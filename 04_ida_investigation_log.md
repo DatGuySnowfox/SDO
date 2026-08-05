@@ -649,11 +649,55 @@ rest of the connection flow.
 
 ---
 
+### SurrounDead Native C++ Classes (`/Script/SurrounDead`)
+
+The native module exposes only **three utility classes** (all 40 bytes, CLASS_Native):
+
+| Class | UClass* global | Constructor | Role |
+|-------|---------------|-------------|------|
+| `UCPlusPlusFunctionLibrary` | `qword_147072D70` | `sub_1436F8310` | Blueprint Function Library |
+| `UDistanceSort` | `qword_147072DB0` | `sub_1436F8520` | Sort helper |
+| `UGetStreamedLevel` | `qword_147072DD8` | `sub_1436F88A0` | Streaming level query |
+
+**`UCPlusPlusFunctionLibrary`** Blueprint-callable functions (at `0x145e82c00`):
+- `IsStreamingTextures` — checks if textures are streaming (getter: `sub_1436F8450`)
+- `Distance_Sort(Array_To_Sort, From_Actor, Descending) → Sorted_Array` — sorts actors by distance
+- `Actor_Dist` — calculates actor-to-actor distance
+
+**`UGetStreamedLevel`** functions:
+- `GetActorStreamingLevelName` / `GetStreamedLevel` — returns streaming level name for an actor
+
+**Conclusion**: All game logic (health, inventory, damage, AI, crafting, etc.) is in
+Blueprint (pak). The `/Script/SurrounDead` C++ module is a thin utility layer only.
+
+---
+
+### ECloudStorageDelegate Enum
+
+The `CSD_*` strings are **not** SurrounDead-specific — they belong to `ECloudStorageDelegate`
+from UE5's built-in cloud storage subsystem (`/Script/Engine`). The game uses UE5's
+`UCloudStorageBase` for cloud saves (player progress, settings):
+
+| Value | Meaning |
+|-------|---------|
+| `CSD_KeyValueReadComplete` | Cloud key-value read finished |
+| `CSD_KeyValueWriteComplete` | Cloud key-value write finished |
+| `CSD_ValueChanged` | Cloud value changed (sync notification) |
+| `CSD_DocumentQueryComplete` | Document query finished |
+| `CSD_DocumentReadComplete` | Document read finished |
+| `CSD_DocumentWriteComplete` | Document write finished |
+| `CSD_DocumentConflictDetected` | Conflict in document sync |
+
+Field `LocalCloudFiles` at `0x1459f7e58` = local cache of cloud files.
+
+---
+
 ### Priorities Updated
 
 - **COMPLETED**: Full vtable class identification (Session 3)
 - **COMPLETED**: Steam online subsystem architecture (Session 4)
-- **COMPLETED**: GEngine global address confirmed
+- **COMPLETED**: GEngine global address confirmed: `0x147068258`
+- **COMPLETED**: SurrounDead native C++ class inventory
 - **NEXT**: Find player health/hunger/thirst field offsets in BP_PlayerCharacter_C
   (needs FModel pak export + UE4SS runtime dump)
 - **NEXT**: Document GUObjectArray exact start for C++ DLL `ForEachUObject` equivalent
