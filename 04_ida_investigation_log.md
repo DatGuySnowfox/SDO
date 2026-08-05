@@ -134,9 +134,9 @@ NativeFunc is NULL in the UFunction registration. `UWorld::SpawnActor` is called
 ## Recommended Follow-up IDA Work
 
 ### Priority 1: Find Game Character Class (for proxy spawning)
-1. Decompile the paired large functions `0x14024BC40` / `0x140266C70` (both 58,928 bytes)
-2. These are likely auto-generated UClass constructors for two game character classes
-3. Look for embedded FName strings or parent class references
+**COMPLETED in Session 3**: The native base for `BP_PlayerCharacter_C` is `AArchVisCharacter`
+(from `/Script/ArchVisCharacter`) which derives from standard `ACharacter` (`/Script/Engine`).
+No custom C++ game character class exists. All game logic is in Blueprint (pak).
 
 ### Priority 2: Find Item Actor Class (for entity spawning)
 1. Similar approach — look at other paired large functions
@@ -382,6 +382,47 @@ vtable. FName `"Spectator"` initialized in SpectatorPawn constructor via
 |-------|-------------|-------|
 | `AChaosWheeledVehicle` | `0x145f47178` | APawn-derived, USkeletalMeshComponent root + UChaosWheeledVehicleMovementComponent |
 | `AArchVisCharacter` | `0x14635c7d8` | From `/Script/ArchVisCharacter` plugin |
+
+---
+
+### UClass Registrations Confirmed
+
+| Class | Package | Size (bytes) | Vtable Start | UClass* global |
+|-------|---------|-------------|-------------|----------------|
+| `ACharacter` | `/Script/Engine` | 1664 (0x680) | `0x145b7a000` | `qword_1470329E0` |
+| `AEQSTestingPawn` | `/Script/AIModule` | 1824 (0x720) | `0x145ee0fb8` | `qword_147075EE8` |
+| `AArchVisCharacter` | `/Script/ArchVisCharacter` | 1760 (0x6E0) | `0x14635c7d8` | `qword_14710B408` |
+
+Class hierarchy (UClass registrations show SuperFunc pointers):
+```
+APawn
+├── ADefaultPawn → ASpectatorPawn
+├── ACharacter (1664 bytes)
+│   ├── AEQSTestingPawn (1824 bytes) — AI EQS testing pawn with NoCollision
+│   └── AArchVisCharacter (1760 bytes) — archviz FPS character
+│       └── BP_PlayerCharacter_C (Blueprint — in pak)
+└── AWheeledVehiclePawn/AChaosVehicle (1824 bytes)
+```
+
+The game has **no custom C++ character class**. `BP_PlayerCharacter_C` derives from
+`AArchVisCharacter` which derives from the standard UE5 `ACharacter`. All game logic
+is in Blueprint (pak file).
+
+### AArchVisCharacter Field Layout (extension above ACharacter base)
+
+Fields at offsets 1656–1759 relative to object base (overlap zone at 1656-1663 is
+last aligned-padding bytes of ACharacter; own fields start at 1664):
+
+| Offset | Field | Initialized with |
+|--------|-------|-----------------|
+| 1664 (0x680) | FString `LookUpAxisName` | "LookUp" |
+| 1680 (0x690) | FString `LookUpRateAxisName` | "LookUpRate" |
+| 1696 (0x6A0) | FString `TurnAxisName` | "Turn" |
+| 1712 (0x6B0) | FString `TurnRateAxisName` | "TurnRate" |
+| 1728 (0x6C0) | FString `MoveForwardAxisName` | "MoveForward" |
+| 1744 (0x6D0) | FString `MoveRightAxisName` | "MoveRight" |
+| 1752 (0x6D8) | `float BaseTurnRate` | ≈ 0.02 (1020054733) |
+| 1756 (0x6DC) | `float BaseLookUpRate` | ≈ 0.02 (1020054733) |
 
 ---
 
