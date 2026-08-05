@@ -1,7 +1,7 @@
 # IDA Investigation Log
 
 Session date: 2026-08-05  
-Tool: IDA Pro 9.3 + Hex-Rays + IDA MCP server (http://172.17.0.1:8744/mcp)
+Tool: IDA Pro 9.3 + Hex-Rays + IDA MCP server (http://192.168.4.54:8744/mcp)
 
 ## Methodology
 
@@ -168,3 +168,133 @@ Key tools used:
 - `analyze_function` — good comprehensive single-function report
 
 Tool that failed: `survey_binary` — IDA plugin not running in the active IDA instance.
+
+---
+
+## Session 2: 2026-08-05 (continued) — Damage System + Large Function Audit
+
+### Strings Found
+
+| Address | String |
+|---------|--------|
+| `0x145b07510` | `ReceiveAnyDamage` |
+| `0x145b0efd8` | `OnTakeAnyDamage` |
+| `0x145c1c808` | `ApplyPointDamage` |
+| `0x145c1c858` | `ApplyRadialDamage` |
+| `0x145c1c870` | `ApplyRadialDamageWithFalloff` |
+
+Not found as strings (blueprint-only — in pak): `Health`, `Hunger`, `Thirst`,
+`CurrentHealth`, `DamageComponent`, `HungerThirst`, `CalculatePlayerDamage`,
+`SendHealthToClient`, `Client_UpdateHealthUI`, `TakeDamage`
+
+---
+
+### Damage System Functions
+
+#### `sub_142ABACD0` — `UGameplayStatics::ApplyDamage`
+- **Size**: 1655 bytes
+- **Code callers**: 1 (`sub_1431E3230`)
+- **Data references**: 162 (vtable entries across all native actor classes)
+- **Signature**: `__m128(AActor* target, float damage, __int64 damageEvent, __int64 instigatorController, __int64 damageCauser)`
+- **Logic**:
+  - Checks `damageEvent` type at vtable+16 against value `1` (AnyDamage) or `2` (PointDamage)
+  - If AnyDamage: calls `target->vtable[1648/8]()` = `TakeAnyDamage`
+  - If PointDamage: calls `target->vtable[1640/8]()` = `TakePointDamage`
+  - Broadcasts `OnTakeAnyDamage` via `sub_142A9A300(actor+0x1D8, ...)`
+  - Broadcasts `OnTakePointDamage` via `sub_142A9A500(actor+0x1DA, ...)`
+  - Notifies instigator at `a4->vtable[2008/8]()` after damage applied
+
+**AActor vtable offsets for damage** (slot = offset/8):
+| Offset | Slot | Role |
+|--------|------|------|
+| 1640 | 205 | `TakePointDamage` |
+| 1648 | 206 | `TakeAnyDamage` |
+| 1912 | 239 | `CanBeDamaged()` bool check |
+
+**Actor delegate fields** (relative to AActor base):
+| Offset | Role |
+|--------|------|
+| `+0x1D8` (472) | `OnTakeAnyDamage` delegate |
+
+#### `sub_1431E3230` — Game-specific `TakeDamage` wrapper
+- **Size**: 142 bytes
+- **Data references**: 8 (appears in 8 actor class vtables)
+- **Vtable tables containing this function**:
+  `0x145b7a660`, `0x145bf97f8`, `0x145d101e8`, `0x145d85198`,
+  `0x145ee1618`, `0x145f477d8`, `0x14635ce38`, `0x147384a70`
+- **Signature**: `void(AActor* self, float damage, __int64 damageEvent, __int64 instigator, __int64 causer)`
+- **Logic**:
+  - Calls `self->vtable[1912/8]()` — `CanBeDamaged()` check
+  - Calls `sub_142ABACD0(self, damage, event, instigator, causer)`
+  - If damage applied and instigator changed: stores instigator at `self[89]` = offset `0x2C8`
+- **Actor offsets extracted**:
+  - `actor + 0x2C8` = last damage instigator controller
+  - `actor + 0x2D0` = previous instigator (comparison target)
+
+#### `sub_142A9A300` — `OnTakeAnyDamage` delegate broadcaster
+- **Size**: 511 bytes
+- **Called from**: `sub_142ABACD0`
+- **Signature**: `void(_BYTE* actorDelegateField, __int64 actor, float damage, __int64 instigator, __int64 instigatorController, __int64 causer)`
+- Called as: `sub_142A9A300(actor + 472, actor, damage, ...)`
+- Lazy-initializes FName "OnTakeAnyDamage" via `sub_140C827F0(&qword_14702DED8, "OnTakeAnyDamage", 1)`
+- Looks up delegate at `actor - 472` (the actor base, then finds delegate by FName)
+- Broadcasts via `sub_140E38610`
+
+#### `sub_142A98E40` — `ReceiveAnyDamage` UFunction singleton getter
+- **Pattern**: Same lazy-init pattern as SpawnActor UFunction getter
+- **Cached UFunction\***: `qword_14702DCF8`
+- **FFunctionParams**: `off_146CD4590`
+- **UFunction name string**: `"ReceiveAnyDamage"` at `0x145b07510`
+  - Embedded in FPropertyParams struct at `0x145b07500` with flags `0x0005_0000_1000_000a`, size 0x45
+  - Next param at `0x145b080d0`
+
+---
+
+### Large Function Audit — CORRECTION
+
+Prior hypothesis that `0x14024BC40`/`0x140266C70` (58,928 bytes each) were UClass
+constructors was **wrong**. Decompile reveals they are **Chaos physics ISPC code**:
+```
+Runtime/Experimental/Chaos/Private/Chaos/PerParticlePBDCollisionConstraint.ispc
+```
+Strings: TaperedCylinder, Sphere geometry assertions. Callees: `puts`, `abort` only.
+These are NOT game character classes.
+
+---
+
+### Hook Strategy for C++ DLL
+
+For monitoring player damage in Phase 2:
+
+**Option A — Hook `sub_142ABACD0` (ApplyDamage)**
+- Hook at `image_base + 0x2ABACD0 - 0x140000000`
+- Intercept ALL damage events for any actor
+- Filter by checking if `a1` is the local player pawn
+
+**Option B — Hook via vtable patching on the player pawn**
+- After `StaticFindObject` returns the character class
+- Patch vtable slot 205 (`TakePointDamage`) or 206 (`TakeAnyDamage`)
+- Only fires for that specific actor instance
+
+**Option C — Use Lua RegisterHook (no IDA needed)**
+- `RegisterHook(".../BP_PlayerCharacter_C:ReceiveAnyDamage", fn)`
+- Already identified as working in the Lua probe scripts
+- Recommended for Phase 2 — least invasive
+
+**Recommended approach**: Option C (Lua) for health monitoring, Option A (C++ hook
+at `sub_142ABACD0`) if sub-millisecond latency matters for death detection.
+
+---
+
+### Follow-up Work Still Needed
+
+1. **Find the 8 actor classes** that contain `sub_1431E3230` in their vtables
+   — one is almost certainly `BP_PlayerCharacter_C`. Read bytes at each vtable
+   address + look at preceding/following vtable entries for class identity clues.
+
+2. **Find UClass* for BP_PlayerCharacter at runtime** — already in plan via
+   `StaticFindObject`. IDA search not needed; confirm with UE4SS runtime dump.
+
+3. **Inventory / item pickup offsets** — no native strings found. All inventory
+   logic is in pak (JigSaw system). Must hook via Blueprint (`RegisterHook` Lua)
+   or via UE4SS C++ `Process Event` hook on the component class.
