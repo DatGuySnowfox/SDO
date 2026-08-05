@@ -191,22 +191,23 @@ Not found as strings (blueprint-only — in pak): `Health`, `Hunger`, `Thirst`,
 
 ### Damage System Functions
 
-#### `sub_142ABACD0` — `UGameplayStatics::ApplyDamage`
+#### `sub_142ABACD0` — `AActor::TakeDamage` (base implementation)
 - **Size**: 1655 bytes
-- **Code callers**: 1 (`sub_1431E3230`)
-- **Data references**: 162 (vtable entries across all native actor classes)
+- **Code callers**: 1 (`sub_1431E3230`, the game's TakeDamage override calls this as super)
+- **Data references**: 162 (vtable entries across all native actor classes — this is the default TakeDamage in all classes that don't override it)
 - **Signature**: `__m128(AActor* target, float damage, __int64 damageEvent, __int64 instigatorController, __int64 damageCauser)`
 - **Logic**:
   - Checks `damageEvent` type at vtable+16 against value `1` (AnyDamage) or `2` (PointDamage)
-  - If AnyDamage: calls `target->vtable[1648/8]()` = `TakeAnyDamage`
-  - If PointDamage: calls `target->vtable[1640/8]()` = `TakePointDamage`
+  - If AnyDamage: calls `target->vtable[1648/8]()` = `TakeAnyDamage` (slot 206)
+  - If PointDamage: calls `target->vtable[1640/8]()` = `TakePointDamage` (slot 205)
   - Broadcasts `OnTakeAnyDamage` via `sub_142A9A300(actor+0x1D8, ...)`
   - Broadcasts `OnTakePointDamage` via `sub_142A9A500(actor+0x1DA, ...)`
   - Notifies instigator at `a4->vtable[2008/8]()` after damage applied
 
-**AActor vtable offsets for damage** (slot = offset/8):
+**AActor vtable offsets for damage** (slot = offset/8, vtable start = first vfptr):
 | Offset | Slot | Role |
 |--------|------|------|
+| 1632 | 204 | `TakeDamage` (game override: `sub_1431E3230`; base: `sub_142ABACD0`) |
 | 1640 | 205 | `TakePointDamage` |
 | 1648 | 206 | `TakeAnyDamage` |
 | 1912 | 239 | `CanBeDamaged()` bool check |
@@ -216,12 +217,22 @@ Not found as strings (blueprint-only — in pak): `Health`, `Hunger`, `Thirst`,
 |--------|------|
 | `+0x1D8` (472) | `OnTakeAnyDamage` delegate |
 
-#### `sub_1431E3230` — Game-specific `TakeDamage` wrapper
+#### `sub_1431E3230` — Game-specific `TakeDamage` override
 - **Size**: 142 bytes
-- **Data references**: 8 (appears in 8 actor class vtables)
-- **Vtable tables containing this function**:
-  `0x145b7a660`, `0x145bf97f8`, `0x145d101e8`, `0x145d85198`,
-  `0x145ee1618`, `0x145f477d8`, `0x14635ce38`, `0x147384a70`
+- **Data references**: 7 real vtable entries + 1 .pdata false positive (see below)
+- **Vtable entries containing this function** (all at slot 204, offset 0x660 from vtable start):
+
+| Vtable Entry | Vtable Start | Class Identified |
+|---|---|---|
+| `0x145b7a660` | `0x145b7a000` | **Game Character** (ACharacter-derived, C++ base of BP_PlayerCharacter_C) |
+| `0x145bf97f8` | `0x145bf9198` | `ADefaultPawn` (sphere mesh root) |
+| `0x145d101e8` | `0x145d0fb88` | `APawn` |
+| `0x145d85198` | `0x145d84b38` | `ASpectatorPawn` (derived from ADefaultPawn) |
+| `0x145ee1618` | `0x145ee0fb8` | **Game AI/Zombie Character** (derived from Game Character, NoCollision capsule) |
+| `0x145f477d8` | `0x145f47178` | `AChaosWheeledVehicle` (SkeletalMesh root + ChaosWheeledVehicleMovementComponent) |
+| `0x14635ce38` | `0x14635c7d8` | `AArchVisCharacter` (/Script/ArchVisCharacter plugin) |
+| ~~`0x147384a70`~~ | ~~N/A~~ | **.pdata exception table** — IDA false positive, not a vtable entry |
+
 - **Signature**: `void(AActor* self, float damage, __int64 damageEvent, __int64 instigator, __int64 causer)`
 - **Logic**:
   - Calls `self->vtable[1912/8]()` — `CanBeDamaged()` check
@@ -273,7 +284,7 @@ For monitoring player damage in Phase 2:
 
 **Option B — Hook via vtable patching on the player pawn**
 - After `StaticFindObject` returns the character class
-- Patch vtable slot 205 (`TakePointDamage`) or 206 (`TakeAnyDamage`)
+- Patch vtable slot 204 (`TakeDamage`), 205 (`TakePointDamage`), or 206 (`TakeAnyDamage`)
 - Only fires for that specific actor instance
 
 **Option C — Use Lua RegisterHook (no IDA needed)**
@@ -288,9 +299,7 @@ at `sub_142ABACD0`) if sub-millisecond latency matters for death detection.
 
 ### Follow-up Work Still Needed
 
-1. **Find the 8 actor classes** that contain `sub_1431E3230` in their vtables
-   — one is almost certainly `BP_PlayerCharacter_C`. Read bytes at each vtable
-   address + look at preceding/following vtable entries for class identity clues.
+1. ~~Find the 8 actor classes~~ — **DONE in Session 3** (see below)
 
 2. **Find UClass* for BP_PlayerCharacter at runtime** — already in plan via
    `StaticFindObject`. IDA search not needed; confirm with UE4SS runtime dump.
@@ -298,3 +307,91 @@ at `sub_142ABACD0`) if sub-millisecond latency matters for death detection.
 3. **Inventory / item pickup offsets** — no native strings found. All inventory
    logic is in pak (JigSaw system). Must hook via Blueprint (`RegisterHook` Lua)
    or via UE4SS C++ `Process Event` hook on the component class.
+
+---
+
+## Session 3: 2026-08-05 (continued) — Vtable Class Identification
+
+### Overview
+
+Identified all 7 real vtable entries for `sub_1431E3230` (TakeDamage override).
+`0x147384a70` was a **.pdata exception table** entry — IDA data xref false positive.
+
+All actor-derived classes in this binary have `TakeDamage` at vtable **slot 204**
+(offset 0x660 = 1632 bytes from vtable start). Prior "slot 205" analysis was wrong
+because the game character's vtable was misidentified as starting at `0x145b79ff8`
+(an async movement struct vtable). The true start is `0x145b7a000`.
+
+---
+
+### Game Character Class (C++ base of BP_PlayerCharacter_C)
+
+**Constructor**: `sub_142C58A20` (1295 bytes)
+- Calls `sub_1431A9E60` (APawn constructor)
+- Sets vtable to `0x145b7a000`, secondary vtable at `obj+0x298` (664) = `0x145b7a998`
+- Creates `UCapsuleComponent` at `obj+0x330` (816) — set as RootComponent at `obj+0x1A0`
+- Creates `UCharacterMovementComponent` at `obj+0x328` (808)
+- Creates `USkeletalMeshComponent` at `obj+0x320` (800)
+- Initializes FName `"Characters"` / SpriteCategory `"Characters"`
+
+**Key field offsets** (relative to actor object base):
+| Offset | Field |
+|--------|-------|
+| `0x000` | Primary vtable pointer (`0x145b7a000`) |
+| `0x298` (664) | Secondary vtable pointer (`0x145b7a998`) |
+| `0x1A0` (416) | `RootComponent` (= CapsuleComponent) |
+| `0x320` (800) | `USkeletalMeshComponent* Mesh` |
+| `0x328` (808) | `UCharacterMovementComponent* CharacterMovement` |
+| `0x330` (816) | `UCapsuleComponent* CapsuleComponent` |
+| `0x2C8` (712) | Last damage instigator controller (from TakeDamage override) |
+| `0x2D0` (720) | Previous instigator (comparison target) |
+| `0x1D8` (472) | `OnTakeAnyDamage` multicast delegate |
+
+**Important**: The field offsets above are shared with all base classes up the hierarchy
+(APawn → AActor → UObject), so `0x1D8` for `OnTakeAnyDamage` is an AActor field.
+
+---
+
+### Game AI/Zombie Character Class
+
+**Constructor**: `sub_1437F8AF0`
+- Calls `sub_142C58A20` (Game Character constructor) then overrides vtable to `0x145ee0fb8`
+- Sets `"NoCollision"` on CapsuleComponent (typical for AI pawns)
+- Initializes additional fields at offsets 1656–1808 (AI state data)
+- This is the C++ base class for zombie/AI Blueprint characters
+
+---
+
+### APawn Hierarchy
+
+| Class | Constructor | Vtable Start |
+|-------|------------|-------------|
+| `APawn` | `sub_1431A9E60` | `0x145d0fb88` |
+| `ADefaultPawn` | `sub_142E09020` | `0x145bf9198` |
+| `ASpectatorPawn` | `sub_143406630` | `0x145d84b38` |
+
+`ASpectatorPawn` constructor calls `sub_142E09020` (DefaultPawn base) then overrides
+vtable. FName `"Spectator"` initialized in SpectatorPawn constructor via
+`sub_140C82960(&qword_147065CC0, L"Spectator", 1)`.
+
+---
+
+### Vehicle and Plugin Classes
+
+| Class | Vtable Start | Notes |
+|-------|-------------|-------|
+| `AChaosWheeledVehicle` | `0x145f47178` | APawn-derived, USkeletalMeshComponent root + UChaosWheeledVehicleMovementComponent |
+| `AArchVisCharacter` | `0x14635c7d8` | From `/Script/ArchVisCharacter` plugin |
+
+---
+
+### Vtable Layout Clarification
+
+The address `0x145b79ff8` (23 code xrefs) is NOT the game character vtable — it belongs
+to a separate non-actor struct (FCharacterMovementComponentAsyncInput or similar)
+that happens to be laid out immediately before the game character vtable in `.rdata`.
+The true game character vtable starts at `0x145b7a000`.
+
+Conclusion: ALL AActor-derived classes in this binary have TakeDamage at **slot 204**
+(vtable byte offset 1632 = 0x660). ACharacter-derived classes do not add virtual
+functions before TakeDamage relative to APawn.
