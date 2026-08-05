@@ -436,3 +436,225 @@ The true game character vtable starts at `0x145b7a000`.
 Conclusion: ALL AActor-derived classes in this binary have TakeDamage at **slot 204**
 (vtable byte offset 1632 = 0x660). ACharacter-derived classes do not add virtual
 functions before TakeDamage relative to APawn.
+
+---
+
+## Session 4: 2026-08-05 (continued) — Online/Network System + Global Variables
+
+### Overview
+
+Investigated the online/networking layer. Key findings:
+- The game uses the commercial **SteamCore** plugin (third-party UE5 plugin wrapping Steam SDK)
+- Session management is via SteamCore's high-level async action nodes
+- Lower-level Steam Matchmaking API is also exposed via Blueprint library
+- Steam authentication (tickets) is used to verify joining players
+- GEngine global address confirmed at `0x147068258`
+- GUObjectArray struct region identified (starts ~`0x146EFDE40`)
+
+---
+
+### Steam API Interfaces
+
+The game uses the following Steam SDK interface versions (confirmed via
+`SteamInternal_FindOrCreateUserInterface` calls):
+
+| Interface | Version String | Getter Function |
+|-----------|---------------|----------------|
+| ISteamMatchmaking | `SteamMatchMaking009` | `sub_1436569D0` at `0x1436569D0` |
+| ISteamUser | `SteamUser021` | `sub_143656A90` at `0x143656A90` |
+| ISteamFriends | `SteamFriends017` | `sub_143656AF0` at `0x143656AF0` |
+| ISteamUtils | `SteamUtils010` | `sub_143656A00` at `0x143656A00` |
+| ISteamNetworking | `SteamNetworking006` | (nearby in same table) |
+| ISteamGameServer | `SteamGameServer014` | (via different path) |
+| ISteamNetworkingSockets | `SteamNetworkingSockets012` | `0x14617ceb0` string |
+
+All getters are stored in a function pointer table at `0x146d2de88` (±0x100 bytes).
+The SteamMatchmaking getter is specifically at `0x146d2dee8` in that table.
+
+---
+
+### SteamCore Plugin — Session Management
+
+The game uses SteamCore's `UAsyncAction`-based session nodes:
+
+| UFunction Name | UClass* Getter | Registration Data |
+|----------------|---------------|-------------------|
+| `CreateSteamCoreSession` | `sub_143682BF0` | `off_145E3DA30` |
+| `FindSteamCoreSessions` | `sub_143682C70` | (registration table) |
+| `DestroySteamCoreSession` | `sub_143682C30` | (registration table) |
+| `UpdateSteamCoreSession` | `sub_143682D70` | (registration table) |
+| `JoinLobbyAsync` | `sub_143682CF0` | (registration table) |
+
+Function registration table (getter fn ↔ name string pairs) at `0x146d35fd0`–`0x146d363xx`.
+
+These are `UBlueprintAsyncActionBase`-derived classes — they wrap async Steam lobby calls
+and fire delegate pins when complete.
+
+---
+
+### SteamCore Plugin — Direct Matchmaking API
+
+The plugin also exposes direct ISteamMatchmaking functions as Blueprint library calls:
+
+**UFunction exec thunk table** (`fn_getter → UFunction name`) at `0x145e3eb00`:
+
+| Address | Function Name |
+|---------|--------------|
+| `0x143681E40` | `AddRequestLobbyListCompatibleMembersFilter` |
+| `0x143681E70` | `AddRequestLobbyListDistanceFilter` |
+| `0x143681EA0` | `AddRequestLobbyListFilterSlotsAvailable` |
+| `0x143681ED0` | `AddRequestLobbyListNearValueFilter` |
+| `0x143681F00` | `AddRequestLobbyListNumericalFilter` |
+| `0x143681F30` | `AddRequestLobbyListResultCountFilter` |
+| `0x143681F60` | `CreateLobby` |
+| `0x143681F90` | `DeleteLobbyData` |
+| `0x143682000` | `GetFavoriteGame` |
+| `0x143682030` | `GetFavoriteGameCount` |
+| `0x143682060` | `GetLobbyByIndex` |
+| `0x143682090` | `GetLobbyChatEntry` |
+| `0x1436820C0` | `GetLobbyData` |
+| `0x1436820F0` | `GetLobbyDataByIndex` |
+| `0x143682120` | `GetLobbyDataCount` |
+| `0x143682150` | `GetLobbyGameServer` |
+| `0x143682180` | `GetLobbyMemberByIndex` |
+| `0x1436821B0` | `GetLobbyMemberData` |
+| `0x1436821E0` | `GetLobbyMemberLimit` |
+| `0x143682210` | `GetLobbyOwner` |
+| `0x143682240` | `GetNumLobbyMembers` |
+| `0x143682300` | `InviteUserToLobby` |
+| `0x143682330` | `JoinLobby` |
+| `0x143682390` | `LeaveLobby` |
+| `0x1436823C0` | `RemoveFavoriteGame` |
+| `0x1436823F0` | `RequestLobbyData` |
+| `0x143682420` | `RequestLobbyList` |
+| `0x143682450` | `SendLobbyChatMsg` |
+| `0x143682480` | `SetLinkedLobby` |
+| `0x1436824B0` | `SetLobbyData` |
+| `0x143682510` | `SetLobbyGameServer` |
+
+**Lobby callback structs** registered nearby (at `0x145e3ed40`+):
+- `FavoritesListAccountsUpdated`, `LobbyChatMsg`, `LobbyChatUpdate`, `LobbyDataUpdate`,
+  `LobbyEnter`, `LobbyGameCreated`, `LobbyKicked`
+
+**ESteamLobbyType enum** (at `0x145e457e0`+):
+- `Private`, `FriendsOnly`, `Public`, `Invisible`
+
+---
+
+### Session Struct Fields
+
+Fields found near `SteamIDHost` in the session data structures:
+
+| Field Name | Context |
+|-----------|---------|
+| `SteamIDLobby` | Lobby identifier (uint64, CSteamID format) |
+| `SteamIDHost` | Host's Steam ID |
+| `PlayerMin` | Minimum player count |
+| `PlayerMax` | Maximum player count |
+| `MaxTeamSize` | Team size limit |
+| `ConnectionDetails` | Server connection info |
+| `NumConnectionDetails` | Count of connection endpoints |
+
+**Lobby search filter fields** (used in `FindSteamCoreSessions` / `RequestLobbyList`):
+- `LobbyDistanceFilter`, `SlotsAvailable`, `KeyToMatch`, `ValueToBeCloseTo`,
+  `ValueToMatch`, `ComparisonType`, `MaxResults`, `LobbyType`, `MaxMembers`
+
+---
+
+### Steam Authentication
+
+The game uses Steam auth tickets for player verification:
+
+| Function | Role |
+|---------|------|
+| `GetAuthSessionTicket` | Client generates ticket before joining |
+| `BeginAuthSession` | Host validates incoming player's ticket |
+| `EndAuthSession` | Host invalidates ticket on disconnect |
+| `GetServerSteamID` | Get server's Steam ID for routing |
+| `GetServerPublicIP` | Server's public IP address |
+| `GetServerSteamID_Pure` | Pure (const) version |
+
+These strings are at `0x145e2c658`–`0x145e2c768`.
+
+**Server-side coordination functions** (at `0x145e2dbe8`+):
+- `HostConfirmGameStart` — host signals game is starting
+- `SearchForGameWithLobby` — finds game session via lobby ID
+- `SetGameHostParams` — configures game host parameters
+
+---
+
+### GEngine Global
+
+| Global | Address | Confirmed by |
+|--------|---------|-------------|
+| `GEngine` | `0x147068258` | Written at `0x1435ae590` in init fn `sub_1435AE370`; read at `0x1435ae6f7` before `GEngine->Init()` call (vtable offset `0x2D8`) |
+
+The GEngine init function (`sub_1435AE370`) at `0x1435ae4dc` loads class string `"GameEngine"`,
+creates the engine object via `sub_140E72AD0` (NewObject-equivalent), then writes to
+`qword_147068258`.
+
+---
+
+### GUObjectArray Region
+
+The `UObjectBaseInit` function (`sub_140E48940` at `0x140E48940`) initializes the
+global `FUObjectArray`:
+
+| Global | Address | Role |
+|--------|---------|------|
+| `dword_146EFDE48` | `0x146EFDE48` | `MaxObjectsNotConsideredByGC` |
+| `qword_146EFDE50` | `0x146EFDE50` | Permanent object pool base |
+| `qword_146EFDE58` | `0x146EFDE58` | Permanent object pool cursor |
+| `qword_146EFDE60` | `0x146EFDE60` | Permanent object pool end |
+| `dword_146EFE160` | `0x146EFE160` | `ObjFirstGCIndex` (= `ObjLastNonGCIndex`) |
+| `dword_146EFE168` | `0x146EFE168` | `MaxObjectsNotConsideredByGC` mirror |
+| `qword_146EFE170` | `0x146EFE170` | `FChunkedFixedUObjectArray::Objects` (chunk ptr array) |
+| `qword_146EFE178` | `0x146EFE178` | Pre-allocated object pool |
+| `dword_146EFE180` | `0x146EFE180` | `MaxElements` (= NumChunks × 65536) |
+| `qword_146EFE184` | `0x146EFE184` | Packed: `[NumChunks, ...]` |
+| `dword_146EFE18C` | `0x146EFE18C` | `NumChunks` |
+
+The `FChunkedFixedUObjectArray` struct effectively begins at `0x146EFE160`.
+`GUObjectArray` as a whole begins at approximately `0x146EFDE40`.
+
+> **Note**: UE4SS locates GUObjectArray at runtime via signature scanning; the above
+> static addresses are for reference only (IDB has all globals as `0xFFFFFFFFFFFFFFFF`
+> since they are uninitialized in static analysis).
+
+---
+
+### Network Architecture Summary (for SD-Online)
+
+```
+SurrounDead multiplayer stack:
+  UE5 Engine
+    └── Online Subsystem Steam (/Script/OnlineSubsystemSteam)
+          └── SteamCore plugin (/Script/SteamCore)
+                ├── CreateSteamCoreSession → ISteamMatchmaking::CreateLobby
+                ├── FindSteamCoreSessions  → ISteamMatchmaking::RequestLobbyList
+                ├── JoinSteamCoreSession   → ISteamMatchmaking::JoinLobby
+                └── Auth: GetAuthSessionTicket / BeginAuthSession / EndAuthSession
+  Transport: IP/UDP (IpNetDriver, WS2_32 socket calls present in import table)
+  P2P Relay: SteamNetworkingSockets012 available (optional relay path)
+```
+
+**SD-Online implication**: The game's session system is fully exposed via Blueprint
+through the SteamCore plugin. SD-Online can hook the SteamCore session functions
+via Lua `RegisterHook` on `CreateSteamCoreSession` / `FindSteamCoreSessions` to
+intercept or extend the session management layer without touching native code.
+
+Alternatively, the game can be made to join a custom session by calling
+`JoinLobby` with a known SteamIDLobby — the SteamCore plugin will handle the
+rest of the connection flow.
+
+---
+
+### Priorities Updated
+
+- **COMPLETED**: Full vtable class identification (Session 3)
+- **COMPLETED**: Steam online subsystem architecture (Session 4)
+- **COMPLETED**: GEngine global address confirmed
+- **NEXT**: Find player health/hunger/thirst field offsets in BP_PlayerCharacter_C
+  (needs FModel pak export + UE4SS runtime dump)
+- **NEXT**: Document GUObjectArray exact start for C++ DLL `ForEachUObject` equivalent
+- **NEXT**: Confirm SpawnActor C++ address via callgraph from `UWorld::SpawnActor`
