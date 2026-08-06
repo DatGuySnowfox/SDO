@@ -2023,3 +2023,162 @@ For `WorldEntityKind::PlacedStructure`, the server would need to track which spe
 Buildable subclass was placed. The entity descriptor's `classPath` field already
 supports this.
 
+---
+
+## Session 13: 2026-08-06 — Runtime Dump: PlayerController, GameMode/State, AIOptimizer Components
+
+### Method
+
+PropertyDumper v3 Lua mod ran successfully in-game. Output: `bp_extended_props.txt`.
+Committed to repo.
+
+---
+
+### BP_PlayerState_C — NOT FOUND
+
+`FindFirstOf("BP_PlayerState_C")` returned nothing. The game either uses a pure C++
+`APlayerState` (no Blueprint) or a class named differently. The PlayerState functionality
+is **folded into BP_PlayerController_C** (see below).
+
+---
+
+### BP_PlayerController_C — Field Layout
+
+C++ `APlayerController` base ends at ~`0x858` (UberGraphFrame offset). Blueprint fields:
+
+| Offset | Field | Type | Notes |
+|--------|-------|------|-------|
+| `+0x860` (2144) | `NarrativeComponent` | ObjectProperty | Quest/story system |
+| `+0x868` (2152) | `LevellingComponent` | ObjectProperty | XP and level |
+| `+0x870` (2160) | `TechTreeComponent` | ObjectProperty | Research progression |
+| `+0x878` (2168) | `PassiveSkillsComponent` | ObjectProperty | Passive perks |
+| `+0x880` (2176) | `Widget` | ObjectProperty | HUD widget reference |
+| `+0x888` (2184) | `AutoSaveEnabled` | BoolProperty | |
+| `+0x890` (2192) | `KeepInventory` | StructProperty | Death inventory retention setting |
+| `+0x8C0` (2240) | `Level` | NameProperty | **Save slot / level name** |
+| `+0x8C8` (2248) | `Forename` | StrProperty | Character first name |
+| `+0x8D8` (2264) | `Surname` | StrProperty | Character last name |
+| `+0x8E8` (2280) | `Sex` | StrProperty | |
+| `+0x8F8` (2296) | `Age` | StrProperty | |
+| `+0x908` (2312) | `Occupation` | ByteProperty | Enum — class/occupation type |
+| `+0x90C` (2316) | `ZombieKills` | IntProperty | |
+| `+0x910` (2320) | `BossZombieKills` | IntProperty | |
+| `+0x914` (2324) | `AnimalKills` | IntProperty | |
+| `+0x918` (2328) | `HumanKills` | IntProperty | |
+| `+0x91C` (2332) | `DaysSurvived` | IntProperty | |
+| `+0x920` (2336) | `DistanceTravelled` | DoubleProperty | |
+| `+0x928` (2344) | `InfestationsDestroyed` | IntProperty | |
+| `+0x92C` (2348) | `RespawnPointEnabled` | BoolProperty | |
+| `+0x930` (2352) | `RespawnLoc` | StructProperty | FVector respawn location |
+
+**Key SD-Online implication**: All player progression and identity lives in the
+**PlayerController**, not a PlayerState. `BP_PlayerController_C` is local-only in a
+single-player game — the mod must read and transmit this data manually. The
+`PlayerProgress` struct in `protocol.hpp` is the right vessel for syncing it.
+
+**`Forename`/`Surname`** at `+0x8C8`/`+0x8D8` can serve as a display name for remote
+players without needing Steam API calls.
+
+**`RespawnLoc`** at `+0x930` is a StructProperty (FVector, 24 bytes). Reading it:
+```cpp
+// RespawnLoc is an FVector3d (3 × double = 24 bytes)
+double* respawnLoc = (double*)(controller + 0x930);
+float rx = (float)respawnLoc[0];
+float ry = (float)respawnLoc[1];
+float rz = (float)respawnLoc[2];
+```
+
+---
+
+### BP_SurroundeadGameMode_C — Field Layout
+
+Extremely thin — game logic is almost entirely in C++.
+
+| Offset | Field | Type | Notes |
+|--------|-------|------|-------|
+| `+0x338` (824) | `UberGraphFrame` | StructProperty | BP base starts at 0x340 |
+| `+0x340` (832) | `DefaultSceneRoot` | ObjectProperty | |
+| `+0x348` (840) | `Autosave` | BoolProperty | |
+| `+0x350` (848) | `DiscordRpc` | ObjectProperty | Discord rich presence |
+
+---
+
+### BP_SurroundeadGameState_C — Field Layout
+
+| Offset | Field | Type | Notes |
+|--------|-------|------|-------|
+| `+0x2F0` (752) | `UberGraphFrame` | StructProperty | BP base starts at 0x2F8 |
+| `+0x2F8` (760) | `DefaultSceneRoot` | ObjectProperty | |
+| `+0x300` (768) | `SnapActorRef` | ObjectProperty | FModel/snap system ref |
+| `+0x308` (776) | `FirstCaptureDone` | BoolProperty | |
+| `+0x310` (784) | `ItemsQueue` | ArrayProperty | Queued item operations |
+| `+0x320` (800) | `SnapDelay` | DoubleProperty | |
+| `+0x328` (808) | `AllInspectedIDs` | ArrayProperty | IDs of already-inspected items |
+| `+0x338` (824) | `AllUIDs` | ArrayProperty | **All world item UIDs** |
+
+**`AllUIDs` at `+0x338`** is likely the authoritative list of all spawned item unique
+IDs in the world. This is the deduplication registry the server needs — reading this
+TArray gives the set of items that already exist and should not be re-spawned.
+
+Reading it:
+```cpp
+// TArray layout: Data*(8) + Num(4) + Max(4)
+UObject* gs = FindFirstOf("BP_SurroundeadGameState_C");
+uint8_t* gsPtr = (uint8_t*)(uintptr_t)gs;
+void**  uidData = *(void***)(gsPtr + 0x338);  // data pointer
+int32_t uidNum  = *(int32_t*)(gsPtr + 0x340); // count
+```
+
+---
+
+### AIOSubjectComponent — Field Layout
+
+Attached to every zombie. C++ base ends before `+0xC8`.
+
+| Offset | Field | Type | Notes |
+|--------|-------|------|-------|
+| `+0xC8` (200) | `Handle` | StructProperty | AIOptimizer registration handle |
+| `+0xD0` (208) | `OnOptimizationUpdate` | MulticastInlineDelegateProperty | Fires on LOD tier change |
+| `+0xE0` (224) | `OnPreDespawn` | MulticastDelegate | **Hook here to intercept despawn** |
+| `+0xF0` (240) | `OnPostSpawned` | MulticastDelegate | Fires after AIOptimizer spawns |
+| `+0x100` (256) | `Spawner` | ObjectProperty | Back-ref to owning spawner actor |
+| `+0x108` (264) | `bAllowSubsystemToAutoDespawn` | BoolProperty | **Set false = prevent auto-despawn** |
+| `+0x108` (264) | `bCanBeUpdatedBySubsystem` | BoolProperty | Bit-packed in same byte as above |
+| `+0x10C` (268) | `OverrideSubsystemDespawnRadius` | FloatProperty | Custom despawn radius |
+| `+0x110` (272) | `Priority` | ByteProperty | Optimization priority tier |
+| `+0x118` (280) | `DataClass` | ClassProperty | AI data class reference |
+| `+0x120` (288) | `OptimizationLayers` | ArrayProperty | LOD layer definitions |
+| `+0x130` (304) | `bShouldCalculateIsSeen` | BoolProperty | Visibility check toggle |
+
+**`bAllowSubsystemToAutoDespawn` at `+0x108`** — setting this to `false` on a zombie
+prevents AIOptimizer from despawning it when players move away. This is how we keep
+server-authoritative zombie positions locked when the host's invoker radius shrinks
+but a remote player's invoker is still within range.
+
+---
+
+### AIOInvokerComponent — Field Layout
+
+Only one Blueprint-visible field:
+
+| Offset | Field | Type |
+|--------|-------|------|
+| `+0xA0` (160) | `DebugWidget` | ObjectProperty |
+
+**All invoker logic (RegisterInvoker, UnregisterInvoker, radius, tick) is in C++.**
+No Blueprint properties for radius or registration state. Access to registration is
+via the C++ AIOptimizer plugin API — `UObjectGlobals::FindObject` + virtual dispatch,
+or via the Lua `RegisterInvoker()`/`UnregisterInvoker()` wrappers if they exist.
+
+The sparse property table confirms we cannot manipulate invoker registration purely
+through property reads — we must call C++ methods.
+
+---
+
+### BP_StaticMeshPickup_C — NOT FOUND
+
+Player was not near a ground item during the dump. A follow-up dump near any pickup
+will reveal item ID / UID fields. However, from the protocol already implemented
+(`itemId` string field in `WorldEntityDescriptor`), the server-side design is already
+correct — we just need to confirm the field name on the C++ side.
+
