@@ -2025,6 +2025,113 @@ supports this.
 
 ---
 
+## Session 14: 2026-08-06 — Runtime Dump: Levelling, Skills, Narrative, Zombie, Vehicle
+
+### Method
+
+PropertyDumper v7 Lua mod. `FindFirstOf` on each component class name.
+Output: `bp_components2_props.txt`.
+
+---
+
+### LevellingComponent_C — Field Layout
+
+Accessed via: `*(UObject**)(controller + 0x868)`
+
+| Offset | Field | Type | Notes |
+|--------|-------|------|-------|
+| `+0xC0` (192) | `CurrentLevel` | IntProperty | Player level |
+| `+0xC4` (196) | `LevelCap` | IntProperty | Max level |
+| `+0xC8` (200) | `CurrentXP` | DoubleProperty | |
+| `+0xD0` (208) | `CurrentMaxXP` | DoubleProperty | XP needed for next level |
+| `+0xD8` (216) | `CurrentPercentage` | DoubleProperty | 0.0–1.0 progress |
+| `+0xE0` (224) | `BufferXP` | DoubleProperty | Pending XP to apply |
+| `+0xE8` (232) | `RemainingXP` | DoubleProperty | |
+| `+0xF0` (240) | `MultiplyValue` | DoubleProperty | XP multiplier |
+| `+0xF8` (248) | `Difficulty_MultiplierValue` | DoubleProperty | Difficulty XP scale |
+
+Minimal sync needed for SD-Online: `CurrentLevel` + `CurrentXP`.
+
+---
+
+### TechTreeComponent_C — Field Layout
+
+Accessed via: `*(UObject**)(controller + 0x870)`
+
+| Offset | Field | Type |
+|--------|-------|------|
+| `+0x148` (328) | `SkillPoints` | IntProperty |
+| `+0x14C` (332) | `CurrentPoints` | IntProperty |
+
+---
+
+### PassiveSkillsComponent_C — Field Layout
+
+Accessed via: `*(UObject**)(controller + 0x878)` (also on `StaminaComponent` back-ref)
+
+9 skill tracks: Fitness, Strength, Toughness, Sneaking, FirstAid, Marksmanship,
+Reloading, Thief, Fishing, Scavenging. Each track follows the pattern:
+
+```
+Current<Skill>XP   (double)
+Max<Skill>XP       (double)
+Current<Skill>Level (double)
+Max<Skill>Level    (double)
+```
+
+Starting at `+0xC0`, packed sequentially. Multipliers and UI delegates follow.
+
+For SD-Online: only the `Current<Skill>Level` fields need syncing (not XP or multipliers —
+those are derived). 10 doubles = 80 bytes total for the sync payload.
+
+---
+
+### NarrativeComponent — Field Layout
+
+C++ native component (Narrative Marketplace plugin). All-delegate layout with key data:
+
+| Offset | Field | Type | Notes |
+|--------|-------|------|-------|
+| `+0x180` (384) | **`OnJoinedParty`** | MulticastInlineDelegateProperty | **Party system hook** |
+| `+0x190` (400) | **`OnLeaveParty`** | MulticastInlineDelegateProperty | **Party system hook** |
+| `+0x230` (560) | `QuestList` | ArrayProperty | Active/completed quests |
+| `+0x248` (584) | `MasterTaskList` | MapProperty | Task progress map |
+| `+0x2A0` (672) | `PartyComponent` | ObjectProperty | |
+| `+0x2A8` (680) | `OwnerPC` | ObjectProperty | Back-ref to PlayerController |
+
+**Critical discovery**: the Narrative plugin already has `OnJoinedParty` / `OnLeaveParty`
+party hooks. This means quest state already has multiplayer-awareness stubs at the
+plugin level. SD-Online can broadcast these delegates when a remote player connects/
+disconnects to keep quest NPCs consistent across the session.
+
+For SD-Online Phase 1: quests are **host-authoritative** — guest players inherit the
+host's `QuestList`. No per-player quest sync needed initially.
+
+---
+
+### BP_Zombie_C — Result
+
+`UberGraphFrame` at `+0x8B0` is the only Blueprint property — all zombie state
+(health, AI behavior, attack) is in native C++ parent classes invisible to
+`ForEachProperty`. The C++ zombie class is at least `0x8B0` bytes.
+
+**Implication**: reading zombie health requires IDA investigation of the C++ parent.
+For Phase 2 position sync this is not blocking — zombie positions are managed
+server-side via AIOptimizer and broadcast via `EntitySpawn`/`EntityDespawn` frames.
+
+---
+
+### Vehicle_PickupTruck_C — Result
+
+Zero Blueprint properties. All vehicle state (speed, health, fuel, occupants) is
+in C++ native classes. Same situation as zombies — IDA required to read state.
+
+For Phase 2: vehicle position sync uses the same `Movement` frame type as players
+(x/y/z + yaw). Entity type `WorldEntityKind::Vehicle` is already defined in the
+protocol.
+
+---
+
 ## Session 13: 2026-08-06 — Runtime Dump: PlayerController, GameMode/State, AIOptimizer Components
 
 ### Method
