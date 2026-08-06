@@ -210,29 +210,130 @@ its uint64 entity IDs to the game's int32 UIDs when coordinating loot despawn.
 
 ---
 
-## What's Already Correct
+## Session 21 Addendum — Wire Format Mismatches (ALL CRITICAL)
 
-- Frame header format, magic, version ✓
-- TCP transport + HMAC ticket auth ✓
-- Movement encode/decode ✓ (minus velocity and float vs double)
-- WorldState fields ✓
-- Death/Respawn/DeathRequest/RespawnRequest flow ✓
-- EntitySpawn/EntityDespawn lifecycle ✓
-- ItemPickup/Drop request/result flow ✓ (minus string itemId)
-- InteractionRequest BUILD ✓
-- PlayerConnected/Disconnected + proxy lifecycle ✓
-- Auto-open world via MenuWidget_C ✓
-- 30-second profile revision cadence ✓
+Full source review (`protocol.cpp`, `tcp_client.cpp`, `gateway/service.js`,
+`host-agent/service.js`) reveals that several message types that appeared correct
+are actually broken because the C++ bridge uses hand-rolled binary encoding while
+the JS host-agent uses `encodeWorldAction` / `decodeWorldAction` (length-prefixed
+JSON). The gateway is a pass-through — it does NOT validate or transcode payloads
+beyond what is shown below.
+
+### 13. Request/Result types: binary C++ vs JSON JS
+
+**Affected C++ → JS (client to host):**
+
+| Frame | C++ sends | JS expects | Effect |
+|-------|-----------|-----------|--------|
+| `ItemDropRequest (34)` | 16-byte binary struct | JSON `{requestId,itemId,classPath,quantity,x,y,z}` | silently dropped by host |
+| `ItemPickupRequest (35)` | 2-byte binary | JSON `{requestId,entityId}` | silently dropped by host |
+| `InteractionRequest (26)` | 22-byte binary BUILD struct | JSON `{action,…}` | silently dropped by host |
+
+**Affected JS → C++ (host to client):**
+
+| Frame | JS sends | C++ expects | Effect |
+|-------|----------|-------------|--------|
+| `ItemDropResult (39)` | JSON via `encodeWorldAction` | 3-byte binary `[tag,success,reason]` | decode returns nullopt; discarded |
+| `ItemPickupResult (36)` | JSON via `encodeWorldAction` | 9 or 3-byte binary | decode returns nullopt; discarded |
+| `InteractionResult (27)` | JSON via `encodeWorldAction` | 3-byte binary | decode returns nullopt; discarded |
+
+**Fix**: Replace all binary encode/decode for these types with JSON
+(`encodeWorldAction`/`decodeWorldAction`). The JS server side is already correct;
+only the C++ side needs to change.
+
+For **requests** the C++ must include a `requestId` (UUID or counter string) in
+the JSON. The JS uses `requestId` for idempotency and deduplication. For
+**results** the C++ must parse the JSON rather than a fixed-size binary struct.
 
 ---
 
-## Recommended Fix Order
+### 14. `EntitySpawn` payload format mismatch
 
-1. **itemId string** — touches protocol, state, mod, server JS, all tests. Do first.
-2. **read_local_progress()** — read vitals/level/equipment from game directly.
-3. **PlayerProgress extended fields** — add level, stamina, radiation, names, respawnLoc.
-4. **Equipment frame** — hook OnEquipmentUpdated, encode/send, update proxy appearance.
-5. **Velocity** — one-liner fix in send_movement().
-6. **EntityType::VEHICLE** — one-liner enum addition.
-7. **PlayerDamage dispatch** — write health to MedicalComponent.
-8. **RemotePlayer equipment fields** — for proxy visual fidelity.
+**Affected**: `decode_entity_spawn()` in `protocol.cpp`, `entity_manager.cpp`.
+
+JS `encodeWorldEntityDescriptor` sends:
+```
+[tag=1, kind=uint8, revision=uint32, quantity=uint16, ownerPlayerId=uint64,
+ classPathLen=uint16, classPath..., itemIdLen=uint16, itemId...]
+```
+
+C++ `decode_entity_spawn` reads:
+```
+[tag=1, entityType=uint8, posX=float, posY=float, posZ=float, yaw=float,
+ stateLen=uint16, stateBlob...]
+```
+
+Consequences:
+- Position bytes 2–17 contain `revision|quantity|ownerPlayerId` — garbage floats.
+- `stateLen` reads partial `ownerPlayerId` bytes — garbage, causes potential
+  overread.
+- Entity kind mapping is wrong: JS `GroundItem=2` → C++ reads as `CONTAINER=2`
+  (should be `LOOT_ITEM=0`); JS `Zombie=1` → C++ reads as `BUILDING_PIECE=1`.
+- The JS sends a **separate** `EntityState` (27-byte binary, `encodeWorldEntityState`)
+  for position. The C++ currently ignores `EntityState` (dispatch falls through
+  to a no-op comment).
+
+**Fix**:
+1. `decode_entity_spawn` must parse `encodeWorldEntityDescriptor` format (variable
+   length, no position).
+2. Add `decode_entity_state` that parses `encodeWorldEntityState` (27 bytes: tag,
+   kind, revision, x/y/z/yaw/health as floats, state byte).
+3. Split `WorldEntity` into descriptor (from EntitySpawn) + state (from EntityState).
+4. Add entity kind enum aligned to `WorldEntityKind` (Zombie=1, GroundItem=2,
+   Vehicle=3, PlacedStructure=4).
+
+---
+
+### 15. `PlayerProgressRestore` payload is a Movement frame
+
+JS sends `encodeMovement` (39 bytes) as the `PlayerProgressRestore` payload —
+position/yaw only, no vitals or inventory. The C++ `decode_player_progress`
+checks `p[0] != 1` (tag byte), but the first byte of a Movement payload is the
+high byte of the X float — almost never 1. Result: `decode_player_progress`
+returns `nullopt`, the restore is silently ignored, and position is never
+restored on rejoin.
+
+**Fix**:
+- For `PlayerProgressRestore`, call `decode_movement` (not `decode_player_progress`).
+- Apply the movement to teleport the pawn to the saved position (write directly
+  to `RootComponent.RelativeLocation` or use a teleport UFunction).
+- If vitals restore is needed later, design a separate extended payload.
+
+---
+
+## Corrected: What's Actually Working
+
+- Frame header format, magic, version ✓
+- TCP transport + HMAC ticket auth ✓  
+  *(C++ JoinRequest payload is 64 zeros but gateway ignores it and re-encodes
+  from ticket claims — works correctly)*
+- `Movement` encode/decode ✓ (minus velocity, float vs double)
+- `WorldState` decode ✓
+- `Death`/`Respawn`/`DeathRequest`/`RespawnRequest` flow ✓
+- `PlayerConnected`/`PlayerDisconnected` + proxy lifecycle ✓
+- `PlayerDamage` decode ✓ (13-byte binary; JS and C++ agree; dispatch is TODO)
+- Auto-open world via `MenuWidget_C` ✓
+- 30-second profile revision cadence ✓ (reads stale BridgeState — see gap 2)
+
+### Confirmed broken (previously listed as ✓):
+
+- `EntitySpawn`/`EntityDespawn` — format mismatch (gap 14 above)
+- `ItemPickup`/`ItemDrop` request/result — binary vs JSON mismatch (gap 13 above)
+- `InteractionRequest` BUILD — binary vs JSON mismatch (gap 13 above)
+- `PlayerProgressRestore` — wrong decode function (gap 15 above)
+
+---
+
+## Recommended Fix Order (revised)
+
+1. **JSON request/result encoding** (gap 13) — unblocks all items and building.
+2. **EntitySpawn/EntityState format** (gap 14) — unblocks ground items and zombies.
+3. **PlayerProgressRestore decode** (gap 15) — fixes position restore on rejoin.
+4. **itemId string** (gap 1) — change uint32_t to string throughout.
+5. **read_local_progress()** (gap 2) — read vitals/level/equipment from game directly.
+6. **PlayerProgress extended fields** (gap 4) — add level, stamina, radiation, names.
+7. **Equipment frame** (gap 3/8) — hook OnEquipmentUpdated, encode/send.
+8. **Velocity** (gap 6) — one-liner fix in send_movement().
+9. **EntityType::VEHICLE** (gap 5) — one-liner enum addition.
+10. **PlayerDamage dispatch** (gap 9) — write health to MedicalComponent.
+11. **RemotePlayer equipment fields** (gap 3) — for proxy visual fidelity.
