@@ -1,0 +1,28 @@
+
+== BP_JigHelperComp_C.ServerEquippedItems.EquippedFacewear_34_8AC8653C42B55B98B18B409ADF11C9D0 [slot inner struct] ==
+Name                                                         Type                           Offset
+--------------------------------------------------------------------------------------------------------------
+ItemID_28_01CA27D84AF7D1014D9E2E83894C1848                   ObjectProperty                 0 (0x0)
+Count_8_DD79AF2A46126A338C8DCCB4616D91CD                     IntProperty                    8 (0x8)
+ItemVec_13_4DB12E4E4F80730BD25ACFA6FA51AD0A                  StructProperty                 16 (0x10)
+Weight_16_C6B7568A4E062D2AE81209916A32B4EB                   DoubleProperty                 32 (0x20)
+Price_19_FEFE0D2A4561BAF04CE37D9BAE1D6EF7                    DoubleProperty                 40 (0x28)
+Durability_22_A3557C454274D193D47AB9B71FB0C0CA               StructProperty                 48 (0x30)
+Stats_26_C770972746930CB80CC49AB7A6D19359                    ArrayProperty                  64 (0x40)
+Pending?_31_C3AE39044666796C0FA128BA521590CB                 DoubleProperty                 80 (0x50)
+CustomDataKey_39_A529F9DA4A7CA3A19669CB877FD2C143            ArrayProperty                  88 (0x58)
+CustomDataValue_40_85E02F31496054699CB2D2A2FA6FCF67          ArrayProperty                  104 (0x68)
+
+== BP_JigMultiplayer_C.PickupInfo.ItemInfo [slot inner struct] ==
+Name                                                         Type                           Offset
+--------------------------------------------------------------------------------------------------------------
+ItemID_28_01CA27D84AF7D1014D9E2E83894C1848                   ObjectProperty                 0 (0x0)
+Count_8_DD79AF2A46126A338C8DCCB4616D91CD                     IntProperty                    8 (0x8)
+ItemVec_13_4DB12E4E4F80730BD25ACFA6FA51AD0A                  StructProperty                 16 (0x10)
+Weight_16_C6B7568A4E062D2AE81209916A32B4EB                   DoubleProperty                 32 (0x20)
+Price_19_FEFE0D2A4561BAF04CE37D9BAE1D6EF7                    DoubleProperty                 40 (0x28)
+Durability_22_A3557C454274D193D47AB9B71FB0C0CA               StructProperty                 48 (0x30)
+Stats_26_C770972746930CB80CC49AB7A6D19359                    ArrayProperty                  64 (0x40)
+Pending?_31_C3AE39044666796C0FA128BA521590CB                 DoubleProperty                 80 (0x50)
+CustomDataKey_39_A529F9DA4A7CA3A19669CB877FD2C143            ArrayProperty                  88 (0x58)
+CustomDataValue_40_85E02F31496054699CB2D2A2FA6FCF67          ArrayProperty                  104 (0x68)
