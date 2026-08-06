@@ -2194,6 +2194,125 @@ protocol.
 
 ---
 
+## Session 15: 2026-08-06 — Jigsaw Inventory + Multiplayer Component Deep Dump
+
+### Method
+
+PropertyDumper v9. Found `BP_JigHelperComp_C`, `BP_JigMultiplayer_C`, and full
+`JigsawItem_DataAsset_C` field layout. Output: `bp_jigsaw_props.txt`.
+
+---
+
+### BP_JigHelperComp_C — Field Layout (Player Character Component)
+
+The primary Jigsaw helper component attached to the player character.
+
+| Offset | Field | Type | Notes |
+|--------|-------|------|-------|
+| `+0xA8` (168) | `EquipmentUIDs` | MapProperty | Slot index → item UID map |
+| `+0xF8` (248) | `ServerEquippedItems` | StructProperty | Full equipped loadout (`S_ServerEquippedItems`) |
+| `+0xAD0` (2768) | `RepPrimitiveActorsData` | ArrayProperty | Replicated primitive actor (static pickup) data |
+| `+0xAE0` (2784) | `RepActorsData` | ArrayProperty | Replicated actor inventory data |
+| `+0xAF0` (2800) | `TraceToActors` | BoolProperty | |
+| `+0xAF8` (2808) | `EquipmentIDSlotConfig` | MapProperty | Equipment slot definitions |
+| `+0xB98` (2968) | `ActiveWeapon` | StructProperty | Currently equipped weapon info |
+| `+0xBA0` (2976) | `OnActiveWeaponSlotChanged` | MulticastDelegate | Fires on weapon switch |
+| `+0xBB0` (2992) | `PreviewChar` | ObjectProperty | Character preview reference |
+| `+0xBB8` (3000) | `CurrentTracActor` | ObjectProperty | Actor being looked at |
+| `+0xBC0` (3008) | `CurrentInteractOptions` | MapProperty | Interaction options map |
+| `+0xC30` (3120) | `OnEquipmentUpdated` | MulticastDelegate | **Fires on any gear change** |
+
+**SD-Online usage**:
+- Hook `OnEquipmentUpdated` to detect clothing/equipment changes → send to server for remote player appearance updates
+- Read `ServerEquippedItems` at +0xF8 to get full loadout for `PlayerProgress` sync
+- Read `ActiveWeapon` at +0xB98 to update animation state on remote proxies
+
+---
+
+### BP_JigMultiplayer_C — Field Layout (Multiplayer Component)
+
+Found on loot containers and the player character. The Jigsaw plugin's built-in
+server-replication component — designed for multiplayer but shipped inactive.
+
+| Offset | Field | Type | Notes |
+|--------|-------|------|-------|
+| `+0xA8` (168) | `MainJigContainers` | ArrayProperty | All inventory containers |
+| `+0xB8` (184) | `LocalJSIContainers` | ArrayProperty | Local-only containers |
+| `+0xC8` (200) | `MPComponentType` | StructProperty | Role: Player/Container/Vendor |
+| `+0xD0` (208) | `PendingRequests` | ArrayProperty | **Built-in server request queue** |
+| `+0xE0` (224) | `MainContainersIDs` | ArrayProperty | Container UID list |
+| `+0xF0` (240) | `ContainersSettings` | ArrayProperty | Per-container settings |
+| `+0x100` (256) | `RefillContainerTimerInSeconds` | DoubleProperty | Loot respawn timer |
+| `+0x108` (264) | `InventoryWidgetClass` | ClassProperty | UI widget class |
+| `+0x12A` (298) | `AllowDroppingItems` | BoolProperty | Enable/disable item dropping |
+| `+0x130` (304) | `PickupInfo` | StructProperty | Pickup actor info (216 bytes) |
+| `+0x208` (520) | `VendorCurrentCurrencyAmount` | DoubleProperty | Trader cash amount |
+| `+0x220` (544) | `VendorAcceptedCurrencyID` | ObjectProperty | Accepted currency DataAsset |
+| `+0x230` (560) | `ItemsToCraft` | ArrayProperty | Available crafting recipes |
+| `+0x250` (592) | `MonitorContainerUID` | StructProperty | Watched container UID |
+| `+0x280` (640) | `InventoryWeight` | ArrayProperty | Per-container weight data |
+| `+0x2A1` (673) | `Looted` | BoolProperty | Container has been looted |
+| `+0x2D8` (728) | `OnWeightUpdated` | MulticastDelegate | Fires on weight change |
+| `+0x2E8` (744) | `OnInventoryOpenClose` | MulticastDelegate | Fires on inventory open/close |
+| `+0x2F8` (760) | `ClientSaveDataReceived` | MulticastDelegate | **Fires when server sends save data** |
+| `+0x308` (776) | `OnRefillContainer` | MulticastDelegate | Fires when container refills |
+
+**SD-Online usage**:
+- Hook `ClientSaveDataReceived` at +0x2F8 → inject remote player initial inventory state
+- `PendingRequests` at +0xD0 → the MP component already has a request queue we can populate
+- `AllowDroppingItems` at +0x12A → set to false on remote player proxies (no phantom drops)
+- `Looted` flag at +0x2A1 → sync container looted state across players
+
+---
+
+### JigsawItem_DataAsset_C — Field Layout (Item Template)
+
+The canonical item data asset. Every item type has one `DA_` instance.
+
+| Offset | Field | Type | Notes |
+|--------|-------|------|-------|
+| `+0x30` (48) | **`ItemId`** | NameProperty | **The canonical item ID (FName: `"DA_AK74"` etc.)** |
+| `+0x38` (56) | `Name` | TextProperty | Display name |
+| `+0x50` (80) | `Description` | TextProperty | |
+| `+0x68` (104) | `SlotDimensions` | StructProperty | Grid size (1×1, 2×1, etc.) |
+| `+0x78` (120) | `Type` | StructProperty | Item type enum |
+| `+0x80` (128) | `Rarity` | StructProperty | Rarity tier |
+| `+0x88` (136) | `Count` | IntProperty | Stack count |
+| `+0x8C` (140) | `CanStack` | BoolProperty | |
+| `+0x90` (144) | `MaxStack` | IntProperty | |
+| `+0x94` (148) | `UniqueServerID` | StructProperty | **Per-instance unique ID (20 bytes)** |
+| `+0xA8` (168) | `Weight` | DoubleProperty | |
+| `+0xC0` (192) | `Durability` | DoubleProperty | Current durability |
+| `+0xC8` (200) | `MaxDurability` | DoubleProperty | |
+| `+0x128` (296) | `PickupClass` | ClassProperty | Pickup actor Blueprint class |
+| `+0x140` (320) | `IsContainer` | BoolProperty | |
+| `+0x4E8` (1256) | `BuildActorClass` | ClassProperty | Buildable actor class |
+
+**`ItemId` at +0x30** is the FName used as the canonical item identifier throughout
+the protocol. The `LocalSlot.itemId` and `WorldEntityDescriptor.itemId` strings in
+`protocol.hpp` should match these FName values (e.g. `"DA_AK74"`, `"DA_Bandages"`).
+
+**`UniqueServerID` at +0x94** is a 20-byte struct (likely `FGuid` padded, or a custom
+UUID struct). This is the per-instance identifier for items with unique state
+(durability, attachments). For ground item entity sync, this is the UID to track.
+
+**`PickupClass` at +0x128** — the DataAsset stores its own pickup Blueprint class
+reference. This means when spawning a ground item, we can read `PickupClass` from
+the DataAsset rather than deriving it from the `DA_` → `BP_Pickup_C` naming convention.
+
+---
+
+### Revised Item Identity Strategy for SD-Online
+
+| Use Case | Identifier |
+|----------|-----------|
+| Item type ID in protocol | `JigsawItem_DataAsset_C.ItemId` FName (`"DA_AK74"`) |
+| Per-instance unique ID | `JigsawItem_DataAsset_C.UniqueServerID` (20-byte struct) |
+| Spawn pickup actor class | `JigsawItem_DataAsset_C.PickupClass` ClassProperty |
+| Server item ID in `LocalSlot` | `ItemId` FName string |
+
+---
+
 ## Session 13: 2026-08-06 — Runtime Dump: PlayerController, GameMode/State, AIOptimizer Components
 
 ### Method
