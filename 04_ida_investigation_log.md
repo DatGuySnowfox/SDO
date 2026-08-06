@@ -698,7 +698,207 @@ Field `LocalCloudFiles` at `0x1459f7e58` = local cache of cloud files.
 - **COMPLETED**: Steam online subsystem architecture (Session 4)
 - **COMPLETED**: GEngine global address confirmed: `0x147068258`
 - **COMPLETED**: SurrounDead native C++ class inventory
+- **COMPLETED**: UWorld::SpawnActor C++ address confirmed (Session 5)
 - **NEXT**: Find player health/hunger/thirst field offsets in BP_PlayerCharacter_C
   (needs FModel pak export + UE4SS runtime dump)
+- **NEXT**: Find UGameplayStatics::GetPlayerController / GetPlayerPawn addresses
 - **NEXT**: Document GUObjectArray exact start for C++ DLL `ForEachUObject` equivalent
-- **NEXT**: Confirm SpawnActor C++ address via callgraph from `UWorld::SpawnActor`
+
+---
+
+## Session 5: 2026-08-05 (continued) — SpawnActor Confirmation + Actor Placement Functions
+
+### UWorld::SpawnActor — CONFIRMED
+
+**Address**: `sub_14300FE50` = `0x14300FE50` (RVA: `0x300FE50`)
+
+**Confirmation method**: Decompile revealed embedded string:
+```
+L"Cannot generate unique name for '%s' in level '%s'."
+```
+This string is unique to `UWorld::SpawnActor` in UE5 source.
+
+**Signature**: `__int64 __fastcall(UWorld* world, UClass* a2, FTransform* a3, FActorSpawnParameters* a4)`
+- `a1` = UWorld pointer
+- `a2` = UClass to spawn (checked for RF_Abstract flag at a2+212 bit 25)
+- `a3` = FTransform pointer (NULL = default transform)
+- `a4` = FActorSpawnParameters struct
+
+**Size**: 701 decompiled lines — very large function (~4KB+ of machine code)
+
+**Call chain confirmed**:
+```
+sub_142EB0790  (BeginSpawningActorFromBlueprint exec thunk)
+  → sub_142E80E80  (UGameplayStatics::BeginSpawningActorFromBlueprint)
+      → sub_1434ACF40(GEngine, world_context, 1)  ← GetWorldFromContextObject
+      → sub_14300FE50(world, class, transform, params)  ← UWorld::SpawnActor
+```
+
+**Key callees within SpawnActor**:
+
+| Callee | Address | Role |
+|--------|---------|------|
+| `sub_142AAFB10` | `0x142AAFB10` | CDO/class validation (get default object) |
+| `sub_142AAEA90` | `0x142AAEA90` | Probably `UClass::GetDefaultObject` |
+| `sub_1430077E0` | `0x1430077E0` | Name generation (`MakeUniqueObjectName`) |
+| `sub_140E661C0` | `0x140E661C0` | Level notification (pre-spawn) |
+| `sub_140DDB430` | `0x140DDB430` | Actor class validity check |
+| `sub_142FFF900` | `0x142FFF900` | `StaticConstructObject_Internal` (allocation) |
+| `sub_140E6FAC0` | `0x140E6FAC0` | Get allocated object pointer |
+| `sub_142D2F650` | `0x142D2F650` | Actor initialization (pre-component) |
+| `sub_142AB4AB0` | `0x142AB4AB0` | `PostSpawnInitialize` (transform, owner, instigator) |
+| `sub_140DDB470` | `0x140DDB470` | `InitializeComponents` |
+| `sub_140B39480(a1+920, v143)` | — | `OnActorSpawned` delegate broadcast |
+| `sub_14350DC80(a1, v143)` | `0x14350DC80` | Final world notification |
+
+**FActorSpawnParameters layout** (a4 offsets, inferred from decompile):
+| Offset | Field | Notes |
+|--------|-------|-------|
+| `+0x00` | Reserved / Name | default = None |
+| `+0x08` | Template | Actor to use as template |
+| `+0x10` | Owner | Owning actor |
+| `+0x18` | Instigator | Pawn instigator |
+| `+0x20` | OverrideLevel | Force spawn into specific level |
+| `+0x30` | bNoFail | bool |
+| `+0x31` | SpawnCollisionHandlingOverride | ESpawnActorCollisionHandlingMethod |
+| `+0x32` | TransformScaleMethod | ETeleportType |
+| `+0x33` | PackedFlags | bAllowDuringConstructionScript (bit 0), bDeferConstruction (bit 1), bTemporaryEditorActor (bit 2), bHideFromSceneOutliner (bit 3) |
+
+**Validation checks** (reasons SpawnActor returns NULL):
+1. `a2 == NULL` (no class provided)
+2. `a2` has `RF_Abstract` flag (offset+212, bit 25)
+3. `a2` has `CLASS_NotPlaceable` flag (offset+212, bit 0)
+4. Class CDO validation fails
+5. World is `None` type or sealed
+6. Unique name generation fails
+7. `StaticConstructObject_Internal` returns NULL
+
+---
+
+### GetWorldFromContextObject — `sub_1434ACF40`
+
+**Address**: `0x1434ACF40`  
+**Signature**: `UWorld* __fastcall(UEngine* engine, UObject* worldContextObject, int WorldType)`
+- Called as `sub_1434ACF40(qword_147068258, a1, 1)`
+- `a1` here is the WorldContext object (e.g. player controller or game instance)
+- Returns the UWorld pointer for the given context
+
+This is the standard `GEngine->GetWorldFromContextObject(...)` which walks the outer chain to find the owning UWorld.
+
+---
+
+### StaticConstructObject_Internal — `sub_142FFF900`
+
+**Address**: `0x142FFF900`  
+Called from SpawnActor to allocate the new actor object. This is `StaticConstructObject_Internal` — the lowest-level UObject allocation primitive.
+
+---
+
+### UGameplayStatics::GetPlayerController — `sub_142E92450`
+
+**Address**: `0x142E92450`  
+**Exec thunk**: `sub_142EB6E90` at `0x142EB6E90` (in UGameplayStatics Blueprint library table at `0x145c359e8`)  
+**Signature**: `APlayerController* __fastcall(UObject* worldContextObject, int playerIndex)`
+
+**Algorithm**:
+1. `sub_1434ACF40(GEngine, worldContextObject, 1)` → UWorld
+2. `UWorld + 440` = `AGameStateBase*` GameState
+3. Walk `GameState + 56` array (TArray<APlayerState*>::Data) with count at `GameState + 64`
+4. Each `PlayerState + 48` = `APlayerController*` owning controller
+5. Return the controller at index == `playerIndex`
+
+**Key field confirmed**: `UWorld + 440` = `AGameStateBase* GameState`
+
+---
+
+### K2_SetActorLocationAndRotation — exec thunk `sub_142AC5500`
+
+**Address**: `0x142AC5500` (exec thunk in AActor Blueprint library table at `0x145b142a8`)
+
+**Algorithm**:
+1. Reads Blueprint params: NewLocation (FVector3d), bSweep (bool), HitResult (FHitResult), bTeleport (bool)  
+2. `actor + 416` = RootComponent (USceneComponent*)
+3. Reads current world-space location from `RootComponent + 608` and rotation from `RootComponent + 576`–`+607` (FQuat4d)
+4. Dispatches via vtable: `(*RootComponent->vtable[1312/8])(RootComponent, delta, newRot, bSweep, hitResult, 0, !bTeleport)`
+
+**USceneComponent field offsets** (all double-precision in UE5):
+| Offset | Field | Size |
+|--------|-------|------|
+| `+0x240` (576) | `ComponentToWorld.Rotation` (FQuat4d: X,Y,Z,W) | 32 bytes |
+| `+0x260` (608) | `ComponentToWorld.Translation.X` | 8 bytes |
+| `+0x268` (616) | `ComponentToWorld.Translation.Y` | 8 bytes |
+| `+0x270` (624) | `ComponentToWorld.Translation.Z` | 8 bytes |
+| `+0x278` (632) | `ComponentToWorld.Scale3D.X` | 8 bytes |
+
+**USceneComponent vtable offsets** (byte offsets from vtable base):
+| Byte Offset | Function |
+|-------------|---------|
+| `1200` (0x4B0) | `GetComponentLocation()` → reads Translation directly |
+| `1312` (0x520) | `MoveComponentImpl(delta, newRot, bSweep, hitResult, flags, teleportType)` |
+
+**Fast C++ DLL position read** (no vtable overhead):
+```cpp
+// actor = AActor*
+USceneComponent* root = *(USceneComponent**)(actor + 416);  // RootComponent
+double X = *(double*)(root + 608);
+double Y = *(double*)(root + 616);
+double Z = *(double*)(root + 624);
+```
+
+---
+
+### K2_GetActorLocation — exec thunk `sub_142AC5100`
+
+**Address**: `0x142AC5100` (exec thunk, AActor table at `0x145b14258`)
+
+**Algorithm**:
+1. Reads 3 boolean/flag params from Blueprint stack
+2. `actor + 416` = RootComponent
+3. Calls `(*RootComponent->vtable[1200/8])(RootComponent, outputBuffer)` → FVector3d
+
+---
+
+### Confirmed Field Offsets Summary
+
+**AActor (applies to all actor-derived classes)**:
+| Offset | Field |
+|--------|-------|
+| `0x000` | Primary vtable pointer |
+| `0x1A0` (416) | `RootComponent` (USceneComponent*) |
+| `0x1D8` (472) | `OnTakeAnyDamage` multicast delegate |
+| `0x2C8` (712) | Last damage instigator controller |
+| `0x2D0` (720) | Previous instigator |
+
+**ACharacter (extends AActor)**:
+| Offset | Field |
+|--------|-------|
+| `0x298` (664) | Secondary vtable pointer |
+| `0x320` (800) | `USkeletalMeshComponent* Mesh` |
+| `0x328` (808) | `UCharacterMovementComponent* CharacterMovement` |
+| `0x330` (816) | `UCapsuleComponent* CapsuleComponent` |
+
+**AArchVisCharacter (C++ base of BP_PlayerCharacter_C, extends ACharacter)**:
+| Offset | Field |
+|--------|-------|
+| `0x680` (1664) | `FString LookUpAxisName` ("LookUp") |
+| `0x690` (1680) | `FString LookUpRateAxisName` ("LookUpRate") |
+| `0x6A0` (1696) | `FString TurnAxisName` ("Turn") |
+| `0x6B0` (1712) | `FString TurnRateAxisName` ("TurnRate") |
+| `0x6C0` (1728) | `FString MoveForwardAxisName` ("MoveForward") |
+| `0x6D0` (1744) | `FString MoveRightAxisName` ("MoveRight") |
+| `0x6D8` (1752) | `float BaseTurnRate` |
+| `0x6DC` (1756) | `float BaseLookUpRate` |
+| `0x6E0` (1760) | **BP_PlayerCharacter_C Blueprint fields begin here** |
+
+**USceneComponent** (used via RootComponent):
+| Offset | Field |
+|--------|-------|
+| `0x240` (576) | `ComponentToWorld.Rotation` (FQuat4d, 32 bytes) |
+| `0x260` (608) | `ComponentToWorld.Translation` (FVector3d: X,Y,Z as doubles) |
+| `0x278` (632) | `ComponentToWorld.Scale3D` (FVector3d) |
+
+**UWorld globals**:
+| Offset | Field |
+|--------|-------|
+| `+440` (0x1B8) | `AGameStateBase* GameState` |
+| `+344` (0x158) | Probable `UGameInstance*` |
