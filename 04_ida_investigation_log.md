@@ -2192,6 +2192,12 @@ For Phase 2: vehicle position sync uses the same `Movement` frame type as player
 (x/y/z + yaw). Entity type `WorldEntityKind::Vehicle` is already defined in the
 protocol.
 
+**Confirmed (Session 15b)**: `Vehicle_PickupTruck_C` and `Vehicle_Charger_C` both
+return 0 Blueprint properties. Position/rotation sync uses `K2_GetActorLocation` /
+`K2_GetActorRotation` — available on any AActor, no Blueprint property access needed.
+Vehicle health, fuel, and occupant data require IDA investigation of C++ parent classes
+(not blocking for Phase 2 position sync).
+
 ---
 
 ## Session 15: 2026-08-06 — Jigsaw Inventory + Multiplayer Component Deep Dump
