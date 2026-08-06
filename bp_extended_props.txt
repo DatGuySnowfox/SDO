@@ -1,6 +1,4 @@
 
-== BP_PlayerState_C == [NOT FOUND IN WORLD]
-
 == BP_PlayerController_C ==
 Name                                                         Type                           Offset
 --------------------------------------------------------------------------------------------------------------
@@ -48,25 +46,10 @@ SnapDelay                                                    DoubleProperty     
 AllInspectedIDs                                              ArrayProperty                  808 (0x328)
 AllUIDs                                                      ArrayProperty                  824 (0x338)
 
-== AIOSubjectComponent ==
+== BP_StaticMeshPickup_C :: BP_WaterCanteenPickup_C [leaf] ==
 Name                                                         Type                           Offset
 --------------------------------------------------------------------------------------------------------------
-Handle                                                       StructProperty                 200 (0xC8)
-OnOptimizationUpdate                                         MulticastInlineDelegateProperty 208 (0xD0)
-OnPreDespawn                                                 MulticastInlineDelegateProperty 224 (0xE0)
-OnPostSpawned                                                MulticastInlineDelegateProperty 240 (0xF0)
-Spawner                                                      ObjectProperty                 256 (0x100)
-bAllowSubsystemToAutoDespawn                                 BoolProperty                   264 (0x108)
-bCanBeUpdatedBySubsystem                                     BoolProperty                   264 (0x108)
-OverrideSubsystemDespawnRadius                               FloatProperty                  268 (0x10C)
-Priority                                                     ByteProperty                   272 (0x110)
-DataClass                                                    ClassProperty                  280 (0x118)
-OptimizationLayers                                           ArrayProperty                  288 (0x120)
-bShouldCalculateIsSeen                                       BoolProperty                   304 (0x130)
 
-== AIOInvokerComponent ==
+== BP_SkeletalMeshPickup_C :: BP_BattleReadyGlockPickup_C [leaf] ==
 Name                                                         Type                           Offset
 --------------------------------------------------------------------------------------------------------------
-DebugWidget                                                  ObjectProperty                 160 (0xA0)
-
-== BP_StaticMeshPickup_C == [no pickup in world]

@@ -2175,10 +2175,27 @@ through property reads — we must call C++ methods.
 
 ---
 
-### BP_StaticMeshPickup_C — NOT FOUND
+### BP_StaticMeshPickup_C / BP_SkeletalMeshPickup_C — Zero Blueprint Properties
 
-Player was not near a ground item during the dump. A follow-up dump near any pickup
-will reveal item ID / UID fields. However, from the protocol already implemented
-(`itemId` string field in `WorldEntityDescriptor`), the server-side design is already
-correct — we just need to confirm the field name on the C++ side.
+**Confirmed**: both pickup base classes have zero UE-reflected Blueprint properties.
+
+Items dropped during dump:
+- Static mesh: `BP_WaterCanteenPickup_C` (leaf of `BP_StaticMeshPickup_C`) — 0 properties
+- Skeletal mesh: `BP_BattleReadyGlockPickup_C` (leaf of `BP_SkeletalMeshPickup_C`) — 0 properties
+
+`GetSuperClass()` throws at the C++ class boundary, preventing reflection of
+native UPROPERTY fields on parent classes. Any per-instance data (quantity, durability)
+is in native C++ structs invisible to UE4SS `ForEachProperty`.
+
+**Key implication for SD-Online**: item identity is **entirely encoded in the class path**.
+There is no `UID` or `Quantity` UPROPERTY to read from the actor. The protocol's
+`WorldEntityDescriptor.classPath` field is sufficient to identify a ground item type.
+For quantity/stack count, the client sending an `ItemDropResult` message already
+includes the item data — the server does not need to read it from the pickup actor.
+
+**Item spawning strategy** (for remote clients):
+- Spawn `BP_StaticMeshPickup_C` for non-weapon/clothing items, OR
+- Spawn the exact subclass (e.g. `BP_AK74Pickup_C`) for correct mesh without data table
+- Position via `K2_SetActorLocationAndRotation`
+- Type is communicated via `classPath` in `EntitySpawn` frame
 
