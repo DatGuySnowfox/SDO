@@ -2409,6 +2409,65 @@ PropertyDumper pass to reveal its inner layout.
 
 ---
 
+---
+
+## Session 17: 2026-08-06 — The Universal Slot Struct (120 bytes)
+
+### Result
+
+Both `S_ServerEquippedItems` slot structs and `PickupInfo.ItemInfo` use the **exact
+same 120-byte struct**. This is the canonical per-item-instance representation in Jigsaw.
+
+| Offset | Logical Name | Type | Size | Notes |
+|--------|-------------|------|------|-------|
+| `+0x00` | **`ItemID`** | ObjectProperty | 8 | Pointer to `JigsawItem_DataAsset_C` (the `DA_` asset) |
+| `+0x08` | **`Count`** | IntProperty | 4 | Stack count |
+| `+0x0C` | *(padding)* | | 4 | |
+| `+0x10` | `ItemVec` | StructProperty | 16 | Unknown — likely FGuid (UniqueServerID for this instance) |
+| `+0x20` | `Weight` | DoubleProperty | 8 | |
+| `+0x28` | `Price` | DoubleProperty | 8 | |
+| `+0x30` | `Durability` | StructProperty | 16 | Likely {Current:double, Max:double} |
+| `+0x40` | `Stats` | ArrayProperty | 16 | Random stats TArray |
+| `+0x50` | `Pending` | DoubleProperty | 8 | Pending durability/stat change |
+| `+0x58` | `CustomDataKey` | ArrayProperty | 16 | Extended custom data keys |
+| `+0x68` | `CustomDataValue` | ArrayProperty | 16 | Extended custom data values |
+
+Total: `0x68 + 16 = 0x78 = 120 bytes` ✓
+
+**`ItemID` at +0x0** is a UObject pointer to the `JigsawItem_DataAsset_C` instance
+for that item type. Reading it gives the DataAsset, from which `ItemId` (FName at
++0x30) gives the canonical string identifier (`"DA_AK74"` etc.).
+
+**`ItemVec` at +0x10** is a 16-byte StructProperty — the most likely candidate is
+another FGuid for per-instance uniqueness. Needs one more drill pass to confirm.
+
+**`Durability` at +0x30** is a 16-byte StructProperty — almost certainly `{double current, double max}`.
+
+### Minimal SD-Online Slot Sync Payload
+
+For each of the 21 equipment slots, the minimum fields to sync are:
+```
+ItemID   → read ObjectProperty pointer → follow to DataAsset → read ItemId FName
+Count    → int32 at +0x08
+Durability → 2 doubles at +0x30 (need confirmation)
+```
+Full loadout sync: 21 slots × ~24 bytes = ~504 bytes per player update.
+
+### Read Pattern for Active Weapon Name
+
+```cpp
+// Get equipped primary weapon's item name from the slot struct
+uint8_t* helperComp = ...; // BP_JigHelperComp_C instance
+uint8_t* equipped   = helperComp + 0xF8;        // S_ServerEquippedItems
+uint8_t* primary    = equipped + 0x528;          // EquippedPrimary slot
+UObject* itemDA     = *(UObject**)(primary + 0x0); // ItemID ObjectProperty
+// itemDA is now the JigsawItem_DataAsset_C*
+// FName at +0x30 = ItemId (e.g. "DA_AK74")
+FName itemId = *(FName*)(itemDA + 0x30);
+```
+
+---
+
 ### Revised Item Identity Strategy for SD-Online
 
 | Use Case | Identifier |
