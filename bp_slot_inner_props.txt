@@ -1,0 +1,12 @@
+
+== SlotStruct.ItemVec_13_4DB12E4E4F80730BD25ACFA6FA51AD0A [inner] ==
+Name                                                         Type                           Offset
+--------------------------------------------------------------------------------------------------------------
+X                                                            DoubleProperty                 0 (0x0)
+Y                                                            DoubleProperty                 8 (0x8)
+
+== SlotStruct.Durability_22_A3557C454274D193D47AB9B71FB0C0CA [inner] ==
+Name                                                         Type                           Offset
+--------------------------------------------------------------------------------------------------------------
+X                                                            DoubleProperty                 0 (0x0)
+Y                                                            DoubleProperty                 8 (0x8)

@@ -2438,18 +2438,38 @@ Total: `0x68 + 16 = 0x78 = 120 bytes` ✓
 for that item type. Reading it gives the DataAsset, from which `ItemId` (FName at
 +0x30) gives the canonical string identifier (`"DA_AK74"` etc.).
 
-**`ItemVec` at +0x10** is a 16-byte StructProperty — the most likely candidate is
-another FGuid for per-instance uniqueness. Needs one more drill pass to confirm.
+**`ItemVec` at +0x10** — confirmed `{X: double, Y: double}` = inventory grid position
+(column, row). NOT a UID — no per-instance FGuid exists in the slot struct.
 
-**`Durability` at +0x30** is a 16-byte StructProperty — almost certainly `{double current, double max}`.
+**`Durability` at +0x30** — confirmed `{X: double current, Y: double max}`.
+
+### Complete Slot Struct Layout (Session 18 confirmed)
+
+| Offset | Field | Type | Detail |
+|--------|-------|------|--------|
+| `+0x00` | `ItemID` | ObjectProperty (8b) | → `JigsawItem_DataAsset_C*` → `ItemId` FName at DA+0x30 |
+| `+0x08` | `Count` | int32 (4b) | Stack size |
+| `+0x0C` | *(padding)* | (4b) | |
+| `+0x10` | `ItemVec` | `{X:double, Y:double}` (16b) | Inventory grid position (col, row) |
+| `+0x20` | `Weight` | double (8b) | |
+| `+0x28` | `Price` | double (8b) | |
+| `+0x30` | `Durability` | `{X:double current, Y:double max}` (16b) | |
+| `+0x40` | `Stats` | TArray (16b) | Random stat modifiers |
+| `+0x50` | `Pending` | double (8b) | Pending change buffer |
+| `+0x58` | `CustomDataKey` | TArray (16b) | Arbitrary key extensions |
+| `+0x68` | `CustomDataValue` | TArray (16b) | Arbitrary value extensions |
+
+**No per-instance FGuid in the slot struct.** Item-instance uniqueness is managed
+server-side. SD-Online assigns its own UUIDs and maps them to (`ItemID` FName, `Count`,
+`Durability.X`) tuples. The `JigsawItem_DataAsset_C.UniqueServerID` FGuid (at DA+0x94)
+is the DataAsset-level UID, not per slot instance.
 
 ### Minimal SD-Online Slot Sync Payload
 
-For each of the 21 equipment slots, the minimum fields to sync are:
 ```
-ItemID   → read ObjectProperty pointer → follow to DataAsset → read ItemId FName
-Count    → int32 at +0x08
-Durability → 2 doubles at +0x30 (need confirmation)
+ItemID FName string  (variable, ~8–24 bytes: "DA_AK74")
+Count  int32         (4 bytes)
+DurabilityX double   (8 bytes, current durability)
 ```
 Full loadout sync: 21 slots × ~24 bytes = ~504 bytes per player update.
 
