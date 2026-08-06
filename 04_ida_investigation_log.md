@@ -804,10 +804,11 @@ Called from SpawnActor to allocate the new actor object. This is `StaticConstruc
 1. `sub_1434ACF40(GEngine, worldContextObject, 1)` → UWorld
 2. `UWorld + 440` = `AGameStateBase*` GameState
 3. Walk `GameState + 56` array (TArray<APlayerState*>::Data) with count at `GameState + 64`
-4. Each `PlayerState + 48` = `APlayerController*` owning controller
+4. Each `PlayerState + 0x140` = `APlayerController*` owning controller (confirmed Session 7/8)
 5. Return the controller at index == `playerIndex`
 
-**Key field confirmed**: `UWorld + 440` = `AGameStateBase* GameState`
+**Key field confirmed**: `UWorld + 440` = `AGameStateBase* GameState`  
+**Correction**: Earlier notes stated "PlayerState + 48 = owning controller" — the correct offset is **+0x140 (320)**, confirmed by decompile of `sub_1432819C0`.
 
 ---
 
@@ -896,6 +897,28 @@ double Z = *(double*)(root + 624);
 | `0x240` (576) | `ComponentToWorld.Rotation` (FQuat4d, 32 bytes) |
 | `0x260` (608) | `ComponentToWorld.Translation` (FVector3d: X,Y,Z as doubles) |
 | `0x278` (632) | `ComponentToWorld.Scale3D` (FVector3d) |
+
+**APlayerState**:
+| Offset | Field | Type |
+|--------|-------|------|
+| `+0x140` (320) | `OwningController` | APlayerController* |
+| `+0x29C` (668) | `PlayerId` | int32 |
+| `+0x2A2` (674) | Name override flag | uint8 (MSB set → vtable GetPlayerName) |
+| `+0x330` (816) | `PlayerNamePrivate.Data` | TCHAR* |
+| `+0x338` (824) | `PlayerNamePrivate.ArrayNum` | int32 |
+| `+0x33C` (828) | `PlayerNamePrivate.ArrayMax` | int32 |
+
+**APlayerController**:
+| Offset | Field | Type |
+|--------|-------|------|
+| `+0x2A0` (672) | `PlayerState` | APlayerState* |
+| `+0x2D8` (728) | `Pawn` | APawn* |
+
+**AGameStateBase**:
+| Offset | Field | Type |
+|--------|-------|------|
+| `+56` (0x38) | `PlayerArray.Data` | APlayerState** |
+| `+64` (0x40) | `PlayerArray.Num` | int32 |
 
 **UWorld globals**:
 | Offset | Field |
@@ -1101,3 +1124,338 @@ These are all hookable via UE4SS `RegisterHook` on the game's `BP_GameMode_C` Bl
 | EasyMultiSave | `/Script/EasyMultiSave` | Save/load all state | `OnPlayerLoaded` = sync point |
 | TechTree | `/Script/TechTree` | Research progression | Per-player, no sync needed |
 | ArchVisCharacter | `/Script/ArchVisCharacter` | BP_PlayerCharacter base | C++ character class |
+
+---
+
+## Session 7: 2026-08-05 (continued) — APlayerState Field Offsets
+
+### Overview
+
+Resolved the GetPlayerName / GetPlayerId table ambiguity. Confirmed `PlayerNamePrivate`
+FString offset directly from decompilation of the implementation function `sub_14325DBB0`.
+
+---
+
+### Exec Thunk Table Format Clarification
+
+The exec thunk table entries are **(name_ptr, fn_ptr)** pairs — name first, function second.
+This was previously misread as (fn_ptr, name_ptr).
+
+Corrected table at `0x145d35a30` (APlayerState functions):
+
+| Table Address | name_ptr | fn_ptr | Function |
+|---------------|----------|--------|---------|
+| `0x145d35a30` | `0x145d2ac58` ("GetPlayerId") | `0x14253e610` | GetPlayerId exec thunk |
+| `0x145d35a40` | `0x1459d0158` ("GetPlayerName") | `0x143281a30` | GetPlayerName exec thunk |
+| `0x145d35a50` | `0x145d2ac68` ("GetScore") | *(next entry)* | GetScore |
+
+---
+
+### APlayerState — GetPlayerName Implementation
+
+**Implementation**: `sub_14325DBB0` at `0x14325DBB0`  
+**Exec thunk**: `sub_143281A30` at `0x143281A30`
+
+Confirmed from disassembly of `sub_14325DBB0`:
+```asm
+cmp [rcx+2A2h], al      ; flag byte at APlayerState+0x2A2
+jge short .direct_read  ; if >= 0: read PlayerNamePrivate directly
+call [rax+768h]         ; else: vtable slot 237 (subclass override)
+
+.direct_read:
+mov rsi, [rcx+330h]     ; PlayerNamePrivate.Data  (TCHAR*)
+movsxd rdi, [rcx+338h]  ; PlayerNamePrivate.ArrayNum
+```
+
+---
+
+### APlayerState — GetPlayerId Implementation
+
+**Exec thunk**: `sub_14253E610` at `0x14253E610`
+
+```c
+__int64 __fastcall sub_14253E610(__int64 a1, __int64 a2, _DWORD *a3)
+{
+    *(_QWORD *)(a2 + 32) += *(_QWORD *)(a2 + 32) != 0;  // advance bytecode ptr
+    result = *(unsigned int *)(a1 + 0x29C);  // PlayerId int32
+    *a3 = result;
+    return result;
+}
+```
+
+`PlayerId` (int32) is at `APlayerState + 0x29C` (668 decimal).
+
+---
+
+### APlayerState — Confirmed Field Offsets
+
+| Offset | Field | Type | Notes |
+|--------|-------|------|-------|
+| `+0x29C` (668) | `PlayerId` | int32 | Unique player session ID |
+| `+0x2A2` (674) | Override flag byte | uint8 | If MSB set → vtable call for GetPlayerName |
+| `+0x330` (816) | `PlayerNamePrivate.Data` | TCHAR* | FString data pointer |
+| `+0x338` (824) | `PlayerNamePrivate.ArrayNum` | int32 | Character count (including null) |
+| `+0x33C` (828) | `PlayerNamePrivate.ArrayMax` | int32 | Allocated capacity |
+
+**`PlayerNamePrivate` FString starts at `APlayerState + 0x330`.**
+
+**Vtable override**: `GetPlayerName()` uses vtable slot 237 (byte offset 0x768 = 1896)
+when the flag at `+0x2A2` has its MSB set. Otherwise reads `PlayerNamePrivate` directly.
+
+---
+
+### Fast C++ DLL Player Name Read
+
+```cpp
+// playerState = APlayerState* (from APlayerController->PlayerState)
+const wchar_t* nameData = *(const wchar_t**)(playerState + 0x330);
+int32_t nameLen = *(int32_t*)(playerState + 0x338);
+// nameData is a null-terminated wchar_t string of length nameLen-1
+std::wstring playerName(nameData, nameLen > 0 ? nameLen - 1 : 0);
+```
+
+---
+
+### APlayerController — PlayerState Pointer
+
+From the `GetPlayerController` algorithm documented in Session 5:
+- `GameState + 56` = `PlayerArray.Data` (TArray of APlayerState*)
+- `PlayerState + 48` = `APlayerController*` owning controller
+
+This means: `APlayerState + 0x30` (48) = `APlayerController* OwningController`
+
+And to get PlayerState from PlayerController, we have the reverse confirmed:
+
+**APlayerController + 0x2A0** (672) = `APlayerState* PlayerState`  
+**APlayerController + 0x2D8** (728) = `APawn* Pawn`
+
+Confirmed from `FObjectPropertyParams` metadata:
+- `0x145bdb6e0` → PlayerState property, encoded offset `0x02A0`
+- `0x145bdb7e0` → Pawn property, encoded offset `0x02D8` (cross-validated by K2_GetPawn exec thunk reading `a1 + 728`)
+
+For APlayerState → APlayerController (reverse): the exec thunk `sub_1432819C0` reads
+`*(QWORD*)(a1 + 320)` where a1 is an APlayerState. This is likely `OwningController`
+at `APlayerState + 0x140` (320). (**Note**: Session 5 incorrectly stated "+48 = owning
+controller" — the correct value is +320 from the decompile.)
+
+---
+
+### Confirmed APlayerController Field Offsets
+
+| Offset | Field | Type |
+|--------|-------|------|
+| `+0x2A0` (672) | `PlayerState` | APlayerState* |
+| `+0x2D8` (728) | `Pawn` | APawn* |
+
+**Key addresses**:
+- K2_GetPawn exec thunk: `sub_1429C6760` at `0x1429C6760`
+- APlayerController exec thunk table: `0x145be5de0`–`0x145be5f18`
+- PlayerState property metadata: `0x145bdb6e0`
+- Pawn property metadata: `0x145bdb7e0`
+
+---
+
+### Pending After Session 7
+
+- **Player health/hunger/thirst** — Blueprint fields in pak, not findable in IDA
+- **AIOptimizer plugin** — investigated in Session 8 (see below)
+- **AGameState/UWorld map name offset** — still pending
+- **GUObjectArray** exact struct start — documented at ~`0x146EFDE40` (Session 4)
+
+---
+
+## Session 8: 2026-08-06 — AIOptimizer Plugin (Critical Multiplayer System)
+
+### Overview
+
+AIOptimizer is a **custom SurrounDead-specific** proximity-based AI actor lifecycle
+subsystem. **All zombies are managed by this system.** This is the single most
+impactful system for SD-Online that was previously unknown.
+
+**Package**: `/Script/AIOptimizer` at `0x145efedd0`  
+**Package descriptor**: `0x145efedb0`  
+**Package singleton getter**: `0x1438635F0`
+
+---
+
+### Registered Classes (6 total)
+
+| Class | Role | Size |
+|-------|------|------|
+| `AIOptimizerSubsystem` | Central world subsystem (singleton) | 208 bytes |
+| `AIOSubjectComponent` | Attached to zombie actors | — |
+| `AIOInvokerComponent` | Attached to player actors | — |
+| `AIOSpawnPoint` | Spawn point actor/component | — |
+| `DebugAIOptimizer` (x2) | Debug widget overlay, two variants | — |
+| `AIOptimizationLayer` | Per-distance-band configuration | — |
+
+---
+
+### AIOptimizerSubsystem — Native Functions (19 total)
+
+`StaticRegisterNativesUAIOptimizerSubsystem` at `0x143869F50`  
+Native function table at `0x145eff0e0`
+
+| Address | Function |
+|---------|---------|
+| `0x14386B340` | `DebugAIOptimizer` |
+| `0x14386B510` | `GetCategorizedDebugSubjects` |
+| `0x14386B680` | `GetClosestInvokerLocation` |
+| `0x14386B750` | `GetDebugSubjects` |
+| `0x14386B900` | `GetDistanceToClosestInvokerSquared` |
+| `0x14386B9A0` | `GetInvokerIndex` |
+| `0x14386BCD0` | `GetSubjectIndex` |
+| `0x14386BEC0` | `K2_DespawnSubject` |
+| `0x14386C320` | `K2_DespawnSubjectByHandle` |
+| `0x14386C4A0` | `K2_SpawnSubjectByHandle` |
+| `0x14386C580` | `LoopPendingSubjects` |
+| `0x14386C5C0` | `LoopSubjects` |
+| `0x14386C5E0` | `RegisterInvoker` |
+| `0x14386C720` | `RegisterSubject` |
+| `0x14386C990` | `RemoveDespawnedSubjectByHandle` |
+| `0x14386CED0` | `SetIsSystemEnabled` |
+| `0x14386D1E0` | `ShrinkArrays` |
+| `0x14386D260` | `UnregisterInvoker` |
+| `0x14386D400` | `UnregisterSubject` |
+
+---
+
+### AIOSubjectComponent — Key Methods
+
+Native table at `0x145efa908`:
+- `AddUniqueHandle` / `FindHandle` / `RemoveHandle` / `IsHandleValid`
+- `GetInvokerTag` / `GetSubjectTag`
+- `SetAILogicEnabled` / `SetCharacterMovementEnabled` / `SetCharacterFeatures`
+- `SetSpawner` / `SetCanBeUpdatedBySubsystem`
+- `CanBeUpdatedBySubsystem` / `ShouldBeDespawned` / `IsDespawning` / `IsSeenByAnyInvoker`
+- `GetCurrentOptimizationLayer` / `GetOptimizationLayerForCurrentDistance`
+- `GetDistanceToClosestInvoker` / `GetDistanceToClosestInvokerSquared`
+- `GetSpawnRadiusSquared` / `GetDespawnRadiusSquared`
+- `ReinitializeOptimizationLayers`
+- **Delegates**: `OnOptimizationUpdate`, `OnPreDespawn`, `OnPostSpawned`
+
+---
+
+### Enumerations
+
+| Enum | Values |
+|------|--------|
+| `EAIOStartSpawningMethod` | `None`, `SpawnOnGameStart`, `SpawnOnRadius`, `SpawnOnRegion` |
+| `EAIOSelectSpawnPointsMethod` | `UseRandomPoints`, `UseSpecifiedSpawnPoints` |
+| `EAIORespawnMethod` | `Undefined`, `AllAtOnce`, `EachIndividually` |
+| `EAIOFeaturesFlags` (bitmask) | `AIBrain`(1), `MovementComponent`(2), `Visibility`(4), `Collision`(8), `Animations`(16), `ActorTick`(32), `Shadows`(64) |
+| `EAIODebugGroup` | `Undefined`, `Spawned`, `Despawned`, `PendingSpawn`, `PendingDespawn`, `SpawnedClose`, `SpawnedMedium`, `SpawnedFar`, `NotUpdated` |
+| `EDespawnMethod` | `UseQueue`, `Immediately` |
+
+---
+
+### AIOptimizerSubsystem — Configuration Fields
+
+| Field | Purpose |
+|-------|---------|
+| `bIsSubsystemEnabled` | Master enable gate |
+| `bDisplayDebugInfo` | Debug display |
+| `OptimizationUpdateInterval` | Timer period for update loop |
+| `HandleSpawnDespawnMethod` | EDespawnMethod (queued vs immediate) |
+| `SpawnCapacityPerUpdate` | Throttle: max spawns per timer tick |
+| `SpawnInterval` / `DespawnRadius` | Distance thresholds |
+| `PeripheralVisionHalfAngleDegrees` | Cone angle for IsSeenByAnyInvoker |
+| `SpawnedSubjects` / `DespawnedSubjects` | Live subject arrays (stride 144 bytes) |
+| `Invokers` | All registered player invoker components |
+| `PendingDespawnSubjectsHeap` / `PendingSpawnSubjectsHeap` | Queued operations |
+
+---
+
+### Key Function Behaviors
+
+#### `SetIsSystemEnabled` (`0x14386CED0`)
+- Writes to global `byte_146D4ECC0`
+- **Enable**: starts 3 recurring timers (spawn, despawn, update)
+- **Disable**: cancels all timers, then **immediately hard-despawns all registered zombies** by looping `SpawnedSubjects` (stride 144) and disabling all EAIOFeaturesFlags on each
+- Fires `OnSubsystemEnabledChanged` delegate
+
+#### Spawn timer callback (`0x143868AA0`)
+1. Calls `0x1438693A0` — tick/update subjects (update positions, distances, layer indices)
+2. Calls `0x14386AC10` — process spawn queue
+3. Iterates `PendingSpawnSubjectsHeap` backwards
+4. Per entry: if `IsForcedToSpawn` OR `distance < spawnRadius²`: spawn actor
+5. Uses `sub_14300FE50` (UWorld::SpawnActor — confirmed address) internally
+
+#### `K2_DespawnSubject` (`0x14386BEC0`)
+Blueprint params: `SubjectHandle` (int), `bDespawnImmediately` (bool), `SubjectRef`, `OverrideRadius` (float), `bAllowRespawnOnlyByHandle` (bool)
+- Immediate → `sub_143866A30`: calls `SetAILogicEnabled(false)`, `SetCharacterMovementEnabled(false)`, applies EAIOFeaturesFlags to disable components
+- Queued → adds to `DespawnedSubjects` heap
+
+#### Visibility management (in spawn core `0x143869C00`)
+Uses `_InterlockedCompareExchange` on EObjectFlags:
+- `0x40000000` or `0x20000000` flag path controlled by `byte_146EFB965`
+- This is how actors transition between "visible" and "hidden" states when spawned/despawned
+
+---
+
+### Global Addresses
+
+| Symbol | Address |
+|--------|---------|
+| `AIOptimizerSubsystem::StaticClass` | `0x143863700` |
+| `SetIsSystemEnabled` native | `0x14386CED0` |
+| `RegisterInvoker` native | `0x14386C5E0` |
+| `RegisterSubject` native | `0x14386C720` |
+| `UnregisterInvoker` native | `0x14386D260` |
+| `UnregisterSubject` native | `0x14386D400` |
+| `K2_DespawnSubject` native | `0x14386BEC0` |
+| Spawn timer callback | `0x143868AA0` |
+| Spawn/feature-apply core | `0x143869C00` |
+| `bIsSubsystemEnabled` global | `0x146d4ecc0` |
+| `EAIOFeaturesFlags` metadata | `0x145efd6f0` |
+| `/Script/AIOptimizer` string | `0x145efedd0` |
+
+---
+
+### SD-Online Implications — CRITICAL
+
+1. **All zombies use AIOptimizer.** They are not persistent actors — they are spawned/
+   despawned based on distance from registered "Invoker" actors. Without registering
+   invoker components for each connected player, zombies will only spawn near the host.
+
+2. **RegisterInvoker must be called for each remote player's pawn.** The subsystem
+   uses the closest invoker for distance checks and feature-flag decisions. Register
+   a new invoker when `K2_PostLogin` fires, unregister on `K2_OnLogout`.
+
+3. **`SetIsSystemEnabled(false)` destroys all active zombies instantly** — any game
+   logic that calls this (menus, loading screens, cinematics) will wipe the AI world.
+   Monitor `byte_146d4ecc0` if zombie consistency matters across scene transitions.
+
+4. **Feature flags are distance-banded.** A zombie near Player A (close band = full AI)
+   and far from Player B (far band = AI off) uses the **closest invoker** distance.
+   This means zombie behavior is set by the nearest registered player — correct for
+   server-authoritative multiplayer.
+
+5. **SpawnCapacityPerUpdate throttles spawning.** With multiple players each adding
+   invokers, the pending spawn heap may grow large. May need to tune
+   `SpawnCapacityPerUpdate` or call `ShrinkArrays` periodically on the server.
+
+6. **Delegate hooks for server tracking:**
+   - `OnSubjectSpawnedByOptimizerSubsystem` — zombie spawned
+   - `OnSubjectDespawnedByOptimizerSubsystem` — zombie despawned  
+   - Bind these on the server for authoritative entity tracking.
+
+7. **Boss/scripted zombies** use `bCanBeRespawnedOnlyByHandle = true`. Server must
+   track handle IDs (`K2_SpawnSubjectByHandle` / `K2_DespawnSubjectByHandle`) for these.
+
+8. **`bIsBeyondLastLayer` = completely frozen** — beyond the outermost optimization
+   layer radius: AI off, tick off, invisible. Still in `SpawnedSubjects` array but
+   effectively suspended. In singleplayer this is fine; in multiplayer with players
+   spread apart, ensure the outermost layer radius covers the largest player spread.
+
+---
+
+### Updated Plugins Summary
+
+| Plugin | Package | Role | SD-Online Impact |
+|--------|---------|------|----------------|
+| SteamCore | `/Script/SteamCore` | Steam sessions | Hooks for session join/create |
+| EasyMultiSave | `/Script/EasyMultiSave` | Save/load all state | `OnPlayerLoaded` = sync point |
+| TechTree | `/Script/TechTree` | Research progression | Per-player, no sync needed |
+| ArchVisCharacter | `/Script/ArchVisCharacter` | BP_PlayerCharacter base | C++ character class |
+| **AIOptimizer** | `/Script/AIOptimizer` | Proximity AI lifecycle | **Must register invoker per player** |
