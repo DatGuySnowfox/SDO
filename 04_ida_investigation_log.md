@@ -920,11 +920,30 @@ double Z = *(double*)(root + 624);
 | `+56` (0x38) | `PlayerArray.Data` | APlayerState** |
 | `+64` (0x40) | `PlayerArray.Num` | int32 |
 
-**UWorld globals**:
-| Offset | Field |
-|--------|-------|
-| `+440` (0x1B8) | `AGameStateBase* GameState` |
-| `+344` (0x158) | Probable `UGameInstance*` |
+**UObject** (base of all UE objects):
+| Offset | Field | Type |
+|--------|-------|------|
+| `+0x08` | `ObjectFlags` | EObjectFlags |
+| `+0x0C` | `InternalIndex` | int32 (GUObjectArray index) |
+| `+0x10` | `ClassPrivate` | UClass* |
+| `+0x18` | `NamePrivate` | FName (8 bytes: ComparisonIdx u32 + Number u32) |
+| `+0x20` | `OuterPrivate` | UObject* |
+
+**UWorld** (extends UObject):
+| Offset | Field | Type |
+|--------|-------|------|
+| `+0x1B8` (440) | `GameState` | AGameStateBase* |
+| `+0x158` (344) | Probable `GameInstance` | UGameInstance* |
+| `+0x6A8` (1704) | `TimeSeconds` | double |
+| `+0x6B0` (1712) | `UnpausedTimeSeconds` | double |
+| `+0x6B8` (1720) | `RealTimeSeconds` | double |
+
+**AGameStateBase** (extends AInfo → AActor):
+| Offset | Field | Type |
+|--------|-------|------|
+| `+0x38` (56) | `PlayerArray.Data` | APlayerState** |
+| `+0x40` (64) | `PlayerArray.Num` | int32 |
+| `+0x218` (536) | `ReplicatedWorldTimeSeconds` | float |
 
 ---
 
@@ -1447,6 +1466,92 @@ Uses `_InterlockedCompareExchange` on EObjectFlags:
    layer radius: AI off, tick off, invisible. Still in `SpawnedSubjects` array but
    effectively suspended. In singleplayer this is fine; in multiplayer with players
    spread apart, ensure the outermost layer radius covers the largest player spread.
+
+---
+
+---
+
+## Session 9: 2026-08-06 — FName::ToString + UWorld Timing Fields
+
+### FName::ToString
+
+**Address**: `0x140C9D940`  
+**Signature**: `void FName::ToString(const FName* this, FString* result)`  
+- `rcx` = FName* (8 bytes: ComparisonIndex uint32 at +0, Number uint32 at +4)  
+- `rdx` = FString* (output, caller-allocated)
+
+**Confirmed by**:
+- `execGetObjectName` at `0x142FB76B0`: reads `*(QWORD*)(uobj + 0x18)` = NamePrivate, calls `0x140C9D940`
+- `execGetDisplayName` at `0x142FB57E0`: same pattern
+
+**UE5 FNamePool internals** (from disassembly):
+```asm
+mov ebx, [rcx]           ; ComparisonIndex (32-bit)
+movzx eax, bx            ; chunk offset = idx & 0xFFFF
+shr edx, 10h             ; chunk index = idx >> 16
+lea r8, [0x146E57DC0]    ; GNamePool (FNamePool global)
+add rcx, [r8+rdx*8+10h]  ; entry = GNamePool.Blocks[chunk] + offset*2
+```
+
+**GNamePool** global: `0x146E57DC0`
+
+**UObject::NamePrivate** (FName) is at **UObject + 0x18** (24 decimal) — confirmed for all objects including UWorld.
+
+**Fast C++ DLL world name read**:
+```cpp
+// world = UWorld* (from GetWorldFromContextObject)
+uint32_t fname_idx = *(uint32_t*)(world + 0x18);   // ComparisonIndex
+uint32_t fname_num = *(uint32_t*)(world + 0x1C);   // Number
+
+FString nameStr = {};
+typedef void(*FNameToString_t)(const void* fname, void* outStr);
+FNameToString_t FName_ToString = (FNameToString_t)0x140C9D940;
+FName_ToString((void*)(world + 0x18), &nameStr);
+// nameStr.Data = *(wchar_t**)&nameStr  (points to world's map name)
+```
+
+---
+
+### UWorld Timing Fields
+
+All confirmed from disassembly of `execGetGameTimeInSeconds` (`0x142EB8070`):
+```asm
+call 0x1434ACF40          ; GetWorldFromContextObject → rax = UWorld*
+movsd xmm0, [rax+6A8h]   ; read TimeSeconds as double
+movsd [rsi], xmm0         ; write to output
+```
+
+| Field | Offset | Type | Notes |
+|-------|--------|------|-------|
+| `TimeSeconds` | `+0x6A8` (1704) | double | Authoritative server clock, updated every tick |
+| `UnpausedTimeSeconds` | `+0x6B0` (1712) | double | Never paused |
+| `RealTimeSeconds` | `+0x6B8` (1720) | double | Wall clock time |
+
+**In UE5.3, all world time fields are double precision** (not float).
+
+Also found on AGameStateBase:
+| Field | Offset | Type | Notes |
+|-------|--------|------|-------|
+| `ReplicatedWorldTimeSeconds` | `+0x218` (536) | float | Network-replicated copy |
+
+Exec thunks:
+- `execGetGameTimeInSeconds`: `0x142EB8070`  
+- `execGetServerWorldTimeSeconds` (AGameStateBase): `0x142AA3C00`
+
+---
+
+### Confirmed UObject Layout
+
+| Offset | Field | Size |
+|--------|-------|------|
+| `+0x00` | vtable | 8 |
+| `+0x08` | `ObjectFlags` | 4 |
+| `+0x0C` | `InternalIndex` | 4 |
+| `+0x10` | `ClassPrivate` (UClass*) | 8 |
+| `+0x18` | `NamePrivate` (FName: ComparisonIndex + Number) | 8 |
+| `+0x20` | `OuterPrivate` (UObject*) | 8 |
+
+FName at `+0x18` confirmed by `execGetObjectName` decompile.
 
 ---
 
