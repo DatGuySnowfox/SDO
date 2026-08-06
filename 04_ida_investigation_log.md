@@ -2025,6 +2025,68 @@ supports this.
 
 ---
 
+## Session 12b: 2026-08-06 — AssetRegistry Deep Dive: Item Database + Replication Structs
+
+### Item Database — JigsawItem_DataAsset_C (589 items)
+
+Every item in the game is a `JigsawItem_DataAsset_C` instance, named `DA_<ItemName>`.
+
+**Path pattern**: `/Game/Inventory/Items/DataAssets/<Category>/<Name>.<Name>`
+
+Examples:
+- `/Game/Inventory/Items/DataAssets/Weapons/Firearms/Rifles/DA_AK74.DA_AK74`
+- `/Game/Inventory/Items/DataAssets/Consumables/Medical/DA_Bandages.DA_Bandages`
+- `/Game/Inventory/Items/DataAssets/Attachments/Ammo/DA_556Ammo.DA_556Ammo`
+
+**SD-Online implication**: The `itemId` field in `WorldEntityDescriptor` and `LocalSlot`
+should reference the `DA_` asset name (e.g. `"DA_AK74"`) not the pickup Blueprint class.
+This is the canonical item identifier used throughout the Jigsaw system.
+
+The mapping between DataAsset and pickup Blueprint is 1:1 by naming convention:
+strip `DA_` prefix → add `BP_` prefix + `Pickup_C` suffix = `BP_AK74Pickup_C`.
+
+---
+
+### Jigsaw Inventory — Replicated Structs
+
+The Jigsaw inventory plugin was designed with network replication in mind.
+
+| Struct | Path | Purpose |
+|--------|------|---------|
+| `RepItemInfo` | `.../Jigsaw/Data/RepItemInfo` | Per-slot replicated item data |
+| `S_JigPayload` | `.../Jigsaw/Data/S_JigPayload` | Inventory slot payload |
+| `S_RepActorData` | `.../Jigsaw/Components/Data/S_RepActorData` | Replicated actor inventory |
+| `S_RepNonActorData` | `.../Jigsaw/Components/Data/S_RepNonActorData` | Replicated non-actor inventory |
+| `S_ReplicatedContainerInfo` | `.../Jigsaw/Components/Data/S_ReplicatedContainerInfo` | Container sync info |
+| `S_ServerEquippedItems` | `.../Jigsaw/Data/S_ServerEquippedItems` | Server-side equipped items |
+| `S_RepAttachmentInfo` | `.../Jigsaw/Data/S_RepAttachmentInfo` | Weapon attachment replication |
+| `S_RepWeaponAttachment` | `.../Jigsaw/Data/S_RepWeaponAttachment` | Weapon attachment details |
+| `S_EquipmentIDInfo` | `.../Jigsaw/Components/Data/S_EquipmentIDInfo` | Equipment slot IDs |
+| `DefaultItemInfo` | `.../Jigsaw/Data/DefaultItemInfo` | Base item info struct |
+
+These structs indicate the Jigsaw plugin had a planned server-authoritative replication
+path that shipped inactive. For SD-Online, `RepItemInfo` is the key struct defining
+the minimum per-slot sync payload. Its fields need runtime dumping via PropertyDumper.
+
+---
+
+### Save System
+
+- `BFL_SaveGames` — Blueprint Function Library wrapping EasyMultiSave. All save/load
+  calls go through this BFL.
+- `Struct_KeepInventory` — the struct at `PlayerController + 0x890`.
+  Defines which inventory slots survive death.
+
+---
+
+### AIOptimizer Structs
+
+- `S_AIOptimization` — Optimization layer config (used by `AIOSubjectComponent.OptimizationLayers`)
+- `S_AIRespawn` — Zombie respawn settings per spawner
+- `S_AISpawner` — Spawner config per zone
+
+---
+
 ## Session 14: 2026-08-06 — Runtime Dump: Levelling, Skills, Narrative, Zombie, Vehicle
 
 ### Method
