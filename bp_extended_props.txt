@@ -1,0 +1,72 @@
+
+== BP_PlayerState_C == [NOT FOUND IN WORLD]
+
+== BP_PlayerController_C ==
+Name                                                         Type                           Offset
+--------------------------------------------------------------------------------------------------------------
+UberGraphFrame                                               StructProperty                 2136 (0x858)
+NarrativeComponent                                           ObjectProperty                 2144 (0x860)
+LevellingComponent                                           ObjectProperty                 2152 (0x868)
+TechTreeComponent                                            ObjectProperty                 2160 (0x870)
+PassiveSkillsComponent                                       ObjectProperty                 2168 (0x878)
+Widget                                                       ObjectProperty                 2176 (0x880)
+AutoSaveEnabled                                              BoolProperty                   2184 (0x888)
+KeepInventory                                                StructProperty                 2192 (0x890)
+Level                                                        NameProperty                   2240 (0x8C0)
+Forename                                                     StrProperty                    2248 (0x8C8)
+Surname                                                      StrProperty                    2264 (0x8D8)
+Sex                                                          StrProperty                    2280 (0x8E8)
+Age                                                          StrProperty                    2296 (0x8F8)
+Occupation                                                   ByteProperty                   2312 (0x908)
+ZombieKills                                                  IntProperty                    2316 (0x90C)
+BossZombieKills                                              IntProperty                    2320 (0x910)
+AnimalKills                                                  IntProperty                    2324 (0x914)
+HumanKills                                                   IntProperty                    2328 (0x918)
+DaysSurvived                                                 IntProperty                    2332 (0x91C)
+DistanceTravelled                                            DoubleProperty                 2336 (0x920)
+InfestationsDestroyed                                        IntProperty                    2344 (0x928)
+RespawnPointEnabled                                          BoolProperty                   2348 (0x92C)
+RespawnLoc                                                   StructProperty                 2352 (0x930)
+
+== BP_SurroundeadGameMode_C ==
+Name                                                         Type                           Offset
+--------------------------------------------------------------------------------------------------------------
+UberGraphFrame                                               StructProperty                 824 (0x338)
+DefaultSceneRoot                                             ObjectProperty                 832 (0x340)
+Autosave                                                     BoolProperty                   840 (0x348)
+DiscordRpc                                                   ObjectProperty                 848 (0x350)
+
+== BP_SurroundeadGameState_C ==
+Name                                                         Type                           Offset
+--------------------------------------------------------------------------------------------------------------
+UberGraphFrame                                               StructProperty                 752 (0x2F0)
+DefaultSceneRoot                                             ObjectProperty                 760 (0x2F8)
+SnapActorRef                                                 ObjectProperty                 768 (0x300)
+FirstCaptureDone                                             BoolProperty                   776 (0x308)
+ItemsQueue                                                   ArrayProperty                  784 (0x310)
+SnapDelay                                                    DoubleProperty                 800 (0x320)
+AllInspectedIDs                                              ArrayProperty                  808 (0x328)
+AllUIDs                                                      ArrayProperty                  824 (0x338)
+
+== AIOSubjectComponent ==
+Name                                                         Type                           Offset
+--------------------------------------------------------------------------------------------------------------
+Handle                                                       StructProperty                 200 (0xC8)
+OnOptimizationUpdate                                         MulticastInlineDelegateProperty 208 (0xD0)
+OnPreDespawn                                                 MulticastInlineDelegateProperty 224 (0xE0)
+OnPostSpawned                                                MulticastInlineDelegateProperty 240 (0xF0)
+Spawner                                                      ObjectProperty                 256 (0x100)
+bAllowSubsystemToAutoDespawn                                 BoolProperty                   264 (0x108)
+bCanBeUpdatedBySubsystem                                     BoolProperty                   264 (0x108)
+OverrideSubsystemDespawnRadius                               FloatProperty                  268 (0x10C)
+Priority                                                     ByteProperty                   272 (0x110)
+DataClass                                                    ClassProperty                  280 (0x118)
+OptimizationLayers                                           ArrayProperty                  288 (0x120)
+bShouldCalculateIsSeen                                       BoolProperty                   304 (0x130)
+
+== AIOInvokerComponent ==
+Name                                                         Type                           Offset
+--------------------------------------------------------------------------------------------------------------
+DebugWidget                                                  ObjectProperty                 160 (0xA0)
+
+== BP_StaticMeshPickup_C == [no pickup in world]
