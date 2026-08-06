@@ -1,0 +1,99 @@
+
+== S_ServerEquippedItems == [NOT FOUND AS USCRIPTSTRUCT]
+
+== RepItemInfo == [NOT FOUND AS USCRIPTSTRUCT]
+
+== S_JigPayload == [NOT FOUND AS USCRIPTSTRUCT]
+
+== S_RepActorData == [NOT FOUND AS USCRIPTSTRUCT]
+
+== S_RepNonActorData == [NOT FOUND AS USCRIPTSTRUCT]
+
+== S_EquipmentIDInfo == [NOT FOUND AS USCRIPTSTRUCT]
+
+== DefaultItemInfo == [NOT FOUND AS USCRIPTSTRUCT]
+
+== S_ContainerSlots == [NOT FOUND AS USCRIPTSTRUCT]
+
+== S_ReplicatedContainerInfo == [NOT FOUND AS USCRIPTSTRUCT]
+
+== BP_JigHelperComp_C.ServerEquippedItems [inner struct] ==
+Name                                                         Type                           Offset
+--------------------------------------------------------------------------------------------------------------
+EquippedFacewear_34_8AC8653C42B55B98B18B409ADF11C9D0         StructProperty                 0 (0x0)
+EquippedHeadwear_35_8AE6F97846E0F3067404628BBA8FD496         StructProperty                 120 (0x78)
+EquippedEyewear_36_27F872F64826604D9E144B835F76AAA1          StructProperty                 240 (0xF0)
+EquippedAccessory_37_D9C5EBD3498FCB04AFC073AF597D0E61        StructProperty                 360 (0x168)
+EquippedTorso_38_68214F6745B9623EC27562AA1DFFE07F            StructProperty                 480 (0x1E0)
+EquippedGloves_14_307137BA447CB8C0EDCE3E95850C75BA           StructProperty                 600 (0x258)
+EquippedLegs_39_2283163D415F1E31B016B19F2F5C5262             StructProperty                 720 (0x2D0)
+EquippedFeet_40_023355084FFB67B156D00A8D1F88F489             StructProperty                 840 (0x348)
+EquippedContainer_41_1820AF744A68808040CE7AB76A7CDB39        StructProperty                 960 (0x3C0)
+EquippedBodyArmor_42_28D80C89469B81E7286ADB81BE5B9F0F        StructProperty                 1080 (0x438)
+EquippedBackpack_30_A980E63A441FE0EF1756E2BB5EF88F82         StructProperty                 1200 (0x4B0)
+EquippedPrimary_43_71FDAE8F453FE0DADB6317949C57DDCF          StructProperty                 1320 (0x528)
+EquippedSecondary_44_06F9E8664A16E6584B9772A436A872B0        StructProperty                 1440 (0x5A0)
+EquippedSidearm_45_DBAF50604B799AD8D36966B58FC8D116          StructProperty                 1560 (0x618)
+EquippedMelee_48_0C451F654720DD3648581EA9DB6E85D0            StructProperty                 1680 (0x690)
+EquippedThrowable_55_56FFA8104E711A5D4173878FBB8E8BAE        StructProperty                 1800 (0x708)
+EquippedFlashlight_56_2F5D9BE4430D3A53E563F384E51D1D96       StructProperty                 1920 (0x780)
+EquippedBinoculars_57_FA37337F42E4A60116D21485F6D57AB7       StructProperty                 2040 (0x7F8)
+EquippedGPS_58_A18BCF9B44989D75939B038888DBFC9C              StructProperty                 2160 (0x870)
+EquippedCompass_59_E0A6289D4D59B1D4ABEB43AC8A5527BB          StructProperty                 2280 (0x8E8)
+EquippedFishingRod_60_E44B357645599BFD4D7B52B9B64F2A9B       StructProperty                 2400 (0x960)
+
+== BP_JigHelperComp_C.ActiveWeapon [inner struct] ==
+Name                                                         Type                           Offset
+--------------------------------------------------------------------------------------------------------------
+TagName                                                      NameProperty                   0 (0x0)
+
+== JigsawItem_DataAsset_C.SlotDimensions [inner struct] ==
+Name                                                         Type                           Offset
+--------------------------------------------------------------------------------------------------------------
+X                                                            DoubleProperty                 0 (0x0)
+Y                                                            DoubleProperty                 8 (0x8)
+
+== JigsawItem_DataAsset_C.Type [inner struct] ==
+Name                                                         Type                           Offset
+--------------------------------------------------------------------------------------------------------------
+TagName                                                      NameProperty                   0 (0x0)
+
+== JigsawItem_DataAsset_C.Rarity [inner struct] ==
+Name                                                         Type                           Offset
+--------------------------------------------------------------------------------------------------------------
+TagName                                                      NameProperty                   0 (0x0)
+
+== JigsawItem_DataAsset_C.UniqueServerID [inner struct] ==
+Name                                                         Type                           Offset
+--------------------------------------------------------------------------------------------------------------
+A                                                            IntProperty                    0 (0x0)
+B                                                            IntProperty                    4 (0x4)
+C                                                            IntProperty                    8 (0x8)
+D                                                            IntProperty                    12 (0xC)
+
+== BP_JigMultiplayer_C.MPComponentType [inner struct] ==
+Name                                                         Type                           Offset
+--------------------------------------------------------------------------------------------------------------
+TagName                                                      NameProperty                   0 (0x0)
+
+== BP_JigMultiplayer_C.PickupInfo [inner struct] ==
+Name                                                         Type                           Offset
+--------------------------------------------------------------------------------------------------------------
+UniqueServerID_37_C49AE0DA449ACAE3BE4633A263303B68           StructProperty                 0 (0x0)
+IsContainer_14_0198F62E4F1B93DD8B4D6E92B7E3EA45              BoolProperty                   16 (0x10)
+ContainerDimension_28_232D13A9468B596AE3CE01B69CB32CD6       StructProperty                 24 (0x18)
+ItemInfo_25_937A083B4BD3D9B590E0A69C76A4F6F7                 StructProperty                 40 (0x28)
+ContainerMotherID_38_33D59C5047C31FF0367835AAF5ABE05D        StructProperty                 160 (0xA0)
+SlotIndex_6_8ED1F34A4AF1D565616883B80192E3DD                 IntProperty                    176 (0xB0)
+Rotated_9_3CFE5D9342A81FB1FF17DEB7B491CE56                   BoolProperty                   180 (0xB4)
+InContainerIndex_31_A61F5C3A47C8E761BA5CF0ADA1DF9FDE         IntProperty                    184 (0xB8)
+PickupRef_20_A3E97763428AC84AF4DBB8A56CFAC657                ObjectProperty                 192 (0xC0)
+SubContainers_35_9B8F8C174A191BE2B5DAE19C1EB3FAAE            ArrayProperty                  200 (0xC8)
+
+== BP_JigMultiplayer_C.MonitorContainerUID [inner struct] ==
+Name                                                         Type                           Offset
+--------------------------------------------------------------------------------------------------------------
+A                                                            IntProperty                    0 (0x0)
+B                                                            IntProperty                    4 (0x4)
+C                                                            IntProperty                    8 (0x8)
+D                                                            IntProperty                    12 (0xC)
