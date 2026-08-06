@@ -1910,3 +1910,116 @@ double radiation = *(double*)(rad + 0xC8);
 // Death flag (no component hop needed)
 bool isDead = *(bool*)(character + 0x13E1);
 ```
+
+---
+
+## Session 12: 2026-08-05 — AssetRegistry Blueprint Class Path Mining
+
+### Method
+
+Parsed `AssetRegistry.json` (exported from pak alongside `pak_all_files.txt`) using
+Python to extract `BlueprintGeneratedClass` entries. These are the paths used for
+`SpawnActor` in UE4SS C++ mods and for `FindFirstOf` / `StaticLoadObject`.
+
+UE class path format for spawning: ObjectPath from AssetRegistry (already ends in `_C`).
+
+---
+
+### Key BlueprintGeneratedClass Paths
+
+| Class | Full Object Path |
+|-------|-----------------|
+| `BP_PlayerCharacter_C` | `/Game/Blueprints/BP_PlayerCharacter.BP_PlayerCharacter_C` |
+| `BP_PlayerCharacter_Child_C` | `/Game/Blueprints/BP_PlayerCharacter_Child.BP_PlayerCharacter_Child_C` |
+| `BP_PlayerController_C` | `/Game/Blueprints/BP_PlayerController.BP_PlayerController_C` |
+| `BP_SurroundeadGameMode_C` | `/Game/Blueprints/BP_SurroundeadGameMode.BP_SurroundeadGameMode_C` |
+| `BP_SurroundeadGameState_C` | `/Game/Blueprints/BP_SurroundeadGameState.BP_SurroundeadGameState_C` |
+| `BP_StaticMeshPickup_C` | `/Game/Inventory/Items/BP_StaticMeshPickup.BP_StaticMeshPickup_C` |
+| `BP_SkeletalMeshPickup_C` | `/Game/Inventory/Items/BP_SkeletalMeshPickup.BP_SkeletalMeshPickup_C` |
+| `BP_LootContainer_C` | `/Game/Inventory/Containers/BP_LootContainer.BP_LootContainer_C` |
+| `Buildable_MASTER_C` | `/Game/Blueprints/BuildingSystem/Actors/Buildable_MASTER.Buildable_MASTER_C` |
+| `BP_VehicleMaster_C` | `/Game/Blueprints/Vehicles/BP_VehicleMaster.BP_VehicleMaster_C` |
+| `BP_Zombie_C` | `/Game/AI/Zombies/BP_Zombie.BP_Zombie_C` |
+| `BP_ZombieBoss_C` | `/Game/AI/Zombies/Boss/BP_ZombieBoss.BP_ZombieBoss_C` |
+
+**No `BP_GameMode_C` or `BP_PlayerState_C`** — those are named `BP_SurroundeadGameMode_C`
+and the PlayerState (if it exists as a Blueprint) would be similarly prefixed. The
+`FindFirstOf("BP_PlayerState_C")` call in PropertyDumper v2 may return nothing; the
+actual class is likely a pure C++ APlayerState or named differently.
+
+---
+
+### Spawnable Vehicle Types (17 total)
+
+All inherit from `BP_VehicleMaster_C`. Specific types:
+
+| Short Name | Object Path |
+|------------|-------------|
+| `Vehicle_4x4Jeep_C` | `/Game/Blueprints/Vehicles/Types/4x4Jeep/Vehicle_4x4Jeep.Vehicle_4x4Jeep_C`* |
+| `Vehicle_Ambulance_C` | `/Game/Blueprints/Vehicles/Types/Ambulance/Vehicle_Ambulance.Vehicle_Ambulance_C`* |
+| `Vehicle_BigRig_C` | `/Game/Blueprints/Vehicles/Types/BigRig/Vehicle_BigRig.Vehicle_BigRig_C`* |
+| `Vehicle_Buggy_C` | `/Game/Blueprints/Vehicles/Types/Buggy/Vehicle_Buggy.Vehicle_Buggy_C`* |
+| `Vehicle_Charger_C` | `/Game/Blueprints/Vehicles/Types/Charger/Vehicle_Charger.Vehicle_Charger_C`* |
+| `Vehicle_PickupTruck_C` | `/Game/Blueprints/Vehicles/Types/PickupTruck/Vehicle_PickupTruck.Vehicle_PickupTruck_C`* |
+| `Vehicle_Humvee_C` | `/Game/Blueprints/Vehicles/Types/Humvee/Vehicle_Humvee.Vehicle_Humvee_C`* |
+| `Vehicle_RV_C` | `/Game/Blueprints/Vehicles/Types/RV/Vehicle_RV.Vehicle_RV_C`* |
+| `Vehicle_SUV_C` | `/Game/Blueprints/Vehicles/Types/SUV/Vehicle_SUV.Vehicle_SUV_C`* |
+
+*`_C` suffix appended — AssetRegistry only shows the Blueprint asset; append `_C` for the generated class.
+
+---
+
+### Item Pickup Class Path Pattern
+
+591 pickup blueprints found. All inherit from `BP_StaticMeshPickup_C` (static mesh)
+or `BP_SkeletalMeshPickup_C` (weapons/clothing with skeletal mesh).
+
+Pattern: `/Game/Inventory/Items/Pickups/<Category>/<Name>.<Name>_C`
+
+Examples:
+- `/Game/Inventory/Items/Pickups/Weapons/Firearms/Rifles/BP_AK74Pickup.BP_AK74Pickup_C`
+- `/Game/Inventory/Items/Pickups/Consumables/Medical/BP_BandagesPickup.BP_BandagesPickup_C`
+- `/Game/Inventory/Items/Pickups/Attachments/Ammo/BP_9mmAmmoPickup.BP_9mmAmmoPickup_C`
+
+For entity_manager::spawn_entity_actor(), spawning the **base** `BP_StaticMeshPickup_C`
+is sufficient — the server tells the client which item via `itemId` string, and the
+existing pickup actor reads its mesh from a data table lookup. Alternatively, spawn
+the specific subclass for correct mesh without data table dependency.
+
+---
+
+### Proxy Actor Strategy — Using BP_PlayerCharacter_C
+
+The existing `proxy_manager.cpp` looks for `"BP_RemoteProxy_C"` which does not exist
+in the pak. The correct approach is to spawn `BP_PlayerCharacter_C` directly as the
+proxy — it's the actual player class with correct animations and mesh.
+
+**Resolved class path for `spawn_proxy()`:**
+```
+/Game/Blueprints/BP_PlayerCharacter.BP_PlayerCharacter_C
+```
+
+This eliminates the need for a custom proxy Blueprint entirely.
+
+**Concern**: `BP_PlayerCharacter_C` has full game logic (AI optimizer registration,
+component ticks, inventory, etc.). For a remote proxy we want it passive. Options:
+1. Spawn it and immediately call `DisableInput` + detach from controller (no PC assigned = inert).
+2. Use `BP_Zombie_C` as proxy (has skeleton/animations but simpler logic). Risk: wrong skeleton rig.
+3. Create a minimal proxy Blueprint (requires dev tools we don't have in cooked build).
+
+**Recommendation**: Option 1 — spawn `BP_PlayerCharacter_C` with no controller assigned.
+UE4 actors with no PlayerController assigned do not process player input and their
+blueprint Tick will still run, but the character will be static without a controller
+sending movement commands. The mod controls position via `K2_SetActorLocationAndRotation`.
+
+---
+
+### Building System
+
+`Buildable_MASTER_C` is the base for all player-built structures. Subclass pattern:
+`/Game/Blueprints/BuildingSystem/Actors/<Category>/Buildable_<Name>.Buildable_<Name>_C`
+
+For `WorldEntityKind::PlacedStructure`, the server would need to track which specific
+Buildable subclass was placed. The entity descriptor's `classPath` field already
+supports this.
+
