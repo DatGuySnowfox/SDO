@@ -1478,6 +1478,60 @@ Uses `_InterlockedCompareExchange` on EObjectFlags:
 
 ---
 
+## Session 10: 2026-08-06 — PlayerArray Verification + Dedicated Server Audit
+
+### AGameStateBase::PlayerArray — CONFIRMED
+
+Property descriptor at `0x145c1d340` (`PlayerArray` in `AGameStateBase`):
+- DWORD at `+0x38` encodes Offset_Internal = **0x0038 = 56 decimal**
+
+**Confirmed**: `PlayerArray` (`TArray<APlayerState*>`) starts at `AGameStateBase + 0x38`.
+
+TArray layout (16 bytes total):
+| Offset | Field | Type |
+|--------|-------|------|
+| `+0x00` | Data | T** |
+| `+0x08` | Num | int32 |
+| `+0x0C` | Max | int32 |
+
+Therefore:
+- `PlayerArray.Data` at `AGameStateBase + 0x38`
+- `PlayerArray.Num` at `AGameStateBase + 0x40`
+- `PlayerArray.Max` at `AGameStateBase + 0x44`
+
+**Both `+0x38` and `+0x40` claims from Session 5 are correct.**
+
+Also confirmed: `GameState` property in `AGameModeBase` encodes Offset_Internal = `0x2F0`
+(752) — consistent with `AGameModeBase` total size 824 bytes (0x338).
+
+---
+
+### Dedicated Server Support — CLIENT-ONLY CONFIRMED
+
+**Finding**: `SurrounDead-Win64-Shipping.exe` is a **client-only binary**. There is no
+dedicated server execution mode, no `*Server-Win64-Shipping.exe` variant.
+
+**Evidence**:
+1. Binary name follows client convention (`Win64-Shipping` not `Server-Win64-Shipping`)
+2. Static imports include `XINPUT1_3` (gamepad), `dxgi` (Direct3D rendering), `DSOUND` (audio) — all absent in UE5 dedicated servers
+3. No `IsRunningDedicatedServer`, `NM_Dedicated`, `bIsRunningAsDedicatedServer`, or UE5 dedicated server compile-flag strings found anywhere in the binary
+4. Full rendering pipeline present in binary — servers skip all of this
+
+**"Dedicated server" strings that ARE present** are:
+- UProperty behavioral flags (`bSimulateSkeletalMeshOnDedicatedServer`, etc.) — exist in all UE5 builds
+- `IsDedicatedServer` — a Steam API wrapper checking lobby type, not UE5 headless mode
+- `SetDedicatedServer` at `0x145e2b448` — part of `ISteamGameServer` interface (for advertising a Steam listen server), confirmed by surrounding API: `LogOn`, `LogOnAnonymous`, `SetAdvertiseServerActive`, `SetBotPlayerCount`, `GetAuthSessionTicket`, `GetServerPublicIP`, `GetServerSteamID`
+
+**SD-Online implication**: The game runs as a **Steam listen server** on the host's machine.
+SD-Online must run entirely within one player's game instance (UE4SS + Lua + C++ mod).
+There is no headless server binary to target. The host player's game is the authoritative server.
+
+**Steam Game Server table** (`0x145e2c700`):
+- Confirms `ISteamGameServer` API for listen-server advertising (lobbies, auth, bots)
+- SD-Online's server-side bridge runs as a sidecar process that communicates with the host's game instance via IPC (the established file IPC or protocol-v3 socket protocol)
+
+---
+
 ## Session 9: 2026-08-06 — StaticFindObject + Net Fields + FName::ToString + UWorld Timing
 
 ### StaticFindObject
