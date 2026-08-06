@@ -2308,6 +2308,107 @@ the DataAsset rather than deriving it from the `DA_` → `BP_Pickup_C` naming co
 
 ---
 
+---
+
+## Session 16: 2026-08-06 — Inner Struct Layouts: UniqueServerID, ServerEquippedItems, PickupInfo
+
+### Method
+
+PropertyDumper v11 — `prop:GetStruct()` successfully walked into nested StructProperty
+fields. Output: `bp_structs_props.txt`.
+
+---
+
+### UniqueServerID / MonitorContainerUID — FGuid (16 bytes)
+
+```
+A  IntProperty  +0x0
+B  IntProperty  +0x4
+C  IntProperty  +0x8
+D  IntProperty  +0xC
+```
+
+**Confirmed FGuid** — standard UE4 `FGuid` (4 × uint32). All Jigsaw container and
+item instance UIDs are FGuids. Total struct size: 16 bytes (+ 4 bytes padding to
+next field on DataAsset). For protocol encoding: encode as 16-byte binary or UUID
+string `XXXXXXXX-XXXXXXXX-XXXXXXXX-XXXXXXXX`.
+
+---
+
+### ActiveWeapon / Type / Rarity / MPComponentType — FGameplayTag
+
+All single-field structs with just `TagName` (NameProperty). These are `FGameplayTag`
+wrappers — the tag name is an FName like `"Item.Type.Weapon.Rifle"` or `"Rarity.Legendary"`.
+
+For `ActiveWeapon`: the currently held weapon slot is identified by its tag name, not
+an index. For remote proxy animation state, read `TagName` to determine which animation
+stance to play.
+
+---
+
+### S_ServerEquippedItems — 21 Equipment Slots × 120 bytes each
+
+The full player loadout struct at `BP_JigHelperComp_C + 0xF8`. Total size: 2520 bytes.
+Each slot is a StructProperty of 120 bytes (likely a `RepItemInfo` or `DefaultItemInfo`).
+
+| Index | Slot Name | Offset within S_ServerEquippedItems |
+|-------|-----------|-------------------------------------|
+| 0 | `EquippedFacewear` | `+0x000` |
+| 1 | `EquippedHeadwear` | `+0x078` |
+| 2 | `EquippedEyewear` | `+0xF0` |
+| 3 | `EquippedAccessory` | `+0x168` |
+| 4 | `EquippedTorso` | `+0x1E0` |
+| 5 | `EquippedGloves` | `+0x258` |
+| 6 | `EquippedLegs` | `+0x2D0` |
+| 7 | `EquippedFeet` | `+0x348` |
+| 8 | `EquippedContainer` | `+0x3C0` |
+| 9 | `EquippedBodyArmor` | `+0x438` |
+| 10 | `EquippedBackpack` | `+0x4B0` |
+| 11 | `EquippedPrimary` | `+0x528` |
+| 12 | `EquippedSecondary` | `+0x5A0` |
+| 13 | `EquippedSidearm` | `+0x618` |
+| 14 | `EquippedMelee` | `+0x690` |
+| 15 | `EquippedThrowable` | `+0x708` |
+| 16 | `EquippedFlashlight` | `+0x780` |
+| 17 | `EquippedBinoculars` | `+0x7F8` |
+| 18 | `EquippedGPS` | `+0x870` |
+| 19 | `EquippedCompass` | `+0x8E8` |
+| 20 | `EquippedFishingRod` | `+0x960` |
+
+Full read path:
+```cpp
+uint8_t* helperComp = (uint8_t*)(uintptr_t)FindFirstOf("BP_JigHelperComp_C");
+uint8_t* equipped   = helperComp + 0xF8;  // S_ServerEquippedItems base
+// Slot 11 (Primary weapon) inner struct starts at:
+uint8_t* primary    = equipped + 0x528;
+```
+
+For SD-Online: minimum visual sync needs slots 1 (Headwear), 4 (Torso), 11 (Primary),
+10 (Backpack). Each 120-byte slot struct contains a `RepItemInfo` — needs one more
+PropertyDumper pass to reveal its inner layout.
+
+---
+
+### BP_JigMultiplayer_C.PickupInfo — Full Layout
+
+| Offset | Field | Type | Notes |
+|--------|-------|------|-------|
+| `+0x00` | `UniqueServerID` | StructProperty (FGuid) | Item instance UID |
+| `+0x10` | `IsContainer` | BoolProperty | |
+| `+0x18` | `ContainerDimension` | StructProperty | Grid size |
+| `+0x28` | `ItemInfo` | StructProperty | 120-byte item data (same as equipment slot) |
+| `+0xA0` | `ContainerMotherID` | StructProperty (FGuid) | Parent container UID |
+| `+0xB0` | `SlotIndex` | IntProperty | Slot in parent container |
+| `+0xB4` | `Rotated` | BoolProperty | Item rotated in grid |
+| `+0xB8` | `InContainerIndex` | IntProperty | Index within container |
+| `+0xC0` | `PickupRef` | ObjectProperty | The actual pickup actor |
+| `+0xC8` | `SubContainers` | ArrayProperty | Nested containers |
+
+**`PickupRef` at +0xC0** is the direct actor reference to the ground pickup —
+`BP_JigMultiplayer_C` already holds a pointer to its own pickup actor.
+
+---
+
 ### Revised Item Identity Strategy for SD-Online
 
 | Use Case | Identifier |
