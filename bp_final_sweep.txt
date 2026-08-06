@@ -1,0 +1,40 @@
+
+=== SECTION 1: Player BP_JigMultiplayer_C check ===
+BP_JigMultiplayer_C found — outer class: Container_CompoundCrate_C
+
+=== SECTION 2: GameState.AllUIDs element type ===
+AllUIDs property type: ArrayProperty
+AllUIDs inner element type: IntProperty
+
+=== SECTION 3: Struct_KeepInventory (PlayerController +0x890) ===
+
+== Struct_KeepInventory [inner] ==
+Name                                                         Type                           Offset
+--------------------------------------------------------------------------------------------------------------
+MainJigContainers_15_DA110C204443D2AB30E541A1550FC694        ArrayProperty                  0 (0x0)
+MainUIDs_16_CFDC4BBB4BB8861F7FAD1A9EED2D8711                 ArrayProperty                  16 (0x10)
+Weights_10_948F84EE41B20820DD51D98A692CD033                  ArrayProperty                  32 (0x20)
+
+=== SECTION 4: BFL_SaveGames_C ===
+
+== BFL_SaveGames_C == [NOT FOUND]
+
+=== SECTION 5: Jigsaw interfaces + trader ===
+
+== BP_JigMPComponentInterface_C == [NOT FOUND]
+
+== BP_JigCharacterInterface_C == [NOT FOUND]
+
+== BP_MpInteractInterface_C == [NOT FOUND]
+
+== BP_MasterTrader_C == [NOT FOUND]
+
+== BP_TraderMaster_C [BP_ShakesConesTrader_C] ==
+Name                                                         Type                           Offset
+--------------------------------------------------------------------------------------------------------------
+UberGraphFrame                                               StructProperty                 848 (0x350)
+Audio                                                        ObjectProperty                 856 (0x358)
+SkeletalMesh2                                                ObjectProperty                 864 (0x360)
+SkeletalMesh1                                                ObjectProperty                 872 (0x368)
+
+== BP_JigControllerSupport_C == [NOT FOUND]
