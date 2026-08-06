@@ -2733,3 +2733,92 @@ includes the item data — the server does not need to read it from the pickup a
 - Position via `K2_SetActorLocationAndRotation`
 - Type is communicated via `classPath` in `EntitySpawn` frame
 
+---
+
+## Session 22 — AIOptimizer RegisterInvoker + EasyMultiSave OnPlayerLoaded
+
+**Goal**: Find the C++ implementation of `AIOInvokerComponent::RegisterInvoker` and locate the `EasyMultiSave::OnPlayerLoaded` delegate broadcast callsite for potential hooking.
+
+---
+
+### AIOptimizer — RegisterInvoker / UnregisterInvoker
+
+**UAIOWorldSubsystem** (the AI Optimizer subsystem) hosts a TArray of registered invokers.
+
+| Symbol | Address | Notes |
+|--------|---------|-------|
+| `EXEC_RegisterInvoker` | `0x14386c5e0` | Native thunk, reads `AIOInvokerComponent*` from stack, appends to TArray at `[subsystem+0x80]`, deduplicates, calls sort helper |
+| `EXEC_UnregisterInvoker` | `0x14386D260` | Mirror of RegisterInvoker — removes from TArray |
+| `EXEC_LoopSubjects` | `0x14386c5c0` | Reads subject count from `[rdx+0x20]`, jumps to `sub_143868AA0` |
+| `Z_Construct_UClass_UAIOWorldSubsystem` | `0x143863700` | Class lazy getter |
+| Sort/update after register | `sub_143865DA0` | Called after appending to invoker TArray |
+| AIO EXEC table (data) | `0x145efd030` | Interleaved (code ptr, FName ptr) pairs |
+| AIO UFunction descriptors | `0x146d4f3d0` area | 21 registered UFunctions |
+
+**Key offset confirmed**: `UAIOWorldSubsystem.RegisteredInvokers` TArray = **`subsystem+0x80`**.
+This matches `AIOInvokerComponent.Handle` at `+0xC8` (Session 13) and confirms the registration flow is pure C++, not Blueprint-callable state we need to track for the mod.
+
+---
+
+### EasyMultiSave — UEMSObject Delegate Layout
+
+All three async-completion delegates live sequentially on `UEMSObject`:
+
+| Delegate | Offset | Inner UFunction getter |
+|----------|--------|----------------------|
+| `OnPlayerLoaded` | **`+0x50`** | `0x1438a2760` |
+| `OnPartitionLoaded` | **`+0x60`** | `0x1438a2700` |
+| (third delegate, probably `OnSaveComplete`) | **`+0x70`** | `0x1438a2730` |
+
+**Source**: Property descriptor at `0x145f1dc90`; offset confirmed at descriptor+0x30 = `0x0000000000500001` (0x50 in bytes [2:3]).
+
+**EMS delegate signature strings** (all in data section, referenced from UFunction descriptors):
+- `EmsLoadPlayerComplete__DelegateSignature` → `0x145f1d628`
+- `EmsLoadLevelComplete__DelegateSignature` → `0x145f1d7e8`
+- `EmsLoadPartitionComplete__DelegateSignature` → `0x145f1dbc8`
+
+**EMS EXEC functions found** (all on `UEMSObject`):
+
+| Function | Address |
+|----------|---------|
+| `ImportSaveThumbnail` | `0x1438cb6b0` |
+| `IsLevelStreamingActive` | `0x1438cb870` |
+| `IsSavingOrLoading` | `0x1438cb900` |
+| `IsWorldPartition` | `0x1438cb9e0` |
+| `LoadPlayerActorsCustom` | `0x1438cbb00` |
+| `LoadRawObject` | `0x1438cbfd0` |
+| `SaveCustom` | `0x1438cc830` |
+| `SavePlayerActorsCustom` | `0x1438cd050` |
+| `SaveRawObject` | `0x1438cd480` |
+| `SetActorSaveProperties` | `0x1438cd9f0` |
+| `SetCurrentSaveGameName` | `0x1438cdd80` |
+| `SetCurrentSaveUserName` | `0x1438cdf10` |
+
+**UEMSAsyncLoadGame** (the async action that wraps save load operations):
+- Parent class: `UBlueprintAsyncActionBase`
+- Vtable: `0x145F21C98` (only destructor overridden — no additional vfuncs)
+- CDO constructor: `sub_1438C6320`
+- Class init: `sub_1438A68E0`
+- Class size: 136 bytes (0x88)
+
+**Broadcast callsite**: The `OnPlayerLoaded.Broadcast()` call is a native C++ function that directly iterates the TMulticastScriptDelegate's InvocationList at `[UEMSObject+0x50]`. No named export or string anchor was found for the broadcast function itself — it is inlined or called from a private completion handler. The delegate descriptor-table xrefs all point to data only (UClass/UFunction registration tables), not to any code that calls Broadcast.
+
+**Hooking strategy** (UE4SS Lua):
+```lua
+-- Bind to OnPlayerLoaded to detect save restore completion
+local ems = FindFirstOf("UEMSObject")
+if ems and ems:IsValid() then
+    -- Bind dynamic delegate via Blueprint callable
+    -- Or use RegisterHook on the EXEC_OnPlayerLoaded wrapper if it exists
+    -- Simplest: hook EMS's async action node called from SurrounDead's
+    -- BP_PlayerController_C (the node will call the EMS BFL which fires the delegate)
+end
+```
+
+**Practical conclusion for SDO**: The `OnPlayerLoaded` delegate fires when EasyMultiSave finishes restoring the player's save data into game objects. Hooking it (or binding to it via Lua) would be the correct time to:
+1. Read final vitals from `MedicalComponent`, `HungerThirstComponent`, etc.
+2. Send a `ProfileRevision` frame with accurate state
+3. Teleport the pawn to the server-authoritative respawn position
+
+The gap analysis already identifies `send_profile_revision()` reading stale `BridgeState` (Gap 2). Adding an EMS hook here would fix that correctly without polling.
+
