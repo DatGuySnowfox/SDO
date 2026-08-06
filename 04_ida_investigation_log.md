@@ -902,3 +902,202 @@ double Z = *(double*)(root + 624);
 |--------|-------|
 | `+440` (0x1B8) | `AGameStateBase* GameState` |
 | `+344` (0x158) | Probable `UGameInstance*` |
+
+---
+
+## Session 6: 2026-08-05 (continued) — Plugin Discovery: EasyMultiSave + TechTree
+
+### Overview
+
+Discovered two commercial Marketplace plugins providing critical game systems:
+- **EasyMultiSave** (EMS) — `/Script/EasyMultiSave` — full save game system
+- **TechTree** — `/Script/TechTree` — technology research system
+
+These were found via targeted string search in the `0x145f1xxxx` binary region.
+
+---
+
+### EasyMultiSave Plugin
+
+**Package**: `/Script/EasyMultiSave` at `0x145f216f0`  
+**Source path**: `D:\build\U5M-Marketplace\...` (Marketplace build)
+
+EasyMultiSave is a UE Marketplace plugin providing multi-slot save game management. The game uses it for **all player state persistence**.
+
+**EMS save data structure** (what gets saved per player):
+
+| Field | Meaning |
+|-------|---------|
+| `SavedPawn` | Player's pawn (character) actor |
+| `SavedController` | Player controller |
+| `SavedPlayerState` | APlayerState data |
+| `SavedGameMode` | AGameMode state |
+| `SavedGameState` | AGameState data |
+| `PlayerStackData` | Player inventory/item stack |
+| `PlayerPositionArchive` | Player world position |
+| `PlayerStackArchive` | Full inventory serialization |
+| `ActorList` / `ActorMap` | All actors in level |
+| `LevelArchiveList` | Per-level save data |
+| `MultiLevelStreamData` | Streaming level data |
+| `DestroyedActors` | Actors that were destroyed |
+| `RawObjectData` | Custom raw save objects |
+| `WorldPartitionActors` | World partition actor data |
+
+**EMS Functions exposed to Blueprint**:
+
+| Function | Purpose |
+|---------|---------|
+| `AsyncLoadActors` | Async actor restore |
+| `AsyncSaveActors` | Async actor save |
+| `AutoLoadLevelActors` | Auto-restore level actors |
+| `AutoSaveLevelActors` | Auto-save level actors |
+| `LoadPlayerActorsCustom` | Load player-specific actors |
+| `SavePlayerActorsCustom` | Save player-specific actors |
+| `LoadRawObject` / `SaveRawObject` | Raw data save/load |
+| `SaveCustom` / `GetCustomSave` | Custom save data |
+| `SetCurrentSaveGameName` | Select save slot |
+| `SetCurrentSaveUserName` | Set player user name |
+| `SetActorSaveProperties` | Per-actor save config |
+| `DeleteAllSaveDataForSlot` | Wipe a save slot |
+| `DeleteCustomPlayerFile` | Delete player-specific file |
+| `DoesSaveSlotExist` | Check if slot has data |
+| `GetAllSaveUsers` | Get all player user names |
+| `GetNamedSlotInfo` / `GetSlotInfoSaveGame` | Slot metadata |
+| `GetSortedSaveSlots` | Sorted slot list |
+| `IsSavingOrLoading` | Save operation in progress |
+| `AsyncWaitForOperation` | Async wait helper |
+| `ClearMultiLevelSave` | Clear multi-level save |
+| `ExportSaveThumbnail` / `ImportSaveThumbnail` | Thumbnail management |
+
+**EMS Enums**:
+
+| Enum | Values |
+|------|--------|
+| `EDataLoadType` | `DATA_Level`, `DATA_Player`, `DATA_Object` |
+| `EActorType` | `AT_Runtime`, `AT_Placed`, `AT_LevelScript`, `AT_PlayerActor` |
+| `EUpdateActorResult` | `RES_Success`, `RES_Skip`, `RES_ShouldSpawnNewActor` |
+| `ENextStepType` | `SaveLevel`, `FinishSave` |
+| `ESaveGameMode` | `MODE_Player`, `MODE_Level`, `MODE_All` |
+
+**EMS Configuration Properties**:
+
+| Property | Type | Purpose |
+|----------|------|---------|
+| `bPersistentPlayer` | bool | Player data persists between sessions |
+| `bPersistentGameMode` | bool | Game mode persists |
+| `bAutoSaveStructs` | bool | Auto-save struct data |
+| `bAutoDestroyActors` | bool | Destroy actors on load |
+| `bAdvancedSpawnCheck` | bool | Advanced spawn handling |
+| `bSkipSave` | bool | Exclude actor from save |
+| `bSkipTransform` | bool | Skip actor transform in save |
+| `bPersistent` | bool | Actor persists |
+| `bMultiThreadSaving` | bool | Multi-thread save operations |
+| `FileSaveMethod` / `LoadMethod` | enum | Serialization format |
+| `DeferredLoadStackSize` | int | Deferred load batch size |
+| `SaveGameVersion` | string | Version string for migration |
+| `DefaultSaveGameName` | FString | Default save slot name |
+| `SlotInfoSaveGameClass` | UClass | Save class for slot info |
+
+**EMS Delegates** (hook points for SD-Online):
+
+| Delegate | Fires When |
+|----------|-----------|
+| `OnPlayerLoaded` | Player save data loaded → SD-Online sync point |
+| `OnPartitionLoaded` | World partition loaded |
+| `AsyncLoadOutputPin` | Async load succeeded |
+| `AsyncLoadFailedPin` | Async load failed |
+| `AsyncSaveOutputPin` | Async save succeeded |
+| `AsyncSaveFailedPin` | Async save failed |
+| `EmsLoadPlayerComplete` | Player load complete |
+| `EmsLoadLevelComplete` | Level load complete |
+| `EmsLoadPartitionComplete` | Partition load complete |
+
+**SD-Online Implications**:
+1. `OnPlayerLoaded` fires after EMS restores player save data — **this is when SD-Online should receive the player's server-synced position**
+2. Proxy actors can be configured with `bSkipSave=true` to prevent EMS from saving them
+3. `bSkipTransform=true` on proxy actors prevents EMS from overwriting their network-synced positions
+4. `SetActorSaveProperties` allows dynamic configuration of which actors are saved
+5. `EMSObject` singleton is the main handle for all EMS operations
+
+---
+
+### TechTree Plugin
+
+**Package**: `/Script/TechTree` at `0x145f50c20`  
+**Source path**: `D:\build\U5M-Marketplace\...\Plugins\TechTree\Source\...`
+
+A Marketplace plugin providing a technology research/progression tree.
+
+**Key classes/functions**:
+
+| Name | Purpose |
+|------|---------|
+| `AssignTechTree` | Assign a tech tree to a player |
+| `GetAssignedTechTree` | Get current tech tree |
+| `GetSavegameTechObject` | Get tech tree save data |
+| `GetTechTreeWidget` | Get the UI widget |
+| `SelectTechTree` | Select active tech tree |
+| `TechTreeTemplate` | Template asset |
+| `AssignedTechTrees` (TMap) | Player → tech tree assignments |
+
+**Delegates**:
+- `OnTechTreeAssigned` — fires when tech tree assigned to player
+- `OnTechTreeRecovered` — fires when tech tree loaded from save
+
+**`ESaveGameMode` enum** (for TechTree save integration):
+- `MODE_Player` — save player-specific tech progress
+- `MODE_Level` — save per-level data
+- `MODE_All` — save everything
+
+The TechTree integrates with EasyMultiSave via `GetSavegameTechObject`.
+
+**SD-Online implication**: Tech tree progression is player-specific save data. SD-Online does not need to sync this between players — each player has their own progression.
+
+---
+
+### AGameMode — Blueprint Lifecycle Hooks
+
+**Exec thunk table** at `0x145c21d50` (UFunction singleton getters):
+
+| Function | Singleton Getter | Role |
+|---------|----------------|------|
+| `FindPlayerStart` | `sub_142E71700` | Find spawn point |
+| `GetDefaultPawnClassForController` | `sub_142E717C0` | Get pawn class |
+| `GetNumPlayers` | `sub_142E718B0` | Count players |
+| `GetNumSpectators` | `sub_142E719C0` | Count spectators |
+| `HandleStartingNewPlayer` | `sub_142E71AE0` | New player setup |
+| `HasMatchEnded` | `sub_142E71B70` | Match over check |
+| `HasMatchStarted` | `sub_142E71C00` | Match started check |
+| `InitializeHUDForPlayer` | `sub_142E71C90` | Init HUD |
+| `K2_FindPlayerStart` | `sub_142E71D50` | BP: find spawn |
+| `K2_OnChangeName` | `sub_142E71F50` | BP: player renamed |
+| `K2_OnLogout` | `sub_142E72010` | BP: player left |
+| `K2_OnRestartPlayer` | `sub_142E72070` | BP: player respawn |
+| `K2_OnSwapPlayerControllers` | `sub_142E720F0` | BP: controller swap |
+| `K2_PostLogin` | `sub_142E72120` | BP: player joined |
+| `MustSpectate` | `sub_142E721B0` | Force spectator |
+| `PlayerCanRestart` | `sub_142E721E0` | Check can respawn |
+| `RestartPlayer` | `sub_142E722A0` | Restart player |
+| `RestartPlayerAtTransform` | `sub_142E72360` | Restart at position |
+| `SpawnDefaultPawnAtTransform` | `sub_142E724C0` | Spawn pawn at pos |
+| `SpawnDefaultPawnFor` | `sub_142E724F0` | Spawn default pawn |
+| `StartPlay` | `sub_142E72520` | Match start |
+
+**Key hooks for SD-Online**:
+- `K2_PostLogin` — player controller pointer available here
+- `K2_OnLogout` — player has left, clean up proxies
+- `K2_OnRestartPlayer` — player respawned (position reset)
+- `SpawnDefaultPawnFor` — game is spawning a new pawn for a player
+
+These are all hookable via UE4SS `RegisterHook` on the game's `BP_GameMode_C` Blueprint class.
+
+---
+
+### Plugins Summary
+
+| Plugin | Package | Role | SD-Online Impact |
+|--------|---------|------|----------------|
+| SteamCore | `/Script/SteamCore` | Steam sessions | Hooks for session join/create |
+| EasyMultiSave | `/Script/EasyMultiSave` | Save/load all state | `OnPlayerLoaded` = sync point |
+| TechTree | `/Script/TechTree` | Research progression | Per-player, no sync needed |
+| ArchVisCharacter | `/Script/ArchVisCharacter` | BP_PlayerCharacter base | C++ character class |
