@@ -2488,6 +2488,66 @@ FName itemId = *(FName*)(itemDA + 0x30);
 
 ---
 
+## Session 19: 2026-08-06 — Final In-Game Sweep
+
+### BP_JigMultiplayer_C — Player Character Check
+
+`FindFirstOf("BP_JigMultiplayer_C")` outer = `Container_CompoundCrate_C`.
+**`BP_JigMultiplayer_C` is NOT on the player character — only on world containers.**
+
+Player inventory sync path: `BP_JigHelperComp_C` exclusively.
+No `BP_JigMultiplayer_C` hook needed for player state replication.
+
+---
+
+### GameState.AllUIDs — Element Type: int32
+
+`AllUIDs` at `BP_SurroundeadGameState_C + 0x338` is `TArray<int32>`.
+
+World item instance UIDs are **simple 32-bit integers** — not FGuids, not FStrings.
+Each spawned pickup/container in the world has an integer UID tracked in this array.
+
+**SD-Online implication**: The server's world item UID registry can use int32 keys.
+The existing `WorldEntityDescriptor.entityId` (uint64) is a superset — use the lower
+32 bits to match the game's native UID when needed.
+
+---
+
+### Struct_KeepInventory — Inner Fields
+
+Located at `BP_PlayerController_C + 0x890`.
+
+| Offset | Field | Type | Notes |
+|--------|-------|------|-------|
+| `+0x00` | `MainJigContainers` | ArrayProperty | Container refs preserved on death |
+| `+0x10` | `MainUIDs` | ArrayProperty | Item UIDs preserved on death |
+| `+0x20` | `Weights` | ArrayProperty | Weight data per preserved container |
+
+This struct defines which inventory containers and their UIDs survive player death.
+For SD-Online: not needed for Phase 2 — death/respawn can use the existing
+`Death`/`Respawn` frame types without inventory preservation sync.
+
+---
+
+### BP_TraderMaster_C
+
+Found as `BP_ShakesConesTrader_C`. Blueprint fields:
+- `Audio` (ObjectProperty) at +0x358
+- `SkeletalMesh2/1` (ObjectProperty) at +0x360/+0x368
+
+All trader logic (inventory, currency, buy/sell) is native C++. Traders are
+server-authoritative world actors — for Phase 2, treat them as static world
+entities; no sync needed beyond their world position.
+
+---
+
+### BFL_SaveGames_C / Jigsaw Interfaces
+
+Not found as world objects — function libraries and interfaces are type definitions
+only, not instantiable. EasyMultiSave hooks require IDA investigation (pending).
+
+---
+
 ### Revised Item Identity Strategy for SD-Online
 
 | Use Case | Identifier |
