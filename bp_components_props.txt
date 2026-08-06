@@ -1,0 +1,66 @@
+
+== MedicalComponent ==
+Name                                                         Type                           Offset
+--------------------------------------------------------------------------------------------------------------
+UberGraphFrame                                               StructProperty                 184 (0xB8)
+Bleed?                                                       BoolProperty                   192 (0xC0)
+HeavyBleed?                                                  BoolProperty                   193 (0xC1)
+BrokenBone?                                                  BoolProperty                   194 (0xC2)
+Character                                                    ObjectProperty                 200 (0xC8)
+Health                                                       DoubleProperty                 208 (0xD0)
+MaxHealth                                                    DoubleProperty                 216 (0xD8)
+BleedTimer                                                   StructProperty                 224 (0xE0)
+HeavyBleedTimer                                              StructProperty                 232 (0xE8)
+BleedStopTimer                                               StructProperty                 240 (0xF0)
+HeavyBleedStopTimer                                          StructProperty                 248 (0xF8)
+BrokenBoneStopTimer                                          StructProperty                 256 (0x100)
+RadiationSickness?                                           BoolProperty                   264 (0x108)
+
+== HungerThirstComponent ==
+Name                                                         Type                           Offset
+--------------------------------------------------------------------------------------------------------------
+UberGraphFrame                                               StructProperty                 184 (0xB8)
+MaxHunger                                                    DoubleProperty                 192 (0xC0)
+CurrentHunger                                                DoubleProperty                 200 (0xC8)
+MaxThirst                                                    DoubleProperty                 208 (0xD0)
+CurrentThirst                                                DoubleProperty                 216 (0xD8)
+HungerHandle                                                 StructProperty                 224 (0xE0)
+ReduceHungerAmount                                           DoubleProperty                 232 (0xE8)
+ReduceThirstAmount                                           DoubleProperty                 240 (0xF0)
+ThirstHandle                                                 StructProperty                 248 (0xF8)
+ThirstDamageHandle                                           StructProperty                 256 (0x100)
+HungerDamageHandle                                           StructProperty                 264 (0x108)
+HungerMultplier                                              DoubleProperty                 272 (0x110)
+ThirstMultiplier                                             DoubleProperty                 280 (0x118)
+HungerDebuff                                                 BoolProperty                   288 (0x120)
+ThirstDebuff                                                 BoolProperty                   289 (0x121)
+
+== StaminaComponent ==
+Name                                                         Type                           Offset
+--------------------------------------------------------------------------------------------------------------
+UberGraphFrame                                               StructProperty                 184 (0xB8)
+MaxStamina                                                   DoubleProperty                 192 (0xC0)
+CurrentStamina                                               DoubleProperty                 200 (0xC8)
+CurrentlySprinting                                           BoolProperty                   208 (0xD0)
+SprintSpeed                                                  DoubleProperty                 216 (0xD8)
+WalkSpeed                                                    DoubleProperty                 224 (0xE0)
+StaminaSprintTimer                                           StructProperty                 232 (0xE8)
+StaminaDrain                                                 DoubleProperty                 240 (0xF0)
+RecoverTimer                                                 StructProperty                 248 (0xF8)
+StaminaRecoverAmount                                         DoubleProperty                 256 (0x100)
+NoStamina                                                    MulticastInlineDelegateProperty 264 (0x108)
+PassiveSkillsComponent                                       ObjectProperty                 280 (0x118)
+
+== RadiationComponent ==
+Name                                                         Type                           Offset
+--------------------------------------------------------------------------------------------------------------
+UberGraphFrame                                               StructProperty                 184 (0xB8)
+MaxRadiation                                                 DoubleProperty                 192 (0xC0)
+CurrentRadiation                                             DoubleProperty                 200 (0xC8)
+RadiationHandle                                              StructProperty                 208 (0xD0)
+ReduceRadiationAmount                                        DoubleProperty                 216 (0xD8)
+RadiationDamageHandle                                        StructProperty                 224 (0xE0)
+RadDeduction                                                 DoubleProperty                 232 (0xE8)
+InRadArea                                                    BoolProperty                   240 (0xF0)
+Geiger                                                       ObjectProperty                 248 (0xF8)
+FilterHandle                                                 StructProperty                 256 (0x100)

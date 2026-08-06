@@ -1769,3 +1769,144 @@ FName at `+0x18` confirmed by `execGetObjectName` decompile.
 | TechTree | `/Script/TechTree` | Research progression | Per-player, no sync needed |
 | ArchVisCharacter | `/Script/ArchVisCharacter` | BP_PlayerCharacter base | C++ character class |
 | **AIOptimizer** | `/Script/AIOptimizer` | Proximity AI lifecycle | **Must register invoker per player** |
+
+---
+
+## Session 11: 2026-08-06 — Vital Stats via UE4SS Runtime Dump
+
+### Method
+
+UE4SS Lua mod dumped `ForEachProperty` on `BP_PlayerCharacter_C` and its
+component classes at runtime. Source files committed to repo:
+- `bp_playercharacter_props.txt` — 225 properties on the character class
+- `bp_components_props.txt` — MedicalComponent, HungerThirstComponent,
+  StaminaComponent, RadiationComponent
+
+All vital stat fields use **double** (64-bit float), consistent with UE5.3.
+
+---
+
+### BP_PlayerCharacter_C — Component Pointer Fields
+
+Blueprint component pointers on the character (ObjectProperty):
+
+| Offset | Field | Notes |
+|--------|-------|-------|
+| `+0x6E8` (1768) | `RadioComponent` | |
+| `+0x708` (1800) | `MinimapSystemComponent` | |
+| `+0x720` (1824) | `SwimmingComponent` | |
+| `+0x730` (1840) | `LockPickingComponent` | |
+| `+0x7D0` (2000) | `MedicalComponent` | Health, bleed, broken bone |
+| `+0x7D8` (2008) | `VehicleDrivingComponent` | |
+| `+0x7E0` (2016) | `BuildingComponent` | |
+| `+0x7F0` (2032) | `RadiationComponent` | Radiation level |
+| `+0x7F8` (2040) | `HungerThirstComponent` | Hunger and thirst |
+| `+0x800` (2048) | `StaminaComponent` | Stamina, sprint state |
+| `+0x808` (2056) | `PhotoModeComponent` | |
+
+**Blueprint fields start at `+0x6E8`** (= `+0x6E0` C++ class end + 8 bytes for `RadioComponent`).
+This confirms the IDA Session 3 finding that AArchVisCharacter occupies 0x6E0 bytes.
+
+---
+
+### MedicalComponent Field Layout
+
+Accessed via: `*(UObject**)(character + 0x7D0)`
+
+| Offset | Field | Type |
+|--------|-------|------|
+| `+0xC0` (192) | `Bleed` | bool |
+| `+0xC1` (193) | `HeavyBleed` | bool |
+| `+0xC2` (194) | `BrokenBone` | bool |
+| `+0xC8` (200) | `Character` (back-ref) | ObjectProperty |
+| `+0xD0` (208) | **`Health`** | **double** |
+| `+0xD8` (216) | **`MaxHealth`** | **double** |
+| `+0x108` (264) | `RadiationSickness` | bool |
+
+---
+
+### HungerThirstComponent Field Layout
+
+Accessed via: `*(UObject**)(character + 0x7F8)`
+
+| Offset | Field | Type |
+|--------|-------|------|
+| `+0xC0` (192) | `MaxHunger` | double |
+| `+0xC8` (200) | **`CurrentHunger`** | **double** |
+| `+0xD0` (208) | `MaxThirst` | double |
+| `+0xD8` (216) | **`CurrentThirst`** | **double** |
+| `+0xE8` (232) | `ReduceHungerAmount` | double |
+| `+0xF0` (240) | `ReduceThirstAmount` | double |
+| `+0x110` (272) | `HungerMultiplier` | double |
+| `+0x118` (280) | `ThirstMultiplier` | double |
+| `+0x120` (288) | `HungerDebuff` | bool |
+| `+0x121` (289) | `ThirstDebuff` | bool |
+
+---
+
+### StaminaComponent Field Layout
+
+Accessed via: `*(UObject**)(character + 0x800)`
+
+| Offset | Field | Type |
+|--------|-------|------|
+| `+0xC0` (192) | `MaxStamina` | double |
+| `+0xC8` (200) | **`CurrentStamina`** | **double** |
+| `+0xD0` (208) | `CurrentlySprinting` | bool |
+| `+0xD8` (216) | `SprintSpeed` | double |
+| `+0xE0` (224) | `WalkSpeed` | double |
+| `+0xF0` (240) | `StaminaDrain` | double |
+| `+0x100` (256) | `StaminaRecoverAmount` | double |
+
+---
+
+### RadiationComponent Field Layout
+
+Accessed via: `*(UObject**)(character + 0x7F0)`
+
+| Offset | Field | Type |
+|--------|-------|------|
+| `+0xC0` (192) | `MaxRadiation` | double |
+| `+0xC8` (200) | **`CurrentRadiation`** | **double** |
+| `+0xD8` (216) | `ReduceRadiationAmount` | double |
+| `+0xE8` (232) | `RadDeduction` | double |
+| `+0xF0` (240) | `InRadArea` | bool |
+
+---
+
+### BP_PlayerCharacter_C — Death State
+
+| Offset | Field | Type | Notes |
+|--------|-------|------|-------|
+| `+0x13E1` (5089) | `PlayerDead` (flag) | bool | Set when player dies |
+| `+0x15B0` (5552) | `KeepInventoryOnDeath` | MulticastDelegate | Fires on death |
+| `+0x1658` (5720) | `PlayerDead` (event) | MulticastDelegate | Death broadcast |
+
+---
+
+### Fast C++ DLL Vital Read Pattern
+
+```cpp
+// character = BP_PlayerCharacter_C* (AActor-derived)
+
+// Health
+UObject* med = *(UObject**)(character + 0x7D0);
+double health    = *(double*)(med + 0xD0);
+double maxHealth = *(double*)(med + 0xD8);
+
+// Hunger / Thirst
+UObject* ht = *(UObject**)(character + 0x7F8);
+double hunger = *(double*)(ht + 0xC8);
+double thirst = *(double*)(ht + 0xD8);
+
+// Stamina
+UObject* stam = *(UObject**)(character + 0x800);
+double stamina = *(double*)(stam + 0xC8);
+
+// Radiation
+UObject* rad = *(UObject**)(character + 0x7F0);
+double radiation = *(double*)(rad + 0xC8);
+
+// Death flag (no component hop needed)
+bool isDead = *(bool*)(character + 0x13E1);
+```
