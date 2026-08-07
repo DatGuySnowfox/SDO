@@ -3346,3 +3346,49 @@ on the next movement input. **Always fully relaunch the game after changing a Lu
 rather than using hot-reload, despite it being convenient in Session 28. Diagnostic mod
 `Mods/JigMPHookTest` has served its purpose across Sessions 27–31 and can be disabled in `mods.txt` now.
 
+---
+
+## Session 32: 2026-08-07 (continued) — PlayerController + Passive Skills: Gaps 4 and 9 Closed
+
+**Goal**: close out gap 4 (`PlayerProgress` missing fields) and gap 9 (`PlayerDamage` dispatch needs
+`HUD.Widget` offset) with the CXX dump rather than the live-property-dump-derived offsets currently in
+the gap analysis.
+
+### `ABP_PlayerController_C` — every previously-documented offset confirmed, one corrected
+
+`ABP_PlayerController_C : public ABP_MasterPlayerController_C`, size `0x990`. All of gap 4's offsets
+check out exactly: `LevellingComponent+0x868`, `PassiveSkillsComponent+0x878`, `Forename+0x8C8`,
+`Surname+0x8D8`, `ZombieKills+0x90C`, `DaysSurvived+0x91C`.
+
+**Correction**: `RespawnLoc` at `+0x930` is a full **`FTransform`** (`0x60` bytes — rotation quat +
+translation + scale), not a bare `FVector3d` as gap 4 assumed. Respawn restores facing direction too,
+not just position.
+
+**Resolves gap 9**: `Widget` (`UWidgetComponent*`) is at `+0x880`, exactly where gap 9 expected `HUD.Widget`.
+
+**New fields beyond gap 4's scope** — a richer stats model than previously assumed:
+
+| Offset | Field |
+|--------|-------|
+| `+0x8E8` | `FString Sex` |
+| `+0x8F8` | `FString Age` |
+| `+0x908` | `TEnumAsByte<Enum_Occupation::Type> Occupation` |
+| `+0x910` | `int32 BossZombieKills` |
+| `+0x914` | `int32 AnimalKills` |
+| `+0x918` | `int32 HumanKills` |
+| `+0x920` | `double DistanceTravelled` |
+| `+0x928` | `int32 InfestationsDestroyed` |
+| `+0x92C` | `bool RespawnPointEnabled` |
+
+### `UPassiveSkillsComponent_C` — all 10 skills confirmed, full layout
+
+Ten skills (Fitness, Strength, Toughness, Sneaking, FirstAid, Marksmanship, Reloading, Thief, Fishing,
+Scavenging), each following the same pattern: `CurrentXP`/`MaxXP`/`CurrentLevel`/`MaxLevel` (4 doubles,
+32 bytes), starting at `+0xC0` and running sequentially (Thief and Fishing land later at `+0x220`/`+0x250`
+respectively, everything else contiguous from `+0xC0`–`+0x198`). Also present but not previously
+documented: per-skill `Percentage` and `Multiplier` fields, and bool `*MultiplierUsed?` flags. Full
+offset table in `CXXHeaderDump/PassiveSkillsComponent.hpp` (committed) rather than reproduced here.
+
+**Practical implication**: gap 4's `read_local_progress()` can now include the full character-stats and
+passive-skill picture with confirmed offsets throughout, not just the four vitals from Session 25.
+
