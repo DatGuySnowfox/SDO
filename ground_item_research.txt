@@ -1,0 +1,58 @@
+=== SECTION 1: Ground item actor class candidates ===
+  -     BP_GroundItem_C
+  -     BP_ItemPickup_C
+  -     BP_WorldItem_C
+  -     BP_LootPickup_C
+  -     BP_DroppedItem_C
+  -     BP_ItemActor_C
+  -     BP_PickupItem_C
+  -     BP_Pickup_C
+  -     BP_Item_C
+  -     BP_LootItem_C
+  -     BP_GroundPickup_C
+  -     BP_ItemBase_C
+  -     BP_PickupBase_C
+  -     BP_ItemSpawner_C
+  -     BP_ItemMaster_C
+  -     BP_JigPickup_C
+  -     BP_JigItem_C
+  -     BP_JigWorldItem_C
+  -     BP_JigGroundItem_C
+  -     BP_JigDrop_C
+  -     BP_JigSpawn_C
+  -     BP_JigLoot_C
+  -     BP_JigActor_C
+  -     BP_JigItemActor_C
+  -     BP_InventoryItem_C
+  -     BP_DroppedItem_Master_C
+  -     BP_ItemContainer_C
+  -     BP_SpawnedItem_C
+  -     BP_PickupSpawner_C
+
+=== SECTION 2: Proxy / remote player class candidates ===
+  -     BP_RemotePlayer_C
+  -     BP_ProxyPlayer_C
+  -     BP_GhostPlayer_C
+  -     BP_RemoteCharacter_C
+  -     BP_NetworkPlayer_C
+  -     BP_DummyPlayer_C
+  -     BP_PlayerCharacter_Proxy_C
+  -     BP_NetProxy_C
+  -     BP_HostileCharacter_C
+  -     BP_NPC_C
+  -     BP_NPC_Master_C
+  -     BP_Bot_C
+
+=== SECTION 3: AllUIDs actor class scan ===
+AllUIDs count: 0
+
+=== SECTION 4: BP_JigMultiplayer_C instances and their outer classes ===
+BP_JigMultiplayer_C instances found: 0
+
+=== SECTION 5: BP_PlayerCharacter_C key properties (for proxy spawn viability) ===
+BP_PlayerCharacter_C not found (need to be in-world)
+
+=== SECTION 6: No ground item classes found — see section 7 ===
+
+=== SECTION 7: Brute-force GUObjectArray scan for item/pickup/loot ===
+Objects scanned: 0

@@ -2822,3 +2822,107 @@ end
 
 The gap analysis already identifies `send_profile_revision()` reading stale `BridgeState` (Gap 2). Adding an EMS hook here would fix that correctly without polling.
 
+---
+
+## Session 23: 2026-08-07 — Blueprint Boundary Confirmation + RegisterInvoker Native Algorithm
+
+**Goal**: Resolve the ground-item UID candidates from `ground_item_research.txt` (all guesses came back
+empty), and locate the EasyMultiSave `OnPlayerLoaded` broadcast callsite left open in Session 22.
+
+---
+
+### Ground Item Classes — Resolved via Static Pak Analysis, Not IDA
+
+The Session-22-era candidate list (`BP_GroundItem_C`, `BP_ItemPickup_C`, etc.) was blind guessing and
+found nothing in-world. `pak_all_files.txt` already answers it: **580 pickup Blueprints** live under
+`SurrounDead/Content/Inventory/Items/Pickups/...` (Ammo, Buildable, Consumables, CraftingMaterials,
+Currency, Equipment, etc.), all descending from the already-confirmed `BP_StaticMeshPickup_C` /
+`BP_SkeletalMeshPickup_C` (zero reflected Blueprint properties, per Session 21). No further scan needed.
+
+No `BP_RemotePlayer_C` / `BP_ProxyPlayer_C` / ghost-actor equivalent exists anywhere in the pak listing
+either. Confirms remote players must be represented by real `BP_PlayerCharacter_C` instances driven by
+the bridge — there is no premade stand-in actor to spawn instead.
+
+---
+
+### `AllUIDs` and Vitals Components Are Pure Blueprint — Confirmed Dead End for IDA
+
+Two static checks against the shipping binary, run directly against the live IDB:
+
+- `find_regex("AllUIDs")` across all strings: **zero matches**.
+- Function name search for `Pickup`, `Jig*`, `Medical`, `Hunger`, `Thirst`, `Stamina`, `Radiation`:
+  **zero native symbols**.
+
+This confirms `BP_SurroundeadGameState_C.AllUIDs` (+0x338) and every vitals/pickup component are
+interpreted Blueprint bytecode over cooked reflection data loaded from the `.pak` at runtime — none of
+it is compiled into the executable. There is no native "append to AllUIDs" function to reverse; it
+doesn't exist as disassemblable code. Same conclusion for `MedicalComponent`/`HungerThirstComponent`
+(Gap 2) — the offsets already documented from live UE4SS runtime dumps are the only way to reach these,
+not IDA.
+
+**Implication**: IDA is only useful in this binary for native engine/plugin internals (AIOptimizer,
+EasyMultiSave, core UE5 functions). Everything gameplay-specific in SurrounDead — items, vitals,
+pickups — is Blueprint and invisible to static analysis. Future sessions chasing game-logic offsets
+should go straight to live UE4SS/Lua probing instead of searching the binary.
+
+---
+
+### EasyMultiSave `OnPlayerLoaded` Broadcast Callsite — Confirmed Unreachable (Re-verified)
+
+Re-checked Session 22's conclusion directly against the live IDB rather than trusting the writeup:
+
+- `LoadPlayerActorsCustom` (`0x1438CBB00`) has **zero code cross-references** — its only xrefs are data
+  (UFunction descriptor table entries). It is only ever invoked through the Blueprint VM's UFunction
+  dispatch, never called directly from other native code.
+- The delegate signature string `EmsLoadPlayerComplete__DelegateSignature` (`0x145F1D628`) has exactly
+  one xref: its own UFunction descriptor. No code path references it.
+
+Confirms Session 22's finding rather than overturning it: the actual `Broadcast()` callsite is inlined
+or resolved generically at runtime and is not something static disassembly can pin down. Hooking via
+live Lua (binding to the delegate, or hooking the BFL node that wraps it) remains the only viable path.
+
+---
+
+### AIOptimizer `RegisterInvoker` — Full Native Algorithm (not just the offset)
+
+Session 22 located the offset (`UAIOWorldSubsystem.RegisteredInvokers` TArray at `subsystem+0x80`) but
+not the actual append logic. Decompiling `EXEC_RegisterInvoker` (`0x14386C5E0`) directly:
+
+```cpp
+// Simplified from decompilation. a1 = subsystem, v8 = invoker component (read off the
+// Blueprint stack by the FFrame-stepping preamble at the top of the function).
+uint8_t* data = *(uint8_t**)(a1 + 128);   // array data ptr
+uint32_t num  = *(uint32_t*)(a1 + 136);   // array count
+// dedup scan: 16 bytes per entry, skip if v8 already present
+// ... if not found:
+*(uint32_t*)(a1 + 136) = num + 1;
+if (num + 1 > *(uint32_t*)(a1 + 140))     // array max — grow if needed
+    sub_1436F9060(a1 + 128, num);
+data = *(uint8_t**)(a1 + 128);
+*(uint64_t*)(data + 16*num)     = (uint64_t)v8;              // component pointer
+*(uint64_t*)(data + 16*num + 8) = *(uint64_t*)((uint8_t*)v8 + 144); // cached field, see below
+sub_143865DA0(a1);
+```
+
+Each entry is **16 bytes**: `{ComponentPtr, *(ComponentPtr+0x90)}`. The second field is read directly
+off the invoker component at registration time — **`AIOInvokerComponent+0x90` is a previously
+undocumented native (non-reflected) pointer field**, one qword before the only known Blueprint-visible
+field (`DebugWidget` at `+0xA0`, Session 13). Likely a cached owner/transform reference used by the
+subsystem's tick to avoid repeated `GetOwner()` resolution — not yet identified precisely.
+
+**Correction to Session 22**: `sub_143865DA0(a1)` was assumed to be a "sort/update helper." Decompiling
+it shows it's actually gated behind a global debug flag (`byte_146D4ECC0`) and, when set, schedules three
+deferred closures bound to `sub_143868AA0`/`sub_143868A70`/`sub_143869BA0` into task slots at
+`subsystem+176/184/192`. This reads as AIOptimizer's debug-overlay/telemetry update path, not a sort —
+it's a no-op in a shipping build with the debug flag off. Doesn't change correctness of registration,
+but the earlier characterization was wrong and should not be relied on.
+
+**Practical implication for SD-Online**: because the second array field is read from a live pointer
+offset on the component (not a value the caller supplies), a fake/hand-crafted array entry would need
+that offset to hold a valid pointer or risk a crash on the next subsystem tick that reads it. The safe
+implementation path for keeping zombies active near a remote player is to spawn a lightweight actor with
+a **real** `AIOInvokerComponent` at the remote player's position and register it normally (either by
+routing through the existing Blueprint-callable `RegisterInvoker` UFunction via reflection, or by
+replicating the append algorithm above verbatim against a genuine component pointer) — not to synthesize
+an entry directly.
+
