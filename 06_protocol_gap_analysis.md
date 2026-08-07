@@ -29,6 +29,13 @@ lookup table that doesn't exist in the game.
 **Fix**: Change all `itemId` fields to `std::string` (C++) / `string` (JS).
 Protocol encoding: length-prefixed UTF-8 string. Average DA_ name is ~8–20 chars.
 
+> **Session 29 confirmation**: `FRepItemInfo.ItemID` (the game's own native per-item struct) is a raw
+> `UJigsawItem_DataAsset_C*` pointer to the DA_ asset — confirms this fix is correct, not a guess: a
+> pointer can't cross the network, and the DA_ name/path is the natural resolvable string on both ends.
+> Note this is **item type**, distinct from **item instance** identity — the latter is
+> `FContainerPickupsInfo.UniqueServerID` (`FGuid`, 16 bytes), which the protocol doesn't currently
+> represent at all. Both are needed: type to know what it is, instance UID to know which specific one.
+
 ---
 
 ### 2. `send_profile_revision()` reads from `BridgeState`, not the game
@@ -208,6 +215,15 @@ TArray, not a fixed slot count. 40 may be too small or too large.
 
 **Recommendation**: Make `MAX_INV_SLOTS` configurable at runtime, or split into
 `MAX_EQUIP_SLOTS = 21` (known) and `MAX_MAIN_SLOTS = N` (to be determined).
+
+> **Session 29 resolution — no fixed number exists, remove the constant.**
+> `BP_JigMultiplayer_C.MainJigContainers` is `TArray<FS_ReplicatedContainerInfo>`, and each entry
+> carries its own runtime `Columns`/`Rows` (resizable live via `ExpandContainer`) plus a plain
+> `TArray<FContainerPickupsInfo> ContainerItems` — never a fixed slot count. `MAX_EQUIP_SLOTS = 21` is
+> right and stays fixed (that's the only genuinely fixed-size part, `S_ServerEquippedItems`). For the
+> main inventory, drop `MAX_MAIN_SLOTS` entirely and encode per-container `Columns`/`Rows` plus a
+> variable-length item list in the wire format instead — trying to pick "the right N" is solving the
+> wrong problem, since containers can be resized mid-game and the game itself never assumes a cap.
 
 ---
 
