@@ -3306,3 +3306,43 @@ for every slot, not just weapon/torso/headwear as originally scoped. Each slot's
 (the DA_ name) is sufficient for visual appearance sync (gap 3's original goal); the rest of each slot's
 `FRepItemInfo` (durability etc.) is available if ever needed but isn't required for appearance alone.
 
+---
+
+## Session 31: 2026-08-07 (continued) — Real Equipment Hook Point Found; Delegate Hooking Limitation
+
+**Goal**: close gap 3/8's hook point for real — confirm something actually catches every equipment
+change, since `OnEquipmentUpdated` (gap 3/8's originally proposed hook) never fired across three
+different equip actions in prior sessions despite registering without error.
+
+### Negative finding: `RegisterHook` on a delegate's `__DelegateSignature` doesn't reliably fire
+
+Both `OnEquipmentUpdated__DelegateSignature` and `OnActiveWeaponSlotChanged__DelegateSignature`
+registered successfully (no error) but never fired, even when the function that should broadcast them
+(`SetActiveWeaponSlot`) was confirmed firing via its own direct hook in the same test. **Lesson for
+future hook-based sessions**: hooking a `UPROPERTY` dynamic multicast delegate by its
+`__DelegateSignature` name registers cleanly but is not a reliable way to observe `Broadcast()` calls in
+this UE4SS setup — hook the plain UFunction that performs the actual mutation instead, not the
+notification delegate.
+
+### `SetActiveWeaponSlot` is "switch active held weapon," not an equipment change
+
+Confirmed by direct observation: fires when cycling between already-equipped Primary / Second-Primary /
+Secondary / Melee via hotkey — i.e. which already-equipped weapon is currently held, not a change to
+equipment slot contents. Distinct from actually equipping a new item.
+
+### `SetEquippedInfoBySlot` — the real, reliable equipment hook point
+
+`BP_JigHelperComp_C.SetEquippedInfoBySlot(FGameplayTag Slot, FRepItemInfo Info, FGuid UID, bool
+SkipUID)` fired reliably on every equip action tested (both ground-equip and hotkey-driven). This is a
+plain UFunction, not a delegate, and is the actual mutator that writes into `FS_ServerEquippedItems`
+(Session 30). **This, not `OnEquipmentUpdated`, is the correct hook point for gap 3/8** — hook this
+function, read `Slot` (which `Equipped*` field) and `Info.ItemID` (the DA_ name) directly from its
+arguments, no need to poll `FS_ServerEquippedItems` afterward.
+
+### Housekeeping: UE4SS hot-reload (`Ctrl+R`) is unsafe for this game
+
+Observed directly: hot-reloading Lua after editing a hook script uninstalled the mods and caused a crash
+on the next movement input. **Always fully relaunch the game after changing a Lua mod on this project**
+rather than using hot-reload, despite it being convenient in Session 28. Diagnostic mod
+`Mods/JigMPHookTest` has served its purpose across Sessions 27–31 and can be disabled in `mods.txt` now.
+

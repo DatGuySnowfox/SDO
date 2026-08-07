@@ -94,9 +94,13 @@ and held weapon. This requires reading `BP_JigHelperComp_C.ServerEquippedItems`
 
 The `Equipment` MsgType (21) is defined but never sent or dispatched.
 
-**Fix**: Add equipment fields to `RemotePlayer`. Hook `OnEquipmentUpdated` delegate
-on `BP_JigHelperComp_C` to send `Equipment` frames. Dispatch `Equipment` frames
-to update `RemotePlayer` appearance and drive proxy actor mesh/anim updates.
+**Fix**: Add equipment fields to `RemotePlayer`. Hook `BP_JigHelperComp_C.SetEquippedInfoBySlot`
+(NOT the `OnEquipmentUpdated` delegate — confirmed in Session 31 that hooking a dynamic multicast
+delegate via `RegisterHook` registers cleanly but never actually fires; `SetEquippedInfoBySlot` is the
+plain UFunction that actually performs the mutation and fires reliably) to send `Equipment` frames.
+Dispatch `Equipment` frames to update `RemotePlayer` appearance and drive proxy actor mesh/anim updates.
+Full 21-slot offset table for `FS_ServerEquippedItems` is in `04_ida_investigation_log.md` Session 30 —
+not just the three slots listed above.
 
 ---
 
@@ -172,8 +176,9 @@ passive skill levels, `playerForename`/`Surname`, `respawnLoc`.
 **Affected**: `protocol.hpp:MsgType::Equipment` (21), `mod.cpp:dispatch_frame()`.
 
 The message type is defined but has no encode/decode, no send path, and no dispatch
-handler. The hook point is `OnEquipmentUpdated` delegate on `BP_JigHelperComp_C`
-at +0xC30.
+handler. The hook point is `BP_JigHelperComp_C.SetEquippedInfoBySlot` (see gap 3 —
+`OnEquipmentUpdated` at +0xC30 exists and is the "obvious" hook point but confirmed
+non-firing via `RegisterHook` in Session 31).
 
 ---
 
