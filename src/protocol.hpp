@@ -154,6 +154,9 @@ struct InventorySlot {
 struct PlayerProgress {
     uint32_t revision = 0;
     float health=1.f, hunger=1.f, thirst=1.f;
+    float stamina=1.f, radiation=0.f;
+    int32_t level = 0;
+    float xp = 0.f;
     float posX=0, posY=0, posZ=0, yaw=0;
     std::vector<InventorySlot> slots;
 };
@@ -184,8 +187,13 @@ double      json_double(const std::string& json, const std::string& key);
 // Unique request ID matching JS validation /^[a-zA-Z0-9._:-]{1,80}$/
 std::string next_request_id();
 
-// ProfileRevision encode (inventory slot itemId encoded as length-prefixed string)
-std::vector<uint8_t> encode_player_progress(const PlayerProgress& p);
+// ProfileRevision encode/decode (inventory slot itemId encoded as length-prefixed
+// string). Shared format for both ProfileRevision (client→server) and
+// PlayerProgressRestore (server→client, replays the last-saved ProfileRevision
+// payload verbatim) — decode_player_progress must be used for both, not
+// decode_movement.
+std::vector<uint8_t>            encode_player_progress(const PlayerProgress& p);
+std::optional<PlayerProgress>   decode_player_progress(const uint8_t* p, size_t n);
 
 uint64_t now_micros();
 

@@ -410,7 +410,7 @@ class HostAgent {
 
     _applyProfileRevision(f) {
         const p = this._players.get(f.playerId);
-        if (!p || f.payload.length < 35) return;
+        if (!p || f.payload.length < 51) return;
         try {
             const { slots } = decodePlayerProgress(f.payload);
             const inv = Array(MAX_INV_SLOTS).fill(null);
