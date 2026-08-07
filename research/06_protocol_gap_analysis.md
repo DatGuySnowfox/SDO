@@ -419,7 +419,30 @@ determining it never existed, not by writing code). What's actually working end-
 - Profile revision every 30s, equipment every 2s, both reading live game state (not stale
   `BridgeState`) ✓
 
-### Genuinely still open
+### Main inventory / container sync — READ SIDE FIXED + LIVE-CONFIRMED (Session 35), gap 11 still open
+
+`send_profile_revision()`'s `PlayerProgress.slots` is no longer always empty: `read_local_inventory()`
+walks `BP_JigMultiplayer_C.MainJigContainers` (Session 26/29) and flattens every real container's items
+into the existing flat-slotIndex wire format — no protocol/JS changes needed, since it reuses the
+`ProfileRevision` format that was already fully wired end-to-end. Live-confirmed across two play
+sessions: resolved a real, varied inventory (ammo, meds, currency, keycards, etc.) with no crash, and
+correctly filtered out 21 placeholder container entries (`Columns=Rows=-1`, one per equipment slot) that
+would otherwise have duplicated equipment data into the inventory slots. Also fixed a latent correctness
+bug found along the way: both `read_local_equipment()` and `read_local_inventory()` now read
+`BP_JigHelperComp`/`BP_JigMultiplayer` directly off the pawn (`+0x700`/`+0x818`,
+`CXXHeaderDump/BP_PlayerCharacter.hpp`) instead of `FindFirstOf` by class name — `FindFirstOf` only
+happened to return the right instance in solo testing; `BP_JigMultiplayer_C` in particular exists on
+every ground pickup too, so it would have been a real bug with more than one player in the world.
+
+**Still open — gap 11 itself**: this is a v1 flattening, not a true fix. Session 35's second live test
+directly confirmed the `MAX_INV_SLOTS = 40` cap is a real limitation, not just theoretical — an actual
+loadout exceeded 40 items across its real containers and got silently truncated. The full fix Session 29
+already specified (per-container `Columns`/`Rows` + a variable-length item list, dropping the fixed cap
+entirely) needs a matching wire-format and decoder change in `server/src/lib/protocol.js` and
+`host-agent.js` (which has its own independent `MAX_INV_SLOTS = 40`) — a cross-language change, left for
+a future session.
+
+### Other genuinely still open items
 
 - **Gap 4/7** — `PlayerProgress`/`BridgeState` still missing forename/surname, `respawnLoc`
   (`FTransform`), zombie/animal/human kill counts, `daysSurvived`, `distanceTravelled`,
@@ -428,16 +451,9 @@ determining it never existed, not by writing code). What's actually working end-
   side (`server/src/lib/protocol.js` or equivalent), unlike the self-contained `Equipment` addition.
 - **Gap 10** — `Movement` position fields are `float`, engine uses `double` (LWC) — precision loss,
   not correctness-breaking at current world scale. Low priority.
-- **Gap 11** — `MAX_INV_SLOTS = 40` in `state.hpp` is still a leftover fixed-size constant; Session 29
-  resolved that the main inventory has no fixed slot count and recommended removing it in favor of
-  per-container `Columns`/`Rows` + a variable-length item list. Not done — no code reads/sends main
-  inventory contents at all yet, just equipment.
 - **`ProxyManager` is still Phase 1** — no code in this repo has ever found or spawned the actual
   remote-player proxy Blueprint class. `RemotePlayer.equipment`/`x,y,z,yaw`/`health` are all tracked
   correctly in `state.hpp` but nothing renders them: `spawn_proxy()` is a stub returning `nullptr`, so
   `ProxyManager::tick()` never actually creates a visible actor for another player. This is the
   biggest remaining gap toward the mod being visually functional in multiplayer — everything else
   fixed above is plumbing feeding a proxy system that doesn't render anything yet.
-- **Main inventory / container sync** — Session 26's `BP_JigMultiplayer_C` native RPC replication
-  path (addresses items/containers by `FGuid`) has never been hooked into. Equipment (worn items) is
-  now fully synced; the backpack/container grid contents are not synced at all.
