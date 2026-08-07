@@ -332,13 +332,17 @@ static void send_profile_revision(AActor* pawn)
         // Slots are read from the game inventory (Phase 2 – empty for now).
     }
 
-    prog.health = static_cast<float>(v.health);
-    prog.hunger = static_cast<float>(v.hunger);
-    prog.thirst = static_cast<float>(v.thirst);
-    prog.posX   = static_cast<float>(loc.X);
-    prog.posY   = static_cast<float>(loc.Y);
-    prog.posZ   = static_cast<float>(loc.Z);
-    prog.yaw    = static_cast<float>(rot.Yaw);
+    prog.health    = static_cast<float>(v.health);
+    prog.hunger    = static_cast<float>(v.hunger);
+    prog.thirst    = static_cast<float>(v.thirst);
+    prog.stamina   = static_cast<float>(v.stamina);
+    prog.radiation = static_cast<float>(v.radiation);
+    prog.level     = v.level;
+    prog.xp        = static_cast<float>(v.xp);
+    prog.posX      = static_cast<float>(loc.X);
+    prog.posY      = static_cast<float>(loc.Y);
+    prog.posZ      = static_cast<float>(loc.Z);
+    prog.yaw       = static_cast<float>(rot.Yaw);
 
     auto buf = sdb::encode_player_progress(prog);
     if (buf.empty()) return;
@@ -456,19 +460,21 @@ static void dispatch_frame(const sdb::Frame& f)
     // ── Player progress restore ───────────────────────────────────────────────
 
     case sdb::MsgType::PlayerProgressRestore: {
-        // JS sends encodeMovement (39 bytes, position/yaw only, no tag byte).
+        // Gateway replays the last-saved ProfileRevision payload verbatim, so
+        // this must use decode_player_progress, not decode_movement — the
+        // payload is the full PlayerProgress format (health/vitals/inventory
+        // included), not the bare 39-byte Movement format.
         st.receivedProgressRestore.store(true, std::memory_order_relaxed);
-        auto mv = sdb::decode_movement(f.payload.data(),
-                                       static_cast<int>(f.payload.size()));
-        if (!mv) break;
-        st.teleportX   = mv->x;
-        st.teleportY   = mv->y;
-        st.teleportZ   = mv->z;
-        st.teleportYaw = mv->yaw;
+        auto prog = sdb::decode_player_progress(f.payload.data(), f.payload.size());
+        if (!prog) break;
+        st.teleportX   = prog->posX;
+        st.teleportY   = prog->posY;
+        st.teleportZ   = prog->posZ;
+        st.teleportYaw = prog->yaw;
         st.pendingTeleport.store(true, std::memory_order_release);
         Output::send<LogLevel::Normal>(
-            STR("SDB: teleport queued  x={:.1f} y={:.1f} z={:.1f}\n"),
-            mv->x, mv->y, mv->z);
+            STR("SDB: progress restored  x={:.1f} y={:.1f} z={:.1f}  health={:.2f} level={:d}\n"),
+            prog->posX, prog->posY, prog->posZ, prog->health, prog->level);
         break;
     }
 

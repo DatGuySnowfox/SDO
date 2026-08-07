@@ -180,62 +180,88 @@ function decodeBuildingState(state) {
 }
 
 // ── PlayerProgress payload (ProfileRevision / PlayerProgressRestore) ──────────
+// Same format both directions: ProfileRevision is client→server, and the
+// gateway persists that payload verbatim and replays it byte-for-byte as
+// PlayerProgressRestore on rejoin (see gateway.js) — so both encode/decode
+// here must stay in lockstep with the C++ side's encode_player_progress /
+// decode_player_progress in src/protocol.cpp.
 // Byte layout:
 //   0      uint8   format version (1)
 //   1–4    uint32  revision (monotonically increasing)
 //   5–8    float32 health  (0.0–1.0)
 //   9–12   float32 hunger
 //   13–16  float32 thirst
-//   17–20  float32 posX
-//   21–24  float32 posY
-//   25–28  float32 posZ
-//   29–32  float32 yaw
-//   33–34  uint16  slotCount
-//   35…    slots: [uint8 slotIndex, uint32 itemId, uint16 quantity] × slotCount
+//   17–20  float32 stamina
+//   21–24  float32 radiation
+//   25–28  uint32  level
+//   29–32  float32 xp
+//   33–36  float32 posX
+//   37–40  float32 posY
+//   41–44  float32 posZ
+//   45–48  float32 yaw
+//   49–50  uint16  slotCount
+//   51…    slots: [uint8 slotIndex, uint16 itemIdLen, itemId utf8, uint16 quantity] × slotCount
 
-function encodePlayerProgress({ revision, health, hunger, thirst, posX, posY, posZ, yaw, slots }) {
-    const n = slots.length;
-    const buf = Buffer.allocUnsafe(35 + n * 7);
+const PLAYER_PROGRESS_HEADER_SIZE = 51;
+
+function encodePlayerProgress({ revision, health, hunger, thirst, stamina, radiation, level, xp,
+                                 posX, posY, posZ, yaw, slots }) {
+    const itemIdBufs = slots.map(s => Buffer.from(s.itemId, 'utf8'));
+    const slotsSize  = itemIdBufs.reduce((sum, b) => sum + 1 + 2 + b.length + 2, 0);
+    const buf = Buffer.allocUnsafe(PLAYER_PROGRESS_HEADER_SIZE + slotsSize);
     buf.writeUInt8(1, 0);
     buf.writeUInt32BE(revision, 1);
-    buf.writeFloatBE(health,  5);
-    buf.writeFloatBE(hunger,  9);
-    buf.writeFloatBE(thirst, 13);
-    buf.writeFloatBE(posX,   17);
-    buf.writeFloatBE(posY,   21);
-    buf.writeFloatBE(posZ,   25);
-    buf.writeFloatBE(yaw,    29);
-    buf.writeUInt16BE(n, 33);
-    for (let i = 0; i < n; i++) {
-        const o = 35 + i * 7;
-        buf.writeUInt8(slots[i].slotIndex,  o);
-        buf.writeUInt32BE(slots[i].itemId,  o + 1);
-        buf.writeUInt16BE(slots[i].quantity, o + 5);
+    buf.writeFloatBE(health,    5);
+    buf.writeFloatBE(hunger,    9);
+    buf.writeFloatBE(thirst,   13);
+    buf.writeFloatBE(stamina,  17);
+    buf.writeFloatBE(radiation,21);
+    buf.writeUInt32BE(level,   25);
+    buf.writeFloatBE(xp,       29);
+    buf.writeFloatBE(posX,     33);
+    buf.writeFloatBE(posY,     37);
+    buf.writeFloatBE(posZ,     41);
+    buf.writeFloatBE(yaw,      45);
+    buf.writeUInt16BE(slots.length, 49);
+
+    let o = PLAYER_PROGRESS_HEADER_SIZE;
+    for (let i = 0; i < slots.length; i++) {
+        buf.writeUInt8(slots[i].slotIndex, o); o += 1;
+        buf.writeUInt16BE(itemIdBufs[i].length, o); o += 2;
+        itemIdBufs[i].copy(buf, o); o += itemIdBufs[i].length;
+        buf.writeUInt16BE(slots[i].quantity, o); o += 2;
     }
     return buf;
 }
 
 function decodePlayerProgress(payload) {
-    if (payload.length < 35) throw new Error('progress_too_short');
-    const slotCount = payload.readUInt16BE(33);
+    if (payload.length < PLAYER_PROGRESS_HEADER_SIZE) throw new Error('progress_too_short');
+
+    const slotCount = payload.readUInt16BE(49);
     const slots = [];
+    let o = PLAYER_PROGRESS_HEADER_SIZE;
     for (let i = 0; i < slotCount; i++) {
-        const o = 35 + i * 7;
-        slots.push({
-            slotIndex: payload.readUInt8(o),
-            itemId:    payload.readUInt32BE(o + 1),
-            quantity:  payload.readUInt16BE(o + 5),
-        });
+        if (o + 3 > payload.length) throw new Error('progress_slot_truncated');
+        const slotIndex = payload.readUInt8(o); o += 1;
+        const idLen     = payload.readUInt16BE(o); o += 2;
+        if (o + idLen + 2 > payload.length) throw new Error('progress_slot_truncated');
+        const itemId    = payload.toString('utf8', o, o + idLen); o += idLen;
+        const quantity  = payload.readUInt16BE(o); o += 2;
+        slots.push({ slotIndex, itemId, quantity });
     }
     return {
-        revision: payload.readUInt32BE(1),
-        health:   payload.readFloatBE(5),
-        hunger:   payload.readFloatBE(9),
-        thirst:   payload.readFloatBE(13),
-        posX:     payload.readFloatBE(17),
-        posY:     payload.readFloatBE(21),
-        posZ:     payload.readFloatBE(25),
-        yaw:      payload.readFloatBE(29),
+        revision:  payload.readUInt32BE(1),
+        health:    payload.readFloatBE(5),
+        hunger:    payload.readFloatBE(9),
+        thirst:    payload.readFloatBE(13),
+        stamina:   payload.readFloatBE(17),
+        radiation: payload.readFloatBE(21),
+        level:     payload.readUInt32BE(25),
+        xp:        payload.readFloatBE(29),
+        posX:      payload.readFloatBE(33),
+        posY:      payload.readFloatBE(37),
+        posZ:      payload.readFloatBE(41),
+        yaw:       payload.readFloatBE(45),
         slots,
     };
 }

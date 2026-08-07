@@ -339,16 +339,19 @@ std::string next_request_id()
 }
 
 // ---------------------------------------------------------------------------
-// ProfileRevision payload  (client→server)
+// ProfileRevision payload  (client→server, and replayed verbatim server→client
+// as PlayerProgressRestore — see decode_player_progress)
 // Header: [tag=1][revision:u32][health:f32][hunger:f32][thirst:f32]
-//         [posX:f32][posY:f32][posZ:f32][yaw:f32][slotCount:u16]  = 35 bytes
+//         [stamina:f32][radiation:f32][level:u32][xp:f32]
+//         [posX:f32][posY:f32][posZ:f32][yaw:f32][slotCount:u16]  = 51 bytes
 // Per slot: [slotIndex:u8][itemIdLen:u16BE][itemId...][qty:u16BE]
 // ---------------------------------------------------------------------------
 
+static constexpr size_t PLAYER_PROGRESS_HEADER_SIZE = 51;
+
 std::vector<uint8_t> encode_player_progress(const PlayerProgress& prog)
 {
-    // Calculate total size
-    size_t total = 35; // fixed header
+    size_t total = PLAYER_PROGRESS_HEADER_SIZE;
     for (const auto& slot : prog.slots)
         total += 1 + 2 + slot.itemId.size() + 2;
 
@@ -360,13 +363,17 @@ std::vector<uint8_t> encode_player_progress(const PlayerProgress& prog)
     w32(p +  5, f2u(prog.health));
     w32(p +  9, f2u(prog.hunger));
     w32(p + 13, f2u(prog.thirst));
-    w32(p + 17, f2u(prog.posX));
-    w32(p + 21, f2u(prog.posY));
-    w32(p + 25, f2u(prog.posZ));
-    w32(p + 29, f2u(prog.yaw));
-    w16(p + 33, static_cast<uint16_t>(prog.slots.size()));
+    w32(p + 17, f2u(prog.stamina));
+    w32(p + 21, f2u(prog.radiation));
+    w32(p + 25, static_cast<uint32_t>(prog.level));
+    w32(p + 29, f2u(prog.xp));
+    w32(p + 33, f2u(prog.posX));
+    w32(p + 37, f2u(prog.posY));
+    w32(p + 41, f2u(prog.posZ));
+    w32(p + 45, f2u(prog.yaw));
+    w16(p + 49, static_cast<uint16_t>(prog.slots.size()));
 
-    size_t off = 35;
+    size_t off = PLAYER_PROGRESS_HEADER_SIZE;
     for (const auto& slot : prog.slots) {
         buf[off++] = slot.slotIndex;
         const uint16_t idLen = static_cast<uint16_t>(slot.itemId.size());
@@ -379,6 +386,48 @@ std::vector<uint8_t> encode_player_progress(const PlayerProgress& prog)
     }
 
     return buf;
+}
+
+std::optional<PlayerProgress> decode_player_progress(const uint8_t* p, size_t n)
+{
+    if (n < PLAYER_PROGRESS_HEADER_SIZE || p[0] != 1) return std::nullopt;
+
+    PlayerProgress prog;
+    prog.revision  = r32(p +  1);
+    prog.health    = u2f(r32(p +  5));
+    prog.hunger    = u2f(r32(p +  9));
+    prog.thirst    = u2f(r32(p + 13));
+    prog.stamina   = u2f(r32(p + 17));
+    prog.radiation = u2f(r32(p + 21));
+    prog.level     = static_cast<int32_t>(r32(p + 25));
+    prog.xp        = u2f(r32(p + 29));
+    prog.posX      = u2f(r32(p + 33));
+    prog.posY      = u2f(r32(p + 37));
+    prog.posZ      = u2f(r32(p + 41));
+    prog.yaw       = u2f(r32(p + 45));
+    const uint16_t slotCount = r16(p + 49);
+
+    const float vals[] = { prog.health, prog.hunger, prog.thirst, prog.stamina,
+                            prog.radiation, prog.xp,
+                            prog.posX, prog.posY, prog.posZ, prog.yaw };
+    for (float v : vals)
+        if (!std::isfinite(v)) return std::nullopt;
+
+    size_t off = PLAYER_PROGRESS_HEADER_SIZE;
+    prog.slots.reserve(slotCount);
+    for (uint16_t i = 0; i < slotCount; ++i) {
+        if (off + 3 > n) return std::nullopt;
+        InventorySlot slot;
+        slot.slotIndex = p[off++];
+        const uint16_t idLen = r16(p + off); off += 2;
+        if (off + idLen + 2 > n) return std::nullopt;
+        slot.itemId = std::string(reinterpret_cast<const char*>(p + off), idLen);
+        off += idLen;
+        slot.quantity = r16(p + off); off += 2;
+        prog.slots.push_back(std::move(slot));
+    }
+
+    return prog;
 }
 
 // ---------------------------------------------------------------------------
