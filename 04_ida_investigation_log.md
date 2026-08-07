@@ -2822,3 +2822,604 @@ end
 
 The gap analysis already identifies `send_profile_revision()` reading stale `BridgeState` (Gap 2). Adding an EMS hook here would fix that correctly without polling.
 
+---
+
+## Session 23: 2026-08-07 — Blueprint Boundary Confirmation + RegisterInvoker Native Algorithm
+
+**Goal**: Resolve the ground-item UID candidates from `ground_item_research.txt` (all guesses came back
+empty), and locate the EasyMultiSave `OnPlayerLoaded` broadcast callsite left open in Session 22.
+
+---
+
+### Ground Item Classes — Resolved via Static Pak Analysis, Not IDA
+
+The Session-22-era candidate list (`BP_GroundItem_C`, `BP_ItemPickup_C`, etc.) was blind guessing and
+found nothing in-world. `pak_all_files.txt` already answers it: **580 pickup Blueprints** live under
+`SurrounDead/Content/Inventory/Items/Pickups/...` (Ammo, Buildable, Consumables, CraftingMaterials,
+Currency, Equipment, etc.), all descending from the already-confirmed `BP_StaticMeshPickup_C` /
+`BP_SkeletalMeshPickup_C` (zero reflected Blueprint properties, per Session 21). No further scan needed.
+
+No `BP_RemotePlayer_C` / `BP_ProxyPlayer_C` / ghost-actor equivalent exists anywhere in the pak listing
+either. Confirms remote players must be represented by real `BP_PlayerCharacter_C` instances driven by
+the bridge — there is no premade stand-in actor to spawn instead.
+
+---
+
+### `AllUIDs` and Vitals Components Are Pure Blueprint — Confirmed Dead End for IDA
+
+Two static checks against the shipping binary, run directly against the live IDB:
+
+- `find_regex("AllUIDs")` across all strings: **zero matches**.
+- Function name search for `Pickup`, `Jig*`, `Medical`, `Hunger`, `Thirst`, `Stamina`, `Radiation`:
+  **zero native symbols**.
+
+This confirms `BP_SurroundeadGameState_C.AllUIDs` (+0x338) and every vitals/pickup component are
+interpreted Blueprint bytecode over cooked reflection data loaded from the `.pak` at runtime — none of
+it is compiled into the executable. There is no native "append to AllUIDs" function to reverse; it
+doesn't exist as disassemblable code. Same conclusion for `MedicalComponent`/`HungerThirstComponent`
+(Gap 2) — the offsets already documented from live UE4SS runtime dumps are the only way to reach these,
+not IDA.
+
+**Implication**: IDA is only useful in this binary for native engine/plugin internals (AIOptimizer,
+EasyMultiSave, core UE5 functions). Everything gameplay-specific in SurrounDead — items, vitals,
+pickups — is Blueprint and invisible to static analysis. Future sessions chasing game-logic offsets
+should go straight to live UE4SS/Lua probing instead of searching the binary.
+
+---
+
+### EasyMultiSave `OnPlayerLoaded` Broadcast Callsite — Confirmed Unreachable (Re-verified)
+
+Re-checked Session 22's conclusion directly against the live IDB rather than trusting the writeup:
+
+- `LoadPlayerActorsCustom` (`0x1438CBB00`) has **zero code cross-references** — its only xrefs are data
+  (UFunction descriptor table entries). It is only ever invoked through the Blueprint VM's UFunction
+  dispatch, never called directly from other native code.
+- The delegate signature string `EmsLoadPlayerComplete__DelegateSignature` (`0x145F1D628`) has exactly
+  one xref: its own UFunction descriptor. No code path references it.
+
+Confirms Session 22's finding rather than overturning it: the actual `Broadcast()` callsite is inlined
+or resolved generically at runtime and is not something static disassembly can pin down. Hooking via
+live Lua (binding to the delegate, or hooking the BFL node that wraps it) remains the only viable path.
+
+---
+
+### AIOptimizer `RegisterInvoker` — Full Native Algorithm (not just the offset)
+
+Session 22 located the offset (`UAIOWorldSubsystem.RegisteredInvokers` TArray at `subsystem+0x80`) but
+not the actual append logic. Decompiling `EXEC_RegisterInvoker` (`0x14386C5E0`) directly:
+
+```cpp
+// Simplified from decompilation. a1 = subsystem, v8 = invoker component (read off the
+// Blueprint stack by the FFrame-stepping preamble at the top of the function).
+uint8_t* data = *(uint8_t**)(a1 + 128);   // array data ptr
+uint32_t num  = *(uint32_t*)(a1 + 136);   // array count
+// dedup scan: 16 bytes per entry, skip if v8 already present
+// ... if not found:
+*(uint32_t*)(a1 + 136) = num + 1;
+if (num + 1 > *(uint32_t*)(a1 + 140))     // array max — grow if needed
+    sub_1436F9060(a1 + 128, num);
+data = *(uint8_t**)(a1 + 128);
+*(uint64_t*)(data + 16*num)     = (uint64_t)v8;              // component pointer
+*(uint64_t*)(data + 16*num + 8) = *(uint64_t*)((uint8_t*)v8 + 144); // cached field, see below
+sub_143865DA0(a1);
+```
+
+Each entry is **16 bytes**: `{ComponentPtr, *(ComponentPtr+0x90)}`. The second field is read directly
+off the invoker component at registration time — **`AIOInvokerComponent+0x90` is a previously
+undocumented native (non-reflected) pointer field**, one qword before the only known Blueprint-visible
+field (`DebugWidget` at `+0xA0`, Session 13). Likely a cached owner/transform reference used by the
+subsystem's tick to avoid repeated `GetOwner()` resolution — not yet identified precisely.
+
+**Correction to Session 22**: `sub_143865DA0(a1)` was assumed to be a "sort/update helper." Decompiling
+it shows it's actually gated behind a global debug flag (`byte_146D4ECC0`) and, when set, schedules three
+deferred closures bound to `sub_143868AA0`/`sub_143868A70`/`sub_143869BA0` into task slots at
+`subsystem+176/184/192`. This reads as AIOptimizer's debug-overlay/telemetry update path, not a sort —
+it's a no-op in a shipping build with the debug flag off. Doesn't change correctness of registration,
+but the earlier characterization was wrong and should not be relied on.
+
+**Practical implication for SD-Online**: because the second array field is read from a live pointer
+offset on the component (not a value the caller supplies), a fake/hand-crafted array entry would need
+that offset to hold a valid pointer or risk a crash on the next subsystem tick that reads it. The safe
+implementation path for keeping zombies active near a remote player is to spawn a lightweight actor with
+a **real** `AIOInvokerComponent` at the remote player's position and register it normally (either by
+routing through the existing Blueprint-callable `RegisterInvoker` UFunction via reflection, or by
+replicating the append algorithm above verbatim against a genuine component pointer) — not to synthesize
+an entry directly.
+
+---
+
+## Session 24: 2026-08-07 (continued) — AIOInvokerComponent+0x90 Identified
+
+**Goal**: identify the previously-unknown cached field at `AIOInvokerComponent+0x90` found in Session 23.
+
+Traced the read side by decompiling the subject-culling tick (`sub_143868AA0`, previously named
+`EXEC_LoopSubjects`'s jump target) and the distance helper it calls, `sub_143867E10`:
+
+```cpp
+// sub_143867E10 — nearest-invoker distance for a subject at *a2 (FVector3d)
+for each entry in RegisteredInvokers (subsystem+0x80, stride 16):
+    cachedPtr = entry.field1;               // == *(ComponentPtr + 0x90) at registration time
+    if (cachedPtr) {
+        rootComp = *(void**)(cachedPtr + 0x1A0);   // AActor::RootComponent
+        loc      = *(FVector3d*)(rootComp + 0x260); // USceneComponent world location, if rootComp valid
+    } else {
+        loc = <hardcoded sentinel vector>;   // fallback when the cached actor is gone
+    }
+    dist = min(dist, |loc - subjectPos|^2);
+```
+
+`AActor+0x1A0 = RootComponent` and `RootComponent+0x260 (608) = world location` are both already
+confirmed elsewhere in this doc (Session 5/9 area) — this is the same pattern, not a new offset.
+
+**Conclusion**: `AIOInvokerComponent+0x90` caches the **owning `AActor*`**, captured once at
+`RegisterInvoker` time so the per-tick culling loop can read the invoker's current world position via
+`Actor->RootComponent->WorldLocation` without repeated `GetOwner()` resolution. If the cached actor
+pointer is null (e.g. destroyed), the tick falls back to a hardcoded sentinel vector instead of crashing
+— so a stale/invalid pointer here fails safe rather than corrupting the tick, but a genuinely garbage
+(non-null, non-actor) pointer would not, since it's dereferenced unconditionally at `+0x1A0`.
+
+**Practical implication for SD-Online**: confirms Session 23's conclusion — there is no safe shortcut to
+registering a "virtual" invoker without a real actor. The minimum viable fake invoker is: spawn any
+actor with a valid `RootComponent` (a bare `USceneComponent` is enough, no mesh needed) at the remote
+player's position, attach a real `AIOInvokerComponent`, and register it through the normal path. Moving
+that actor's root component each frame (via the existing native root-component move calls already
+documented in this file) is sufficient to keep the cached location fresh — no need to re-register.
+
+---
+
+## Session 25: 2026-08-07 (continued) — UE4SS Built-In SDK Dump: Crash Finding + Vitals Validation
+
+**Goal**: stop reconstructing class layouts one property at a time. UE4SS ships a built-in CXX Header
+Generator (`Ctrl+H`, `[CXXHeaderGenerator]` in `UE4SS-settings.ini`) that dumps every currently-loaded
+class — native and Blueprint — as a `.hpp` with property names and byte offsets in one pass
+(`DumpOffsetsAndSizes = 1` is the default). This had never been run for this game before this session.
+
+### Negative finding: `LoadAllAssetsBefore*` reliably crashes this game
+
+Both `[ObjectDumper] LoadAllAssetsBeforeDumpingObjects` and
+`[CXXHeaderGenerator] LoadAllAssetsBeforeGeneratingCXXHeaders` force-load every asset in the game before
+dumping, intended to produce a fully exhaustive dump regardless of what's currently loaded. **Enabling
+either one crashes the game outright**, even on a 64GB-RAM machine — this is not a memory-capacity
+problem. `UE4SS.log` stops cold immediately after `Loading all assets...` with no further output and no
+crash dump written (`crash_*.dmp` stays 0 bytes). Something in this game's asset set (likely dev-only,
+platform-specific, or otherwise-unreachable content) does not tolerate being force-loaded outside its
+normal load order.
+
+**Conclusion**: do not set either `LoadAllAssetsBefore*` flag to `1` for this game. Both are confirmed
+back at their default of `0`. Get a rich a set of classes loaded organically instead (be in-world, open
+inventory, get near a zombie, get in a vehicle) before dumping.
+
+### Successful dump (defaults, no force-load)
+
+With both flags at `0`, `Ctrl+H` generated 2,407 header files in `CXXHeaderDump/` in 2.6 seconds, no
+crash. This pass happened to catch the native vitals components (they're always loaded once a character
+exists) but not yet `BP_SurroundeadGameState_C`, `BP_JigHelperComp_C`, pickup classes, or the AIOptimizer
+plugin classes — those need a pass while genuinely in-world with inventory/zombies/vehicles interacted
+with. Re-run `Ctrl+H` (and `Ctrl+J` for a live object dump, and `Ctrl+Numpad7` for actors) during an
+actual play session to fill those in.
+
+### Vitals offsets — fully confirmed against Gap 2/4, with types now known
+
+Every offset guessed from live `ForEachProperty` dumps in earlier sessions checks out exactly against
+the authoritative dump, and the dump adds the missing type information:
+
+| Class | Field | Offset | Type |
+|-------|-------|--------|------|
+| `UMedicalComponent_C` | `Health` | `+0xD0` | `double` |
+| `UMedicalComponent_C` | `MaxHealth` | `+0xD8` | `double` |
+| `UHungerThirstComponent_C` | `CurrentHunger` | `+0xC8` | `double` |
+| `UHungerThirstComponent_C` | `CurrentThirst` | `+0xD8` | `double` |
+| `UStaminaComponent_C` | `CurrentStamina` | `+0xC8` | `double` |
+| `URadiationComponent_C` | `CurrentRadiation` | `+0xC8` | `double` |
+| `ULevellingComponent_C` | `CurrentLevel` | `+0xC0` | **`int32`** (previously unspecified) |
+| `ULevellingComponent_C` | `CurrentXP` | `+0xC8` | `double` |
+| `ULevellingComponent_C` | `LevelCap` | `+0xC4` | `int32` (new) |
+
+All five inherit from `UBaseComponent_C` (`Player`/`Controller` pointers at `+0xA8`/`+0xB0`, own
+`UberGraphFrame` at `+0xB8`, size `0xB8`), which itself extends native `UActorComponent` (confirmed size
+`0xA0` in this build). This is why every vitals component's own fields start at `+0xC0`/`+0xC8` — it's
+the same Blueprint base class pattern, not a coincidence.
+
+**Practical implication for SD-Online**: gap 2's `read_local_progress()` can now be implemented with
+fully confirmed offsets and types for health/hunger/thirst/stamina/radiation/level/XP — no further
+research needed on these fields specifically.
+
+---
+
+## Session 26: 2026-08-07 (continued) — BP_JigMultiplayer_C: An Already-Built Replication Layer
+
+**Correction to method, first**: UE4SS filenames drop the `_C` Blueprint suffix (`BP_SurroundeadGameState.hpp`,
+not `BP_SurroundeadGameState_C.hpp`). The first pass over the dump missed this and wrongly looked like
+`BP_SurroundeadGameState`/`BP_JigHelperComp`/pickup classes hadn't loaded. They had. Full re-check:
+
+### Correction to Session 21: pickups are not propertyless
+
+"`BP_StaticMeshPickup_C` / `BP_SkeletalMeshPickup_C` — Zero Blueprint Properties" was wrong. Confirmed
+layout (`ABP_StaticMeshPickup_C : public AStaticMeshActor`, size `0x310`):
+
+| Offset | Field |
+|--------|-------|
+| `+0x2B0` | `UBP_JigPickupComponent_C* BP_JigPickupComponent` |
+| `+0x2B8` | `UBP_JigMultiplayer_C* BP_JigMultiplayer` |
+| `+0x2C0` | `TMap<FGameplayTag, FText> InteractOptions` |
+
+Every ground pickup carries its own `BP_JigMultiplayer_C` component instance. This was invisible to the
+earlier `ForEachProperty` pass (likely queried the wrong class or an instance where the component
+hadn't initialized) and completely invisible to IDA (confirmed Session 23) since it's 100% Blueprint —
+but is fully visible via the UE4SS CXX dump, which reads live reflection data rather than static binary
+content. **Methodological note for future sessions**: when IDA and raw-property dumps both come up
+empty for a Blueprint class, try the CXX Header Generator before concluding it's unreachable — it
+appears to succeed where targeted single-class property walks failed.
+
+### `BP_JigMultiplayer_C` — the real inventory replication system
+
+`UBP_JigMultiplayer_C : public UActorComponent`, size `0x318`, ~300 member functions. The naming
+convention (`SERVER_RequestDropItem`, `CLIENT_NewItemAdded`, `MC_UpdateCount`, etc.) exactly matches
+Unreal's own Server/Client/Multicast RPC pattern. This is not a thin wrapper — it's the actual mechanism
+the base game uses to move items between containers, drop/pickup, equip, craft, reload magazines, and
+sync vendor state. Every one of these functions addresses items and containers by **`FGuid`**, not the
+`int32` UIDs in `GameState.AllUIDs` and not `classPath` strings:
+
+- Item identity: `FGuid ItemUID` (per-instance)
+- Container identity: `FGuid ContainerUID` / `MainContainersIDs` (`TArray<FGuid>`)
+- Item *type* (as opposed to instance) is still `UJigsawItem_DataAsset_C*` (the `DA_*` asset — confirms
+  earlier `classPath`/DA-name findings are about item type, not instance identity)
+
+Full field layout and the complete function list are in `CXXHeaderDump/BP_JigMultiplayer.hpp` (committed
+alongside this session) — not reproduced here given its size.
+
+Key fields:
+
+| Offset | Field |
+|--------|-------|
+| `+0xA8` | `TArray<FS_ReplicatedContainerInfo> MainJigContainers` |
+| `+0xE0` | `TArray<FGuid> MainContainersIDs` |
+| `+0x130` | `FContainerPickupsInfo PickupInfo` (0xD8 bytes) |
+| `+0x250` | `FGuid MonitorContainerUID` |
+
+**Practical implication for SD-Online**: this changes the shape of the right answer for items/inventory
+sync (gaps 1, 11, 12, 13, 14 in the protocol gap analysis). Rather than the bridge inventing its own
+wire format for drop/pickup/move and hoping it lines up with game state, hooking these existing
+`SERVER_*`/`CLIENT_*`/`MC_*` functions directly would ride on replication logic the game already
+implements and tests — and `FGuid` (16 bytes, not `int32` or a variable-length string) is the correct
+wire type for per-instance item/container identity. Whether this replication path is actually wired up
+to real networking in a live build (vs. dormant/local-only scaffolding) is not yet confirmed and is the
+natural next thing to check — e.g. by hooking one of these functions in Lua and seeing if it fires
+during normal single-player play.
+
+### `BP_JigHelperComp_C` — equipment layout fully confirmed
+
+`UBP_JigHelperComp_C : public UActorComponent`, size `0xC40`. Confirms the Session 15 finding exactly:
+
+| Offset | Field |
+|--------|-------|
+| `+0xA8` | `TMap<FGameplayTag, FGuid> EquipmentUIDs` |
+| `+0xF8` | `FS_ServerEquippedItems ServerEquippedItems` (0x9D8 bytes) |
+| `+0xC30` | `FBP_JigHelperComp_COnEquipmentUpdated OnEquipmentUpdated` (dynamic multicast delegate) — matches
+  gap 3/8's hook point exactly, now with the real delegate type name for binding |
+| `+0xB98` | `FGameplayTag ActiveWeapon` |
+
+### `BP_SurroundeadGameState_C` — fully confirmed, matches every prior live-dump finding
+
+`ABP_SurroundeadGameState_C : public AGameStateBase`, size `0x348`. `AllUIDs` at `+0x338` is
+`TArray<int32>`, exactly as found in Session 19 — this is a separate, coarser tracking array from
+`BP_JigMultiplayer_C`'s per-item `FGuid` system, not a duplicate of it. What specifically populates
+`AllUIDs` (vs. the FGuid system) is still an open question, but is now a much narrower one.
+
+---
+
+## Session 27: 2026-08-07 (continued) — BP_JigMultiplayer_C Replication Path Is Live, Not Dormant
+
+**Goal**: Session 26 left open whether `BP_JigMultiplayer_C`'s `SERVER_*`/`CLIENT_*`/`MC_*` functions are
+actually used during normal play or dormant scaffolding. Tested directly with a live Lua hook (UE4SS
+`RegisterHook`) rather than more static analysis.
+
+**Method**: a disposable diagnostic mod (`Mods/JigMPHookTest`) hooked 9 candidate functions across
+`BP_JigMultiplayer_C` and `BP_JigHelperComp_C`, each just logging a marker on invocation. First attempt
+registered at mod-init time and **all 9 failed** — Blueprint classes don't exist in memory until
+actually loaded/spawned, so hooking by path at main-menu time can't resolve the UFunction. Fixed by
+retrying registration every 3 seconds until each succeeds (standard UE4SS pattern for hooking Blueprint
+functions, worth remembering for future hook-based sessions — don't register once at load, poll).
+
+**Result**, after dropping an item, picking one up, and equipping something in a normal single-player
+session:
+
+| Function | Fired? |
+|----------|--------|
+| `SERVER_RequestDropItem` | **Yes**, 3× |
+| `SERVER_RequestEquipActorToContainer` | **Yes**, 3× |
+| `CLIENT_EquipActorSuccess` | **Yes**, 3× |
+| `CLIENT_NewItemAdded` | No |
+| `MC_NewItemAdded` | No |
+| `SERVER_RequestAddActorToContainer` | No |
+| `CLIENT_AddActorToContainerSUCCESS` | No |
+| `JigHelperComp.OnItemAdded` | No |
+| `JigHelperComp.OnEquipmentUpdated` | Inconclusive (hook never confirmed registered) |
+
+**Conclusion**: the replication scaffolding is confirmed **live**, not dormant — `SERVER_*`/`CLIENT_*`
+functions genuinely fire during ordinary single-player play. In a listen-server-shaped single-player
+session the "server" and "client" roles collapse onto the same local call, which is exactly why these
+fire with no real networking involved. This directly de-risks Session 26's proposal of hooking these
+functions from the mod instead of reinventing wire formats.
+
+**Also learned**: ground-pickup does **not** go through `SERVER_RequestAddActorToContainer` /
+`CLIENT_AddActorToContainerSUCCESS` as guessed — those are for some other add-to-container path (likely
+crafting/loot-container transfer, given the naming). `BP_JigHelperComp_C.TryPickup(AActor* PickupRef,
+UJSIContainer_C* TargetContainer, bool& Result)` (seen in the Session 26 header dump) is the more likely
+entry point for a normal ground pickup and is the natural next thing to hook.
+
+**Housekeeping**: `Mods/JigMPHookTest` is a throwaway diagnostic mod, not part of the SD-Online bridge —
+safe to disable/remove once no longer needed for follow-up hook testing.
+
+---
+
+## Session 28: 2026-08-07 (continued) — Ground Pickup Entry Point Confirmed: `TryPickup`
+
+**Method note**: UE4SS's hot-reload (`Ctrl+R` by default, `[General].HotReloadKey` in
+`UE4SS-settings.ini`, needs `EnableHotReloadSystem = 1` which is already the default) reloads all Lua
+mods from disk without restarting the game. Used this to iterate on the hook list from Session 27
+in-session instead of relaunching each time — much faster for this kind of live-hook testing.
+
+**Fix carried over from Session 27**: hooking a dynamic multicast delegate by its bare name (e.g.
+`OnEquipmentUpdated`) fails to register. Delegates hook via their `__DelegateSignature` wrapper instead
+(`OnEquipmentUpdated__DelegateSignature`) — this registered successfully where the bare name had not.
+
+**Test**: extended the diagnostic mod with new candidates for the actual ground-pickup path
+(`TryPickup`, `JigMP_OnPickupAdded`, `PickupBuildFromGround`, `JigTryAddItemSomewhere`,
+`AddNewItemSomewhere`), all 8 hooks registered cleanly this time. After dropping and picking up an item:
+
+| Function | Fired? |
+|----------|--------|
+| `SERVER_RequestDropItem` | Yes, 3× (reconfirms Session 27) |
+| `JigHelperComp.TryPickup` | **Yes, 2×** |
+| `StaticMeshPickup.JigMP_OnPickupAdded` | No |
+| `StaticMeshPickup.PickupBuildFromGround` | No |
+| `JigTryAddItemSomewhere` | No |
+| `AddNewItemSomewhere` | No |
+| `SERVER_RequestEquipActorToContainer` / `OnEquipmentUpdated` | Not exercised this pass (no equip action taken) |
+
+**Conclusion**: `BP_JigHelperComp_C.TryPickup(AActor* PickupRef, UJSIContainer_C* TargetContainer, bool&
+Result)` is the confirmed real entry point for a normal ground pickup — not any of the
+`BP_JigMultiplayer_C` add-to-container functions guessed earlier. `PickupRef` is the ground actor being
+picked up and `TargetContainer` is the destination; this is directly usable as the mod's hook point for
+detecting pickups and their target container without needing to reverse further.
+
+**Still open**: confirm `OnEquipmentUpdated__DelegateSignature` actually fires on a real equip action
+(registered successfully this session but wasn't exercised) — straightforward follow-up with the same
+mod, just needs an equip action during the test pass.
+
+---
+
+## Session 29: 2026-08-07 (continued) — Inventory Data Model Fully Resolved
+
+**Goal**: move from equipment/pickup events to the inventory *data model* itself — what actually backs
+a container's contents, and what closes gap 11 (`MAX_INV_SLOTS` arbitrary) and gap 1 (`itemId` type).
+
+### `UJSIContainer_C` / `UJSI_Slot_C` are UI widgets, not the data model
+
+Both extend `UUserWidget` (sizes `0x783` and `0x5F0`). They're the visual grid presentation — instantiated
+when an inventory panel is actually open — not where authoritative state lives. That's
+`BP_JigMultiplayer_C` (Session 26), specifically its `MainJigContainers: TArray<FS_ReplicatedContainerInfo>`
+at `+0xA8`. This matters for the mod: read/sync from the actor component, not the transient widgets,
+which likely don't even exist server-side or while the panel is closed.
+
+### `FS_ReplicatedContainerInfo` — closes gap 11 completely
+
+```
+FGuid  ReplicationUID     // 0x00, this container's own UID
+FGuid  InContainerUID     // 0x10, UID of the item that owns this (sub-)container, if nested
+int32  Columns            // 0x20
+int32  Rows               // 0x24
+int32  ContainerIndex     // 0x28, index within MainJigContainers
+TArray<FS_ContainerSlots>      ContainerSlots  // 0x30, occupancy grid
+TArray<FContainerPickupsInfo>  ContainerItems  // 0x40, actual items
+```
+Size `0x50`. **There is no fixed slot count anywhere in this system.** Every container carries its own
+runtime `Columns`/`Rows`, resizable live via `BP_JigMultiplayer_C.ServerFuncExpandContainer` /
+`UJSIContainer_C.ExpandContainer`, backed by a plain dynamic `TArray` of actual items — not a fixed-size
+slot array. `protocol.hpp`'s `MAX_INV_SLOTS = 40` should be removed outright, not replaced with a better
+constant — the wire format needs a variable-length item list per container plus that container's current
+`Columns`/`Rows`, mirroring this struct.
+
+### `FContainerPickupsInfo` — per-item placement wrapper
+
+```
+FGuid   UniqueServerID     // 0x00 — the per-instance item ID (this is what "itemId" should really be
+                           //        keyed on for identity, distinct from item *type* below)
+bool    IsContainer        // 0x10 — true if this item is itself a container (nested backpacks etc.)
+FVector2D ContainerDimension // 0x18
+FRepItemInfo ItemInfo      // 0x28 (0x78 bytes, see below)
+FGuid   ContainerMotherID  // 0xA0
+int32   SlotIndex          // 0xB0
+bool    Rotated            // 0xB4
+int32   InContainerIndex   // 0xB8
+AActor* PickupRef          // 0xC0 — set when this item exists as a ground actor
+TArray<FS_SubContainerInfo> SubContainers // 0xC8 — recursive nesting (container-within-container)
+```
+Size `0xD8`.
+
+### `FRepItemInfo` — closes gap 1, and reveals more than expected
+
+```
+UJigsawItem_DataAsset_C* ItemID   // 0x00 — raw pointer to the item-type DataAsset (the DA_* asset)
+int32     Count                   // 0x08
+FVector2D ItemVec                 // 0x10 (grid footprint)
+double    Weight                  // 0x20
+double    Price                   // 0x28
+FVector2D Durability               // 0x30 (current, max)
+TArray<FS_ItemStat> Stats         // 0x40
+double    Pending?                // 0x50
+TArray<FString> CustomDataKey     // 0x58
+TArray<FString> CustomDataValue   // 0x68 (parallel array to CustomDataKey)
+```
+Size `0x78`.
+
+**Gap 1 resolution**: `ItemID` is a native pointer to the `DA_*` DataAsset, not a string or an int at the
+engine level — but a raw pointer can't cross the network, and since every client has the same static
+content installed, the DataAsset's own name/path (`"DA_AK74"` etc.) is exactly the right wire
+representation, resolvable back to the local pointer on each end via `StaticFindObject`. This confirms
+gap 1's original recommendation (`itemId` → `std::string`) was correct, not merely a guess.
+
+**Beyond gap 1**: the actual per-item model the game maintains is far richer than a bare `itemId` +
+`quantity` — weight, price, durability (current/max), an arbitrary stat array, and free-form
+`CustomData` key/value pairs (used for e.g. weapon attachment state, per the `BP_JigMultiplayer_C`
+function names referencing custom data). None of this is in the current protocol; whether it needs to
+be synced is a design question, not a research one, but it's now fully visible if/when it does.
+
+---
+
+## Session 30: 2026-08-07 (continued) — Full Equipment Slot Layout
+
+**Goal**: finish gap 3/4/8 (equipment sync) — get the complete, named slot layout for
+`FS_ServerEquippedItems` rather than the four slots previously spot-checked.
+
+`FS_ServerEquippedItems` (`BP_JigHelperComp_C + 0xF8`, size `0x9D8` — matches the Session 16 total of
+2520 bytes exactly). All 21 slots, each a full `FRepItemInfo` (`0x78` bytes — not just an item ID; every
+slot carries its own weight/price/durability/stats/customdata per Session 29):
+
+| Offset | Slot |
+|--------|------|
+| `+0x000` | `EquippedFacewear` |
+| `+0x078` | `EquippedHeadwear` |
+| `+0x0F0` | `EquippedEyewear` |
+| `+0x168` | `EquippedAccessory` |
+| `+0x1E0` | `EquippedTorso` |
+| `+0x258` | `EquippedGloves` |
+| `+0x2D0` | `EquippedLegs` |
+| `+0x348` | `EquippedFeet` |
+| `+0x3C0` | `EquippedContainer` |
+| `+0x438` | `EquippedBodyArmor` |
+| `+0x4B0` | `EquippedBackpack` |
+| `+0x528` | `EquippedPrimary` (confirms the existing gap-analysis offset exactly) |
+| `+0x5A0` | `EquippedSecondary` |
+| `+0x618` | `EquippedSidearm` |
+| `+0x690` | `EquippedMelee` |
+| `+0x708` | `EquippedThrowable` |
+| `+0x780` | `EquippedFlashlight` |
+| `+0x7F8` | `EquippedBinoculars` |
+| `+0x870` | `EquippedGPS` |
+| `+0x8E8` | `EquippedCompass` |
+| `+0x960` | `EquippedFishingRod` |
+
+**Practical implication**: gap 3's `RemotePlayer` equipment fields can now be built with exact offsets
+for every slot, not just weapon/torso/headwear as originally scoped. Each slot's `FRepItemInfo.ItemID`
+(the DA_ name) is sufficient for visual appearance sync (gap 3's original goal); the rest of each slot's
+`FRepItemInfo` (durability etc.) is available if ever needed but isn't required for appearance alone.
+
+---
+
+## Session 31: 2026-08-07 (continued) — Real Equipment Hook Point Found; Delegate Hooking Limitation
+
+**Goal**: close gap 3/8's hook point for real — confirm something actually catches every equipment
+change, since `OnEquipmentUpdated` (gap 3/8's originally proposed hook) never fired across three
+different equip actions in prior sessions despite registering without error.
+
+### Negative finding: `RegisterHook` on a delegate's `__DelegateSignature` doesn't reliably fire
+
+Both `OnEquipmentUpdated__DelegateSignature` and `OnActiveWeaponSlotChanged__DelegateSignature`
+registered successfully (no error) but never fired, even when the function that should broadcast them
+(`SetActiveWeaponSlot`) was confirmed firing via its own direct hook in the same test. **Lesson for
+future hook-based sessions**: hooking a `UPROPERTY` dynamic multicast delegate by its
+`__DelegateSignature` name registers cleanly but is not a reliable way to observe `Broadcast()` calls in
+this UE4SS setup — hook the plain UFunction that performs the actual mutation instead, not the
+notification delegate.
+
+### `SetActiveWeaponSlot` is "switch active held weapon," not an equipment change
+
+Confirmed by direct observation: fires when cycling between already-equipped Primary / Second-Primary /
+Secondary / Melee via hotkey — i.e. which already-equipped weapon is currently held, not a change to
+equipment slot contents. Distinct from actually equipping a new item.
+
+### `SetEquippedInfoBySlot` — the real, reliable equipment hook point
+
+`BP_JigHelperComp_C.SetEquippedInfoBySlot(FGameplayTag Slot, FRepItemInfo Info, FGuid UID, bool
+SkipUID)` fired reliably on every equip action tested (both ground-equip and hotkey-driven). This is a
+plain UFunction, not a delegate, and is the actual mutator that writes into `FS_ServerEquippedItems`
+(Session 30). **This, not `OnEquipmentUpdated`, is the correct hook point for gap 3/8** — hook this
+function, read `Slot` (which `Equipped*` field) and `Info.ItemID` (the DA_ name) directly from its
+arguments, no need to poll `FS_ServerEquippedItems` afterward.
+
+### Housekeeping: UE4SS hot-reload (`Ctrl+R`) is unsafe for this game
+
+Observed directly: hot-reloading Lua after editing a hook script uninstalled the mods and caused a crash
+on the next movement input. **Always fully relaunch the game after changing a Lua mod on this project**
+rather than using hot-reload, despite it being convenient in Session 28. Diagnostic mod
+`Mods/JigMPHookTest` has served its purpose across Sessions 27–31 and can be disabled in `mods.txt` now.
+
+---
+
+## Session 32: 2026-08-07 (continued) — PlayerController + Passive Skills: Gaps 4 and 9 Closed
+
+**Goal**: close out gap 4 (`PlayerProgress` missing fields) and gap 9 (`PlayerDamage` dispatch needs
+`HUD.Widget` offset) with the CXX dump rather than the live-property-dump-derived offsets currently in
+the gap analysis.
+
+### `ABP_PlayerController_C` — every previously-documented offset confirmed, one corrected
+
+`ABP_PlayerController_C : public ABP_MasterPlayerController_C`, size `0x990`. All of gap 4's offsets
+check out exactly: `LevellingComponent+0x868`, `PassiveSkillsComponent+0x878`, `Forename+0x8C8`,
+`Surname+0x8D8`, `ZombieKills+0x90C`, `DaysSurvived+0x91C`.
+
+**Correction**: `RespawnLoc` at `+0x930` is a full **`FTransform`** (`0x60` bytes — rotation quat +
+translation + scale), not a bare `FVector3d` as gap 4 assumed. Respawn restores facing direction too,
+not just position.
+
+**Resolves gap 9**: `Widget` (`UWidgetComponent*`) is at `+0x880`, exactly where gap 9 expected `HUD.Widget`.
+
+**New fields beyond gap 4's scope** — a richer stats model than previously assumed:
+
+| Offset | Field |
+|--------|-------|
+| `+0x8E8` | `FString Sex` |
+| `+0x8F8` | `FString Age` |
+| `+0x908` | `TEnumAsByte<Enum_Occupation::Type> Occupation` |
+| `+0x910` | `int32 BossZombieKills` |
+| `+0x914` | `int32 AnimalKills` |
+| `+0x918` | `int32 HumanKills` |
+| `+0x920` | `double DistanceTravelled` |
+| `+0x928` | `int32 InfestationsDestroyed` |
+| `+0x92C` | `bool RespawnPointEnabled` |
+
+### `UPassiveSkillsComponent_C` — all 10 skills confirmed, full layout
+
+Ten skills (Fitness, Strength, Toughness, Sneaking, FirstAid, Marksmanship, Reloading, Thief, Fishing,
+Scavenging), each following the same pattern: `CurrentXP`/`MaxXP`/`CurrentLevel`/`MaxLevel` (4 doubles,
+32 bytes), starting at `+0xC0` and running sequentially (Thief and Fishing land later at `+0x220`/`+0x250`
+respectively, everything else contiguous from `+0xC0`–`+0x198`). Also present but not previously
+documented: per-skill `Percentage` and `Multiplier` fields, and bool `*MultiplierUsed?` flags. Full
+offset table in `CXXHeaderDump/PassiveSkillsComponent.hpp` (committed) rather than reproduced here.
+
+**Practical implication**: gap 4's `read_local_progress()` can now include the full character-stats and
+passive-skill picture with confirmed offsets throughout, not just the four vitals from Session 25.
+
+---
+
+## Session 33: 2026-08-07 (continued) — Gap 12 Closed: `AllUIDs` Is Not a World-Item Registry
+
+**Goal**: find what populates `BP_SurroundeadGameState_C.AllUIDs` (`TArray<int32>`, `+0x338`), left open
+since Session 19 first found it and gap 12 assumed it was "the authoritative list of all spawned item
+unique IDs in the world" needing a `uint64 entityId` mapping.
+
+**Method**: live test rather than more static analysis. A diagnostic mod polled `AllUIDs`'s length every
+2 seconds and also logged it on every confirmed drop (`SERVER_RequestDropItem`) and pickup (`TryPickup`)
+event.
+
+**Result**: `AllUIDs` stayed at exactly **0** throughout — across 3 confirmed drops and 3 confirmed
+pickups, it never changed. Normal item drop/pickup gameplay does not touch this array at all.
+
+**Reframing, not just a narrower gap**: looking at `BP_SurroundeadGameState_C`'s full field/function list
+(Session 26) with this result in hand, `AllUIDs` sits alongside `FirstCaptureDone`, `ItemsQueue`,
+`SnapDelay`, `AllInspectedIDs`, and functions named `SpawnSnapshotCaptor`, `UpdateSnapCustom`,
+`AddItemToQueue`, `HandleQueue`, `HandleSnapTaken`, `OnSnapTaken` — this entire region of the class is the
+**item icon/thumbnail snapshot-capture system** (rendering a 3D preview image for inventory icons), not a
+world-item spawn registry. `AllUIDs` is almost certainly internal bookkeeping for that system (e.g.
+which numeric IDs already have a captured snapshot cached) — unrelated to tracking spawned world items
+for multiplayer purposes. The original assumption (an early, pre-deep-dive session) that this was "the
+deduplication registry the server needs" was a plausible-sounding guess from the name alone that this
+result overturns.
+
+**Practical implication for SD-Online**: gap 12 (map `int32` `AllUIDs` entries to `uint64 entityId`) can
+be **dropped entirely** — there's nothing there to map. The correct per-instance world-item identity,
+per Session 29, is `FContainerPickupsInfo.UniqueServerID` (`FGuid`, 16 bytes) — that's the real thing to
+track for loot dedup/sync, not `AllUIDs`.
+

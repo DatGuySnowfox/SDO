@@ -1,0 +1,60 @@
+#ifndef UE4SS_SDK_Save_Difficulties_HPP
+#define UE4SS_SDK_Save_Difficulties_HPP
+
+class USave_Difficulties_C : public UEMSCustomSaveGame
+{
+    bool Permadeath;                                                                  // 0x0050 (size: 0x1)
+    bool LootRefill;                                                                  // 0x0051 (size: 0x1)
+    double XpMultiplier;                                                              // 0x0058 (size: 0x8)
+    bool Airdrop;                                                                     // 0x0060 (size: 0x1)
+    float GeneralLoot;                                                                // 0x0064 (size: 0x4)
+    float Melee;                                                                      // 0x0068 (size: 0x4)
+    float Ranged;                                                                     // 0x006C (size: 0x4)
+    float Food&Drink;                                                                 // 0x0070 (size: 0x4)
+    float Medical;                                                                    // 0x0074 (size: 0x4)
+    float Equipment;                                                                  // 0x0078 (size: 0x4)
+    float Clothing;                                                                   // 0x007C (size: 0x4)
+    float Attachments;                                                                // 0x0080 (size: 0x4)
+    float Ammo;                                                                       // 0x0084 (size: 0x4)
+    float Crafting;                                                                   // 0x0088 (size: 0x4)
+    double HungerMultiplier;                                                          // 0x0090 (size: 0x8)
+    double ThirstMultiplier;                                                          // 0x0098 (size: 0x8)
+    double FuelMultiplier;                                                            // 0x00A0 (size: 0x8)
+    double DamageMultiplier;                                                          // 0x00A8 (size: 0x8)
+    double DayLength;                                                                 // 0x00B0 (size: 0x8)
+    double NightLength;                                                               // 0x00B8 (size: 0x8)
+    double RandomEventMultiplier;                                                     // 0x00C0 (size: 0x8)
+    double AiRespawnTimer;                                                            // 0x00C8 (size: 0x8)
+    double StaminaMultiplier;                                                         // 0x00D0 (size: 0x8)
+    double StaminaRecoveryMultiplier;                                                 // 0x00D8 (size: 0x8)
+    double ZombieDamage;                                                              // 0x00E0 (size: 0x8)
+    double ZombieSpeed;                                                               // 0x00E8 (size: 0x8)
+    double ZombieHealth;                                                              // 0x00F0 (size: 0x8)
+    double ZombieAmount;                                                              // 0x00F8 (size: 0x8)
+    double ZombieBossAmount;                                                          // 0x0100 (size: 0x8)
+    double BanditHealth;                                                              // 0x0108 (size: 0x8)
+    double BanditCampMultiplier;                                                      // 0x0110 (size: 0x8)
+    double ScavengerHealth;                                                           // 0x0118 (size: 0x8)
+    double ScavengerCampMultiplier;                                                   // 0x0120 (size: 0x8)
+    double MilitaryHealth;                                                            // 0x0128 (size: 0x8)
+    double MilitaryCampMultiplier;                                                    // 0x0130 (size: 0x8)
+    bool PassiveSkillsReset;                                                          // 0x0138 (size: 0x1)
+    double AnimalAmount;                                                              // 0x0140 (size: 0x8)
+    double InfestationsMultiplier;                                                    // 0x0148 (size: 0x8)
+    double InfestationsHealth;                                                        // 0x0150 (size: 0x8)
+    double NightBrightness;                                                           // 0x0158 (size: 0x8)
+    float Keycards;                                                                   // 0x0160 (size: 0x4)
+    float LegendaryWeapons;                                                           // 0x0164 (size: 0x4)
+    float LegendaryGear;                                                              // 0x0168 (size: 0x4)
+    float RefillTime;                                                                 // 0x016C (size: 0x4)
+    bool BackpackInBackpack;                                                          // 0x0170 (size: 0x1)
+    bool LevelScalingEnabled;                                                         // 0x0171 (size: 0x1)
+    double ScalingHealth;                                                             // 0x0178 (size: 0x8)
+    double ScalingDamage;                                                             // 0x0180 (size: 0x8)
+    bool AllowDifficultyChange;                                                       // 0x0188 (size: 0x1)
+
+    void SaveDifficulties();
+    void LoadDifficulties();
+}; // Size: 0x189
+
+#endif
