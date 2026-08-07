@@ -120,14 +120,18 @@ not just the three slots listed above.
 | `radiation` | `RadiationComponent` | `pawn+0x7F0` → `+0xC8` |
 | `forename` | `PlayerController` | `ctrl+0x8C8` (FString) |
 | `surname` | `PlayerController` | `ctrl+0x8D8` (FString) |
-| `respawnX/Y/Z` | `PlayerController` | `ctrl+0x930` (FVector3d) |
+| `respawnLoc` | `PlayerController` | `ctrl+0x930` — **`FTransform` (0x60 bytes), not just FVector3d** (Session 32 correction — includes facing rotation) |
 | `zombieKills` | `PlayerController` | `ctrl+0x90C` |
 | `daysSurvived` | `PlayerController` | `ctrl+0x91C` |
-| Passive skills (10) | `PassiveSkillsComponent` | `ctrl+0x878` → various |
-| Equipment (21 slots) | `BP_JigHelperComp_C` | `helper+0xF8` |
+| Passive skills (10) | `PassiveSkillsComponent` | `ctrl+0x878` → various, full offset table in `04_ida_investigation_log.md` Session 32 |
+| Equipment (21 slots) | `BP_JigHelperComp_C` | `helper+0xF8`, full table in Session 30 |
 
 At minimum, add `level`, `stamina`, `radiation`, `forename`/`surname`, and
-`respawnX/Y/Z`. The full passive skill and equipment sync can be Phase 2.
+`respawnLoc`. The full passive skill and equipment sync can be Phase 2.
+
+> **Session 32 addendum**: also confirmed and available if wanted — `Sex`/`Age`/`Occupation` (`ctrl+0x8E8`/`0x8F8`/`0x908`),
+> `BossZombieKills`/`AnimalKills`/`HumanKills` (`ctrl+0x910`/`0x914`/`0x918`), `DistanceTravelled` (`ctrl+0x920`),
+> `InfestationsDestroyed` (`ctrl+0x928`). Not in the original scope of this gap but sitting right next to the fields that are.
 
 ---
 
@@ -195,6 +199,10 @@ case sdb::MsgType::PlayerDamage:
 **Fix**: Read `HUD.Widget` from `BP_PlayerController_C + 0x880` and call a
 Blueprint event to update the health bar. Or write directly to
 `MedicalComponent.Health` at `pawn+0x7D0 → +0xD0`.
+
+> **Session 32 confirmation**: `BP_PlayerController_C+0x880` is exactly `UWidgetComponent* Widget` —
+> the `+0x880` offset was correct, now confirmed against the authoritative class dump rather than a
+> live property walk.
 
 ---
 
