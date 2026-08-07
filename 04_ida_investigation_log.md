@@ -3188,3 +3188,81 @@ detecting pickups and their target container without needing to reverse further.
 (registered successfully this session but wasn't exercised) — straightforward follow-up with the same
 mod, just needs an equip action during the test pass.
 
+---
+
+## Session 29: 2026-08-07 (continued) — Inventory Data Model Fully Resolved
+
+**Goal**: move from equipment/pickup events to the inventory *data model* itself — what actually backs
+a container's contents, and what closes gap 11 (`MAX_INV_SLOTS` arbitrary) and gap 1 (`itemId` type).
+
+### `UJSIContainer_C` / `UJSI_Slot_C` are UI widgets, not the data model
+
+Both extend `UUserWidget` (sizes `0x783` and `0x5F0`). They're the visual grid presentation — instantiated
+when an inventory panel is actually open — not where authoritative state lives. That's
+`BP_JigMultiplayer_C` (Session 26), specifically its `MainJigContainers: TArray<FS_ReplicatedContainerInfo>`
+at `+0xA8`. This matters for the mod: read/sync from the actor component, not the transient widgets,
+which likely don't even exist server-side or while the panel is closed.
+
+### `FS_ReplicatedContainerInfo` — closes gap 11 completely
+
+```
+FGuid  ReplicationUID     // 0x00, this container's own UID
+FGuid  InContainerUID     // 0x10, UID of the item that owns this (sub-)container, if nested
+int32  Columns            // 0x20
+int32  Rows               // 0x24
+int32  ContainerIndex     // 0x28, index within MainJigContainers
+TArray<FS_ContainerSlots>      ContainerSlots  // 0x30, occupancy grid
+TArray<FContainerPickupsInfo>  ContainerItems  // 0x40, actual items
+```
+Size `0x50`. **There is no fixed slot count anywhere in this system.** Every container carries its own
+runtime `Columns`/`Rows`, resizable live via `BP_JigMultiplayer_C.ServerFuncExpandContainer` /
+`UJSIContainer_C.ExpandContainer`, backed by a plain dynamic `TArray` of actual items — not a fixed-size
+slot array. `protocol.hpp`'s `MAX_INV_SLOTS = 40` should be removed outright, not replaced with a better
+constant — the wire format needs a variable-length item list per container plus that container's current
+`Columns`/`Rows`, mirroring this struct.
+
+### `FContainerPickupsInfo` — per-item placement wrapper
+
+```
+FGuid   UniqueServerID     // 0x00 — the per-instance item ID (this is what "itemId" should really be
+                           //        keyed on for identity, distinct from item *type* below)
+bool    IsContainer        // 0x10 — true if this item is itself a container (nested backpacks etc.)
+FVector2D ContainerDimension // 0x18
+FRepItemInfo ItemInfo      // 0x28 (0x78 bytes, see below)
+FGuid   ContainerMotherID  // 0xA0
+int32   SlotIndex          // 0xB0
+bool    Rotated            // 0xB4
+int32   InContainerIndex   // 0xB8
+AActor* PickupRef          // 0xC0 — set when this item exists as a ground actor
+TArray<FS_SubContainerInfo> SubContainers // 0xC8 — recursive nesting (container-within-container)
+```
+Size `0xD8`.
+
+### `FRepItemInfo` — closes gap 1, and reveals more than expected
+
+```
+UJigsawItem_DataAsset_C* ItemID   // 0x00 — raw pointer to the item-type DataAsset (the DA_* asset)
+int32     Count                   // 0x08
+FVector2D ItemVec                 // 0x10 (grid footprint)
+double    Weight                  // 0x20
+double    Price                   // 0x28
+FVector2D Durability               // 0x30 (current, max)
+TArray<FS_ItemStat> Stats         // 0x40
+double    Pending?                // 0x50
+TArray<FString> CustomDataKey     // 0x58
+TArray<FString> CustomDataValue   // 0x68 (parallel array to CustomDataKey)
+```
+Size `0x78`.
+
+**Gap 1 resolution**: `ItemID` is a native pointer to the `DA_*` DataAsset, not a string or an int at the
+engine level — but a raw pointer can't cross the network, and since every client has the same static
+content installed, the DataAsset's own name/path (`"DA_AK74"` etc.) is exactly the right wire
+representation, resolvable back to the local pointer on each end via `StaticFindObject`. This confirms
+gap 1's original recommendation (`itemId` → `std::string`) was correct, not merely a guess.
+
+**Beyond gap 1**: the actual per-item model the game maintains is far richer than a bare `itemId` +
+`quantity` — weight, price, durability (current/max), an arbitrary stat array, and free-form
+`CustomData` key/value pairs (used for e.g. weapon attachment state, per the `BP_JigMultiplayer_C`
+function names referencing custom data). None of this is in the current protocol; whether it needs to
+be synced is a design question, not a research one, but it's now fully visible if/when it does.
+
