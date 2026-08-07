@@ -16,7 +16,10 @@ Comparing `protocol.hpp`, `state.hpp`, and `mod.cpp` against all research findin
 
 ## CRITICAL — Breaks Correctness
 
-### 1. `itemId` is `uint32_t` everywhere — must be string
+### 1. `itemId` is `uint32_t` everywhere — must be string — FIXED
+
+**Status**: `InventorySlot.itemId`, `EntityDescriptorData.itemId`, and `EquipmentSlot.itemId` in
+`protocol.hpp` are all `std::string` (length-prefixed UTF-8 on the wire), as recommended below.
 
 **Affected**: `InventorySlot.itemId`, `LocalSlot.itemId`, `WorldEntity.itemId`,
 `EntitySpawnData.itemId`, `ItemPickupResult.itemId`, `ItemDropReq` (implicit).
@@ -135,7 +138,11 @@ At minimum, add `level`, `stamina`, `radiation`, `forename`/`surname`, and
 
 ---
 
-### 5. `EntityType` missing `VEHICLE`
+### 5. `EntityType` missing `VEHICLE` — FIXED
+
+**Status**: `EntityKind::Vehicle = 3` exists in `protocol.hpp` (enum was renamed `EntityKind` along the
+way, aligned to the JS `WorldEntityKind` values: `Unknown=0, Zombie=1, GroundItem=2, Vehicle=3,
+PlacedStructure=4`).
 
 **Affected**: `protocol.hpp:EntityType`.
 
@@ -289,7 +296,12 @@ the JS host-agent uses `encodeWorldAction` / `decodeWorldAction` (length-prefixe
 JSON). The gateway is a pass-through — it does NOT validate or transcode payloads
 beyond what is shown below.
 
-### 13. Request/Result types: binary C++ vs JSON JS
+### 13. Request/Result types: binary C++ vs JSON JS — FIXED
+
+**Status**: `send_item_pickup_request`/`send_item_drop_request` (`mod.cpp`) build JSON via
+`encode_world_action` with a `requestId`; `dispatch_frame()`'s `ItemPickupResult`/`ItemDropResult`/
+`InteractionResult` cases all decode via `decode_world_action` + `json_bool`/`json_str`. No binary
+structs remain on either side of this boundary.
 
 **Affected C++ → JS (client to host):**
 
@@ -317,7 +329,13 @@ the JSON. The JS uses `requestId` for idempotency and deduplication. For
 
 ---
 
-### 14. `EntitySpawn` payload format mismatch
+### 14. `EntitySpawn` payload format mismatch — FIXED
+
+**Status**: `protocol.hpp`'s `EntityDescriptorData` (kind/revision/quantity/ownerPlayerId/classPath/
+itemId, variable length) and `EntityStateData` (kind/revision/x/y/z/yaw/health/state, fixed 27 bytes)
+match the JS `encodeWorldEntityDescriptor`/`encodeWorldEntityState` shapes described below exactly;
+`dispatch_frame()`'s `EntitySpawn`/`EntityState` cases decode them separately and forward to
+`EntityManager`.
 
 **Affected**: `decode_entity_spawn()` in `protocol.cpp`, `entity_manager.cpp`.
 
@@ -354,7 +372,12 @@ Consequences:
 
 ---
 
-### 15. `PlayerProgressRestore` payload is a Movement frame
+### 15. `PlayerProgressRestore` payload is a Movement frame — FIXED
+
+**Status**: `dispatch_frame()`'s `PlayerProgressRestore` case calls `decode_player_progress` (not
+`decode_movement`), matching the gateway's actual behavior of replaying the last-saved
+`ProfileRevision` payload verbatim. It applies the restored position via `pendingTeleport` /
+`K2_SetActorLocationAndRotation` on the next tick, as recommended below.
 
 JS sends `encodeMovement` (39 bytes) as the `PlayerProgressRestore` payload —
 position/yaw only, no vitals or inventory. The C++ `decode_player_progress`
@@ -376,39 +399,45 @@ restored on rejoin.
 
 ---
 
-## Corrected: What's Actually Working
+## Current Status (updated after Session 34 audit — 2026-08-07)
+
+Every gap numbered above is now **FIXED**: 1, 3, 5, 6, 8, 9, 12, 13, 14, 15 (12 was closed by
+determining it never existed, not by writing code). What's actually working end-to-end:
 
 - Frame header format, magic, version ✓
-- TCP transport + HMAC ticket auth ✓  
-  *(C++ JoinRequest payload is 64 zeros but gateway ignores it and re-encodes
-  from ticket claims — works correctly)*
-- `Movement` encode/decode ✓ (minus velocity, float vs double)
+- TCP transport + HMAC ticket auth ✓
+- `Movement` encode/decode ✓ including velocity (minor: still float, not double — see gap 10)
 - `WorldState` decode ✓
 - `Death`/`Respawn`/`DeathRequest`/`RespawnRequest` flow ✓
-- `PlayerConnected`/`PlayerDisconnected` + proxy lifecycle ✓
-- `PlayerDamage` decode ✓ (13-byte binary; JS and C++ agree; dispatch is TODO)
+- `PlayerConnected`/`PlayerDisconnected` + proxy lifecycle (position/state tracking only — see below) ✓
+- `PlayerDamage` decode + dispatch ✓ (writes straight to `MedicalComponent`)
+- `EntitySpawn`/`EntityState`/`EntityDespawn` ✓ (correct JS-matching formats)
+- `ItemPickup`/`ItemDrop`/`Interaction` request+result ✓ (JSON both directions)
+- `PlayerProgressRestore` ✓ (correct decode + teleport-on-restore)
+- `Equipment` — send (local read) and receive (cache on `RemotePlayer`) ✓, live-confirmed Session 34
 - Auto-open world via `MenuWidget_C` ✓
-- 30-second profile revision cadence ✓ (reads stale BridgeState — see gap 2)
+- Profile revision every 30s, equipment every 2s, both reading live game state (not stale
+  `BridgeState`) ✓
 
-### Confirmed broken (previously listed as ✓):
+### Genuinely still open
 
-- `EntitySpawn`/`EntityDespawn` — format mismatch (gap 14 above)
-- `ItemPickup`/`ItemDrop` request/result — binary vs JSON mismatch (gap 13 above)
-- `InteractionRequest` BUILD — binary vs JSON mismatch (gap 13 above)
-- `PlayerProgressRestore` — wrong decode function (gap 15 above)
-
----
-
-## Recommended Fix Order (revised)
-
-1. **JSON request/result encoding** (gap 13) — unblocks all items and building.
-2. **EntitySpawn/EntityState format** (gap 14) — unblocks ground items and zombies.
-3. **PlayerProgressRestore decode** (gap 15) — fixes position restore on rejoin.
-4. **itemId string** (gap 1) — change uint32_t to string throughout.
-5. **read_local_progress()** (gap 2) — read vitals/level/equipment from game directly.
-6. **PlayerProgress extended fields** (gap 4) — add level, stamina, radiation, names.
-7. **Equipment frame** (gap 3/8) — hook OnEquipmentUpdated, encode/send.
-8. **Velocity** (gap 6) — one-liner fix in send_movement().
-9. **EntityType::VEHICLE** (gap 5) — one-liner enum addition.
-10. **PlayerDamage dispatch** (gap 9) — write health to MedicalComponent.
-11. **RemotePlayer equipment fields** (gap 3) — for proxy visual fidelity.
+- **Gap 4/7** — `PlayerProgress`/`BridgeState` still missing forename/surname, `respawnLoc`
+  (`FTransform`), zombie/animal/human kill counts, `daysSurvived`, `distanceTravelled`,
+  `infestationsDestroyed`, and all 10 passive skills. Offsets are fully documented (Session 32) but
+  wiring them in means extending the `PlayerProgress` wire format — needs a matching change on the JS
+  side (`server/src/lib/protocol.js` or equivalent), unlike the self-contained `Equipment` addition.
+- **Gap 10** — `Movement` position fields are `float`, engine uses `double` (LWC) — precision loss,
+  not correctness-breaking at current world scale. Low priority.
+- **Gap 11** — `MAX_INV_SLOTS = 40` in `state.hpp` is still a leftover fixed-size constant; Session 29
+  resolved that the main inventory has no fixed slot count and recommended removing it in favor of
+  per-container `Columns`/`Rows` + a variable-length item list. Not done — no code reads/sends main
+  inventory contents at all yet, just equipment.
+- **`ProxyManager` is still Phase 1** — no code in this repo has ever found or spawned the actual
+  remote-player proxy Blueprint class. `RemotePlayer.equipment`/`x,y,z,yaw`/`health` are all tracked
+  correctly in `state.hpp` but nothing renders them: `spawn_proxy()` is a stub returning `nullptr`, so
+  `ProxyManager::tick()` never actually creates a visible actor for another player. This is the
+  biggest remaining gap toward the mod being visually functional in multiplayer — everything else
+  fixed above is plumbing feeding a proxy system that doesn't render anything yet.
+- **Main inventory / container sync** — Session 26's `BP_JigMultiplayer_C` native RPC replication
+  path (addresses items/containers by `FGuid`) has never been hooked into. Equipment (worn items) is
+  now fully synced; the backpack/container grid contents are not synced at all.
