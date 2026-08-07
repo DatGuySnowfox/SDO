@@ -1,0 +1,31 @@
+namespace Enum_VendorTypes {
+    enum Type {
+        NewEnumerator17 = 0,
+        NewEnumerator18 = 1,
+        NewEnumerator19 = 2,
+        NewEnumerator20 = 3,
+        NewEnumerator21 = 4,
+        NewEnumerator22 = 5,
+        NewEnumerator23 = 6,
+        NewEnumerator24 = 7,
+        NewEnumerator25 = 8,
+        NewEnumerator26 = 9,
+        NewEnumerator27 = 10,
+        NewEnumerator28 = 11,
+        NewEnumerator29 = 12,
+        NewEnumerator30 = 13,
+        NewEnumerator31 = 14,
+        NewEnumerator32 = 15,
+        NewEnumerator33 = 16,
+        NewEnumerator34 = 17,
+        NewEnumerator35 = 18,
+        NewEnumerator36 = 19,
+        NewEnumerator37 = 20,
+        NewEnumerator38 = 21,
+        NewEnumerator39 = 22,
+        NewEnumerator40 = 23,
+        NewEnumerator42 = 24,
+        Enum_MAX = 25,
+    };
+}
+
