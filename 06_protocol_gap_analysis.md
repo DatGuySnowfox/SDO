@@ -240,11 +240,20 @@ TArray, not a fixed slot count. 40 may be too small or too large.
 
 ---
 
-### 12. `AllUIDs` is `TArray<int32>` — entityId mapping needed
+### 12. ~~`AllUIDs` is `TArray<int32>` — entityId mapping needed~~ — CLOSED, not applicable
 
-**Research finding**: `BP_SurroundeadGameState_C.AllUIDs` at +0x338 tracks world
+**Original assumption**: `BP_SurroundeadGameState_C.AllUIDs` at +0x338 tracks world
 item UIDs as `int32`. The protocol uses `uint64_t entityId`. The server must map
 its uint64 entity IDs to the game's int32 UIDs when coordinating loot despawn.
+
+**Session 33 finding — this gap doesn't exist**: live-tested directly. `AllUIDs` stayed at 0 across
+multiple confirmed drop and pickup actions — normal gameplay never touches it. It sits alongside
+`BP_SurroundeadGameState_C`'s item-icon snapshot/thumbnail-capture system fields and functions
+(`ItemsQueue`, `AllInspectedIDs`, `SpawnSnapshotCaptor`, `HandleSnapTaken`, etc.), and is almost
+certainly internal bookkeeping for that unrelated system, not a world-item spawn registry. There is
+nothing to map here. **Use `FContainerPickupsInfo.UniqueServerID` (`FGuid`) instead** — that's the
+real per-instance world-item identity (see gap 1's addendum and `04_ida_investigation_log.md` Sessions
+29/33).
 
 ---
 
