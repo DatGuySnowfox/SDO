@@ -295,8 +295,13 @@ restored on rejoin.
 
 **Fix**:
 - For `PlayerProgressRestore`, call `decode_movement` (not `decode_player_progress`).
-- Apply the movement to teleport the pawn to the saved position (write directly
-  to `RootComponent.RelativeLocation` or use a teleport UFunction).
+- Apply the movement to teleport the pawn to the saved position using the already-documented
+  `K2_SetActorLocationAndRotation` exec thunk (`0x142AC5500`, see `04_ida_investigation_log.md`
+  Session 5/9): resolve `RootComponent` at `actor+0x1A0`, then dispatch through
+  `RootComponent->vtable[1312/8]` (`MoveComponentImpl`) with `bTeleport = true` (passed through as
+  `!bTeleport` to the teleport-type argument). This is a real engine call, not a raw memory write —
+  it handles collision/sweep correctly and is already fully reverse-engineered, no further research
+  needed.
 - If vitals restore is needed later, design a separate extended payload.
 
 ---
