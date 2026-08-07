@@ -148,20 +148,17 @@ protocol but the C++ `EntityType` enum only has `LOOT_ITEM`, `BUILDING_PIECE`,
 
 ---
 
-### 6. No velocity reading in `send_movement()`
+### 6. ~~No velocity reading in `send_movement()`~~ — FIXED
 
-**Affected**: `mod.cpp:send_movement()` line ~114.
+**Affected**: `mod.cpp:send_movement()`.
 
-**Research finding**: `AActor::GetVelocity()` is a standard UE5 method available
-via UE4SS (`pawn->GetVelocity()`). The current code falls back to zeros.
+**Original finding**: `AActor::GetVelocity()` isn't in the UE4SS stub headers, so the code fell back to
+zeros.
 
-**Fix**:
-```cpp
-const FVector vel = pawn->GetVelocity();
-mv.velocityX = static_cast<float>(vel.X);
-mv.velocityY = static_cast<float>(vel.Y);
-mv.velocityZ = static_cast<float>(vel.Z);
-```
+**Fix applied**: read it directly instead of via UFunction — `ACharacter+0x328` is `CharacterMovement`
+(already confirmed), and `UMovementComponent::Velocity` sits at `+0xB8` on that component (confirmed via
+`research/CXXHeaderDump/Engine.hpp`), valid regardless of the exact `UCharacterMovementComponent`
+subclass since base-class fields are always a prefix of the derived layout.
 
 ---
 
