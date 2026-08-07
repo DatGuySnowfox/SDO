@@ -3266,3 +3266,43 @@ gap 1's original recommendation (`itemId` → `std::string`) was correct, not me
 function names referencing custom data). None of this is in the current protocol; whether it needs to
 be synced is a design question, not a research one, but it's now fully visible if/when it does.
 
+---
+
+## Session 30: 2026-08-07 (continued) — Full Equipment Slot Layout
+
+**Goal**: finish gap 3/4/8 (equipment sync) — get the complete, named slot layout for
+`FS_ServerEquippedItems` rather than the four slots previously spot-checked.
+
+`FS_ServerEquippedItems` (`BP_JigHelperComp_C + 0xF8`, size `0x9D8` — matches the Session 16 total of
+2520 bytes exactly). All 21 slots, each a full `FRepItemInfo` (`0x78` bytes — not just an item ID; every
+slot carries its own weight/price/durability/stats/customdata per Session 29):
+
+| Offset | Slot |
+|--------|------|
+| `+0x000` | `EquippedFacewear` |
+| `+0x078` | `EquippedHeadwear` |
+| `+0x0F0` | `EquippedEyewear` |
+| `+0x168` | `EquippedAccessory` |
+| `+0x1E0` | `EquippedTorso` |
+| `+0x258` | `EquippedGloves` |
+| `+0x2D0` | `EquippedLegs` |
+| `+0x348` | `EquippedFeet` |
+| `+0x3C0` | `EquippedContainer` |
+| `+0x438` | `EquippedBodyArmor` |
+| `+0x4B0` | `EquippedBackpack` |
+| `+0x528` | `EquippedPrimary` (confirms the existing gap-analysis offset exactly) |
+| `+0x5A0` | `EquippedSecondary` |
+| `+0x618` | `EquippedSidearm` |
+| `+0x690` | `EquippedMelee` |
+| `+0x708` | `EquippedThrowable` |
+| `+0x780` | `EquippedFlashlight` |
+| `+0x7F8` | `EquippedBinoculars` |
+| `+0x870` | `EquippedGPS` |
+| `+0x8E8` | `EquippedCompass` |
+| `+0x960` | `EquippedFishingRod` |
+
+**Practical implication**: gap 3's `RemotePlayer` equipment fields can now be built with exact offsets
+for every slot, not just weapon/torso/headwear as originally scoped. Each slot's `FRepItemInfo.ItemID`
+(the DA_ name) is sufficient for visual appearance sync (gap 3's original goal); the rest of each slot's
+`FRepItemInfo` (durability etc.) is available if ever needed but isn't required for appearance alone.
+
