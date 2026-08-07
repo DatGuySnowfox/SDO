@@ -441,9 +441,25 @@ static void dispatch_frame(const sdb::Frame& f)
         }
         break;
 
-    case sdb::MsgType::PlayerDamage:
-        // TODO: read decoded damage and forward to HUD widget
+    case sdb::MsgType::PlayerDamage: {
+        auto dmg = sdb::decode_player_damage(f.payload.data(),
+                                             static_cast<int>(f.payload.size()));
+        if (!dmg) break;
+        // Write straight into MedicalComponent.Health — this frame carries the
+        // server-authoritative current/max health, not a delta to apply.
+        if (AActor* pawn = find_local_pawn()) {
+            const auto base = reinterpret_cast<uintptr_t>(pawn);
+            const auto med  = *reinterpret_cast<uintptr_t*>(base + 0x7D0);
+            if (med) {
+                *reinterpret_cast<double*>(med + 0xD0) = static_cast<double>(dmg->current);
+                *reinterpret_cast<double*>(med + 0xD8) = static_cast<double>(dmg->maximum);
+            }
+        }
+        Output::send<LogLevel::Normal>(
+            STR("SDB: player damage applied  health={:.1f}/{:.1f}\n"),
+            dmg->current, dmg->maximum);
         break;
+    }
 
     // ── Entity lifecycle ──────────────────────────────────────────────────────
 
