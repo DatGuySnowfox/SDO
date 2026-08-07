@@ -1,0 +1,5 @@
+{
+  "hostSecret":   "d9932899504ec95525f8496ca4b85ee7c22b5c43392b5e434da8759926350639",
+  "ticketSecret": "5c2c17bcec53530da0be26ad10b0b79f1765ce95dc60ab6a39bb9fcb5a83c60e",
+  "ticketTtlMs":  3600000
+}

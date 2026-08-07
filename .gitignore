@@ -6,6 +6,33 @@ CLAUDE.md
 .aider*
 .copilot/
 .github/copilot-instructions.md
+.vs/
+.xmake/
+
+# Build output
+build/
+*.exp
+*.lib
+*.obj
+*.pch
+
+# .NET build output
+launcher/bin/
+launcher/obj/
+
+# Node
+node_modules/
+*.db
+
+# Logs / downloads
+wget-log
+wget-log.1
+wget-log*
+
+# Screenshots
+*.png
+*.jpg
+*.jpeg
 
 # IDA
 *.i64

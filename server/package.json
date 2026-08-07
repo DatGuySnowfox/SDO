@@ -1,0 +1,16 @@
+{
+  "name": "sdb-server",
+  "version": "1.0.0",
+  "description": "SurrounDead Bridge – dedicated server (gateway + host-agent)",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "better-sqlite3": "^13.0.2"
+  }
+}
