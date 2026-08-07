@@ -3392,3 +3392,34 @@ offset table in `CXXHeaderDump/PassiveSkillsComponent.hpp` (committed) rather th
 **Practical implication**: gap 4's `read_local_progress()` can now include the full character-stats and
 passive-skill picture with confirmed offsets throughout, not just the four vitals from Session 25.
 
+---
+
+## Session 33: 2026-08-07 (continued) — Gap 12 Closed: `AllUIDs` Is Not a World-Item Registry
+
+**Goal**: find what populates `BP_SurroundeadGameState_C.AllUIDs` (`TArray<int32>`, `+0x338`), left open
+since Session 19 first found it and gap 12 assumed it was "the authoritative list of all spawned item
+unique IDs in the world" needing a `uint64 entityId` mapping.
+
+**Method**: live test rather than more static analysis. A diagnostic mod polled `AllUIDs`'s length every
+2 seconds and also logged it on every confirmed drop (`SERVER_RequestDropItem`) and pickup (`TryPickup`)
+event.
+
+**Result**: `AllUIDs` stayed at exactly **0** throughout — across 3 confirmed drops and 3 confirmed
+pickups, it never changed. Normal item drop/pickup gameplay does not touch this array at all.
+
+**Reframing, not just a narrower gap**: looking at `BP_SurroundeadGameState_C`'s full field/function list
+(Session 26) with this result in hand, `AllUIDs` sits alongside `FirstCaptureDone`, `ItemsQueue`,
+`SnapDelay`, `AllInspectedIDs`, and functions named `SpawnSnapshotCaptor`, `UpdateSnapCustom`,
+`AddItemToQueue`, `HandleQueue`, `HandleSnapTaken`, `OnSnapTaken` — this entire region of the class is the
+**item icon/thumbnail snapshot-capture system** (rendering a 3D preview image for inventory icons), not a
+world-item spawn registry. `AllUIDs` is almost certainly internal bookkeeping for that system (e.g.
+which numeric IDs already have a captured snapshot cached) — unrelated to tracking spawned world items
+for multiplayer purposes. The original assumption (an early, pre-deep-dive session) that this was "the
+deduplication registry the server needs" was a plausible-sounding guess from the name alone that this
+result overturns.
+
+**Practical implication for SD-Online**: gap 12 (map `int32` `AllUIDs` entries to `uint64 entityId`) can
+be **dropped entirely** — there's nothing there to map. The correct per-instance world-item identity,
+per Session 29, is `FContainerPickupsInfo.UniqueServerID` (`FGuid`, 16 bytes) — that's the real thing to
+track for loot dedup/sync, not `AllUIDs`.
+
