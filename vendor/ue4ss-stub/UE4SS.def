@@ -1,0 +1,32 @@
+LIBRARY UE4SS
+EXPORTS
+    ??0CppUserModBase@RC@@QEAA@XZ
+    ??0FName@Unreal@RC@@QEAA@II@Z
+    ??0FRotator@Unreal@RC@@QEAA@NNN@Z
+    ??0FRotator@Unreal@RC@@QEAA@XZ
+    ??1CppUserModBase@RC@@UEAA@XZ
+    ?FindAllOf@UObjectGlobals@Unreal@RC@@YAXPEB_WAEAV?$vector@PEAVUObject@Unreal@RC@@V?$allocator@PEAVUObject@Unreal@RC@@@std@@@std@@@Z
+    ?FindFirstOf@UObjectGlobals@Unreal@RC@@YAPEAVUObject@23@PEB_W@Z
+    ?FindObject@UObjectGlobals@Unreal@RC@@YAPEAVUObject@23@PEAVUClass@23@PEAV423@PEB_W_NPEAUObjectSearcher@23@@Z
+    ?ForEachUObject@UObjectGlobals@Unreal@RC@@YAXAEBV?$function@$$A6A?AW4LoopAction@RC@@PEAVUObject@Unreal@2@HH@Z@std@@@Z
+    ?GetClassPrivate@UObjectBase@Unreal@RC@@QEAAAEAPEAVUClass@23@XZ
+    ?GetFullName@UObject@Unreal@RC@@QEBA?AV?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@PEAV123@@Z
+    ?GetFunctionByNameInChain@UObject@Unreal@RC@@QEAAPEAVUFunction@23@PEB_W@Z
+    ?GetValuePtrByPropertyNameInChain@UObject@Unreal@RC@@QEAAPEAXPEB_W@Z
+    ?GetWorld@AActor@Unreal@RC@@QEAAPEAVUWorld@23@XZ
+    ?GetYaw@FRotator@Unreal@RC@@QEBANXZ
+    ?IsA@UObjectBase@Unreal@RC@@QEBA_NPEAVUClass@23@@Z
+    ?K2_DestroyActor@AActor@Unreal@RC@@QEAAXXZ
+    ?K2_GetActorLocation@AActor@Unreal@RC@@QEAA?AUFVector@23@XZ
+    ?K2_GetActorRotation@AActor@Unreal@RC@@QEAA?AUFRotator@23@XZ
+    ?K2_SetActorLocationAndRotation@AActor@Unreal@RC@@QEAA_NUFVector@23@UFRotator@23@_NAEAUFHitResult@23@2@Z
+    ?Major@Version@Unreal@RC@@2HA
+    ?Minor@Version@Unreal@RC@@2HA
+    ?ProcessEvent@UObject@Unreal@RC@@QEAAXPEAVUFunction@23@PEAX@Z
+
+    ?SetActorEnableCollision@AActor@Unreal@RC@@QEAAX_N@Z
+    ?SetActorHiddenInGame@AActor@Unreal@RC@@QEAAX_N@Z
+    ?SetActorTickEnabled@AActor@Unreal@RC@@QEAAX_N@Z
+    ?SpawnActor@UWorld@Unreal@RC@@QEAAPEAVAActor@23@PEAVUClass@23@PEBUFVector@23@PEBUFRotator@23@@Z
+    ?StaticClass@AActor@Unreal@RC@@SAPEAVUClass@23@XZ
+    ?ToString@FName@Unreal@RC@@QEAA?AV?$basic_string@_WU?$char_traits@_W@std@@V?$allocator@_W@2@@std@@XZ

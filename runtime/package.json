@@ -1,0 +1,11 @@
+{
+  "name": "sdb-bridge-runtime",
+  "version": "1.0.0",
+  "description": "SurrounDead Bridge – client-side UDP↔TCP relay",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "engines": { "node": ">=18" },
+  "license": "MIT"
+}
