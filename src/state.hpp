@@ -21,6 +21,7 @@ struct RemotePlayer {
     uint8_t  animState  = 0;
     void*    proxyActor = nullptr;
     uint64_t updatedUs  = 0;
+    uint64_t lastSpawnAttemptUs = 0; // throttles retry after a failed spawn_proxy()
     std::vector<EquipmentSlot> equipment; // last Equipment frame received, for proxy appearance sync
 };
 
