@@ -171,7 +171,19 @@ static void send_movement(AActor* pawn)
     mv.z      = static_cast<float>(loc.Z);
     mv.yaw    = static_cast<float>(rot.Yaw);
     mv.aimYaw = static_cast<float>(rot.Yaw);
-    // Velocity: GetVelocity() not in UE4SS stub; read from CharacterMovement in Phase 2.
+
+    // Velocity: not exposed via the UE4SS stub, so read it directly.
+    // ACharacter::CharacterMovement (pawn+0x328) -> UMovementComponent::Velocity (+0xB8).
+    const auto pawnBase = reinterpret_cast<uintptr_t>(pawn);
+    const auto moveComp = *reinterpret_cast<uintptr_t*>(pawnBase + 0x328);
+    if (moveComp) {
+        const double vx = *reinterpret_cast<double*>(moveComp + 0xB8);
+        const double vy = *reinterpret_cast<double*>(moveComp + 0xC0);
+        const double vz = *reinterpret_cast<double*>(moveComp + 0xC8);
+        mv.velocityX = static_cast<float>(vx);
+        mv.velocityY = static_cast<float>(vy);
+        mv.velocityZ = static_cast<float>(vz);
+    }
 
     uint8_t payload[sdb::MOVEMENT_PAYLOAD_SIZE];
     sdb::encode_movement(mv, payload);
