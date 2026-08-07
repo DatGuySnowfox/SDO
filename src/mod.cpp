@@ -22,6 +22,7 @@
 #include <RC/DynamicOutput/Output.hpp>
 
 #include <windows.h>
+#include <algorithm>
 #include <atomic>
 #include <cstdlib>
 #include <mutex>
@@ -312,9 +313,9 @@ static sdb::LocalVitals read_local_progress(AActor* pawn)
 // full replace of RemotePlayer.equipment per frame, so an unequipped slot
 // correctly disappears simply by being absent from the next frame.
 //
-// Not yet live-tested end-to-end (see native::fname_to_string) — verify
-// resolved itemId strings in-game before trusting this.
-static sdb::Equipment read_local_equipment()
+// Live-confirmed Session 34 (resolved real item names, no crash across a
+// full play session) — see research/04_ida_investigation_log.md.
+static sdb::Equipment read_local_equipment(AActor* pawn)
 {
     static constexpr uintptr_t kSlotOffsets[sdb::EQUIPMENT_SLOT_COUNT] = {
         0x000, 0x078, 0x0F0, 0x168, 0x1E0, 0x258, 0x2D0, 0x348, 0x3C0, 0x438,
@@ -323,10 +324,16 @@ static sdb::Equipment read_local_equipment()
 
     sdb::Equipment eq;
 
-    UObject* helper = UObjectGlobals::FindFirstOf(STR("BP_JigHelperComp_C"));
+    // BP_PlayerCharacter_C.BP_JigHelperComp is a named property at pawn+0x700
+    // (research/CXXHeaderDump/BP_PlayerCharacter.hpp) — read it directly
+    // rather than via FindFirstOf("BP_JigHelperComp_C"), which only happened
+    // to return the right instance in solo testing; with more than one
+    // player in the world it could just as easily return someone else's.
+    const uintptr_t helper = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(pawn) + 0x700);
     if (!helper) return eq;
 
-    const auto equipped = reinterpret_cast<uintptr_t>(helper) + 0xF8;
+    const auto equipped = helper + 0xF8;
 
     for (uint8_t i = 0; i < sdb::EQUIPMENT_SLOT_COUNT; ++i) {
         const uintptr_t slot   = equipped + kSlotOffsets[i];
@@ -343,6 +350,83 @@ static sdb::Equipment read_local_equipment()
     }
 
     return eq;
+}
+
+// Walks BP_JigMultiplayer_C.MainJigContainers (comp+0xA8, TArray of
+// FS_ReplicatedContainerInfo, each 0x50 bytes) and flattens every container's
+// FContainerPickupsInfo items into one sequential slot list, matching the
+// existing flat-slotIndex ProfileRevision wire format (protocol.hpp
+// InventorySlot / state.hpp MAX_INV_SLOTS). This is a v1: it does not
+// preserve per-container boundaries, Columns/Rows, or nested SubContainers
+// (research/04_ida_investigation_log.md Session 29) — full gap 11 closure
+// needs a wire-format change matched on the JS side (server/src/lib/
+// protocol.js decodePlayerProgress + host-agent.js MAX_INV_SLOTS handling),
+// which is out of scope here. This only reads real data into the slot that
+// already existed and was previously always empty.
+//
+// BP_PlayerCharacter_C.BP_JigMultiplayer is a named property at pawn+0x818
+// (research/CXXHeaderDump/BP_PlayerCharacter.hpp) — same reasoning as
+// read_local_equipment() for reading it directly instead of FindFirstOf.
+//
+// Live-confirmed Session 35: correctly resolved a real, varied inventory
+// (ammo, meds, currency, keycards, etc.) across multiple real containers with
+// no crash. Also confirmed the flat 40-slot cap is a genuine limitation, not
+// just theoretical — a real loadout exceeded it in testing (gap 11).
+static std::vector<sdb::InventorySlot> read_local_inventory(AActor* pawn)
+{
+    std::vector<sdb::InventorySlot> out;
+
+    const uintptr_t jigMp = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(pawn) + 0x818);
+    if (!jigMp) return out;
+
+    // TArray<FS_ReplicatedContainerInfo> MainJigContainers @ +0xA8
+    const uintptr_t containersData = *reinterpret_cast<uintptr_t*>(jigMp + 0xA8);
+    const int32_t   containerCount = *reinterpret_cast<int32_t*>(jigMp + 0xA8 + 0x08);
+    if (!containersData || containerCount <= 0) return out;
+
+    constexpr size_t kContainerStride = 0x50;
+    constexpr size_t kContainerItemsOffset = 0x40; // TArray<FContainerPickupsInfo>
+    constexpr size_t kPickupStride = 0xD8;
+    constexpr size_t kItemInfoOffset = 0x28;       // FRepItemInfo within FContainerPickupsInfo
+
+    for (int32_t c = 0; c < containerCount && out.size() < sdb::MAX_INV_SLOTS; ++c) {
+        const uintptr_t container = containersData + static_cast<size_t>(c) * kContainerStride;
+
+        // Columns/Rows @ +0x20/+0x24. Live-tested Session 35: MainJigContainers
+        // reserves one placeholder entry per equipment slot (21 of them,
+        // Columns=Rows=-1, uninitialized/unused) ahead of the real storage
+        // containers (backpack, secure container, etc., which have genuine
+        // Columns/Rows >= 2). Skip anything <= 1x1 so those placeholders
+        // don't get read as (empty) containers.
+        const int32_t columns = *reinterpret_cast<int32_t*>(container + 0x20);
+        const int32_t rows    = *reinterpret_cast<int32_t*>(container + 0x24);
+        if (columns <= 1 && rows <= 1) continue;
+
+        const uintptr_t itemsData = *reinterpret_cast<uintptr_t*>(container + kContainerItemsOffset);
+        const int32_t   itemCount = *reinterpret_cast<int32_t*>(container + kContainerItemsOffset + 0x08);
+        if (!itemsData || itemCount <= 0) continue;
+
+        for (int32_t i = 0; i < itemCount && out.size() < sdb::MAX_INV_SLOTS; ++i) {
+            const uintptr_t pickup   = itemsData + static_cast<size_t>(i) * kPickupStride;
+            const uintptr_t itemInfo = pickup + kItemInfoOffset;
+
+            const uintptr_t itemDA = *reinterpret_cast<uintptr_t*>(itemInfo + 0x00);
+            if (!itemDA) continue;
+            const int32_t count = *reinterpret_cast<int32_t*>(itemInfo + 0x08);
+
+            std::string itemId = native::fname_to_string(itemDA + 0x30);
+            if (itemId.empty()) continue;
+
+            sdb::InventorySlot slot;
+            slot.slotIndex = static_cast<uint8_t>(out.size());
+            slot.itemId    = std::move(itemId);
+            slot.quantity  = static_cast<uint16_t>(std::clamp(count, 0, 65535));
+            out.push_back(std::move(slot));
+        }
+    }
+
+    return out;
 }
 
 // ── Outbound senders ──────────────────────────────────────────────────────
@@ -437,10 +521,11 @@ static void send_profile_revision(AActor* pawn)
     const FRotator rot = pawn->K2_GetActorRotation();
 
     sdb::PlayerProgress prog;
+    prog.slots = read_local_inventory(pawn);
+
     {
         std::lock_guard<std::mutex> lk(st.inventoryMtx);
         prog.revision = ++st.progressRevision;
-        // Slots are read from the game inventory (Phase 2 – empty for now).
     }
 
     prog.health    = static_cast<float>(v.health);
@@ -468,9 +553,9 @@ static void send_profile_revision(AActor* pawn)
     st.localVitals = v;
 }
 
-static void send_equipment()
+static void send_equipment(AActor* pawn)
 {
-    const sdb::Equipment eq = read_local_equipment();
+    const sdb::Equipment eq = read_local_equipment(pawn);
 
     sdb::Frame f;
     f.type    = sdb::MsgType::Equipment;
@@ -859,7 +944,7 @@ static void do_game_tick()
     const uint64_t last_equip = g_last_equip_us.load(std::memory_order_relaxed);
     if (last_equip == 0 || now - last_equip >= 2'000'000ULL) {
         g_last_equip_us.store(now, std::memory_order_relaxed);
-        send_equipment();
+        send_equipment(pawn);
     }
 }
 

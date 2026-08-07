@@ -3488,3 +3488,63 @@ diagnostic log. All three open questions above resolved cleanly:
 appearance rendering (blocked on `ProxyManager` Phase 2 / real proxy actor spawning), and switching
 from 2 s polling to the `SetEquippedInfoBySlot` hook if push-based updates are ever wanted.
 
+---
+
+## Session 35: 2026-08-07 (continued) — Real Main Inventory Read, Live-Confirmed
+
+**Goal**: read the player's actual backpack/container contents into `PlayerProgress.slots`, which had
+been a comment ("Phase 2 – empty for now") since `send_profile_revision()` was written. Uses
+`BP_JigMultiplayer_C.MainJigContainers` (Session 26/29) rather than reinventing a format.
+
+### Correctness fix found first: `BP_JigHelperComp`/`BP_JigMultiplayer` should be read off the pawn, not `FindFirstOf`
+
+`BP_PlayerCharacter_C` (`research/CXXHeaderDump/BP_PlayerCharacter.hpp`) has both components as named,
+fixed-offset properties directly on the pawn: `BP_JigHelperComp` at `+0x700`, `BP_JigMultiplayer` at
+`+0x818`. `read_local_equipment()` (Session 34) had been using
+`FindFirstOf("BP_JigHelperComp_C")` instead, which only happened to return the right instance because
+solo testing has exactly one player in the world — `BP_JigMultiplayer_C` in particular exists on
+*every ground pickup as well as the player* (Session 26), so `FindFirstOf` on it would be a real bug in
+actual multiplayer (could silently read some other player's or a ground item's component). Fixed
+`read_local_equipment()` to use `pawn+0x700` and wrote `read_local_inventory()` to use `pawn+0x818`
+from the start.
+
+### `read_local_inventory()`: walk `MainJigContainers`, flatten into the existing flat-slot wire format
+
+Implementation reads `TArray<FS_ReplicatedContainerInfo> MainJigContainers` (`jigMp+0xA8`), and for each
+container reads `TArray<FContainerPickupsInfo> ContainerItems` (`container+0x40`), resolving each
+item's `FRepItemInfo.ItemID` (`itemInfo+0x00`, a `UJigsawItem_DataAsset_C*`) via the same
+`native::fname_to_string(itemDA+0x30)` from Session 34. Deliberately reuses the existing
+`PlayerProgress.slots` flat-slotIndex format (no protocol/JS changes) rather than designing a new
+container-aware wire format — full gap 11 closure is out of scope for this pass since it needs a
+matching change in `server/src/lib/protocol.js`/`host-agent.js`, not just the C++ mod.
+
+### Live test 1: revealed `MainJigContainers` reserves 21 placeholder entries before real containers
+
+First live pass logged real data immediately (`Rags qty=2`) but also produced an `items=40` snapshot
+whose first 20 entries were an exact duplicate of the equipped-gear list from the Session 34 equipment
+poll (`AK15`, `MilitaryTacticalHelmet`, etc.). Root cause, confirmed by adding per-container
+`Columns`/`Rows` logging: `MainJigContainers` index 0–20 are placeholder entries — `Columns`/`Rows` =
+**-1** (not 0 or 1), `ContainerItems` empty or near-empty — one per equipment slot, sitting ahead of the
+real storage containers in the array. (Original hypothesis before adding the diagnostic was "each
+equipped item is its own 1×1 container" — wrong in the specifics, but the fix ended up the same: skip
+any container with `Columns <= 1 && Rows <= 1`.)
+
+**Fix**: skip containers where `Columns <= 1 && Rows <= 1` before reading their items. Confirmed this
+threshold is correct (not merely "skip empty ones") because a later poll showed a placeholder entry with
+`items=1` that was still correctly excluded by the dimension check alone.
+
+### Live test 2: real multi-container inventory resolves correctly, and gap 11's cap is real
+
+Second live pass (after picking up more items) showed containers 0–20 correctly skipped
+(`cols=-1 rows=-1`, one now showing `items=1` — still skipped), and 17 real multi-cell containers
+(`cols=2..6, rows=2..8`) starting at index 21+. All 40 resolved slots were genuine, varied inventory —
+ammo of multiple calibers, `Money qty=2590`, `Level1Keycard`, `SmallMedkit`, `RadiationPills`,
+`Painkillers`, etc. — with no crash and stable memory across both live passes.
+
+**Confirms gap 11 is a real, not theoretical, limitation**: the actual inventory in this test exceeded
+40 items across its real containers, so the flat `MAX_INV_SLOTS` cap silently truncated genuine
+inventory. Closing this properly needs the container-aware wire format Session 29 already specified
+(`FS_ReplicatedContainerInfo`'s `Columns`/`Rows` + a variable-length item list per container) plus a
+matching decoder change in `server/src/lib/protocol.js` and `host-agent.js`'s `MAX_INV_SLOTS` handling
+— left for a future session since it's a cross-language change, not just a C++ one.
+
