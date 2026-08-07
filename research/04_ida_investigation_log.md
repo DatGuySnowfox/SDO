@@ -3423,3 +3423,68 @@ be **dropped entirely** — there's nothing there to map. The correct per-instan
 per Session 29, is `FContainerPickupsInfo.UniqueServerID` (`FGuid`, 16 bytes) — that's the real thing to
 track for loot dedup/sync, not `AllUIDs`.
 
+---
+
+## Session 34: 2026-08-07 (continued) — GMalloc/FMemory::Free Traced for Safe FName::ToString Cleanup
+
+**Goal**: close the remaining half of gap 3/8 (equipment send path) — read the local player's 21
+equipment slots and resolve each `FRepItemInfo.ItemID` (a `UJigsawItem_DataAsset_C*`) to its `ItemId`
+`FName` as a string, using `FName::ToString` (`0x140C9D940`, Session 9).
+
+**Note on method**: this session is static analysis only — no debugger was attached to a running game
+(`ida_dbg.is_debugger_on()` returned `False`, `idaapi.get_process_state()` returned `0`/no process). Every
+address and offset below is IDA-derived and internally consistent, but **not yet confirmed against a
+live process**. This is also the first fix in the codebase that calls a raw native function by address
+rather than a UE4SS stub method (`K2_*`) or a plain pointer-offset read — flagged for live verification
+before being trusted.
+
+### The missing piece: `FName::ToString`'s output must be freed, or every call leaks
+
+`FName::ToString(FName*, FString* out)` writes a `TArray<TCHAR>`-shaped `FString` (`{TCHAR* Data; int32
+Num; int32 Max}`) into `out`, allocated via the engine's allocator — not the CRT heap. Decompiling the
+allocation path confirms this and reveals the two addresses actually needed to use this safely from C++:
+
+```
+FName::ToString (0x140C9D940)
+  -> sub_140B2C110 / sub_140B20500   (FString reserve / construct-from-buffer)
+    -> sub_140B2D320                  (TArray::ResizeAllocation)
+      -> sub_140B2C4D0                 (thin wrapper)
+        -> sub_140B7D300                (FMemory::Realloc)
+          -> qword_146E1DF70 vtable+0x38   ; GMalloc->Realloc(...)
+```
+
+- **`GMalloc`**: global `FMalloc*` at `0x146E1DF70`.
+- **`FMemory::Realloc`**: `0x140B7D300` — `(*(*GMalloc)+0x38)(GMalloc, ptr, newSize, alignment)`.
+- **`FMemory::Free`**: `0x140B27000` — one level of indirection, `(*(*GMalloc)+0x48)(GMalloc, ptr)`. This
+  is the one that matters for the C++ DLL: call it on `FString.Data` after copying the chars out, or the
+  buffer leaks on every equipment poll.
+
+**Fix applied**: `native::fname_to_string()` in `mod.cpp` calls `FName::ToString`, converts the returned
+UTF-16 buffer to UTF-8 via `WideCharToMultiByte`, then frees the buffer via `FMemory::Free`. Both
+addresses are rebased at runtime against `GetModuleHandle(nullptr)` relative to this session's IDA
+imagebase (`0x140000000`) rather than called as fixed addresses, since nothing guarantees the game
+loads at that address at runtime.
+
+**Live test (same session, later)**: deployed `main.dll` and ran it in-game with a temporary per-slot
+diagnostic log. All three open questions above resolved cleanly:
+
+- Resolved real item names correctly across ~19–20 occupied slots per poll: `AK15`, `BenelliM4`,
+  `BattleReadyGlock`, `MilitaryTacticalHelmet`, `MilitaryPlateCarrier`, `LargeCoyoteBackpack`,
+  `TacticalHatchet`, `HighPoweredFlashlight`, `MilitaryGradeBinoculars`, `GPS`, `Compass`,
+  `FishingRod`, etc. Note these are plain names, not the `DA_`-prefixed form used in earlier
+  hypothetical examples (gap 1/2's `"DA_AK74"`) — the actual `ItemId` FName has no `DA_` prefix.
+- Watched slot 11 (`EquippedPrimary`) appear/disappear/reappear across consecutive polls while
+  manually equipping and unequipping a primary weapon in-game — confirms both the slot-offset table
+  and the "only emit occupied slots, full-replace on receive" design (gap 8) behave correctly.
+- Ran continuously at the 2 s poll cadence for the test session with no crash and stable memory
+  (checked via `tasklist` before/after) — confirms the `GMalloc` vtable-slot math for `Realloc`
+  (`+0x38`) and `Free` (`+0x48`) is correct, not landing on adjacent vtable slots, and that
+  `FString::Num` does include the null terminator on this build (the `--len` adjustment in
+  `fname_to_string` is correct, not a source of off-by-one garbage).
+- No crash dumps were produced after deploying, ruling out heap corruption from the `FMemory::Free`
+  call.
+
+**Gap 3/8 (equipment send path) is now closed** for the local-read direction. Still open: proxy-side
+appearance rendering (blocked on `ProxyManager` Phase 2 / real proxy actor spawning), and switching
+from 2 s polling to the `SetEquippedInfoBySlot` hook if push-based updates are ever wanted.
+

@@ -81,7 +81,7 @@ UObject* itemDA  = *(UObject**)(equipped + 0x528);       // EquippedPrimary slot
 
 ---
 
-### 3. `RemotePlayer` has no equipment or appearance data — PARTIALLY FIXED (dispatch side; see gap 8)
+### 3. `RemotePlayer` has no equipment or appearance data — DATA FIXED + LIVE-CONFIRMED, VISUALS PENDING (see gap 8)
 
 **Affected**: `state.hpp:RemotePlayer`.
 
@@ -172,31 +172,37 @@ passive skill levels, `playerForename`/`Surname`, `respawnLoc`.
 
 ---
 
-### 8. `Equipment` MsgType never sent or dispatched — PARTIALLY FIXED
+### 8. `Equipment` MsgType never sent or dispatched — FIXED, LIVE-CONFIRMED
 
 **Affected**: `protocol.hpp:MsgType::Equipment` (21), `mod.cpp:dispatch_frame()`.
 
-**Fix applied so far**: `encode_equipment`/`decode_equipment` added to `protocol.cpp`/`protocol.hpp`;
-`dispatch_frame()` now decodes inbound `Equipment` frames and forwards them to
-`ProxyManager::on_equipment()`, which caches `RemotePlayer.equipment` (`state.hpp`). Appearance
-sync (mesh/anim per slot) is still a no-op — `ProxyManager` doesn't spawn real proxy actors yet
-(`spawn_proxy()` is a Phase 2 stub), so there's nothing to visually update yet; the data is cached
-for when that lands.
+**Fix applied**:
+- `encode_equipment`/`decode_equipment` in `protocol.cpp`/`protocol.hpp`.
+- `dispatch_frame()` decodes inbound `Equipment` frames and forwards them to
+  `ProxyManager::on_equipment()`, which caches `RemotePlayer.equipment` (`state.hpp`). Appearance
+  sync (mesh/anim per slot) is still a no-op — `ProxyManager` doesn't spawn real proxy actors yet
+  (`spawn_proxy()` is a Phase 2 stub) — but the data is cached for when that lands.
+- `read_local_equipment()` walks all 21 `FS_ServerEquippedItems` slots off `BP_JigHelperComp_C+0xF8`
+  (Session 30 offset table) and resolves each occupied slot's `ItemID` DA pointer to its `ItemId`
+  FName string via a new `native::fname_to_string()` helper.
+- `send_equipment()` sends the result every 2 s from `do_game_tick()` (polling, not the
+  `SetEquippedInfoBySlot` hook described below — this file has no per-UFunction hook filtering
+  infrastructure yet, and polling 21 pointers is cheap).
 
-**Still missing**: the send path. Nothing calls `encode_equipment` yet — no `send_equipment()`,
-no local equipment read. That requires two pieces neither of which exist anywhere in the codebase
-yet and both need live-game verification before landing:
-1. Walking the 21 `FS_ServerEquippedItems` slots off `BP_JigHelperComp_C+0xF8` (offsets fully
-   documented, Session 30) to get each slot's `ItemID` object pointer (`JigsawItem_DataAsset_C*`).
-2. Resolving that DA object's `ItemId` `FName` (at `DA+0x30`) to a string — needs `FName::ToString`
-   (documented at `0x140C9D940`, Session 9) or equivalent; no code in this repo has resolved an
-   FName to a string yet, and this is the first gap fix that would need a raw absolute address
-   rather than a UE4SS stub call or a plain offset read, so the address should be re-verified live
-   before use.
+**Live-confirmed (Session 34)**: this was the first fix in the codebase to call a raw native function
+by address (`FName::ToString`, plus `FMemory::Free` to avoid leaking its output buffer — see
+`04_ida_investigation_log.md` Session 34 for the full allocator trace) rather than a UE4SS stub method
+or a plain offset read, so it carried real risk of a bad vtable-slot guess crashing or corrupting the
+game. Deployed and run live: correctly resolved real item names (`AK15`, `BenelliM4`,
+`MilitaryTacticalHelmet`, etc.) across ~20 occupied slots, tracked a live primary-weapon
+equip/unequip via slot 11 appearing and disappearing between polls, and ran continuously for the
+2 s poll cadence with no crash and stable memory (confirms the `GMalloc` vtable-slot math for
+`Realloc`/`Free` is correct, `FString::Num` does include the null terminator on this build, and the
+`GetModuleHandle`-based rebasing resolves the right runtime address).
 
-Hook point for a live-driven send (vs. polling) is `BP_JigHelperComp_C.SetEquippedInfoBySlot` (see
-gap 3 — `OnEquipmentUpdated` at +0xC30 exists and is the "obvious" hook point but confirmed
-non-firing via `RegisterHook` in Session 31).
+For a future hook-driven send (event-based instead of polling), the documented real hook point is
+`BP_JigHelperComp_C.SetEquippedInfoBySlot` (see gap 3 — `OnEquipmentUpdated` at +0xC30 exists and is
+the "obvious" hook point but confirmed non-firing via `RegisterHook` in Session 31).
 
 ---
 

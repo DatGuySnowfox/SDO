@@ -195,6 +195,63 @@ static void send_movement(AActor* pawn)
     send_frame(f);
 }
 
+// ── Native engine calls ───────────────────────────────────────────────────
+//
+// Raw calls into UE5 native functions by address, rebased at runtime against
+// GetModuleHandle so this survives ASLR (the IDA session this was derived
+// from has imagebase 0x140000000, which is very unlikely to match the
+// runtime load address). This is the first gap fix in this file that needs a
+// raw function-pointer call rather than a UE4SS stub method or a plain
+// pointer-offset read — static-analysis only, NOT yet live-tested against a
+// running game. See research/04_ida_investigation_log.md Session 34 before
+// trusting resolved itemId strings.
+namespace native {
+
+static constexpr uintptr_t kIdaImageBase = 0x140000000ULL;
+
+static uintptr_t rebase(uintptr_t ida_addr)
+{
+    static const uintptr_t exe_base =
+        reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr));
+    return exe_base + (ida_addr - kIdaImageBase);
+}
+
+// UE FString is a TArray<TCHAR>: {TCHAR* Data; int32 Num; int32 Max}.
+struct UnrealFString { wchar_t* data; int32_t num; int32_t max; };
+
+using FNameToStringFn = void(*)(const void* fname, UnrealFString* out);
+using FMemoryFreeFn   = void(*)(void* ptr);
+
+// FName::ToString @ 0x140C9D940 (research Session 9) allocates its output
+// buffer via GMalloc, so the result must be freed with FMemory::Free @
+// 0x140B27000 (research Session 34, traced via FName::ToString ->
+// FString::Reserve -> TArray::ResizeAllocation -> FMemory::Realloc ->
+// GMalloc vtable+0x38, then FMemory::Free -> GMalloc vtable+0x48) or every
+// call leaks.
+static std::string fname_to_string(uintptr_t fnamePtr)
+{
+    static auto* toString = reinterpret_cast<FNameToStringFn>(rebase(0x140C9D940));
+    static auto* memFree  = reinterpret_cast<FMemoryFreeFn>(rebase(0x140B27000));
+
+    UnrealFString out{};
+    toString(reinterpret_cast<const void*>(fnamePtr), &out);
+    if (!out.data || out.num <= 0) return {};
+
+    int len = out.num;
+    if (out.data[len - 1] == L'\0') --len; // FString::Num includes the null terminator
+
+    std::string s;
+    if (len > 0) {
+        const int needed = WideCharToMultiByte(CP_UTF8, 0, out.data, len, nullptr, 0, nullptr, nullptr);
+        s.resize(static_cast<size_t>(needed));
+        WideCharToMultiByte(CP_UTF8, 0, out.data, len, s.data(), needed, nullptr, nullptr);
+    }
+    memFree(out.data);
+    return s;
+}
+
+} // namespace native
+
 // ── Vitals reader ─────────────────────────────────────────────────────────
 
 // Reads live game state from UE5 components using IDA-confirmed offsets.
@@ -244,6 +301,48 @@ static sdb::LocalVitals read_local_progress(AActor* pawn)
     }
 
     return v;
+}
+
+// ── Equipment reader ──────────────────────────────────────────────────────
+
+// Walks BP_JigHelperComp_C.ServerEquippedItems (helper+0xF8, 21 slots of
+// FRepItemInfo, each 0x78 bytes with ItemID at +0x00) using the full offset
+// table from research/04_ida_investigation_log.md Session 30. Only occupied
+// slots are emitted — dispatch_frame()/ProxyManager::on_equipment() does a
+// full replace of RemotePlayer.equipment per frame, so an unequipped slot
+// correctly disappears simply by being absent from the next frame.
+//
+// Not yet live-tested end-to-end (see native::fname_to_string) — verify
+// resolved itemId strings in-game before trusting this.
+static sdb::Equipment read_local_equipment()
+{
+    static constexpr uintptr_t kSlotOffsets[sdb::EQUIPMENT_SLOT_COUNT] = {
+        0x000, 0x078, 0x0F0, 0x168, 0x1E0, 0x258, 0x2D0, 0x348, 0x3C0, 0x438,
+        0x4B0, 0x528, 0x5A0, 0x618, 0x690, 0x708, 0x780, 0x7F8, 0x870, 0x8E8, 0x960,
+    };
+
+    sdb::Equipment eq;
+
+    UObject* helper = UObjectGlobals::FindFirstOf(STR("BP_JigHelperComp_C"));
+    if (!helper) return eq;
+
+    const auto equipped = reinterpret_cast<uintptr_t>(helper) + 0xF8;
+
+    for (uint8_t i = 0; i < sdb::EQUIPMENT_SLOT_COUNT; ++i) {
+        const uintptr_t slot   = equipped + kSlotOffsets[i];
+        const uintptr_t itemDA = *reinterpret_cast<uintptr_t*>(slot + 0x00);
+        if (!itemDA) continue; // empty slot
+
+        std::string itemId = native::fname_to_string(itemDA + 0x30);
+        if (itemId.empty()) continue;
+
+        sdb::EquipmentSlot es;
+        es.slotIndex = i;
+        es.itemId    = std::move(itemId);
+        eq.slots.push_back(std::move(es));
+    }
+
+    return eq;
 }
 
 // ── Outbound senders ──────────────────────────────────────────────────────
@@ -367,6 +466,17 @@ static void send_profile_revision(AActor* pawn)
 
     // Cache vitals for any HUD reads
     st.localVitals = v;
+}
+
+static void send_equipment()
+{
+    const sdb::Equipment eq = read_local_equipment();
+
+    sdb::Frame f;
+    f.type    = sdb::MsgType::Equipment;
+    f.payload = sdb::encode_equipment(eq);
+    build_session_frame(f);
+    send_frame(f);
 }
 
 // ── Incoming frame dispatcher ─────────────────────────────────────────────
@@ -566,6 +676,7 @@ static void dispatch_frame(const sdb::Frame& f)
 static std::atomic<uint64_t> g_last_move_us{0};
 static std::atomic<uint64_t> g_last_tick_us{0};
 static std::atomic<uint64_t> g_last_profile_us{0};
+static std::atomic<uint64_t> g_last_equip_us{0};
 static std::atomic<uint64_t> g_init_time_us{0};
 static std::atomic<bool>     g_auto_open_fired{false};
 static std::atomic<uint64_t> g_last_open_try_us{0};
@@ -739,6 +850,16 @@ static void do_game_tick()
     if (last_prof == 0 || now - last_prof >= 30'000'000ULL) {
         g_last_profile_us.store(now, std::memory_order_relaxed);
         send_profile_revision(pawn);
+    }
+
+    // 8. Periodic equipment sync: push loadout to other players every 2 s.
+    // Polling, not hook-driven (see gap 8) — SetEquippedInfoBySlot is the
+    // documented real hook point but this file has no per-UFunction hook
+    // filtering infrastructure yet; polling 21 pointers is cheap enough.
+    const uint64_t last_equip = g_last_equip_us.load(std::memory_order_relaxed);
+    if (last_equip == 0 || now - last_equip >= 2'000'000ULL) {
+        g_last_equip_us.store(now, std::memory_order_relaxed);
+        send_equipment();
     }
 }
 
