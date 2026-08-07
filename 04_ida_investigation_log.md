@@ -3106,3 +3106,48 @@ during normal single-player play.
 `BP_JigMultiplayer_C`'s per-item `FGuid` system, not a duplicate of it. What specifically populates
 `AllUIDs` (vs. the FGuid system) is still an open question, but is now a much narrower one.
 
+---
+
+## Session 27: 2026-08-07 (continued) — BP_JigMultiplayer_C Replication Path Is Live, Not Dormant
+
+**Goal**: Session 26 left open whether `BP_JigMultiplayer_C`'s `SERVER_*`/`CLIENT_*`/`MC_*` functions are
+actually used during normal play or dormant scaffolding. Tested directly with a live Lua hook (UE4SS
+`RegisterHook`) rather than more static analysis.
+
+**Method**: a disposable diagnostic mod (`Mods/JigMPHookTest`) hooked 9 candidate functions across
+`BP_JigMultiplayer_C` and `BP_JigHelperComp_C`, each just logging a marker on invocation. First attempt
+registered at mod-init time and **all 9 failed** — Blueprint classes don't exist in memory until
+actually loaded/spawned, so hooking by path at main-menu time can't resolve the UFunction. Fixed by
+retrying registration every 3 seconds until each succeeds (standard UE4SS pattern for hooking Blueprint
+functions, worth remembering for future hook-based sessions — don't register once at load, poll).
+
+**Result**, after dropping an item, picking one up, and equipping something in a normal single-player
+session:
+
+| Function | Fired? |
+|----------|--------|
+| `SERVER_RequestDropItem` | **Yes**, 3× |
+| `SERVER_RequestEquipActorToContainer` | **Yes**, 3× |
+| `CLIENT_EquipActorSuccess` | **Yes**, 3× |
+| `CLIENT_NewItemAdded` | No |
+| `MC_NewItemAdded` | No |
+| `SERVER_RequestAddActorToContainer` | No |
+| `CLIENT_AddActorToContainerSUCCESS` | No |
+| `JigHelperComp.OnItemAdded` | No |
+| `JigHelperComp.OnEquipmentUpdated` | Inconclusive (hook never confirmed registered) |
+
+**Conclusion**: the replication scaffolding is confirmed **live**, not dormant — `SERVER_*`/`CLIENT_*`
+functions genuinely fire during ordinary single-player play. In a listen-server-shaped single-player
+session the "server" and "client" roles collapse onto the same local call, which is exactly why these
+fire with no real networking involved. This directly de-risks Session 26's proposal of hooking these
+functions from the mod instead of reinventing wire formats.
+
+**Also learned**: ground-pickup does **not** go through `SERVER_RequestAddActorToContainer` /
+`CLIENT_AddActorToContainerSUCCESS` as guessed — those are for some other add-to-container path (likely
+crafting/loot-container transfer, given the naming). `BP_JigHelperComp_C.TryPickup(AActor* PickupRef,
+UJSIContainer_C* TargetContainer, bool& Result)` (seen in the Session 26 header dump) is the more likely
+entry point for a normal ground pickup and is the natural next thing to hook.
+
+**Housekeeping**: `Mods/JigMPHookTest` is a throwaway diagnostic mod, not part of the SD-Online bridge —
+safe to disable/remove once no longer needed for follow-up hook testing.
+
