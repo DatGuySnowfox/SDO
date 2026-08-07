@@ -451,9 +451,18 @@ a future session.
   side (`server/src/lib/protocol.js` or equivalent), unlike the self-contained `Equipment` addition.
 - **Gap 10** — `Movement` position fields are `float`, engine uses `double` (LWC) — precision loss,
   not correctness-breaking at current world scale. Low priority.
-- **`ProxyManager` is still Phase 1** — no code in this repo has ever found or spawned the actual
-  remote-player proxy Blueprint class. `RemotePlayer.equipment`/`x,y,z,yaw`/`health` are all tracked
-  correctly in `state.hpp` but nothing renders them: `spawn_proxy()` is a stub returning `nullptr`, so
-  `ProxyManager::tick()` never actually creates a visible actor for another player. This is the
-  biggest remaining gap toward the mod being visually functional in multiplayer — everything else
-  fixed above is plumbing feeding a proxy system that doesn't render anything yet.
+- **`ProxyManager` — spawn attempted, rejected live for two different classes (Session 36)**:
+  `spawn_proxy()` is no longer a stub — it resolves a `UClass*` (fixing a real linker bug in the
+  vendored UE4SS stub's `GetClassPrivate()` along the way, which was mangled against the wrong owning
+  class) and calls `UWorld::SpawnActor`. Live-tested with both `BP_PlayerCharacter_C` and `BP_Zombie_C`:
+  every spawn attempt for either class was cleanly rejected (no crash, clean `nullptr`). Zombies are
+  definitely not `CLASS_NotPlaceable` (the game's own spawner places them constantly), which rules out
+  the leading hypothesis from Session 5's `SpawnActor` validation checklist — the blocker isn't which
+  class is targeted, it's something more fundamental about how this mod calls the UE4SS `SpawnActor`
+  wrapper. Needs IDA-level investigation of that export before another live attempt is worth making.
+  Also fixed a real incident found during testing: `ProxyManager::tick()` had no cooldown between spawn
+  retries, so a failing `spawn_proxy()` retried on every tick and visibly tanked the frame rate — now
+  throttled to one attempt per player per 5s, confirmed effective (stable frame rate on the follow-up
+  test) and correct regardless of what eventually fixes the spawn itself. `RemotePlayer.equipment`/
+  `x,y,z,yaw`/`health` are all tracked correctly and ready to drive a proxy the moment one actually
+  spawns — this remains the biggest gap toward the mod being visually functional in multiplayer.

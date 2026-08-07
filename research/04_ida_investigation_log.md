@@ -3548,3 +3548,69 @@ inventory. Closing this properly needs the container-aware wire format Session 2
 matching decoder change in `server/src/lib/protocol.js` and `host-agent.js`'s `MAX_INV_SLOTS` handling
 — left for a future session since it's a cross-language change, not just a C++ one.
 
+---
+
+## Session 36: 2026-08-07 (continued) — ProxyManager Phase 2: SpawnActor Implemented, `BP_PlayerCharacter_C` Rejected Live
+
+**Goal**: implement real proxy-actor spawning (`proxy_manager.cpp:spawn_proxy()`, previously a stub
+returning `nullptr` unconditionally) using Session 12's recommendation to spawn `BP_PlayerCharacter_C`
+itself, since no dedicated proxy Blueprint exists in the game.
+
+### Fixed a real linker bug in the vendored UE4SS stub: `UObject::GetClassPrivate()`
+
+`vendor/ue4ss-stub/include/RC/Unreal/UObject.hpp` declares `GetClassPrivate()` as a member of `UObject`,
+but its own comment shows the true DLL export is mangled against `UObjectBase`
+(`?GetClassPrivate@UObjectBase@Unreal@RC@@...` vs. the `UObject`-mangled symbol the linker actually
+looks for) — a real bug in the stub header, not a usage mistake; this was simply the first code in the
+repo to call it. Fixed the same way `mod.cpp` already handles the two `RegisterXPreCallback` exports
+that aren't in the stub at all: resolve by address via `GetProcAddress(GetModuleHandleW(L"UE4SS.dll"),
+"?GetClassPrivate@UObjectBase@Unreal@RC@@QEAAAEAPEAVUClass@23@XZ")`. MSVC returns a reference
+(`UClass*&`) as a pointer to the referenced storage in RAX, so the resolved function pointer type is
+`UClass**(__fastcall*)(void*)`, not `UClass*(*)(void*)`.
+
+### Live test: `BP_PlayerCharacter_C` spawn was rejected 100% of the time, no crash
+
+Deployed and tested. `get_class_private()` resolved a non-null `UClass*` correctly (confirms the linker
+fix works), but every single `world->SpawnActor(s_proxy_class, &loc, &rot)` call returned `nullptr` — no
+crash, clean rejection every time.
+
+**Real incident**: `ProxyManager::tick()` had no retry cooldown on a failed `spawn_proxy()`, so it
+retried on every single call to `tick()` (many times per second via `do_game_tick()`). 848 consecutive
+`SDB: proxy spawn failed` log lines and a severe in-game frame-rate drop confirmed this — the retry
+storm itself was the acute problem, independent of why the spawn failed. **Fixed**: added
+`RemotePlayer.lastSpawnAttemptUs` and a 5s cooldown between spawn attempts in `ProxyManager::tick()`.
+This fix stands regardless of whether the underlying spawn ever succeeds — any future spawn strategy
+needs this cooldown too.
+
+**Initial hypothesis for the rejection** (falsified by the follow-up test below): Session 5's
+already-documented `UWorld::SpawnActor` validation checklist includes `a2` (the class) having the
+`CLASS_NotPlaceable` flag. Player-character Blueprint classes are commonly flagged this way
+deliberately — meant to be spawned only through the game's own PlayerController/GameMode possession
+flow, not placed directly by external code. This was never actually live-tested before this session;
+Session 12's recommendation was a plausible hypothesis, not a confirmed one.
+
+### Follow-up live test: `BP_Zombie_C` also rejected — rules out `CLASS_NotPlaceable`
+
+Swapped the target class to `BP_Zombie_C` (found via `FindFirstOf` off a live zombie instance in the
+world) to distinguish "the generic `SpawnActor` path itself doesn't work from this mod" from
+"`BP_PlayerCharacter_C` specifically is blocked." Retry-storm fix from above confirmed effective at the
+same time: spawn attempts were cleanly spaced ~5s apart in the log with no frame-rate impact, unlike the
+first test.
+
+**Result**: identical outcome — `get_class_private()` resolved a valid, non-null `UClass*` (confirms the
+`FindFirstOf` + linker-fixed `GetClassPrivate` combination works correctly), but `world->SpawnActor(...)`
+still returned `nullptr` on every call. Since the game's own zombie spawner places `BP_Zombie_C`
+instances constantly, it cannot be `CLASS_NotPlaceable` — **this rules out the class-flag hypothesis
+entirely**. The problem is not which class is targeted; it's something about how this mod's call into
+the UE4SS `SpawnActor` wrapper itself behaves (or doesn't) — possibly an `FActorSpawnParameters`
+default the 3-arg convenience wrapper sets up incorrectly for this UE4SS version, a threading/context
+precondition not being met, or a bug in the wrapper itself. This needs IDA-level investigation of the
+actual `UWorld::SpawnActor` export UE4SS.dll ships (address, decompile, compare against the confirmed
+raw engine `sub_14300FE50` from Session 5) rather than more live trial-and-error with class names.
+
+**Status**: `ProxyManager` remains functionally Phase 1 (no visible proxy actors). The retry-storm fix
+is real, confirmed effective, and safe to leave deployed regardless of whether spawning ever works.
+Left `spawn_proxy()` targeting `BP_PlayerCharacter_C` (the real desired proxy visual) since class choice
+isn't the blocker. Next session should decompile UE4SS's `SpawnActor` export before trying another live
+spawn — further blind live attempts are unlikely to reveal anything past this point.
+
