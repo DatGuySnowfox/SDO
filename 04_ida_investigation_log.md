@@ -3024,3 +3024,85 @@ the same Blueprint base class pattern, not a coincidence.
 fully confirmed offsets and types for health/hunger/thirst/stamina/radiation/level/XP — no further
 research needed on these fields specifically.
 
+---
+
+## Session 26: 2026-08-07 (continued) — BP_JigMultiplayer_C: An Already-Built Replication Layer
+
+**Correction to method, first**: UE4SS filenames drop the `_C` Blueprint suffix (`BP_SurroundeadGameState.hpp`,
+not `BP_SurroundeadGameState_C.hpp`). The first pass over the dump missed this and wrongly looked like
+`BP_SurroundeadGameState`/`BP_JigHelperComp`/pickup classes hadn't loaded. They had. Full re-check:
+
+### Correction to Session 21: pickups are not propertyless
+
+"`BP_StaticMeshPickup_C` / `BP_SkeletalMeshPickup_C` — Zero Blueprint Properties" was wrong. Confirmed
+layout (`ABP_StaticMeshPickup_C : public AStaticMeshActor`, size `0x310`):
+
+| Offset | Field |
+|--------|-------|
+| `+0x2B0` | `UBP_JigPickupComponent_C* BP_JigPickupComponent` |
+| `+0x2B8` | `UBP_JigMultiplayer_C* BP_JigMultiplayer` |
+| `+0x2C0` | `TMap<FGameplayTag, FText> InteractOptions` |
+
+Every ground pickup carries its own `BP_JigMultiplayer_C` component instance. This was invisible to the
+earlier `ForEachProperty` pass (likely queried the wrong class or an instance where the component
+hadn't initialized) and completely invisible to IDA (confirmed Session 23) since it's 100% Blueprint —
+but is fully visible via the UE4SS CXX dump, which reads live reflection data rather than static binary
+content. **Methodological note for future sessions**: when IDA and raw-property dumps both come up
+empty for a Blueprint class, try the CXX Header Generator before concluding it's unreachable — it
+appears to succeed where targeted single-class property walks failed.
+
+### `BP_JigMultiplayer_C` — the real inventory replication system
+
+`UBP_JigMultiplayer_C : public UActorComponent`, size `0x318`, ~300 member functions. The naming
+convention (`SERVER_RequestDropItem`, `CLIENT_NewItemAdded`, `MC_UpdateCount`, etc.) exactly matches
+Unreal's own Server/Client/Multicast RPC pattern. This is not a thin wrapper — it's the actual mechanism
+the base game uses to move items between containers, drop/pickup, equip, craft, reload magazines, and
+sync vendor state. Every one of these functions addresses items and containers by **`FGuid`**, not the
+`int32` UIDs in `GameState.AllUIDs` and not `classPath` strings:
+
+- Item identity: `FGuid ItemUID` (per-instance)
+- Container identity: `FGuid ContainerUID` / `MainContainersIDs` (`TArray<FGuid>`)
+- Item *type* (as opposed to instance) is still `UJigsawItem_DataAsset_C*` (the `DA_*` asset — confirms
+  earlier `classPath`/DA-name findings are about item type, not instance identity)
+
+Full field layout and the complete function list are in `CXXHeaderDump/BP_JigMultiplayer.hpp` (committed
+alongside this session) — not reproduced here given its size.
+
+Key fields:
+
+| Offset | Field |
+|--------|-------|
+| `+0xA8` | `TArray<FS_ReplicatedContainerInfo> MainJigContainers` |
+| `+0xE0` | `TArray<FGuid> MainContainersIDs` |
+| `+0x130` | `FContainerPickupsInfo PickupInfo` (0xD8 bytes) |
+| `+0x250` | `FGuid MonitorContainerUID` |
+
+**Practical implication for SD-Online**: this changes the shape of the right answer for items/inventory
+sync (gaps 1, 11, 12, 13, 14 in the protocol gap analysis). Rather than the bridge inventing its own
+wire format for drop/pickup/move and hoping it lines up with game state, hooking these existing
+`SERVER_*`/`CLIENT_*`/`MC_*` functions directly would ride on replication logic the game already
+implements and tests — and `FGuid` (16 bytes, not `int32` or a variable-length string) is the correct
+wire type for per-instance item/container identity. Whether this replication path is actually wired up
+to real networking in a live build (vs. dormant/local-only scaffolding) is not yet confirmed and is the
+natural next thing to check — e.g. by hooking one of these functions in Lua and seeing if it fires
+during normal single-player play.
+
+### `BP_JigHelperComp_C` — equipment layout fully confirmed
+
+`UBP_JigHelperComp_C : public UActorComponent`, size `0xC40`. Confirms the Session 15 finding exactly:
+
+| Offset | Field |
+|--------|-------|
+| `+0xA8` | `TMap<FGameplayTag, FGuid> EquipmentUIDs` |
+| `+0xF8` | `FS_ServerEquippedItems ServerEquippedItems` (0x9D8 bytes) |
+| `+0xC30` | `FBP_JigHelperComp_COnEquipmentUpdated OnEquipmentUpdated` (dynamic multicast delegate) — matches
+  gap 3/8's hook point exactly, now with the real delegate type name for binding |
+| `+0xB98` | `FGameplayTag ActiveWeapon` |
+
+### `BP_SurroundeadGameState_C` — fully confirmed, matches every prior live-dump finding
+
+`ABP_SurroundeadGameState_C : public AGameStateBase`, size `0x348`. `AllUIDs` at `+0x338` is
+`TArray<int32>`, exactly as found in Session 19 — this is a separate, coarser tracking array from
+`BP_JigMultiplayer_C`'s per-item `FGuid` system, not a duplicate of it. What specifically populates
+`AllUIDs` (vs. the FGuid system) is still an open question, but is now a much narrower one.
+

@@ -3,6 +3,15 @@
 Comparing `protocol.hpp`, `state.hpp`, and `mod.cpp` against all research findings
 (Sessions 1–19). Gaps ordered by severity.
 
+> **Session 26 update**: `BP_JigMultiplayer_C` (attached to every pickup and to the player) turns out to
+> be a near-complete, already-built Server/Client/Multicast RPC replication system for the inventory,
+> addressing items and containers by `FGuid` — not the `int32` UIDs in gap 12 or a plain `classPath`
+> string. This doesn't invalidate gaps 1/11/12/13/14 below, but it means the *better* fix for several of
+> them may be hooking the game's own `SERVER_*`/`CLIENT_*`/`MC_*` functions directly rather than
+> reinventing drop/pickup/move wire formats from scratch. See `04_ida_investigation_log.md` Session 26
+> before implementing any of the items/inventory gaps below. Not yet confirmed whether this replication
+> path is live in single-player or dormant scaffolding.
+
 ---
 
 ## CRITICAL — Breaks Correctness
