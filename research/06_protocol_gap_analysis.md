@@ -183,23 +183,26 @@ non-firing via `RegisterHook` in Session 31).
 
 ---
 
-### 9. `PlayerDamage` dispatch is a TODO
+### 9. ~~`PlayerDamage` dispatch is a TODO~~ — FIXED
 
-**Affected**: `mod.cpp:dispatch_frame()` line ~288.
+**Affected**: `mod.cpp:dispatch_frame()`.
 
+**Original**:
 ```cpp
 case sdb::MsgType::PlayerDamage:
     // TODO: forward to HUD
     break;
 ```
 
-**Fix**: Read `HUD.Widget` from `BP_PlayerController_C + 0x880` and call a
-Blueprint event to update the health bar. Or write directly to
-`MedicalComponent.Health` at `pawn+0x7D0 → +0xD0`.
+**Fix applied**: took the simpler of the two proposed options — write directly to
+`MedicalComponent.Health`/`MaxHealth` at `pawn+0x7D0 → +0xD0`/`+0xD8` rather than routing through a
+Blueprint HUD event. The frame carries the server-authoritative current/max health (a state sync, not a
+delta), so a direct write is the correct semantics, not a shortcut.
 
 > **Session 32 confirmation**: `BP_PlayerController_C+0x880` is exactly `UWidgetComponent* Widget` —
 > the `+0x880` offset was correct, now confirmed against the authoritative class dump rather than a
-> live property walk.
+> live property walk. Not used by the fix above, but confirmed in case a HUD-widget-event approach is
+> wanted later instead.
 
 ---
 
