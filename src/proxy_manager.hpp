@@ -22,6 +22,7 @@ public:
     void on_player_connected(uint64_t playerId);
     void on_player_disconnected(uint64_t playerId);
     void on_movement(uint64_t playerId, const Movement& m);
+    void on_equipment(uint64_t playerId, const Equipment& e);
 
     // Per-frame update – world and local_pawn may be null (proxies are skipped).
     void tick(RC::Unreal::UWorld* world, RC::Unreal::AActor* local_pawn);

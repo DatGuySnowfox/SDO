@@ -55,6 +55,17 @@ void ProxyManager::on_movement(uint64_t playerId, const Movement& m)
     p.updatedUs = now_micros();
 }
 
+void ProxyManager::on_equipment(uint64_t playerId, const Equipment& e)
+{
+    std::lock_guard<std::mutex> lock(g_state().playersMtx);
+    auto it = g_state().players.find(playerId);
+    if (it == g_state().players.end()) return;
+
+    // Appearance sync (mesh/anim per slot) is Phase 2 pending proxy actor
+    // spawning — for now just cache the latest loadout on the remote player.
+    it->second.equipment = e.slots;
+}
+
 void ProxyManager::tick(UWorld* world, AActor* /*local_pawn*/)
 {
     if (!initialized_) return;

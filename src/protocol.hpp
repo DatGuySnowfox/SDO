@@ -161,6 +161,23 @@ struct PlayerProgress {
     std::vector<InventorySlot> slots;
 };
 
+// ── Equipment payload (from BP_JigHelperComp_C.ServerEquippedItems) ───────────
+// slotIndex is a fixed 0..20 index over the 21 equipment slots in declaration
+// order (Facewear, Headwear, Eyewear, Accessory, Torso, Gloves, Legs, Feet,
+// Container, BodyArmor, Backpack, Primary, Secondary, Sidearm, Melee,
+// Throwable, Flashlight, Binoculars, GPS, Compass, FishingRod).
+// Wire format: [tag=1][slotCount:u16BE], per slot [slotIndex:u8][itemIdLen:u16BE][itemId...]
+struct EquipmentSlot {
+    uint8_t     slotIndex = 0;   // 0..20
+    std::string itemId;          // DA_ name, e.g. "DA_AK74"; empty = unequipped
+};
+
+struct Equipment {
+    std::vector<EquipmentSlot> slots;
+};
+
+static constexpr int EQUIPMENT_SLOT_COUNT = 21;
+
 // ── Encode / decode ───────────────────────────────────────────────────────────
 
 int  encode_frame(uint8_t* buf, int cap, const Frame& f, uint32_t& seq, uint32_t& tck);
@@ -194,6 +211,9 @@ std::string next_request_id();
 // decode_movement.
 std::vector<uint8_t>            encode_player_progress(const PlayerProgress& p);
 std::optional<PlayerProgress>   decode_player_progress(const uint8_t* p, size_t n);
+
+std::vector<uint8_t>            encode_equipment(const Equipment& e);
+std::optional<Equipment>        decode_equipment(const uint8_t* p, size_t n);
 
 uint64_t now_micros();
 
