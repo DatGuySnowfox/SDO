@@ -5,6 +5,7 @@
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace sdb {
 
@@ -20,6 +21,7 @@ struct RemotePlayer {
     uint8_t  animState  = 0;
     void*    proxyActor = nullptr;
     uint64_t updatedUs  = 0;
+    std::vector<EquipmentSlot> equipment; // last Equipment frame received, for proxy appearance sync
 };
 
 // Bridge session context.

@@ -81,7 +81,7 @@ UObject* itemDA  = *(UObject**)(equipped + 0x528);       // EquippedPrimary slot
 
 ---
 
-### 3. `RemotePlayer` has no equipment or appearance data
+### 3. `RemotePlayer` has no equipment or appearance data — PARTIALLY FIXED (dispatch side; see gap 8)
 
 **Affected**: `state.hpp:RemotePlayer`.
 
@@ -172,13 +172,30 @@ passive skill levels, `playerForename`/`Surname`, `respawnLoc`.
 
 ---
 
-### 8. `Equipment` MsgType never sent or dispatched
+### 8. `Equipment` MsgType never sent or dispatched — PARTIALLY FIXED
 
 **Affected**: `protocol.hpp:MsgType::Equipment` (21), `mod.cpp:dispatch_frame()`.
 
-The message type is defined but has no encode/decode, no send path, and no dispatch
-handler. The hook point is `BP_JigHelperComp_C.SetEquippedInfoBySlot` (see gap 3 —
-`OnEquipmentUpdated` at +0xC30 exists and is the "obvious" hook point but confirmed
+**Fix applied so far**: `encode_equipment`/`decode_equipment` added to `protocol.cpp`/`protocol.hpp`;
+`dispatch_frame()` now decodes inbound `Equipment` frames and forwards them to
+`ProxyManager::on_equipment()`, which caches `RemotePlayer.equipment` (`state.hpp`). Appearance
+sync (mesh/anim per slot) is still a no-op — `ProxyManager` doesn't spawn real proxy actors yet
+(`spawn_proxy()` is a Phase 2 stub), so there's nothing to visually update yet; the data is cached
+for when that lands.
+
+**Still missing**: the send path. Nothing calls `encode_equipment` yet — no `send_equipment()`,
+no local equipment read. That requires two pieces neither of which exist anywhere in the codebase
+yet and both need live-game verification before landing:
+1. Walking the 21 `FS_ServerEquippedItems` slots off `BP_JigHelperComp_C+0xF8` (offsets fully
+   documented, Session 30) to get each slot's `ItemID` object pointer (`JigsawItem_DataAsset_C*`).
+2. Resolving that DA object's `ItemId` `FName` (at `DA+0x30`) to a string — needs `FName::ToString`
+   (documented at `0x140C9D940`, Session 9) or equivalent; no code in this repo has resolved an
+   FName to a string yet, and this is the first gap fix that would need a raw absolute address
+   rather than a UE4SS stub call or a plain offset read, so the address should be re-verified live
+   before use.
+
+Hook point for a live-driven send (vs. polling) is `BP_JigHelperComp_C.SetEquippedInfoBySlot` (see
+gap 3 — `OnEquipmentUpdated` at +0xC30 exists and is the "obvious" hook point but confirmed
 non-firing via `RegisterHook` in Session 31).
 
 ---

@@ -431,6 +431,60 @@ std::optional<PlayerProgress> decode_player_progress(const uint8_t* p, size_t n)
 }
 
 // ---------------------------------------------------------------------------
+// Equipment  (from BP_JigHelperComp_C.ServerEquippedItems)
+// Header: [tag=1][slotCount:u16BE]
+// Per slot: [slotIndex:u8][itemIdLen:u16BE][itemId...]
+// ---------------------------------------------------------------------------
+
+std::vector<uint8_t> encode_equipment(const Equipment& e)
+{
+    size_t total = 3; // tag + slotCount
+    for (const auto& slot : e.slots)
+        total += 1 + 2 + slot.itemId.size();
+
+    std::vector<uint8_t> buf(total);
+    uint8_t* p = buf.data();
+
+    p[0] = 1;
+    w16(p + 1, static_cast<uint16_t>(e.slots.size()));
+
+    size_t off = 3;
+    for (const auto& slot : e.slots) {
+        buf[off++] = slot.slotIndex;
+        const uint16_t idLen = static_cast<uint16_t>(slot.itemId.size());
+        w16(buf.data() + off, idLen); off += 2;
+        if (idLen) {
+            std::memcpy(buf.data() + off, slot.itemId.data(), idLen);
+            off += idLen;
+        }
+    }
+
+    return buf;
+}
+
+std::optional<Equipment> decode_equipment(const uint8_t* p, size_t n)
+{
+    if (n < 3 || p[0] != 1) return std::nullopt;
+
+    Equipment e;
+    const uint16_t slotCount = r16(p + 1);
+    size_t off = 3;
+    e.slots.reserve(slotCount);
+    for (uint16_t i = 0; i < slotCount; ++i) {
+        if (off + 3 > n) return std::nullopt;
+        EquipmentSlot slot;
+        slot.slotIndex = p[off++];
+        const uint16_t idLen = r16(p + off); off += 2;
+        if (off + idLen > n) return std::nullopt;
+        slot.itemId = std::string(reinterpret_cast<const char*>(p + off), idLen);
+        off += idLen;
+        e.slots.push_back(std::move(slot));
+    }
+
+    return e;
+}
+
+// ---------------------------------------------------------------------------
 // now_micros
 // ---------------------------------------------------------------------------
 

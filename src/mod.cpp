@@ -415,6 +415,14 @@ static void dispatch_frame(const sdb::Frame& f)
         }
         break;
 
+    case sdb::MsgType::Equipment:
+        if (f.playerId && f.playerId != st.session.playerId
+                       && !f.payload.empty()) {
+            if (auto eq = sdb::decode_equipment(f.payload.data(), f.payload.size()))
+                sdb::g_proxy_manager().on_equipment(f.playerId, *eq);
+        }
+        break;
+
     case sdb::MsgType::Death:
         sdb::g_proxy_manager().on_player_disconnected(f.playerId);
         sdb::g_proxy_manager().on_player_connected(f.playerId);
