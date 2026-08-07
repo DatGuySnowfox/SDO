@@ -3,6 +3,15 @@
 Comparing `protocol.hpp`, `state.hpp`, and `mod.cpp` against all research findings
 (Sessions 1–19). Gaps ordered by severity.
 
+> **Session 26 update**: `BP_JigMultiplayer_C` (attached to every pickup and to the player) turns out to
+> be a near-complete, already-built Server/Client/Multicast RPC replication system for the inventory,
+> addressing items and containers by `FGuid` — not the `int32` UIDs in gap 12 or a plain `classPath`
+> string. This doesn't invalidate gaps 1/11/12/13/14 below, but it means the *better* fix for several of
+> them may be hooking the game's own `SERVER_*`/`CLIENT_*`/`MC_*` functions directly rather than
+> reinventing drop/pickup/move wire formats from scratch. See `04_ida_investigation_log.md` Session 26
+> before implementing any of the items/inventory gaps below. Not yet confirmed whether this replication
+> path is live in single-player or dormant scaffolding.
+
 ---
 
 ## CRITICAL — Breaks Correctness
@@ -19,6 +28,13 @@ lookup table that doesn't exist in the game.
 
 **Fix**: Change all `itemId` fields to `std::string` (C++) / `string` (JS).
 Protocol encoding: length-prefixed UTF-8 string. Average DA_ name is ~8–20 chars.
+
+> **Session 29 confirmation**: `FRepItemInfo.ItemID` (the game's own native per-item struct) is a raw
+> `UJigsawItem_DataAsset_C*` pointer to the DA_ asset — confirms this fix is correct, not a guess: a
+> pointer can't cross the network, and the DA_ name/path is the natural resolvable string on both ends.
+> Note this is **item type**, distinct from **item instance** identity — the latter is
+> `FContainerPickupsInfo.UniqueServerID` (`FGuid`, 16 bytes), which the protocol doesn't currently
+> represent at all. Both are needed: type to know what it is, instance UID to know which specific one.
 
 ---
 
@@ -78,9 +94,13 @@ and held weapon. This requires reading `BP_JigHelperComp_C.ServerEquippedItems`
 
 The `Equipment` MsgType (21) is defined but never sent or dispatched.
 
-**Fix**: Add equipment fields to `RemotePlayer`. Hook `OnEquipmentUpdated` delegate
-on `BP_JigHelperComp_C` to send `Equipment` frames. Dispatch `Equipment` frames
-to update `RemotePlayer` appearance and drive proxy actor mesh/anim updates.
+**Fix**: Add equipment fields to `RemotePlayer`. Hook `BP_JigHelperComp_C.SetEquippedInfoBySlot`
+(NOT the `OnEquipmentUpdated` delegate — confirmed in Session 31 that hooking a dynamic multicast
+delegate via `RegisterHook` registers cleanly but never actually fires; `SetEquippedInfoBySlot` is the
+plain UFunction that actually performs the mutation and fires reliably) to send `Equipment` frames.
+Dispatch `Equipment` frames to update `RemotePlayer` appearance and drive proxy actor mesh/anim updates.
+Full 21-slot offset table for `FS_ServerEquippedItems` is in `04_ida_investigation_log.md` Session 30 —
+not just the three slots listed above.
 
 ---
 
@@ -100,14 +120,18 @@ to update `RemotePlayer` appearance and drive proxy actor mesh/anim updates.
 | `radiation` | `RadiationComponent` | `pawn+0x7F0` → `+0xC8` |
 | `forename` | `PlayerController` | `ctrl+0x8C8` (FString) |
 | `surname` | `PlayerController` | `ctrl+0x8D8` (FString) |
-| `respawnX/Y/Z` | `PlayerController` | `ctrl+0x930` (FVector3d) |
+| `respawnLoc` | `PlayerController` | `ctrl+0x930` — **`FTransform` (0x60 bytes), not just FVector3d** (Session 32 correction — includes facing rotation) |
 | `zombieKills` | `PlayerController` | `ctrl+0x90C` |
 | `daysSurvived` | `PlayerController` | `ctrl+0x91C` |
-| Passive skills (10) | `PassiveSkillsComponent` | `ctrl+0x878` → various |
-| Equipment (21 slots) | `BP_JigHelperComp_C` | `helper+0xF8` |
+| Passive skills (10) | `PassiveSkillsComponent` | `ctrl+0x878` → various, full offset table in `04_ida_investigation_log.md` Session 32 |
+| Equipment (21 slots) | `BP_JigHelperComp_C` | `helper+0xF8`, full table in Session 30 |
 
 At minimum, add `level`, `stamina`, `radiation`, `forename`/`surname`, and
-`respawnX/Y/Z`. The full passive skill and equipment sync can be Phase 2.
+`respawnLoc`. The full passive skill and equipment sync can be Phase 2.
+
+> **Session 32 addendum**: also confirmed and available if wanted — `Sex`/`Age`/`Occupation` (`ctrl+0x8E8`/`0x8F8`/`0x908`),
+> `BossZombieKills`/`AnimalKills`/`HumanKills` (`ctrl+0x910`/`0x914`/`0x918`), `DistanceTravelled` (`ctrl+0x920`),
+> `InfestationsDestroyed` (`ctrl+0x928`). Not in the original scope of this gap but sitting right next to the fields that are.
 
 ---
 
@@ -156,8 +180,9 @@ passive skill levels, `playerForename`/`Surname`, `respawnLoc`.
 **Affected**: `protocol.hpp:MsgType::Equipment` (21), `mod.cpp:dispatch_frame()`.
 
 The message type is defined but has no encode/decode, no send path, and no dispatch
-handler. The hook point is `OnEquipmentUpdated` delegate on `BP_JigHelperComp_C`
-at +0xC30.
+handler. The hook point is `BP_JigHelperComp_C.SetEquippedInfoBySlot` (see gap 3 —
+`OnEquipmentUpdated` at +0xC30 exists and is the "obvious" hook point but confirmed
+non-firing via `RegisterHook` in Session 31).
 
 ---
 
@@ -174,6 +199,10 @@ case sdb::MsgType::PlayerDamage:
 **Fix**: Read `HUD.Widget` from `BP_PlayerController_C + 0x880` and call a
 Blueprint event to update the health bar. Or write directly to
 `MedicalComponent.Health` at `pawn+0x7D0 → +0xD0`.
+
+> **Session 32 confirmation**: `BP_PlayerController_C+0x880` is exactly `UWidgetComponent* Widget` —
+> the `+0x880` offset was correct, now confirmed against the authoritative class dump rather than a
+> live property walk.
 
 ---
 
@@ -200,13 +229,31 @@ TArray, not a fixed slot count. 40 may be too small or too large.
 **Recommendation**: Make `MAX_INV_SLOTS` configurable at runtime, or split into
 `MAX_EQUIP_SLOTS = 21` (known) and `MAX_MAIN_SLOTS = N` (to be determined).
 
+> **Session 29 resolution — no fixed number exists, remove the constant.**
+> `BP_JigMultiplayer_C.MainJigContainers` is `TArray<FS_ReplicatedContainerInfo>`, and each entry
+> carries its own runtime `Columns`/`Rows` (resizable live via `ExpandContainer`) plus a plain
+> `TArray<FContainerPickupsInfo> ContainerItems` — never a fixed slot count. `MAX_EQUIP_SLOTS = 21` is
+> right and stays fixed (that's the only genuinely fixed-size part, `S_ServerEquippedItems`). For the
+> main inventory, drop `MAX_MAIN_SLOTS` entirely and encode per-container `Columns`/`Rows` plus a
+> variable-length item list in the wire format instead — trying to pick "the right N" is solving the
+> wrong problem, since containers can be resized mid-game and the game itself never assumes a cap.
+
 ---
 
-### 12. `AllUIDs` is `TArray<int32>` — entityId mapping needed
+### 12. ~~`AllUIDs` is `TArray<int32>` — entityId mapping needed~~ — CLOSED, not applicable
 
-**Research finding**: `BP_SurroundeadGameState_C.AllUIDs` at +0x338 tracks world
+**Original assumption**: `BP_SurroundeadGameState_C.AllUIDs` at +0x338 tracks world
 item UIDs as `int32`. The protocol uses `uint64_t entityId`. The server must map
 its uint64 entity IDs to the game's int32 UIDs when coordinating loot despawn.
+
+**Session 33 finding — this gap doesn't exist**: live-tested directly. `AllUIDs` stayed at 0 across
+multiple confirmed drop and pickup actions — normal gameplay never touches it. It sits alongside
+`BP_SurroundeadGameState_C`'s item-icon snapshot/thumbnail-capture system fields and functions
+(`ItemsQueue`, `AllInspectedIDs`, `SpawnSnapshotCaptor`, `HandleSnapTaken`, etc.), and is almost
+certainly internal bookkeeping for that unrelated system, not a world-item spawn registry. There is
+nothing to map here. **Use `FContainerPickupsInfo.UniqueServerID` (`FGuid`) instead** — that's the
+real per-instance world-item identity (see gap 1's addendum and `04_ida_investigation_log.md` Sessions
+29/33).
 
 ---
 
@@ -295,8 +342,13 @@ restored on rejoin.
 
 **Fix**:
 - For `PlayerProgressRestore`, call `decode_movement` (not `decode_player_progress`).
-- Apply the movement to teleport the pawn to the saved position (write directly
-  to `RootComponent.RelativeLocation` or use a teleport UFunction).
+- Apply the movement to teleport the pawn to the saved position using the already-documented
+  `K2_SetActorLocationAndRotation` exec thunk (`0x142AC5500`, see `04_ida_investigation_log.md`
+  Session 5/9): resolve `RootComponent` at `actor+0x1A0`, then dispatch through
+  `RootComponent->vtable[1312/8]` (`MoveComponentImpl`) with `bTeleport = true` (passed through as
+  `!bTeleport` to the teleport-type argument). This is a real engine call, not a raw memory write —
+  it handles collision/sweep correctly and is already fully reverse-engineered, no further research
+  needed.
 - If vitals restore is needed later, design a separate extended payload.
 
 ---
