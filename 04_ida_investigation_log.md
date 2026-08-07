@@ -2965,3 +2965,62 @@ player's position, attach a real `AIOInvokerComponent`, and register it through 
 that actor's root component each frame (via the existing native root-component move calls already
 documented in this file) is sufficient to keep the cached location fresh — no need to re-register.
 
+---
+
+## Session 25: 2026-08-07 (continued) — UE4SS Built-In SDK Dump: Crash Finding + Vitals Validation
+
+**Goal**: stop reconstructing class layouts one property at a time. UE4SS ships a built-in CXX Header
+Generator (`Ctrl+H`, `[CXXHeaderGenerator]` in `UE4SS-settings.ini`) that dumps every currently-loaded
+class — native and Blueprint — as a `.hpp` with property names and byte offsets in one pass
+(`DumpOffsetsAndSizes = 1` is the default). This had never been run for this game before this session.
+
+### Negative finding: `LoadAllAssetsBefore*` reliably crashes this game
+
+Both `[ObjectDumper] LoadAllAssetsBeforeDumpingObjects` and
+`[CXXHeaderGenerator] LoadAllAssetsBeforeGeneratingCXXHeaders` force-load every asset in the game before
+dumping, intended to produce a fully exhaustive dump regardless of what's currently loaded. **Enabling
+either one crashes the game outright**, even on a 64GB-RAM machine — this is not a memory-capacity
+problem. `UE4SS.log` stops cold immediately after `Loading all assets...` with no further output and no
+crash dump written (`crash_*.dmp` stays 0 bytes). Something in this game's asset set (likely dev-only,
+platform-specific, or otherwise-unreachable content) does not tolerate being force-loaded outside its
+normal load order.
+
+**Conclusion**: do not set either `LoadAllAssetsBefore*` flag to `1` for this game. Both are confirmed
+back at their default of `0`. Get a rich a set of classes loaded organically instead (be in-world, open
+inventory, get near a zombie, get in a vehicle) before dumping.
+
+### Successful dump (defaults, no force-load)
+
+With both flags at `0`, `Ctrl+H` generated 2,407 header files in `CXXHeaderDump/` in 2.6 seconds, no
+crash. This pass happened to catch the native vitals components (they're always loaded once a character
+exists) but not yet `BP_SurroundeadGameState_C`, `BP_JigHelperComp_C`, pickup classes, or the AIOptimizer
+plugin classes — those need a pass while genuinely in-world with inventory/zombies/vehicles interacted
+with. Re-run `Ctrl+H` (and `Ctrl+J` for a live object dump, and `Ctrl+Numpad7` for actors) during an
+actual play session to fill those in.
+
+### Vitals offsets — fully confirmed against Gap 2/4, with types now known
+
+Every offset guessed from live `ForEachProperty` dumps in earlier sessions checks out exactly against
+the authoritative dump, and the dump adds the missing type information:
+
+| Class | Field | Offset | Type |
+|-------|-------|--------|------|
+| `UMedicalComponent_C` | `Health` | `+0xD0` | `double` |
+| `UMedicalComponent_C` | `MaxHealth` | `+0xD8` | `double` |
+| `UHungerThirstComponent_C` | `CurrentHunger` | `+0xC8` | `double` |
+| `UHungerThirstComponent_C` | `CurrentThirst` | `+0xD8` | `double` |
+| `UStaminaComponent_C` | `CurrentStamina` | `+0xC8` | `double` |
+| `URadiationComponent_C` | `CurrentRadiation` | `+0xC8` | `double` |
+| `ULevellingComponent_C` | `CurrentLevel` | `+0xC0` | **`int32`** (previously unspecified) |
+| `ULevellingComponent_C` | `CurrentXP` | `+0xC8` | `double` |
+| `ULevellingComponent_C` | `LevelCap` | `+0xC4` | `int32` (new) |
+
+All five inherit from `UBaseComponent_C` (`Player`/`Controller` pointers at `+0xA8`/`+0xB0`, own
+`UberGraphFrame` at `+0xB8`, size `0xB8`), which itself extends native `UActorComponent` (confirmed size
+`0xA0` in this build). This is why every vitals component's own fields start at `+0xC0`/`+0xC8` — it's
+the same Blueprint base class pattern, not a coincidence.
+
+**Practical implication for SD-Online**: gap 2's `read_local_progress()` can now be implemented with
+fully confirmed offsets and types for health/hunger/thirst/stamina/radiation/level/XP — no further
+research needed on these fields specifically.
+
