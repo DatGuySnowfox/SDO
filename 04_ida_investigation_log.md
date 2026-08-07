@@ -3151,3 +3151,40 @@ entry point for a normal ground pickup and is the natural next thing to hook.
 **Housekeeping**: `Mods/JigMPHookTest` is a throwaway diagnostic mod, not part of the SD-Online bridge —
 safe to disable/remove once no longer needed for follow-up hook testing.
 
+---
+
+## Session 28: 2026-08-07 (continued) — Ground Pickup Entry Point Confirmed: `TryPickup`
+
+**Method note**: UE4SS's hot-reload (`Ctrl+R` by default, `[General].HotReloadKey` in
+`UE4SS-settings.ini`, needs `EnableHotReloadSystem = 1` which is already the default) reloads all Lua
+mods from disk without restarting the game. Used this to iterate on the hook list from Session 27
+in-session instead of relaunching each time — much faster for this kind of live-hook testing.
+
+**Fix carried over from Session 27**: hooking a dynamic multicast delegate by its bare name (e.g.
+`OnEquipmentUpdated`) fails to register. Delegates hook via their `__DelegateSignature` wrapper instead
+(`OnEquipmentUpdated__DelegateSignature`) — this registered successfully where the bare name had not.
+
+**Test**: extended the diagnostic mod with new candidates for the actual ground-pickup path
+(`TryPickup`, `JigMP_OnPickupAdded`, `PickupBuildFromGround`, `JigTryAddItemSomewhere`,
+`AddNewItemSomewhere`), all 8 hooks registered cleanly this time. After dropping and picking up an item:
+
+| Function | Fired? |
+|----------|--------|
+| `SERVER_RequestDropItem` | Yes, 3× (reconfirms Session 27) |
+| `JigHelperComp.TryPickup` | **Yes, 2×** |
+| `StaticMeshPickup.JigMP_OnPickupAdded` | No |
+| `StaticMeshPickup.PickupBuildFromGround` | No |
+| `JigTryAddItemSomewhere` | No |
+| `AddNewItemSomewhere` | No |
+| `SERVER_RequestEquipActorToContainer` / `OnEquipmentUpdated` | Not exercised this pass (no equip action taken) |
+
+**Conclusion**: `BP_JigHelperComp_C.TryPickup(AActor* PickupRef, UJSIContainer_C* TargetContainer, bool&
+Result)` is the confirmed real entry point for a normal ground pickup — not any of the
+`BP_JigMultiplayer_C` add-to-container functions guessed earlier. `PickupRef` is the ground actor being
+picked up and `TargetContainer` is the destination; this is directly usable as the mod's hook point for
+detecting pickups and their target container without needing to reverse further.
+
+**Still open**: confirm `OnEquipmentUpdated__DelegateSignature` actually fires on a real equip action
+(registered successfully this session but wasn't exercised) — straightforward follow-up with the same
+mod, just needs an equip action during the test pass.
+
