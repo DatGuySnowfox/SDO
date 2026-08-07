@@ -2926,3 +2926,42 @@ routing through the existing Blueprint-callable `RegisterInvoker` UFunction via 
 replicating the append algorithm above verbatim against a genuine component pointer) — not to synthesize
 an entry directly.
 
+---
+
+## Session 24: 2026-08-07 (continued) — AIOInvokerComponent+0x90 Identified
+
+**Goal**: identify the previously-unknown cached field at `AIOInvokerComponent+0x90` found in Session 23.
+
+Traced the read side by decompiling the subject-culling tick (`sub_143868AA0`, previously named
+`EXEC_LoopSubjects`'s jump target) and the distance helper it calls, `sub_143867E10`:
+
+```cpp
+// sub_143867E10 — nearest-invoker distance for a subject at *a2 (FVector3d)
+for each entry in RegisteredInvokers (subsystem+0x80, stride 16):
+    cachedPtr = entry.field1;               // == *(ComponentPtr + 0x90) at registration time
+    if (cachedPtr) {
+        rootComp = *(void**)(cachedPtr + 0x1A0);   // AActor::RootComponent
+        loc      = *(FVector3d*)(rootComp + 0x260); // USceneComponent world location, if rootComp valid
+    } else {
+        loc = <hardcoded sentinel vector>;   // fallback when the cached actor is gone
+    }
+    dist = min(dist, |loc - subjectPos|^2);
+```
+
+`AActor+0x1A0 = RootComponent` and `RootComponent+0x260 (608) = world location` are both already
+confirmed elsewhere in this doc (Session 5/9 area) — this is the same pattern, not a new offset.
+
+**Conclusion**: `AIOInvokerComponent+0x90` caches the **owning `AActor*`**, captured once at
+`RegisterInvoker` time so the per-tick culling loop can read the invoker's current world position via
+`Actor->RootComponent->WorldLocation` without repeated `GetOwner()` resolution. If the cached actor
+pointer is null (e.g. destroyed), the tick falls back to a hardcoded sentinel vector instead of crashing
+— so a stale/invalid pointer here fails safe rather than corrupting the tick, but a genuinely garbage
+(non-null, non-actor) pointer would not, since it's dereferenced unconditionally at `+0x1A0`.
+
+**Practical implication for SD-Online**: confirms Session 23's conclusion — there is no safe shortcut to
+registering a "virtual" invoker without a real actor. The minimum viable fake invoker is: spawn any
+actor with a valid `RootComponent` (a bare `USceneComponent` is enough, no mesh needed) at the remote
+player's position, attach a real `AIOInvokerComponent`, and register it through the normal path. Moving
+that actor's root component each frame (via the existing native root-component move calls already
+documented in this file) is sufficient to keep the cached location fresh — no need to re-register.
+
