@@ -473,3 +473,14 @@ a future session.
   test) and correct regardless of what eventually fixes the spawn itself. `RemotePlayer.equipment`/
   `x,y,z,yaw`/`health` are all tracked correctly and ready to drive a proxy the moment one actually
   spawns — this remains the biggest gap toward the mod being visually functional in multiplayer.
+
+  **Session 38 update**: full IDA trace of the native call chain (`04_ida_investigation_log.md` Session
+  38) confirms this is a universal rejection (UE4SS's own Lua `SpawnActor` binding fails identically, not
+  just our mod's call) happening somewhere inside 100%-stock Unreal Engine code — no SurrounDead-specific
+  anti-cheat gate found anywhere in `BeginDeferredActorSpawnFromClass`, `GetWorldFromContextObject`, or
+  the real native `SpawnActor`. Leading candidate is the virtual `GetWorld()` call `GetWorldFromContextObject`
+  makes on the passed `UWorld*` (vtable+392) possibly hitting a shifted vtable slot for this engine build,
+  but this can't be confirmed without live debugger value inspection — Shipping builds strip all `UE_LOG`
+  output, so there's no log evidence either way. Next step needs either a live IDA debugger session with a
+  breakpoint at the resolved addresses, or finding and hooking whatever simpler native function the game's
+  own zombie/loot spawners use internally instead of going through this generic reflection path.
