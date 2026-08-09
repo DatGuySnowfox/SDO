@@ -3759,3 +3759,36 @@ cheaper bypass — investigate whether the game's own internal spawners (used co
 loot) call a more specific, simpler native function we could hook/call directly instead of going through
 the generic Blueprint reflection path at all.
 
+### Session 38 addendum — live debugger attempt: real hazards found, no conclusive answer yet
+
+Attempted (a) above: attached IDA's debugger to the running game via the GUI (Debugger → Attach to
+process), jumped to `0x1434ACF40` and `0x142EB0540` post-attach, set breakpoints, resumed, then drove the
+rest programmatically via IDA's Python execution (`ida_dbg` module) rather than the GUI.
+
+**Real finding — address translation is not straightforward post-attach**: `idaapi.get_imagebase()`
+returns the live runtime base once a debugger is attached (`0x7ff71b960000` here, vs. the static
+analysis base `0x140000000`), but naively translating `static_addr - static_base + live_base` and
+checking the result against `idc.get_func_name()`/segment info gave nonsense (an empty function name, a
+segment named `debug10107`) — though this may simply be because `auto_analysis_ready` was `false` for
+the whole attached session (confirmed via `server_health`), meaning symbol/function lookups are
+unreliable while live regardless of whether the address itself is correct. Genuinely unresolved whether
+the two breakpoints that were set (via jump-to-address *after* attaching) actually landed on the intended
+functions at all.
+
+**Real hazard — a live text search hung the whole MCP connection**: calling `ida_search.find_text()` to
+empirically verify the address translation (searching for the `"BeginDeferredActorSpawnFromClass"`
+string while attached) caused IDA to stop responding entirely — not just that call, but all subsequent
+MCP calls including a bare health check — for an extended period, with the game process left suspended
+at a breakpoint (frozen) for the duration. It recovered on its own after enough time passed. **Avoid
+combining live search operations with an active attached debug session** until this is better understood;
+prefer read-only register/state queries only while attached.
+
+**Cleaned up**: removed both breakpoints and detached the debugger via `ida_dbg.detach_process()` once
+IDA recovered, confirmed the game resumed normally.
+
+**Lesson for the next attempt**: set breakpoints via jump-to-address *before* attaching (while IDA is
+still in its normal static/idle view with well-defined addressing), then attach afterward — IDA is
+designed to carry statically-set breakpoints through into a live session correctly, which should avoid
+the post-attach addressing ambiguity hit here. This session's attempt did it in the opposite order
+(attach first, then jump-to-address), which is the likely root cause of the confusion.
+
