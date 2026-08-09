@@ -251,6 +251,25 @@ static std::string fname_to_string(uintptr_t fnamePtr)
     return s;
 }
 
+// Reads an FString field already sitting in memory (e.g. a UPROPERTY member)
+// in place — unlike fname_to_string, this doesn't call into the engine or
+// allocate anything, so there's nothing to free; the engine owns that buffer
+// for as long as the containing object exists.
+static std::string read_fstring_field(uintptr_t addr)
+{
+    const auto& fstr = *reinterpret_cast<const UnrealFString*>(addr);
+    if (!fstr.data || fstr.num <= 0) return {};
+
+    int len = fstr.num;
+    if (fstr.data[len - 1] == L'\0') --len;
+    if (len <= 0) return {};
+
+    const int needed = WideCharToMultiByte(CP_UTF8, 0, fstr.data, len, nullptr, 0, nullptr, nullptr);
+    std::string s(static_cast<size_t>(needed), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, fstr.data, len, s.data(), needed, nullptr, nullptr);
+    return s;
+}
+
 } // namespace native
 
 // ── Vitals reader ─────────────────────────────────────────────────────────
@@ -292,6 +311,14 @@ static sdb::LocalVitals read_local_progress(AActor* pawn)
         v.radiation = read_double(rad + 0xC8);
 
     // LevellingComponent (ctrl+0x868) → level +0xC0, xp +0xC8
+    //
+    // NOTE (pre-existing, not introduced by gap 4/7): FindFirstOf grabs
+    // whichever BP_PlayerController_C instance happens to exist first, same
+    // class of bug fixed for BP_JigHelperComp/BP_JigMultiplayer in Session
+    // 35 (fixed there via a direct pawn-offset read instead). With more than
+    // one player in the world this could read a different player's
+    // controller. Left as-is here since a fix needs the pawn's "Controller"
+    // property resolved and live-verified, which hasn't been done yet.
     UObject* ctrl = UObjectGlobals::FindFirstOf(STR("BP_PlayerController_C"));
     if (ctrl) {
         const uintptr_t ctrlBase = reinterpret_cast<uintptr_t>(ctrl);
@@ -299,6 +326,18 @@ static sdb::LocalVitals read_local_progress(AActor* pawn)
             v.level = read_int32(lvl + 0xC0);
             v.xp    = read_double(lvl + 0xC8);
         }
+
+        // Extended PlayerController stats (gap 4/7, offsets from research
+        // Session 32).
+        v.forename              = native::read_fstring_field(ctrlBase + 0x8C8);
+        v.surname               = native::read_fstring_field(ctrlBase + 0x8D8);
+        v.zombieKills           = read_int32(ctrlBase + 0x90C);
+        v.daysSurvived          = read_int32(ctrlBase + 0x91C);
+        v.bossZombieKills       = read_int32(ctrlBase + 0x910);
+        v.animalKills           = read_int32(ctrlBase + 0x914);
+        v.humanKills            = read_int32(ctrlBase + 0x918);
+        v.distanceTravelled     = static_cast<float>(read_double(ctrlBase + 0x920));
+        v.infestationsDestroyed = read_int32(ctrlBase + 0x928);
     }
 
     return v;
@@ -539,6 +578,16 @@ static void send_profile_revision(AActor* pawn)
     prog.posY      = static_cast<float>(loc.Y);
     prog.posZ      = static_cast<float>(loc.Z);
     prog.yaw       = static_cast<float>(rot.Yaw);
+
+    prog.forename              = v.forename;
+    prog.surname               = v.surname;
+    prog.zombieKills           = v.zombieKills;
+    prog.daysSurvived          = v.daysSurvived;
+    prog.bossZombieKills       = v.bossZombieKills;
+    prog.animalKills           = v.animalKills;
+    prog.humanKills            = v.humanKills;
+    prog.distanceTravelled     = v.distanceTravelled;
+    prog.infestationsDestroyed = v.infestationsDestroyed;
 
     auto buf = sdb::encode_player_progress(prog);
     if (buf.empty()) return;

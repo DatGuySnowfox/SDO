@@ -201,14 +201,31 @@ function decodeBuildingState(state) {
 //   45–48  float32 yaw
 //   49–50  uint16  slotCount
 //   51…    slots: [uint8 slotIndex, uint16 itemIdLen, itemId utf8, uint16 quantity] × slotCount
+//   …      extended stats trailer (gap 4/7), optional — a payload persisted before this trailer
+//          existed just ends after the slots, and decode must tolerate that (see decodePlayerProgress):
+//            uint16  forenameLen, forename utf8
+//            uint16  surnameLen,  surname utf8
+//            uint32  zombieKills
+//            uint32  daysSurvived
+//            uint32  bossZombieKills
+//            uint32  animalKills
+//            uint32  humanKills
+//            float32 distanceTravelled
+//            uint32  infestationsDestroyed
 
 const PLAYER_PROGRESS_HEADER_SIZE = 51;
 
 function encodePlayerProgress({ revision, health, hunger, thirst, stamina, radiation, level, xp,
-                                 posX, posY, posZ, yaw, slots }) {
-    const itemIdBufs = slots.map(s => Buffer.from(s.itemId, 'utf8'));
-    const slotsSize  = itemIdBufs.reduce((sum, b) => sum + 1 + 2 + b.length + 2, 0);
-    const buf = Buffer.allocUnsafe(PLAYER_PROGRESS_HEADER_SIZE + slotsSize);
+                                 posX, posY, posZ, yaw, slots,
+                                 forename = '', surname = '', zombieKills = 0, daysSurvived = 0,
+                                 bossZombieKills = 0, animalKills = 0, humanKills = 0,
+                                 distanceTravelled = 0, infestationsDestroyed = 0 }) {
+    const itemIdBufs  = slots.map(s => Buffer.from(s.itemId, 'utf8'));
+    const slotsSize   = itemIdBufs.reduce((sum, b) => sum + 1 + 2 + b.length + 2, 0);
+    const forenameBuf = Buffer.from(forename, 'utf8');
+    const surnameBuf  = Buffer.from(surname, 'utf8');
+    const trailerSize = 2 + forenameBuf.length + 2 + surnameBuf.length + 4 * 6 + 4;
+    const buf = Buffer.allocUnsafe(PLAYER_PROGRESS_HEADER_SIZE + slotsSize + trailerSize);
     buf.writeUInt8(1, 0);
     buf.writeUInt32BE(revision, 1);
     buf.writeFloatBE(health,    5);
@@ -231,6 +248,18 @@ function encodePlayerProgress({ revision, health, hunger, thirst, stamina, radia
         itemIdBufs[i].copy(buf, o); o += itemIdBufs[i].length;
         buf.writeUInt16BE(slots[i].quantity, o); o += 2;
     }
+
+    buf.writeUInt16BE(forenameBuf.length, o); o += 2;
+    forenameBuf.copy(buf, o); o += forenameBuf.length;
+    buf.writeUInt16BE(surnameBuf.length, o); o += 2;
+    surnameBuf.copy(buf, o); o += surnameBuf.length;
+    buf.writeUInt32BE(zombieKills, o);              o += 4;
+    buf.writeUInt32BE(daysSurvived, o);              o += 4;
+    buf.writeUInt32BE(bossZombieKills, o);           o += 4;
+    buf.writeUInt32BE(animalKills, o);               o += 4;
+    buf.writeUInt32BE(humanKills, o);                o += 4;
+    buf.writeFloatBE(distanceTravelled, o);          o += 4;
+    buf.writeUInt32BE(infestationsDestroyed, o);     o += 4;
     return buf;
 }
 
@@ -249,6 +278,31 @@ function decodePlayerProgress(payload) {
         const quantity  = payload.readUInt16BE(o); o += 2;
         slots.push({ slotIndex, itemId, quantity });
     }
+
+    // Extended stats trailer (gap 4/7) — optional. A payload persisted before
+    // this trailer existed just ends here, so leave defaults on short input
+    // rather than throwing.
+    let forename = '', surname = '';
+    let zombieKills = 0, daysSurvived = 0, bossZombieKills = 0, animalKills = 0, humanKills = 0;
+    let distanceTravelled = 0, infestationsDestroyed = 0;
+    if (o + 2 <= payload.length) {
+        const forenameLen = payload.readUInt16BE(o); o += 2;
+        if (o + forenameLen + 2 <= payload.length) {
+            forename = payload.toString('utf8', o, o + forenameLen); o += forenameLen;
+            const surnameLen = payload.readUInt16BE(o); o += 2;
+            if (o + surnameLen + 28 <= payload.length) {
+                surname = payload.toString('utf8', o, o + surnameLen); o += surnameLen;
+                zombieKills           = payload.readUInt32BE(o); o += 4;
+                daysSurvived          = payload.readUInt32BE(o); o += 4;
+                bossZombieKills       = payload.readUInt32BE(o); o += 4;
+                animalKills           = payload.readUInt32BE(o); o += 4;
+                humanKills            = payload.readUInt32BE(o); o += 4;
+                distanceTravelled     = payload.readFloatBE(o);  o += 4;
+                infestationsDestroyed = payload.readUInt32BE(o); o += 4;
+            }
+        }
+    }
+
     return {
         revision:  payload.readUInt32BE(1),
         health:    payload.readFloatBE(5),
@@ -263,6 +317,8 @@ function decodePlayerProgress(payload) {
         posZ:      payload.readFloatBE(41),
         yaw:       payload.readFloatBE(45),
         slots,
+        forename, surname, zombieKills, daysSurvived, bossZombieKills, animalKills, humanKills,
+        distanceTravelled, infestationsDestroyed,
     };
 }
 

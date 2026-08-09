@@ -444,11 +444,18 @@ a future session.
 
 ### Other genuinely still open items
 
-- **Gap 4/7** — `PlayerProgress`/`BridgeState` still missing forename/surname, `respawnLoc`
-  (`FTransform`), zombie/animal/human kill counts, `daysSurvived`, `distanceTravelled`,
-  `infestationsDestroyed`, and all 10 passive skills. Offsets are fully documented (Session 32) but
-  wiring them in means extending the `PlayerProgress` wire format — needs a matching change on the JS
-  side (`server/src/lib/protocol.js` or equivalent), unlike the self-contained `Equipment` addition.
+- **Gap 4/7 — "at minimum" scope FIXED + live-confirmed (Session 37)**: `PlayerProgress` now carries
+  `forename`/`surname`, zombie/boss-zombie/animal/human kill counts, `daysSurvived`,
+  `distanceTravelled`, and `infestationsDestroyed`, read off `ABP_PlayerController_C` at the offsets
+  Session 32 confirmed and appended to the wire format as a trailer after the existing slot list (so
+  old persisted saves without the trailer still decode fine — see `server/src/db.js`'s raw-byte
+  persistence). Updated on both sides: `protocol.hpp`/`.cpp` and `server/src/lib/protocol.js` +
+  `host-agent.js`'s `_applyProfileRevision` (stores the trailer onto `p.stats`). Live-tested:
+  `forename`/`surname` resolved correctly (`John`/`Doe`) via a new `native::read_fstring_field()` — the
+  first code in the repo reading a plain in-place `FString` rather than calling `FName::ToString` — no
+  crash, stable. **Still open**: `respawnLoc` (needs the `FTransform`'s internal `FQuat`/`FVector`
+  sub-offsets live-verified, not just its total size) and all 10 passive skills — both explicitly
+  deferred as separate, larger follow-ups per Session 32's own framing.
 - **Gap 10** — `Movement` position fields are `float`, engine uses `double` (LWC) — precision loss,
   not correctness-breaking at current world scale. Low priority.
 - **`ProxyManager` — spawn attempted, rejected live for two different classes (Session 36)**:

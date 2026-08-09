@@ -3614,3 +3614,56 @@ Left `spawn_proxy()` targeting `BP_PlayerCharacter_C` (the real desired proxy vi
 isn't the blocker. Next session should decompile UE4SS's `SpawnActor` export before trying another live
 spawn — further blind live attempts are unlikely to reveal anything past this point.
 
+---
+
+## Session 37: 2026-08-07 (continued) — Gap 4/7 Closed: Extended PlayerController Stats, Live-Confirmed
+
+**Goal**: wire the "at minimum" fields gap 4 asked for — `forename`/`surname`/kill-counts/`daysSurvived`
+— into `PlayerProgress`, using the offsets Session 32 already confirmed off `ABP_PlayerController_C`.
+`respawnLoc` and the 10 passive skills were deliberately left out of scope: `RespawnLoc` is a full
+`FTransform` whose internal `FQuat`/`FVector` sub-offsets haven't been live-verified (only its total
+size and starting offset are confirmed), and the passive skills are a much larger separate chunk of
+data Session 32 itself flagged as a bigger follow-up.
+
+### New read primitive: `native::read_fstring_field()` — reading an FString in place, not via `ToString`
+
+`Forename`/`Surname` are already-live `FString` UPROPERTYs sitting directly on the PlayerController
+(`ctrl+0x8C8`/`+0x8D8`), unlike `ItemId`, which is an `FName` requiring a call into
+`FName::ToString` (Session 34) to materialize a string at all. Reading an in-place `FString` is
+simpler and has no allocation to free — treat the address as the same `UnrealFString{data,num,max}`
+layout already defined for `fname_to_string`'s output, read `Data`/`Num` directly, and convert with
+`WideCharToMultiByte`. No engine call, nothing to free (the engine owns that buffer for the object's
+lifetime).
+
+### Wire format: appended a trailer rather than reworking the existing header
+
+`PlayerProgress`'s wire format (`protocol.hpp`/`protocol.cpp`, mirrored in
+`server/src/lib/protocol.js`) gained a new section appended *after* the existing slot list, rather than
+inserting fields into the fixed 51-byte header. This matters because `db.saveProgress()`
+(`server/src/db.js`) persists the *raw client-sent bytes* to SQLite and `db.getProgress()` replays them
+verbatim on rejoin (`gateway.js`'s `JoinAccepted` handler) — any player with progress saved before this
+change has an old-format blob with no trailer sitting in that database. Both `decode_player_progress`
+(C++) and `decodePlayerProgress` (JS) tolerate a payload that ends right after the slots: the new fields
+just stay at their `PlayerProgress` defaults rather than the decode throwing/returning `nullopt`. Also
+updated `host-agent.js`'s `_applyProfileRevision` to store the decoded trailer onto `p.stats`, alongside
+the existing `p.inventory` — `encodePlayerProgress` (JS) was extended too for consistency even though
+nothing currently calls it (mirrors the existing gap-13 audit's concern about protocol drift between
+what's defined and what's actually used).
+
+### Live test: forename/surname resolved correctly, no crash
+
+Deployed with a temporary diagnostic log. Result:
+```
+SDB: extended stats  forename=John surname=Doe zombieKills=0 daysSurvived=1 bossZombieKills=0
+animalKills=0 humanKills=0 distanceTravelled=0.0 infestationsDestroyed=0
+```
+`forename`/`surname` resolved to sane values (not garbage or empty strings), confirming the
+`UnrealFString` layout assumption holds for an in-place-read FString the same way it already did for
+`FName::ToString`'s output. `daysSurvived=1` and all-zero kill counts are consistent with a freshly
+started character. No crash; game remained stable through the test. Diagnostic logging removed after
+confirmation — this closes gap 4/7's "at minimum" scope.
+
+**Still open**: `respawnLoc` (needs the `FTransform` sub-layout confirmed, likely via a live
+PropertyDumper pass rather than guessing) and the 10 passive skills (a separate, larger effort per
+Session 32's own framing).
+
