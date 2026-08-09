@@ -345,15 +345,25 @@ std::string next_request_id()
 //         [stamina:f32][radiation:f32][level:u32][xp:f32]
 //         [posX:f32][posY:f32][posZ:f32][yaw:f32][slotCount:u16]  = 51 bytes
 // Per slot: [slotIndex:u8][itemIdLen:u16BE][itemId...][qty:u16BE]
+//
+// Extended stats trailer (gap 4/7), appended after the slots:
+// [forenameLen:u16BE][forename utf8][surnameLen:u16BE][surname utf8]
+// [zombieKills:u32][daysSurvived:u32][bossZombieKills:u32][animalKills:u32]
+// [humanKills:u32][distanceTravelled:f32][infestationsDestroyed:u32]
+// Optional on decode: a payload that ends right after the slots (i.e. one
+// persisted by the server before this trailer existed) still decodes fine,
+// just with these fields left at their PlayerProgress defaults.
 // ---------------------------------------------------------------------------
 
 static constexpr size_t PLAYER_PROGRESS_HEADER_SIZE = 51;
+static constexpr size_t PLAYER_PROGRESS_TRAILER_FIXED_SIZE = 2 + 2 + 4 * 6 + 4; // sans the two strings
 
 std::vector<uint8_t> encode_player_progress(const PlayerProgress& prog)
 {
     size_t total = PLAYER_PROGRESS_HEADER_SIZE;
     for (const auto& slot : prog.slots)
         total += 1 + 2 + slot.itemId.size() + 2;
+    total += PLAYER_PROGRESS_TRAILER_FIXED_SIZE + prog.forename.size() + prog.surname.size();
 
     std::vector<uint8_t> buf(total);
     uint8_t* p = buf.data();
@@ -384,6 +394,21 @@ std::vector<uint8_t> encode_player_progress(const PlayerProgress& prog)
         }
         w16(buf.data() + off, slot.quantity); off += 2;
     }
+
+    auto write_str = [&](const std::string& s) {
+        const uint16_t len = static_cast<uint16_t>(s.size());
+        w16(buf.data() + off, len); off += 2;
+        if (len) { std::memcpy(buf.data() + off, s.data(), len); off += len; }
+    };
+    write_str(prog.forename);
+    write_str(prog.surname);
+    w32(buf.data() + off, static_cast<uint32_t>(prog.zombieKills));           off += 4;
+    w32(buf.data() + off, static_cast<uint32_t>(prog.daysSurvived));          off += 4;
+    w32(buf.data() + off, static_cast<uint32_t>(prog.bossZombieKills));       off += 4;
+    w32(buf.data() + off, static_cast<uint32_t>(prog.animalKills));           off += 4;
+    w32(buf.data() + off, static_cast<uint32_t>(prog.humanKills));            off += 4;
+    w32(buf.data() + off, f2u(prog.distanceTravelled));                      off += 4;
+    w32(buf.data() + off, static_cast<uint32_t>(prog.infestationsDestroyed)); off += 4;
 
     return buf;
 }
@@ -425,6 +450,26 @@ std::optional<PlayerProgress> decode_player_progress(const uint8_t* p, size_t n)
         off += idLen;
         slot.quantity = r16(p + off); off += 2;
         prog.slots.push_back(std::move(slot));
+    }
+
+    // Extended stats trailer — optional; absent entirely on payloads persisted
+    // before gap 4/7 landed, so a short remainder just leaves the defaults.
+    auto read_str = [&](std::string& out) -> bool {
+        if (off + 2 > n) return false;
+        const uint16_t len = r16(p + off); off += 2;
+        if (off + len > n) return false;
+        out = std::string(reinterpret_cast<const char*>(p + off), len);
+        off += len;
+        return true;
+    };
+    if (read_str(prog.forename) && read_str(prog.surname) && off + 28 <= n) {
+        prog.zombieKills           = static_cast<int32_t>(r32(p + off)); off += 4;
+        prog.daysSurvived          = static_cast<int32_t>(r32(p + off)); off += 4;
+        prog.bossZombieKills       = static_cast<int32_t>(r32(p + off)); off += 4;
+        prog.animalKills           = static_cast<int32_t>(r32(p + off)); off += 4;
+        prog.humanKills            = static_cast<int32_t>(r32(p + off)); off += 4;
+        prog.distanceTravelled     = u2f(r32(p + off));                  off += 4;
+        prog.infestationsDestroyed = static_cast<int32_t>(r32(p + off)); off += 4;
     }
 
     return prog;

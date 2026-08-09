@@ -412,13 +412,19 @@ class HostAgent {
         const p = this._players.get(f.playerId);
         if (!p || f.payload.length < 51) return;
         try {
-            const { slots } = decodePlayerProgress(f.payload);
+            const { slots, forename, surname, zombieKills, daysSurvived, bossZombieKills,
+                     animalKills, humanKills, distanceTravelled, infestationsDestroyed } =
+                decodePlayerProgress(f.payload);
             const inv = Array(MAX_INV_SLOTS).fill(null);
             for (const s of slots) {
                 if (s.slotIndex < MAX_INV_SLOTS)
                     inv[s.slotIndex] = { itemId: s.itemId, quantity: s.quantity };
             }
             p.inventory = inv;
+            // Extended stats trailer (gap 4/7) — absent (all defaults) on a
+            // payload persisted before this trailer existed.
+            p.stats = { forename, surname, zombieKills, daysSurvived, bossZombieKills,
+                        animalKills, humanKills, distanceTravelled, infestationsDestroyed };
         } catch { /* malformed payload */ }
     }
 

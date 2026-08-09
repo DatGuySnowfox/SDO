@@ -141,6 +141,23 @@ struct LocalVitals {
     double  radiation = 0.0;
     int32_t level     = 0;
     double  xp        = 0.0;
+
+    // Extended PlayerController stats (gap 4/7, offsets from research
+    // Session 32, live-confirmed Session 37 — forename/surname resolved
+    // correctly via a plain in-place FString read, no crash). respawnLoc/
+    // passive skills intentionally NOT included yet: RespawnLoc is a full
+    // FTransform whose internal FQuat/FVector byte layout hasn't been
+    // live-verified, and the 10 passive skills are a much larger separate
+    // chunk of data — both deferred.
+    std::string forename;
+    std::string surname;
+    int32_t zombieKills           = 0;
+    int32_t daysSurvived          = 0;
+    int32_t bossZombieKills       = 0;
+    int32_t animalKills           = 0;
+    int32_t humanKills            = 0;
+    float   distanceTravelled     = 0.0f;
+    int32_t infestationsDestroyed = 0;
 };
 
 // ── ProfileRevision payload (client→server) ───────────────────────────────────
@@ -159,6 +176,20 @@ struct PlayerProgress {
     float xp = 0.f;
     float posX=0, posY=0, posZ=0, yaw=0;
     std::vector<InventorySlot> slots;
+
+    // Extended stats trailer (gap 4/7) — appended after slots on the wire so
+    // the original 51-byte header + slot list is untouched; a payload that
+    // ends right after the slots (already-persisted pre-gap-4/7 saves) still
+    // decodes fine, just with these left at their defaults.
+    std::string forename;
+    std::string surname;
+    int32_t zombieKills           = 0;
+    int32_t daysSurvived          = 0;
+    int32_t bossZombieKills       = 0;
+    int32_t animalKills           = 0;
+    int32_t humanKills            = 0;
+    float   distanceTravelled     = 0.0f;
+    int32_t infestationsDestroyed = 0;
 };
 
 // ── Equipment payload (from BP_JigHelperComp_C.ServerEquippedItems) ───────────
