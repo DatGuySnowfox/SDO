@@ -3667,3 +3667,95 @@ confirmation — this closes gap 4/7's "at minimum" scope.
 PropertyDumper pass rather than guessing) and the 10 passive skills (a separate, larger effort per
 Session 32's own framing).
 
+---
+
+## Session 38: 2026-08-09 — SpawnActor Rejection: Full Call Chain Mapped, Root Cause Still Open
+
+**Goal**: Session 36 found `ProxyManager::spawn_proxy()` cleanly rejected for both `BP_PlayerCharacter_C`
+and `BP_Zombie_C` (no crash, clean `nullptr`), ruling out class-flag issues, and flagged this as needing
+IDA-level investigation of the actual `SpawnActor` export before another live attempt was worthwhile.
+This session does that investigation.
+
+### Confirmed: the failure is universal, not specific to the C++ mod's call
+
+Before touching IDA, isolated whether this was specific to the mod's own reflection-based invocation.
+UE4SS's own Lua `SpawnActor` binding (`LuaUWorld.cpp`) calls the exact same underlying
+`RC::Unreal::UWorld::SpawnActor` C++ method our mod calls — a live Lua test (`world:SpawnActor(cls,
+{X=,Y=,Z=}, {Yaw=,Pitch=,Roll=})` against `BP_PlayerCharacter_C`) reproduced the identical clean
+rejection. This rules out anything specific to our mod's parameter marshaling via `ProcessEvent` — both
+call paths funnel into the same native code, and both fail identically.
+
+### `UWorld::SpawnActor` (UE4SS) is not a raw engine call — it's itself reflection-based
+
+`RC::Unreal::UWorld::SpawnActor` (`RE-UE4SS/deps/first/Unreal/src/World.cpp`) doesn't call a native
+engine `SpawnActor` directly. It calls `UGameplayStatics::BeginDeferredActorSpawnFromClass` followed by
+`FinishSpawningActor` — the same two-step deferred-spawn mechanism Blueprint's "Spawn Actor from Class"
+node uses. Both are resolved and invoked via `StaticReflectedFunctionBase` (`ReflectedFunction.hpp`),
+which does a one-time `StaticFindObject<UFunction*>` lookup by full path
+(`/Script/Engine.GameplayStatics:BeginDeferredActorSpawnFromClass`) and calls it via `ProcessEvent` —
+logging `"Was unable to locate '{}'"` if that lookup itself fails.
+
+**No such message appears in `UE4SS.log` across a fresh test session** — meaning the UFunction resolves
+fine; the rejection happens inside the actual native call, not in UE4SS's wiring to it.
+
+### Full native call chain, traced via IDA/Hex-Rays
+
+Found the real exec thunk for `BeginDeferredActorSpawnFromClass` at `0x142EB0540` (found via the
+(name-string, code-ptr) pairs referencing the `"BeginDeferredActorSpawnFromClass"` string at
+`0x145C1C920` — two of the three candidate code pointers were small `0x2f`-byte lazy
+UFunction-object-getter trampolines, same dead-end pattern as Session 24's `K2_TeleportTo` chase; the
+third, `0x24d` bytes, was the real one). It reads `WorldContextObject`, `ActorClass`, `SpawnTransform`
+(with baked-in identity rotation/scale defaults matching `FTransform{FQuat(), Location, {1,1,1}}` from
+the engine source), `CollisionHandlingOverride`, and `Owner` off the Blueprint stack, then calls:
+
+```
+sub_142E80E80(WorldContextObject, ActorClass, SpawnTransform, CollisionHandlingOverride, Owner, ...)
+```
+
+This is `UGameplayStatics::BeginDeferredActorSpawnFromClass`'s actual body:
+1. `if (!ActorClass) return 0;` — not our issue, class resolves fine.
+2. Resolves `WorldContextObject` to a `UWorld*` via `sub_1434ACF40`, confirmed to be
+   `UEngine::GetWorldFromContextObject` (embedded strings `"No world was found for object (%s) passed in
+   to UEngine::GetWorldFromContextObject()."` / `"A null object was passed as a world context object..."`).
+   For `EGetWorldErrorMode::LogAndReturnNull` (mode `1`), this calls a **virtual function at vtable
+   offset 392** (slot 49) on the passed object — almost certainly `UObject::GetWorld()` — and returns
+   null (logging a warning first) if that returns null.
+3. If world resolution succeeds, calls `sub_14300FE50` — the real native `UWorld::SpawnActor` — passing
+   a `FActorSpawnParameters`-shaped struct built from the Owner/CollisionHandling/DeferConstruction
+   fields set just before this call.
+
+### `sub_14300FE50` (the real native SpawnActor) is confirmed stock UE5, no custom gate
+
+Decompiled in full. It's the genuine, enormous `UWorld::SpawnActor` — actor-uniqueness-name generation,
+NaN/invalid-transform checks on the spawn matrix, `CLASS_Deprecated` (`ClassFlags & 0x02000000`) and
+`CLASS_Abstract` (`ClassFlags & 0x1`) rejection checks, collision-handling-mode branches, and the actual
+construction/registration calls at the end. **No SurrounDead-specific validation, anti-cheat check, or
+"reject non-internal spawns" gate found anywhere in this function.** `BP_PlayerCharacter_C`/`BP_Zombie_C`
+are definitely not deprecated or abstract (they're the live, constantly-used gameplay classes), so these
+checks should pass for both — consistent with Session 36 ruling out class-specific issues.
+
+### Root cause still open — needs live value inspection, not just static analysis
+
+The call chain is now fully mapped and confirmed to be entirely stock engine code, but **which specific
+early-exit branch is actually firing can't be determined from static decompilation alone** — it requires
+inspecting actual register/memory values at the moment of rejection (a live debugger breakpoint), which
+this session didn't attempt. Compounding this: **Shipping builds strip `UE_LOG` output entirely**
+(confirmed — `Saved/Logs/` exists but the game never writes to it, only `Saved/Crashes/` gets populated),
+so even if `GetWorldFromContextObject`'s own warning fired for real, it would never be visible to us
+through any log. Absence of that log message is not evidence either way.
+
+**Leading candidate**: the virtual `GetWorld()` call at vtable+392 on the passed `UWorld*` itself. In
+stock UE5, `UWorld::GetWorld()` trivially returns `this`, so this should never fail — but if this specific
+engine build's vtable layout shifted (virtual function added/removed/reordered relative to what UE4SS's
+hardcoded offset assumes for this UE version), the call could land on the wrong function entirely and
+return garbage/null. Weighs against this: other Blueprint-library calls already work reliably in this
+mod (`K2_GetActorLocation`, `K2_SetActorLocationAndRotation`, `GetAllActorsOfClass`), so the general
+reflection/virtual-dispatch machinery isn't fundamentally broken — though those go through `AActor`'s
+own `GetWorld()` override, a different vtable slot, so this doesn't fully rule it out either.
+
+**Practical next step**: this needs either (a) a live IDA debugger session attached to the running game
+with a breakpoint at `0x142EB0540` or `0x1434ACF40` to read actual parameter/return values, or (b) a
+cheaper bypass — investigate whether the game's own internal spawners (used constantly for zombies and
+loot) call a more specific, simpler native function we could hook/call directly instead of going through
+the generic Blueprint reflection path at all.
+
