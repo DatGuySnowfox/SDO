@@ -161,11 +161,22 @@ struct LocalVitals {
 };
 
 // ── ProfileRevision payload (client→server) ───────────────────────────────────
-// Per-slot wire format: [slotIndex:u8][itemIdLen:u16BE][itemId...][qty:u16BE]
+// Per-item wire format: [slotIndex:u8][itemIdLen:u16BE][itemId...][qty:u16BE]
 struct InventorySlot {
-    uint8_t     slotIndex = 0;
+    uint8_t     slotIndex = 0;   // index within its container, not global
     std::string itemId;          // FName string, e.g. "DA_AK74"
     uint16_t    quantity  = 0;
+};
+
+// A single real container from BP_JigMultiplayer_C.MainJigContainers
+// (backpack, secure container, etc.) — Columns/Rows are runtime-resizable
+// (ExpandContainer), never a fixed constant (research/04_ida_investigation_log.md
+// Session 29), so they're carried on the wire instead of assumed. Per-container
+// wire format: [columns:u16BE][rows:u16BE][itemCount:u16BE][items...]
+struct InventoryContainer {
+    uint16_t columns = 0;
+    uint16_t rows    = 0;
+    std::vector<InventorySlot> items;
 };
 
 struct PlayerProgress {
@@ -175,7 +186,7 @@ struct PlayerProgress {
     int32_t level = 0;
     float xp = 0.f;
     float posX=0, posY=0, posZ=0, yaw=0;
-    std::vector<InventorySlot> slots;
+    std::vector<InventoryContainer> containers;
 
     // Extended stats trailer (gap 4/7) — appended after slots on the wire so
     // the original 51-byte header + slot list is untouched; a payload that

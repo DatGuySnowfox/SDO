@@ -392,28 +392,24 @@ static sdb::Equipment read_local_equipment(AActor* pawn)
 }
 
 // Walks BP_JigMultiplayer_C.MainJigContainers (comp+0xA8, TArray of
-// FS_ReplicatedContainerInfo, each 0x50 bytes) and flattens every container's
-// FContainerPickupsInfo items into one sequential slot list, matching the
-// existing flat-slotIndex ProfileRevision wire format (protocol.hpp
-// InventorySlot / state.hpp MAX_INV_SLOTS). This is a v1: it does not
-// preserve per-container boundaries, Columns/Rows, or nested SubContainers
-// (research/04_ida_investigation_log.md Session 29) — full gap 11 closure
-// needs a wire-format change matched on the JS side (server/src/lib/
-// protocol.js decodePlayerProgress + host-agent.js MAX_INV_SLOTS handling),
-// which is out of scope here. This only reads real data into the slot that
-// already existed and was previously always empty.
+// FS_ReplicatedContainerInfo, each 0x50 bytes) and returns each real
+// container with its own Columns/Rows and item list, matching the
+// per-container ProfileRevision wire format (protocol.hpp
+// InventoryContainer/InventorySlot). Gap 11 (2026-08-10): the game's own
+// inventory has no fixed slot count — each container is independently
+// resizable at runtime (research/04_ida_investigation_log.md Session 29) —
+// so this reads every container and every item in it, with no artificial cap.
 //
 // BP_PlayerCharacter_C.BP_JigMultiplayer is a named property at pawn+0x818
 // (research/CXXHeaderDump/BP_PlayerCharacter.hpp) — same reasoning as
 // read_local_equipment() for reading it directly instead of FindFirstOf.
 //
-// Live-confirmed Session 35: correctly resolved a real, varied inventory
-// (ammo, meds, currency, keycards, etc.) across multiple real containers with
-// no crash. Also confirmed the flat 40-slot cap is a genuine limitation, not
-// just theoretical — a real loadout exceeded it in testing (gap 11).
-static std::vector<sdb::InventorySlot> read_local_inventory(AActor* pawn)
+// Live-confirmed Session 35 (as the earlier flat-list v1): correctly resolved
+// a real, varied inventory (ammo, meds, currency, keycards, etc.) across
+// multiple real containers with no crash.
+static std::vector<sdb::InventoryContainer> read_local_inventory(AActor* pawn)
 {
-    std::vector<sdb::InventorySlot> out;
+    std::vector<sdb::InventoryContainer> out;
 
     const uintptr_t jigMp = *reinterpret_cast<uintptr_t*>(
         reinterpret_cast<uintptr_t>(pawn) + 0x818);
@@ -429,7 +425,7 @@ static std::vector<sdb::InventorySlot> read_local_inventory(AActor* pawn)
     constexpr size_t kPickupStride = 0xD8;
     constexpr size_t kItemInfoOffset = 0x28;       // FRepItemInfo within FContainerPickupsInfo
 
-    for (int32_t c = 0; c < containerCount && out.size() < sdb::MAX_INV_SLOTS; ++c) {
+    for (int32_t c = 0; c < containerCount; ++c) {
         const uintptr_t container = containersData + static_cast<size_t>(c) * kContainerStride;
 
         // Columns/Rows @ +0x20/+0x24. Live-tested Session 35: MainJigContainers
@@ -446,7 +442,11 @@ static std::vector<sdb::InventorySlot> read_local_inventory(AActor* pawn)
         const int32_t   itemCount = *reinterpret_cast<int32_t*>(container + kContainerItemsOffset + 0x08);
         if (!itemsData || itemCount <= 0) continue;
 
-        for (int32_t i = 0; i < itemCount && out.size() < sdb::MAX_INV_SLOTS; ++i) {
+        sdb::InventoryContainer bucket;
+        bucket.columns = static_cast<uint16_t>(std::clamp(columns, 0, 65535));
+        bucket.rows    = static_cast<uint16_t>(std::clamp(rows, 0, 65535));
+
+        for (int32_t i = 0; i < itemCount; ++i) {
             const uintptr_t pickup   = itemsData + static_cast<size_t>(i) * kPickupStride;
             const uintptr_t itemInfo = pickup + kItemInfoOffset;
 
@@ -458,11 +458,14 @@ static std::vector<sdb::InventorySlot> read_local_inventory(AActor* pawn)
             if (itemId.empty()) continue;
 
             sdb::InventorySlot slot;
-            slot.slotIndex = static_cast<uint8_t>(out.size());
+            slot.slotIndex = static_cast<uint8_t>(std::clamp<int32_t>(i, 0, 255));
             slot.itemId    = std::move(itemId);
             slot.quantity  = static_cast<uint16_t>(std::clamp(count, 0, 65535));
-            out.push_back(std::move(slot));
+            bucket.items.push_back(std::move(slot));
         }
+
+        if (!bucket.items.empty())
+            out.push_back(std::move(bucket));
     }
 
     return out;
@@ -560,7 +563,7 @@ static void send_profile_revision(AActor* pawn)
     const FRotator rot = pawn->K2_GetActorRotation();
 
     sdb::PlayerProgress prog;
-    prog.slots = read_local_inventory(pawn);
+    prog.containers = read_local_inventory(pawn);
 
     {
         std::lock_guard<std::mutex> lk(st.inventoryMtx);

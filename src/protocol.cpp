@@ -343,14 +343,24 @@ std::string next_request_id()
 // as PlayerProgressRestore — see decode_player_progress)
 // Header: [tag=1][revision:u32][health:f32][hunger:f32][thirst:f32]
 //         [stamina:f32][radiation:f32][level:u32][xp:f32]
-//         [posX:f32][posY:f32][posZ:f32][yaw:f32][slotCount:u16]  = 51 bytes
-// Per slot: [slotIndex:u8][itemIdLen:u16BE][itemId...][qty:u16BE]
+//         [posX:f32][posY:f32][posZ:f32][yaw:f32][containerCount:u16]  = 51 bytes
+// Per container: [columns:u16BE][rows:u16BE][itemCount:u16BE][items...]
+// Per item: [slotIndex:u8][itemIdLen:u16BE][itemId...][qty:u16BE]
 //
-// Extended stats trailer (gap 4/7), appended after the slots:
+// Gap 11 (2026-08-10): replaces the earlier flat, globally-indexed slot list
+// capped at MAX_INV_SLOTS=40. The game's own inventory (BP_JigMultiplayer_C.
+// MainJigContainers) has no fixed slot count — each container carries its own
+// runtime-resizable Columns/Rows (research/04_ida_investigation_log.md Session
+// 29) — so encoding a flat cap was solving the wrong problem. This is a
+// breaking wire-format change: old payloads persisted in the server DB under
+// the previous flat format will not decode correctly against this container
+// list and should be treated as stale (dev-stage mod, no migration provided).
+//
+// Extended stats trailer (gap 4/7), appended after the containers:
 // [forenameLen:u16BE][forename utf8][surnameLen:u16BE][surname utf8]
 // [zombieKills:u32][daysSurvived:u32][bossZombieKills:u32][animalKills:u32]
 // [humanKills:u32][distanceTravelled:f32][infestationsDestroyed:u32]
-// Optional on decode: a payload that ends right after the slots (i.e. one
+// Optional on decode: a payload that ends right after the containers (i.e. one
 // persisted by the server before this trailer existed) still decodes fine,
 // just with these fields left at their PlayerProgress defaults.
 // ---------------------------------------------------------------------------
@@ -361,8 +371,11 @@ static constexpr size_t PLAYER_PROGRESS_TRAILER_FIXED_SIZE = 2 + 2 + 4 * 6 + 4; 
 std::vector<uint8_t> encode_player_progress(const PlayerProgress& prog)
 {
     size_t total = PLAYER_PROGRESS_HEADER_SIZE;
-    for (const auto& slot : prog.slots)
-        total += 1 + 2 + slot.itemId.size() + 2;
+    for (const auto& container : prog.containers) {
+        total += 2 + 2 + 2; // columns, rows, itemCount
+        for (const auto& item : container.items)
+            total += 1 + 2 + item.itemId.size() + 2;
+    }
     total += PLAYER_PROGRESS_TRAILER_FIXED_SIZE + prog.forename.size() + prog.surname.size();
 
     std::vector<uint8_t> buf(total);
@@ -381,18 +394,23 @@ std::vector<uint8_t> encode_player_progress(const PlayerProgress& prog)
     w32(p + 37, f2u(prog.posY));
     w32(p + 41, f2u(prog.posZ));
     w32(p + 45, f2u(prog.yaw));
-    w16(p + 49, static_cast<uint16_t>(prog.slots.size()));
+    w16(p + 49, static_cast<uint16_t>(prog.containers.size()));
 
     size_t off = PLAYER_PROGRESS_HEADER_SIZE;
-    for (const auto& slot : prog.slots) {
-        buf[off++] = slot.slotIndex;
-        const uint16_t idLen = static_cast<uint16_t>(slot.itemId.size());
-        w16(buf.data() + off, idLen); off += 2;
-        if (idLen) {
-            std::memcpy(buf.data() + off, slot.itemId.data(), idLen);
-            off += idLen;
+    for (const auto& container : prog.containers) {
+        w16(buf.data() + off, container.columns); off += 2;
+        w16(buf.data() + off, container.rows);    off += 2;
+        w16(buf.data() + off, static_cast<uint16_t>(container.items.size())); off += 2;
+        for (const auto& item : container.items) {
+            buf[off++] = item.slotIndex;
+            const uint16_t idLen = static_cast<uint16_t>(item.itemId.size());
+            w16(buf.data() + off, idLen); off += 2;
+            if (idLen) {
+                std::memcpy(buf.data() + off, item.itemId.data(), idLen);
+                off += idLen;
+            }
+            w16(buf.data() + off, item.quantity); off += 2;
         }
-        w16(buf.data() + off, slot.quantity); off += 2;
     }
 
     auto write_str = [&](const std::string& s) {
@@ -430,7 +448,7 @@ std::optional<PlayerProgress> decode_player_progress(const uint8_t* p, size_t n)
     prog.posY      = u2f(r32(p + 37));
     prog.posZ      = u2f(r32(p + 41));
     prog.yaw       = u2f(r32(p + 45));
-    const uint16_t slotCount = r16(p + 49);
+    const uint16_t containerCount = r16(p + 49);
 
     const float vals[] = { prog.health, prog.hunger, prog.thirst, prog.stamina,
                             prog.radiation, prog.xp,
@@ -439,17 +457,27 @@ std::optional<PlayerProgress> decode_player_progress(const uint8_t* p, size_t n)
         if (!std::isfinite(v)) return std::nullopt;
 
     size_t off = PLAYER_PROGRESS_HEADER_SIZE;
-    prog.slots.reserve(slotCount);
-    for (uint16_t i = 0; i < slotCount; ++i) {
-        if (off + 3 > n) return std::nullopt;
-        InventorySlot slot;
-        slot.slotIndex = p[off++];
-        const uint16_t idLen = r16(p + off); off += 2;
-        if (off + idLen + 2 > n) return std::nullopt;
-        slot.itemId = std::string(reinterpret_cast<const char*>(p + off), idLen);
-        off += idLen;
-        slot.quantity = r16(p + off); off += 2;
-        prog.slots.push_back(std::move(slot));
+    prog.containers.reserve(containerCount);
+    for (uint16_t c = 0; c < containerCount; ++c) {
+        if (off + 6 > n) return std::nullopt;
+        InventoryContainer container;
+        container.columns = r16(p + off); off += 2;
+        container.rows    = r16(p + off); off += 2;
+        const uint16_t itemCount = r16(p + off); off += 2;
+
+        container.items.reserve(itemCount);
+        for (uint16_t i = 0; i < itemCount; ++i) {
+            if (off + 3 > n) return std::nullopt;
+            InventorySlot item;
+            item.slotIndex = p[off++];
+            const uint16_t idLen = r16(p + off); off += 2;
+            if (off + idLen + 2 > n) return std::nullopt;
+            item.itemId = std::string(reinterpret_cast<const char*>(p + off), idLen);
+            off += idLen;
+            item.quantity = r16(p + off); off += 2;
+            container.items.push_back(std::move(item));
+        }
+        prog.containers.push_back(std::move(container));
     }
 
     // Extended stats trailer — optional; absent entirely on payloads persisted
