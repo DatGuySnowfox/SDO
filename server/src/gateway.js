@@ -360,10 +360,27 @@ class Gateway {
             }));
             break;
 
+        // Equipment is client-authoritative appearance data, same as Movement —
+        // relay directly to other clients for low latency, host gets a copy
+        // for future server-side validation (currently a no-op there; see
+        // host-agent.js). Previously only forwarded to host, which doesn't
+        // exist yet as a real player, so remote players' equipment never
+        // propagated to anyone at all.
+        case MsgType.Equipment: {
+            const out = encodeFrame({
+                ...f,
+                connectionId: conn.id,
+                playerId:     conn.playerId,
+                entityId:     conn.entityId,
+            });
+            this._broadcast(conn.playerId, out);
+            if (this._host) this._host.write(out);
+            break;
+        }
+
         // Forward to host-agent for authoritative processing
         case MsgType.DeathRequest:
         case MsgType.RespawnRequest:
-        case MsgType.Equipment:
         case MsgType.InteractionRequest:
         case MsgType.ItemDropRequest:
         case MsgType.ItemPickupRequest:

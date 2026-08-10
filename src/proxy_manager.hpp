@@ -41,6 +41,12 @@ private:
 
     void destroy_proxy(RC::Unreal::AActor* actor);
 
+    // Pushes player.equipment onto the proxy actor via
+    // BP_JigHelperComp_C::SetEquippedInfoBySlot. See proxy_manager.cpp for
+    // the verification gate (kEnableEquipmentWrite) — read
+    // research/04_ida_investigation_log.md Session 43/44 before flipping it.
+    void sync_equipment(RC::Unreal::AActor* actor, RemotePlayer& player);
+
     bool initialized_ = false;
 };
 
