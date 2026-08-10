@@ -23,6 +23,9 @@ struct RemotePlayer {
     uint64_t updatedUs  = 0;
     uint64_t lastSpawnAttemptUs = 0; // throttles retry after a failed spawn_proxy()
     std::vector<EquipmentSlot> equipment; // last Equipment frame received, for proxy appearance sync
+    bool equipmentDirty = false; // set by on_equipment(), cleared once ProxyManager::tick() applies it
+    void* primaryWeaponVisualActor = nullptr; // spawned PickupClass actor attached to the proxy's EquipSocket
+    std::string primaryWeaponVisualItemId;    // itemId the actor above was spawned for — respawn only on change
 };
 
 // Bridge session context.

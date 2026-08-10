@@ -4255,3 +4255,677 @@ Knowing the real tag strings closes one of the two blockers from Session 41. Sti
   done so far this session — this needs its own careful, incremental live-verification pass before being
   called for real, not a first attempt built entirely from documentation/analogy.
 
+## Session 44 — `GetFunctionByNameInChain` crash via live register hijack; pivot to compiled C++
+
+Attempted the first live call toward `SetEquippedInfoBySlot`: resolve `GetEquippedInfoBySlot`
+(the read-only getter, as a safer first step) via `helper->GetFunctionByNameInChain(L"GetEquippedInfoBySlot")`,
+using the same register-hijacking technique that made 21 successful `FName::ToString` calls earlier this
+session. The call crashed instead of returning: an access violation (`0xc0000005`) reading memory at
+address `0x80`, landing several frames deep inside `UE4SS.dll` (not at the intended trampoline), with `RSP`
+having grown by `0x10D8` bytes from the hijack's starting point before faulting.
+
+### Recovery
+
+Diagnosed via `ida_dbg.get_debug_event()`: `eid=7` is `ida_idd.EXCEPTION` (`ida_idd.BREAKPOINT` is `5`,
+confirmed empirically — these are the real `debug_event_t` codes, distinct from the `dbg_*` notification
+constants on `ida_dbg` which happen to overlap in value and are easy to confuse). Recovered cleanly without
+restarting the game: restored the hijacked thread's original `RIP`/`RSP` (saved before the hijack), removed
+both the trampoline breakpoint and a stale leftover breakpoint from an earlier investigation, and resumed —
+confirmed via `Get-Process -Id <pid> | Responding` that the game came back fully responsive. This recovery
+procedure (save original `RIP`/`RSP` before every hijack, restore + clear breakpoints + continue on any
+unexpected event) should be treated as mandatory going forward for this technique, not optional cleanup.
+
+### Ruled out both easy explanations
+
+1. **Stale `helper` pointer?** No — re-derived a fresh `BP_JigHelperComp_C` pointer via the established
+   non-invasive technique (breakpoint the entry and return address of `GetValuePtrByPropertyNameInChain`,
+   catch `find_local_pawn()`'s own `AcknowledgedPawn` read in flight) and got back the *exact same* pointer
+   (`0x136769a00`), independently confirmed still valid (`ActiveWeapon` read back `ComparisonIndex=1730659`,
+   correctly matching `PrimaryWeapon` — consistent with "weapon is out now").
+2. **Wrong/guessed function name?** No — `research/CXXHeaderDump/BP_JigHelperComp.hpp:63` confirms
+   `GetEquippedInfoBySlot(FGameplayTag Slot, FRepItemInfo& Info, bool& Equipped)` is a real, dumped member,
+   not a guessed pairing with the setter.
+
+Both of those were the leading hypotheses; ruling them out points at the manual call setup itself (shadow
+space, stack alignment, or scratch-string placement colliding with the callee's own deep stack usage across
+`0x10D8+` bytes) rather than anything wrong with the target object or name.
+
+### Decision: move `GetFunctionByNameInChain`/`ProcessEvent` calls into compiled C++, not further live hijacking
+
+`mod.cpp:847` already calls `menu->GetFunctionByNameInChain(...)` + `ProcessEvent` successfully from real
+compiled code (the `try_open_world()` continue-button click), proving the exported function itself is fine
+when called with a compiler-generated calling convention — it's the hand-rolled register/stack setup in the
+live-hijack technique that's the suspect, not UE4SS's implementation. Given the remaining work is substantial
+(FGameplayTag-from-string construction, `FRepItemInfo::ItemID` asset-lookup-by-name, and Kismet parameter
+marshaling for the actual write call) and two live attempts have now frozen the game momentarily, further
+iteration on `SetEquippedInfoBySlot`/`GetEquippedInfoBySlot` should happen as real mod code (correct calling
+convention guaranteed by the compiler, testable via normal log output) rather than more ad-hoc IDA-side
+native calls. This requires a mod rebuild + game restart to test, unlike the fully live IDA workflow used
+so far this session.
+
+### Retried anyway with a much larger stack safety margin — crashed again, differently, and found the real cause
+
+Re-derived a fresh `helper` pointer (again `0x136769a00`, confirmed still valid — `ActiveWeapon` still reads
+`ComparisonIndex=1730659`) via the same non-invasive entry/exit breakpoint technique. This time probed the
+hijacked thread's actual mapped stack range first (`ida_bytes.get_bytes` reads succeeded at least 256 KB
+below its `RSP`, vs. the ~0x8000-byte cliff seen on an earlier thread) and used generous separation: fake
+call frame 64 KB below `RSP` (16-byte aligned per the real x64 `call` convention), scratch string buffer a
+further 64 KB below that. Confirmed both writes with `ida_bytes.get_bytes` readback — note
+**`ida_bytes.get_bytes` reads a stale cache after `ida_dbg.write_dbg_memory()`; must call
+`ida_dbg.invalidate_dbgmem_contents(ea, size)` before reading back a fresh write**, a new gotcha for this
+technique.
+
+Also newly learned: `debug_event_t.eid` is inconsistently exposed by the SWIG binding — sometimes a plain
+int attribute, sometimes a bound method depending on the event — so reading it must handle both
+(`ev.eid() if callable(ev.eid) else ev.eid`). And confirmed thread IDs get recycled quickly (the original
+`tid=30900` from earlier in the session had already exited by this point) — a "known-good" thread from
+one moment cannot be assumed to still exist, or be the same physical thread, a few actions later.
+
+The call crashed again — but this time only ~0x70 bytes into the call (not 0x10D8 bytes deep), a pure
+null dereference (`referenced memory at 0x0`, not `0x80`). The shallow, different-address, different-offset
+crash on the *same call with a much bigger safety margin* ruled out the stack-collision theory entirely.
+Recovered the same way as before (restore saved `RIP`/`RSP`/`RCX`/`RDX`, clear breakpoints, continue) —
+confirmed responsive again via `Get-Process -Id 90048 | Responding`.
+
+**Root cause, found by manually disassembling the live bytes at `GetFunctionByNameInChain`'s real entry
+(`0x7ff81aa6a720`, via `ida_ua.decode_insn` — no analysis database exists for `UE4SS.dll`, same approach as
+Session 40's `BeginDeferredActorSpawnFromClass` trace):**
+
+```asm
+push rbx; sub rsp, 0x20; xor eax, eax; mov rbx, rcx        ; rbx = this
+cmp byte ptr [rip+0xA245F7], al                             ; global "ready" flag
+mov [rsp+0x40], rax                                         ; scratch slot defaults to 0
+jz  0x7ff81aa6a746                                          ; flag==0 -> SKIP the init call
+    xor r8d, r8d
+    lea rcx, [rsp+0x40]
+    call [rip+0xA245CA]                                     ; lazy-init, writes [rsp+0x40] as an out-param
+mov rdx, [rsp+0x40]                                         ; rdx = whatever ended up there
+mov rcx, rbx
+call 0x7ff81aa6a760                                         ; main body: rcx=this, rdx=[rsp+0x40]
+```
+
+Inside the main body, that `rdx` is passed into a further helper (`call` to `0x7ff81aa69750`), and the
+helper's return value in `RAX` is immediately dereferenced (`mov rcx, [rax]`) with no null check. If the
+global "ready" flag reads as already-set on whatever thread/context we hijack (real state left over from
+wherever the flag last got set during normal game execution — not necessarily meaningful for our
+purposes), the lazy-init call is skipped, `rdx` stays `0`, the inner helper returns null for that input,
+and `[rax]` faults reading address `0`. This is a **global, not per-thread, lazy-init gate**, so it isn't
+about which physical thread does the hijacking at all — it depends on state the function's *normal callers*
+set up beforehand that a manually-hijacked out-of-band call has no way to replicate correctly.
+
+**Conclusion**: `GetFunctionByNameInChain` cannot be safely called via manual register-hijacking from an
+arbitrary suspended point, regardless of thread choice or stack margin — it depends on caller-side state
+that's only valid when reached through its real call path. Confirmed real compiled C++ (`mod.cpp:847`) goes
+through that real path correctly and works. The pivot to writing this as real mod code (not further IDA-side
+native calls) is no longer just "safer in general" but the actual fix for a real, now-understood blocker.
+
+## Session 45 — Equipment sync implemented, read path verified live, write path hits a real wall
+
+Implemented `get_equipped_info_by_slot()`/`set_equipped_info_by_slot()`/`set_active_weapon_slot()` in
+`proxy_manager.cpp` as real compiled C++ (per Session 44's conclusion), wired into `ProxyManager::tick()`
+via `sync_equipment()`. `RawFGameplayTag`/`RawFRepItemInfo`/`RawFGuid` mirror the CXXHeaderDump layouts;
+Kismet param buffers use standard UHT sequential-alignment offsets, confirmed via `static_assert(offsetof(...))`.
+Only `PrimaryWeapon` (slot 11, `ComparisonIndex=1730659`) has a real tag filled in — the other 20 are
+placeholder `0`s (`slot_tag()` safely no-ops for those) since re-extracting them needs a live IDA session,
+which wasn't available when this was written (game had closed, IDA session had restarted losing debugger
+state).
+
+### Found the mod's own log file: `SDB.log`, not `UE4SS.log`
+
+Burned a long detour chasing "zero SDB: log output despite the mod visibly working (TCP connected, server
+showed real joins)" — tried disabling `GuiConsoleEnabled` as a fix, which did nothing, because the actual
+problem was checking the wrong file the entire time. The mod's own `Output::send` calls land in a **separate
+`SDB.log`** file in the Win64 directory, not `UE4SS.log` (which only has UE4SS core + other mods' output).
+Saved as a standing memory (`feedback_sdo_log_file_location`) since this had already happened once before
+this session.
+
+### Server-side gap: Equipment frames were never relayed between players
+
+`host-agent.js`'s `MsgType.Equipment` handler was a stub (`// Equipment updates are informational for the
+host (future: validate loadout). break;`) — meaning `on_equipment()` could never fire on any client, ever,
+regardless of anything client-side. Fixed in `gateway.js`: `Equipment` now gets the same treatment as
+`Movement` — broadcast directly to other clients via `_broadcast()`, plus a copy to host. Required a full
+local dedicated-server restart to take effect (`worldId` is regenerated fresh each start, invalidating all
+outstanding tickets — every client needs a fresh ticket after any server restart, not just a game restart).
+
+### Read path: confirmed working end to end, live, no crashes
+
+With the relay fix, `SDB: equip-getter slot=11 itemId=AK15 ok=1 equipped=0` appeared on client 2 for PC1's
+real AK15 — `GetFunctionByNameInChain` + `ProcessEvent` succeeded via real compiled code, matching Session
+44's prediction that this would work once routed through a normal call path instead of manual hijacking.
+`equipped=0` is correct, not a bug: this queries the **proxy actor**, a blank never-written stand-in, so
+reporting nothing equipped is exactly right before any write ever happens.
+
+### Write path: calls succeed (`ok=1`) but never actually persist
+
+Enabled `kEnableEquipmentWrite` for slot 11 only. `SetEquippedInfoBySlot` → `ok=1`. Added
+`SetActiveWeaponSlot` (separate `ActiveWeapon` property, confirmed distinct from equipped-items data back in
+Session 43) → `ok=1`. Added `OnRep_ActiveWeapon()` (manually invoking what real network replication would
+normally trigger automatically on a client, since our proxy has no real replication happening) → `ok=1`.
+None of it made the proxy visually hold the weapon. Read back via `get_equipped_info_by_slot()` immediately
+after: still `equipped=0`, every time, across dozens of cycles. **`ok=1` only means `ProcessEvent` didn't
+crash — it says nothing about whether the Blueprint's internal logic actually accepted the write.** The
+item asset resolution itself was verified correct in the same test (`resolved_ptr=0x246f545a300,
+cache_size=588` — a real, valid `UJigsawItem_DataAsset_C*`), ruling out a null-item-pointer explanation.
+
+### Traced the real equip action — found it never calls anything reflectable at all
+
+Added an `on_process_event_pre`-based trace (mod.cpp) to log every `ProcessEvent` call on the local player's
+own `BP_JigHelperComp_C` instance, unthrottled. Had the user manually unequip and re-equip their AK15 through
+the game's real UI — a confirmed real state transition (slot went from populated to empty and back). The
+trace caught real activity (`OnInventoryOpenClose_Event_0`, `TraceToWorld`, `UpdatePrevFromPrim`,
+`OnPawnControllerChangedDelegates_Event_0`) but **zero** calls resembling an equip/inventory write, on either
+the unequip or the re-equip.
+
+Broadened the trace further to log **every** `ProcessEvent` call from **any** object, gated behind a
+short (5s) externally-triggered window (`check_trace_trigger()` polls an `%APPDATA%\SurrounDeadBridge\
+trace_trigger.flag` file every `do_game_tick()`, same file-flag IPC pattern as character creation) to avoid
+flooding the log the way an always-on unthrottled trace would (see the 106 MB `SDB.log` incident below).
+Captured 100+ distinct functions across a real 5-second window including the equip action — background
+ticks, AI, weather, UI bindings, animation graphs, everything — but still **nothing** containing "Equip" or
+resembling an inventory write.
+
+**Conclusion**: the real equip/unequip logic does not go through `UObject::ProcessEvent` at all — not on the
+helper component, not on anything else in the entire game during that window. This means it's implemented in
+native C++ (very plausibly inside the "JigSInventory" plugin's compiled backend, given the asset path
+`/Game/JigSInventory/...`) that directly manipulates the underlying data, bypassing Blueprint/reflection
+entirely for this specific operation. No `ProcessEvent`-hook-based technique — safe or otherwise — can ever
+observe this call. `SetEquippedInfoBySlot`/`SetActiveWeaponSlot` are real, callable Blueprint functions that
+exist for some other purpose (initial loadout, debug tooling, etc.), not what the interactive drag-and-drop
+UI actually uses.
+
+### Two live crashes from a hardware write-watchpoint — do not reuse this technique as tried
+
+Attempted to find the real write by setting an IDA hardware write-watchpoint (`ida_dbg.add_bpt(addr, 8,
+ida_idd.BPT_WRITE)`) on the exact live address of the Primary slot's `ItemID` field
+(`helper + 0xF8 + kSlotOffsets[11]`), reasoning that a watchpoint is purely observational (unlike the
+Session 44 register-hijacking) and would catch whatever native instruction performs the write regardless of
+Blueprint visibility. Confirmed the target address and current value looked sane before arming
+(read back `0x0` when the slot was genuinely empty in one attempt, a plausible-if-unverified pointer in
+another).
+
+Both attempts crashed the game outright — not a clean breakpoint stop: `RIP` came back as literal `0x0`
+(`eid=7`/`EXCEPTION` on an unrelated thread), and the process was fully gone (not just frozen) moments later.
+The **second** attempt crashed **immediately** upon resuming, before any user action at all, proving this
+has nothing to do with the equip gesture itself and everything to do with the watchpoint mechanism being
+unstable for this game/IDA combination — possibly a debug-register conflict, or something about how this
+memory region gets accessed (JIT'd code, an SEH handler, or similar) that a plain write-watchpoint interacts
+badly with. **Do not retry hardware watchpoints on this target without a fundamentally different setup**
+(e.g., a soft page-guard technique instead of CPU debug registers, or watching a decoy/copy location instead
+of the live field) — the failure was fast, clean, and 2-for-2 reproducible, not a fluke worth trying a third
+time the same way.
+
+### Known-good infrastructure fixes from this session (not mod-code, but load-bearing for testing)
+
+- **Client 2 (VM) NVENC/software-encoding fix**: Parsec was falling back to software H.264 because Proxmox's
+  default emulated console display (always "connected" from boot) kept Windows on it as primary, so Parsec's
+  capture/encode pipeline never bound to the passthrough GPU at all — not a GeForce-VM-detection issue as
+  first suspected (that theory's SMBIOS spoof + `vmgenid` disable made no difference). Real fix: `vga: none`
+  in the Proxmox VM config, forcing Windows onto the GPU (or Parsec's own Virtual Display Adapter) as primary.
+  Confirmed via `nvidia-smi`-style Parsec log lines: `encoder = nvidia`, `Using modern NVENC preset`.
+- **Client 2 RAM bump**: 12 GB → 16 GB (`qm set 102 --memory 16384`, needs a full `qm stop`/`qm start`, not
+  just a guest reboot — Proxmox stages it as `[PENDING]` otherwise). Also added a Windows Defender exclusion
+  for the game's install directory (zero exclusions existed before), the more likely fix for reported
+  in-game stutter than the RAM bump itself.
+- **Launching the game on client 2 via SSH silently does nothing visible**: any `Start-Process "steam://..."`
+  invoked over an SSH-opened PowerShell session lands in **Session 0**, not the real interactive desktop
+  session (confirmed via `tasklist /V` showing spawned processes as `Services`/session 0 instead of
+  `Console`/session 1). Fixed by launching through a Scheduled Task created with `/it` (interactive) and
+  `/ru <user>`, triggered via `schtasks /run` — this lands correctly in the real session. `play_local.ps1`
+  (the local dev-server ticket-fetch script) needed a `-NoLaunch` switch added so its own redundant
+  session-0 launch attempt didn't keep interfering with the working scheduled-task launch.
+- **Local dev server ticket flow is not `play.ps1`'s** (`game.ristl.org`/`/v1/join`, 2-minute TTL,
+  `serverId`+`playerId`+`displayName` body) — the local server (`server/src/index.js`) exposes a different,
+  simpler endpoint: `POST http://<host>:42201/v1/tickets` with just `{playerId, displayName}`, returns
+  `{ticket, gatewayHost, gatewayPort, worldId}`, `ticketTtlMs=3600000` (1 hour, per `settings.json`).
+  `gatewayHost` in the response is always `127.0.0.1` regardless of who asks (server-side logic, not
+  client-aware) — a second machine (client 2) must override it to the host's real LAN IP manually.
+- **Tickets are single-use** (`_usedTickets` replay guard in `gateway.js`) and tied to the server's current
+  `worldId`, which is regenerated fresh on every server restart — reusing an old `session.cfg` after either
+  a server restart or a prior successful connection silently fails auth (`ticket_replay` or a `worldId`
+  mismatch), which manifests client-side as an infinite `[tcp] authentication rejected` retry loop that
+  floods `SDB.log` to well over 100 MB if left running. Every fresh game launch needs a fresh ticket fetch,
+  no exceptions.
+
+### Correction: not native C++ after all — it's Blueprint, just via widget drag-drop, not BP_JigHelperComp directly
+
+Static analysis reversed the native-code theory almost immediately: searching the executable's indexed
+strings (94,226 total, via `mcp__ida__find`/`find_regex` after an explicit `server_warmup(build_caches=true)`
+— the default search tools timed out repeatedly against this string count before warming the cache) for any
+`Jig`-prefixed class name returned **zero matches anywhere in the binary**. There is no native C++ plugin
+backing this system at all; `BP_JigHelperComp_C` sits directly on stock `UActorComponent`. The "native code"
+conclusion from the trace was actually a **timing problem**: a one-time discrete UI event (a drag-drop) is
+easy to miss in a narrow trace window when background ticks (which fire every frame, guaranteed to be
+caught) dominate the noise.
+
+Redid the broadened `on_process_event_pre` trace with tight synchronization (armed the trigger and had the
+user act within the same message) and this time caught the real chain:
+
+```
+JSI_Slot_C:OnMouseButtonDown -> OnDragDetected -> DragWidget_C:Construct
+  -> JSIContainer_C:OnDragEnter / OnDragLeave  (hover feedback while dragging)
+  -> JSI_Slot_C:OnDrop / JSIContainer_C:OnDrop  (the actual drop)
+  -> DragWidget_C:Destruct
+  -> BP_JigMultiplayer_C:EventOnJigItemMouseButtonDown
+```
+
+Standard UMG drag-drop pattern: `JigSDragOperation_C` (a custom `DragDropOperation` subclass, confirmed via
+FModel's structural JSON export of `JSI_Slot.uasset` — a local variable in `OnDrop`'s signature) carries the
+dragged item's payload between widgets.
+
+### Got FModel working (needed a `.usmap` mapping file) — but structural export doesn't include bytecode
+
+FModel (`C:\Users\mccau\Downloads\FModel.exe`) initially failed to open any Blueprint asset:
+`MappingException: Package has unversioned properties but mapping file is missing, can't serialize`. Fixed
+by generating one live: UE4SS ships a USMAP dumper, bound by the stock Keybinds mod to **Ctrl+Numpad6**
+(`DumpUSMAP` in `Mods/Keybinds/Scripts/main.lua`) — produces `Mappings.usmap` directly in the Win64
+directory. Pointed FModel's Settings -> Mappings at it, and `JSI_Slot.uasset` exported cleanly afterward.
+
+The JSON export (`Exports/SurrounDead/Content/JigSInventory/Jigsaw/Widgets/JSI_Slot.json`, 16.5k lines) only
+contains structural data — class hierarchy, property/function **signatures**, CDO default values — no
+`"Script"` field anywhere (confirmed via direct grep). FModel's structural export is the wrong tool for
+seeing what a function's graph actually *does*; it's the right tool for confirming type/signature info
+(which is what identified `JigSDragOperation_C`).
+
+### Reading `UFunction::Script` directly from live memory — safe (pure read, no calls/watchpoints)
+
+With the trace narrowing candidates to a short list of real `OnDrop`-family functions, went straight to each
+one's raw compiled bytecode instead of more tracing or asset tooling. Reused the **already-proven-safe**
+`GetFunctionByNameInChain` call path (real compiled code, per Session 44/45's established distinction between
+"safe when called normally" vs. "crashes when hijacked") to get a live `UFunction*` for a given class+function
+name pair, then just read raw struct bytes at increasing offsets — no `ProcessEvent`, no breakpoints, no
+watchpoints, nothing that touches execution or debug registers. Added this as a reusable diagnostic
+(`check_bytecode_dump_trigger()` in `mod.cpp`), driven by the same file-flag trigger pattern as the earlier
+trace, with the target class/function names read from the flag file's own content so no rebuild is needed
+per candidate.
+
+**Found `UFunction::Script` (the `TArray<uint8>` bytecode array) at `UFunction + 0x60`** for this build —
+`Data` pointer at `+0x60`, `Count` (int32) at `+0x68` low dword, `Max` (int32) at `+0x68` high dword/`+0x6C`.
+Identified empirically (dumped a range of raw qwords looking for a plausible pointer-then-two-int32s
+pattern) and confirmed conclusively: `JSI_Slot_C::OnDrop`'s bytecode was exactly 33 bytes and the 33rd byte
+was `0x53` (`EX_EndOfScript`), the mandatory terminator for every compiled Kismet function — can't be a
+coincidence at exactly the boundary implied by the `Count` field.
+
+Checked three candidates by raw byte count (a strong, fast proxy for "does this function actually do
+anything," without needing to hand-disassemble):
+- `JSI_Slot_C::OnDrop` — **33 bytes**. Manually decoded: `0x14` (`EX_LetBool`) x2, then `0x04` (`EX_Return`),
+  ending in `0x53`. A near-empty stub — just sets its `bool ReturnValue` and returns. Not where the logic is.
+- `JigSDragOperation_C::Drop` — **0 bytes** (`Script.Data=0x0, Count=0, Max=0`). No override at all; this
+  class doesn't implement the native `DragDropOperation::Drop` event in Blueprint. Needed the drag to be
+  *actively in progress* (mouse held down) for `FindFirstOf` to find even the instance at all — a
+  `DragDropOperation` object is transient, created in `OnDragDetected` and gone shortly after the drop, unlike
+  a widget CDO which persists once its class is loaded.
+- **`JSIContainer_C::OnDrop` — 9,137 bytes.** Two orders of magnitude larger than the other two — this is
+  where the real logic lives. Saved the raw bytecode to
+  `research/bytecode/JSIContainer_C_OnDrop.bin` (9,137 bytes, live-verified `EX_EndOfScript` would need
+  checking at the tail same as the 33-byte case, not yet confirmed for this one specifically) for a future
+  session with a proper Kismet bytecode disassembler — hand-decoding 9 KB of raw opcodes by eye isn't a
+  reasonable use of a single session, but a real disassembler (opcode tables are fully public,
+  `Engine/Source/Runtime/CoreUObject/Public/UObject/Script.h`'s `EExprToken` enum) should make quick work of
+  it once one exists for this project.
+
+### Wrote a working Kismet bytecode disassembler and fully decoded JSIContainer_C::OnDrop
+
+Built `research/bytecode/kismet_disasm.py`, a recursive-descent Kismet bytecode disassembler, rather than
+hand-reading the raw bytes. Bootstrapped the `EExprToken` opcode table by fetching the authoritative version
+from CUE4Parse (`FabianFG/CUE4Parse`, the open-source library FModel itself uses — Epic's own `UnrealEngine`
+repo is private) via WebFetch, after an initial hand-typed table (from memory) turned out to have several
+wrong values, caught by cross-checking against `JSI_Slot_C::OnDrop`'s 33-byte stub as an empirical anchor
+(known operand structure, known terminator position).
+
+Iteratively fixed a series of operand-format bugs by decoding the 33-byte anchor first, then the real 9,137-byte
+`JSIContainer_C::OnDrop`, re-verifying the anchor after every fix so a correction never silently broke what
+already worked:
+
+- `EX_Let` (plain, non-specialized) **does** serialize a leading `FProperty*` before its two nested
+  expressions — unlike `EX_LetBool`/`EX_LetObj`/etc., which don't. An early version incorrectly assumed all
+  `Let` variants shared the no-leading-pointer shape of `EX_LetBool` (the only one actually exercised by the
+  33-byte anchor).
+- **`FName` is 12 bytes in this build, not 8** (`ComparisonIndex`, an unidentified second `int32` — assumed
+  `DisplayIndex` for case-preserving name support, a real UE5 feature — then `Number`), for every opcode that
+  embeds one directly (`EX_NameConst`, `EX_VirtualFunction`, `EX_LocalVirtualFunction`, `EX_InstanceDelegate`,
+  `EX_BindDelegate`). Found via a `KismetSystemLibrary::PrintString` call resolved live (see below) — its
+  known, fixed signature made it obvious a trailing `Key=NAME_None` parameter was being misread. This also
+  retroactively explained an earlier "Local variants have 4 mystery extra bytes" patch as the same underlying
+  issue wearing a different hat — removed that special-casing once the real 12-byte width was understood.
+- Several loop-termination bytes (`EX_EndFunctionParms`, `EX_EndStructConst`, `EX_EndArray`,
+  `EX_EndArrayConst`) were hardcoded to their values from the *first*, wrong opcode table and never updated
+  when the table was replaced with the authoritative one — silent off-by-one bugs since the corrected table
+  shifted those values by one position.
+
+Ultimately decoded the entire 9,137-byte function with **zero unhandled opcodes**, confirmed via two
+independent structural checks: the function's very first instruction (`EX_PushExecutionFlow -> 0x23a6`) and
+its second-to-last (`EX_PopExecutionFlow` immediately before `EX_Return` landing at exactly `0x23a6`) point at
+the identical address, and the decode ends in the same `EX_Return`-of-`EX_LocalOutVariable`-then-
+`EX_EndOfScript` pattern already validated against the 33-byte anchor.
+
+### Resolved every function pointer and property name in the decoded output — found the real architecture
+
+Extended `check_resolve_ptr_trigger()`/`check_resolve_fname_trigger()` (mod.cpp) to accept a whole batch (one
+address/FName per line) instead of one at a time, then resolved all ~17 unique function pointers and ~32
+unique `FName`s referenced anywhere in the decoded `OnDrop`. Saved to `research/bytecode/resolved_names.txt`
+alongside the full annotated decode (`JSIContainer_C_OnDrop_disasm.txt`) and the disassembler script itself.
+
+**This fully explains why `SetEquippedInfoBySlot` never persisted anything (Session 45's original mystery):
+it simply isn't part of the real drag-drop path at all.** `OnDrop` never calls it. Instead it's a substantial
+state-machine-style handler built almost entirely from generically-named internal helpers — `IsEquipped?`,
+`IsEquipTo?`, `GetEquippedItemRef`, `CheckLimitedEquipToStack`, `CheckUnhandledSplit`, `CheckUnhandledStack`,
+`CombineItemRequest`, `CompareItems`, `HandleContainerOnContainer`, `OnDropCheckStackability`,
+`GetEmptySlotTryRotated_NonPure`, `DetectChange` — that check the drop's context (same slot? stackable?
+swap-equip? container-on-container?) and ultimately dispatch to an internal function literally named
+**`PerfromDrop`** (a genuine typo baked into the shipped Blueprint, not a transcription error here) to
+actually execute the transfer. Confirmed the write mechanism itself is **not** a hardcoded function at all,
+but `KismetSystemLibrary::SetObjectPropertyByName`/`SetIntPropertyByName` — generic by-name reflection
+setters — building a small request object with `ContainerRec` (self-reference), `SlotRef`, and `ToSlot`
+fields immediately before what's presumably the `PerfromDrop` dispatch later in the function.
+
+Also resolved incidentally: `CancelHighlights` (confirms the earlier trace finding), and a UI-widget
+creation/display sequence (`WidgetBlueprintLibrary:Create` -> three `SetObjectPropertyByName`/
+`SetIntPropertyByName` calls -> `AddToViewport(ZOrder=99)`) — likely a drop-feedback popup, not equip logic.
+
+### Traced the call chain one more layer down: PerfromDrop is UI-only, real chain lands in a shared Ubergraph
+
+Exported `JSIContainer.uasset` via FModel (same `.usmap` setup as `JSI_Slot.uasset` earlier) to get
+`PerfromDrop`'s real declared signature directly from reflection metadata instead of guessing from raw
+local-variable pointers: `PerfromDrop(int32 SlotIndex, FVector2D SlotVector, JSI_Slot_C* SlotRef, bool
+Rotated, out bool Moved)`. All five parameters are UI-layer (which slot *widget*, grid position, rotation) —
+confirmed by then dumping and fully decoding `PerfromDrop` itself (2,265 bytes, zero errors): it's entirely
+visual/layout bookkeeping (`ClearSlot`, `GetPaddingBySlotIndex`, `RotateSlot`, `SetHostedSlot`,
+`SetHostingArray`, `SetVisibility`) with no property writes of its own. The actual authoritative write
+happens elsewhere, reached via a **delegate broadcast** (`Drop_ItemOverItem`), not a direct call.
+
+Found the delegate's bound handler in the existing `BP_JigMultiplayer.hpp` CXXHeaderDump (already on disk
+from an earlier session, no new dump needed): `Drop_ItemOverItem_Event_0(...)` calls
+`HandleItemOverItem(UJSIContainer_C* Container)`. Dumped and decoded `HandleItemOverItem` (36 bytes, zero
+errors after one small fix) and found it's a **thin Ubergraph-dispatch trampoline** — the standard UE5
+Blueprint compiler pattern where a named function just stashes its parameter on a "persistent frame" slot
+and jumps into one shared per-class function (`ExecuteUbergraph_<ClassName>`) at a specific integer entry
+point, rather than containing any real logic itself:
+
+```
+EX_LetValueOnPersistentFrame frame_slot=0xff967300 = LocalVariable(Container param)
+EX_LocalFinalFunction func=ExecuteUbergraph_BP_JigMultiplayer(EntryPoint=9060)
+Return Nothing
+```
+
+This surfaced one more genuine disassembler bug: `EX_LetValueOnPersistentFrame` was grouped with
+`EX_LetBool`/`EX_LetObj`/etc. (no leading pointer) but actually has its own distinct shape — a direct 8-byte
+frame-slot identifier followed by *only* an Assignment expression (no nested "Variable" expression at all,
+unlike every other `Let` variant). Fixed and re-verified against the 33-byte anchor before trusting the
+36-byte decode.
+
+**Dumped the full `ExecuteUbergraph_BP_JigMultiplayer` (24,576 bytes) — decoding stalled partway through**,
+saved as `research/bytecode/BP_JigMultiplayer_C_ExecuteUbergraph_partial_disasm.txt` (~311 of 24,576 bytes,
+everything before it hand-verified correct byte-for-byte, including a working `EX_ObjToInterfaceCast` and a
+correctly-decoded nested `EX_InterfaceContext`). This is a qualitatively different problem from the three
+functions decoded before it: a Blueprint Ubergraph concatenates *every* event graph in the class into one
+function with a jump-table dispatch at the top (an `EX_ComputedJump` off a precomputed offset — visible at
+the very start of the file, before the byte range that stalled), so entry point 9060 (`HandleItemOverItem`'s
+target) is a specific offset deep inside a 24 KB function whose *other* 23-odd KB is unrelated event-graph
+code for entirely different Blueprint events. Reaching it means understanding the jump-table mechanism
+first, not just fixing operand-format bugs one at a time the way the last three functions went — a
+different, more open-ended task than what today's tooling was built for.
+
+### Remaining work
+
+- Fill in the other 20 slots' real `ComparisonIndex` values (safe, read-only, proven technique from Session
+  43 — just needs a live IDA session with the game actually running).
+- Understand `ExecuteUbergraph_BP_JigMultiplayer`'s entry-point jump-table mechanism (the `EX_ComputedJump`
+  at the very start of the function) well enough to jump straight to entry point 9060's code instead of
+  decoding sequentially from byte 0 — the real equip-write logic (the actual `ServerEquippedItems`/property
+  mutation) is presumably right there, given everything upstream of it (`OnDrop`, `PerfromDrop`,
+  `HandleItemOverItem`) is now conclusively ruled out as UI-only or a pure trampoline.
+- Once the real write mechanism is identified, replicate it in `proxy_manager.cpp` (calling whatever
+  specific internal helper it turns out to be via `GetFunctionByNameInChain`, or via
+  `SetObjectPropertyByName`/`SetIntPropertyByName` the same way, now that both the technique and the
+  toolchain — `kismet_disasm.py`, `check_bytecode_dump_trigger()`, the batch `resolve_ptr`/`resolve_fname`
+  triggers — are all proven and reusable) instead of the abandoned `SetEquippedInfoBySlot` approach.
+- Solve the "unequip doesn't clear the proxy" gap noted in `sync_equipment()`'s comments before enabling
+  writes for real, once the underlying write mechanism is actually understood.
+
+## Session 46 — Ubergraph fully decoded, real equip architecture found, visual-attach chain traced 5 layers deep, weapon actor confirmed never spawned
+
+Picked up exactly where Session 45 left off: `ExecuteUbergraph_BP_JigMultiplayer`'s entry-point mechanism was
+still unexplained, decode stalled at ~311 of 24,576 bytes.
+
+### Confirmed entry point is a direct byte offset, not a jump-table index
+
+Jumped straight to offset 9060 (`HandleItemOverItem`'s entry point) in the existing 24,576-byte dump and got
+immediately coherent, correctly-structured output — no jump table lookup needed at all. `EntryPoint` passed to
+`ExecuteUbergraph_<ClassName>(int32 EntryPoint)` is simply a direct byte offset into that same function's own
+bytecode array.
+
+### Two more disassembler bugs found and fixed, verified against the 33-byte anchor each time
+
+- **`EX_Context`/`EX_ClassContext`/`EX_Context_FailSilent` wrapping an `EX_InterfaceContext` object_expr have
+  no separate `skip`+`field` pair** — execution goes straight from the end of `object_expr` into `context_expr`.
+  Found via manual byte forensics on two separate occurrences of the identical garbage-value pattern (once in
+  `JSIContainer_C::OnDrop`, once in the Ubergraph itself). Fixed by peeking the not-yet-consumed opcode byte
+  before parsing `object_expr`, and skipping the `skip`/`field` read when it's `0x51` (`EX_InterfaceContext`).
+- **`EX_SkipOffsetConst`** (`0x5B`) was entirely unhandled — a plain `uint32` constant operand, no nested
+  expression. Missing this stalled the decode again immediately after the `EX_InterfaceContext` fix, inside an
+  `EX_StructConst` member list.
+
+With both fixes, `ExecuteUbergraph_BP_JigMultiplayer` decodes **completely clean from entry point 9060 to
+`EX_EndOfScript`, zero unhandled opcodes**, up from the ~311 bytes at the end of Session 45.
+
+### Discovered live pointers/FNames are only valid within the exact process that produced the dump
+
+First resolve-batch attempt against the existing (Session-45-era) `.bin` dump crashed the game hard —
+`EXCEPTION_ACCESS_VIOLATION reading address 0xffffffffffffffff` inside `UObject::GetPathName()`'s Outer-chain
+walk, called from `GetFullName()`. The struct/function pointers embedded in linked Kismet bytecode are literal
+runtime addresses baked in at load time for *that specific process instance* — ASLR and heap layout differ on
+every relaunch, so a dump captured in an earlier game session is guaranteed garbage once that process has
+restarted, even for structurally identical bytecode. This also explains an earlier oddity from the *same*
+dump: FName resolution wasn't crashing but was returning garbled, overlapping strings for many (not all)
+indices — same root cause, not a decoder bug. Confirmed by re-dumping the identical function fresh in a live
+session and getting 100% clean FName resolution with zero garbling.
+
+**Fix, in two parts:**
+- Added an SEH guard (`seh_invoke`/`__try`/`__except` in `mod.cpp`) around `check_resolve_ptr_trigger`'s
+  `GetFullName()` call, split into a trampoline with no local C++ objects needing unwinding (MSVC `C2712`)
+  plus a plain inner function that does the actual call — turns a hard game crash on a bad/stale pointer into
+  a logged `<access violation, not a live UObject here>` line instead. Still a real crash risk for anything
+  that overflows the stack rather than taking a clean access violation (see below), but closes the common case.
+- **Established the actual working methodology going forward: always re-dump the target function fresh in the
+  exact same live session as the resolve calls, never reuse a `.bin` from an earlier session or an earlier
+  relaunch.** Re-verified this repeatedly for the rest of the session with zero further crashes from stale
+  pointers.
+
+One batch (11 func pointers from a later dump) was silently consumed with zero log output despite valid
+content and a live, non-stale session — bisected down to a single suspect address (`0x10ba5eb00`, oddly
+9-hex-digit-shaped) that seemed like the likely culprit for a stack-overflow-via-runaway-Outer-chain-recursion
+(which SEH can technically catch via `STATUS_STACK_OVERFLOW`, but the stack is left in an unreliable state
+afterward, plausibly explaining silent data loss rather than a clean crash or a clean success). Re-tested all
+10 *other* addresses individually and in small batches afterward — every one resolved cleanly on its own,
+making the specific cause inconclusive but the practical workaround (smaller batches, retry on silent
+zero-output) trivial and reliable.
+
+### Found the real equip data architecture — completely different from what `SetEquippedInfoBySlot` assumed
+
+Resolved every FName/pointer in the freshly-decoded Ubergraph. Two calls stood out immediately:
+`ServerFuncHandleEquipActor` and `HandleActorEquipped`, both invoked as `LocalVirtualFunction`s (same-class
+calls) from inside the entry-point-9060 code path.
+
+Dumped and fully decoded `ServerFuncHandleEquipActor` (3,458 bytes, zero errors). It:
+1. Loops over an `InstanceVariable` array property (raw pointer, address confirmed process-specific/unstable
+   as above), matching elements by GUID (`KismetGuidLibrary::EqualEqual_GuidGuid`) against a target container
+   ID.
+2. Builds a complete `FRepItemInfo` struct field-by-field in a local variable, sourced from a `TMap`'s
+   `Map_Keys`/`Map_Values` (custom item data) plus the target actor's own instance variables (Count, ItemVec,
+   Weight, Price) plus a freshly-`GenerateRandomStats` call, computing `Durability` via
+   `KismetMathLibrary::MakeVector2D`, and explicitly resetting `Pending? = -1.0` (a "not pending" sentinel).
+   Confirmed field-for-field against `research/CXXHeaderDump/RepItemInfo.hpp`'s real declared layout — every
+   single field matched in order, including the `-1.0` landing exactly on the `Pending?` field.
+3. Wraps that into a complete `FContainerPickupsInfo` the same way (`UniqueServerID` via `GetUniqueID`,
+   `IsContainer`, `ContainerDimension` zeroed, the `FRepItemInfo` embedded as `ItemInfo`, `ContainerMotherID`
+   zeroed, `SlotIndex=0`, `Rotated=false`, `PickupRef=`the target actor) — again confirmed field-for-field
+   against `research/CXXHeaderDump/ContainerPickupsInfo.hpp`.
+4. Calls `AddNewItemToSlot(FContainerPickupsInfo& ItemInfo, FGuid ToContainer, int32 ToIndex,
+   TArray<FS_ReplicatedContainerInfo>& ContainerContent, bool SetUID?, bool& Added, FContainerPickupsInfo&
+   AddedItemInfo)` — the real declared signature, already sitting in the existing `BP_JigMultiplayer.hpp`
+   CXXHeaderDump, matching the decoded 7-parameter call exactly. `ContainerContent` is the *matched container
+   element's own* `ContainerItems` sub-array (`TArray<FContainerPickupsInfo>`), obtained via
+   `KismetArrayLibrary::Array_Length` on a `StructMemberContext` read off the GUID-matched element from step 1
+   — not the top-level array itself.
+5. On success, fires the `JigMP_OnPickupEquipped` interface notification and the `CLIENT_EquipActorSuccess`
+   client RPC.
+
+**`TArray<FS_ReplicatedContainerInfo>` appears exactly once in the whole class: `MainJigContainers`.**
+Cross-referencing `research/CXXHeaderDump/S_ReplicatedContainerInfo.hpp` confirms the real architecture:
+equipment is **not** a dedicated array or property at all. `MainJigContainers` holds *every* container this
+component tracks (backpack, ground loot, vendor, and — per this whole call chain — an "equip slot" is modeled
+as just another container entry, identified by a reserved GUID, holding 0 or 1 item in its own nested
+`ContainerItems`). This fully explains Session 45's original mystery: `SetEquippedInfoBySlot` was never wrong
+about crashing or erroring, it was writing to a property that was never the real source of truth to begin
+with — the actual authoritative state lives inside this nested container structure, mutated only through the
+full `AddNewItemToSlot` call chain with all its GUID-matching and notification side effects.
+
+Also dumped and decoded `HandleActorEquipped` (2,689 bytes, zero errors) expecting to find the visual-attach
+logic there — it turned out to be pure bookkeeping too (array remove/clear, owner/durability/stats updates via
+generically-named helpers), no `AttachToComponent`, no mesh/socket calls anywhere in either function.
+
+### Live two-client test: full write chain succeeds end to end, zero visual result — chased 5 layers deep
+
+Since proxy actors are locally-`SpawnActor`'d visual stand-ins with no real replication or authoritative state
+of their own, decided the existing `SetEquippedInfoBySlot`/`SetActiveWeaponSlot`/`OnRep_ActiveWeapon` chain
+(already implemented and enabled from Session 45, `kEnableEquipmentWrite = true`) was still worth testing
+directly on the proxy, rather than replicating the full `MainJigContainers` mechanism — a proxy has no
+Tick-driven logic that would re-derive/overwrite a manually-set display property from authoritative data the
+way a real player's own character apparently does (the likely real explanation for why the write "didn't
+persist" when tested against a real character in Session 45: something else keeps refreshing it from
+`MainJigContainers`, not a failed write).
+
+Set up a genuine two-client live test (local machine as PC1, a second physical Windows VM as PC2, both against
+the local dev server, PC2's `session.cfg` gateway host manually overridden to the host's LAN IP since the
+ticket endpoint always returns `127.0.0.1`). PC1 equipped a real AK15 into the Primary slot; checked PC2's view
+of PC1's proxy.
+
+Every call in the existing chain reported `ok=1` (getter, setter, `SetActiveWeaponSlot`, `OnRep_ActiveWeapon`)
+— but the proxy remained a bare, unequipped body. Decoded `OnRep_ActiveWeapon` itself (112 bytes) and found
+why: it calls `Owner->HasAuthority()`, and returns immediately *without* broadcasting the
+`OnActiveWeaponSlotChanged` multicast delegate if true — a check meant to distinguish server/client for a real
+replicated `OnRep` (which normally only ever fires client-side regardless). A locally-`SpawnActor`'d proxy,
+never part of any replication graph, has local authority by definition, so this branch always trips, and the
+delegate that actually drives the visual never fires. Every prior "success" was real — the calls just never
+reached the one broadcast that mattered.
+
+Found the delegate's real bound handler in `research/CXXHeaderDump/BP_PlayerCharacter.hpp`:
+`OnActiveWeaponSlotChanged_Event_0(FGameplayTag Slot)`. Added `call_on_active_weapon_slot_changed()` in
+`proxy_manager.cpp`, calling it directly on the character actor (not the `+0x700` helper component) to skip
+`OnRep_ActiveWeapon`'s gate entirely. Live-tested: `ok=1`, still no visual.
+
+Dumped `Event_0` itself (36 bytes) — another thin persistent-frame trampoline into yet another Ubergraph, this
+time `ExecuteUbergraph_BP_PlayerCharacter` (205,862 bytes — the biggest function decoded so far), entry point
+164582. Decoded that section clean (9,723 lines, zero errors). Found `MC_AttachClothing` called as a bare
+`EX_VirtualFunction` partway through — a strong general lead (`MC_` is this codebase's `NetMulticast` RPC
+convention, and UnrealHeaderTool splits those into a dispatch wrapper plus a `_Implementation` twin containing
+the real body; calling the wrapper via `ProcessEvent` on a non-networked actor very plausibly just enters
+network-dispatch code that silently no-ops without a real connection) — but it's specifically clothing-related,
+not the weapon. Checking `research/CXXHeaderDump/BP_PlayerCharacter.hpp` directly confirmed there is **no**
+`MC_AttachWeapon`-equivalent function at all, and no dedicated weapon mesh component among the character's
+`USkeletalMeshComponent*` body-part fields either — ruling out a simple "set mesh + toggle visibility"
+mechanism.
+
+Found a second, more promising property instead: `bool PrimaryWeaponEquipped?` (plain, `@0x1DC0` directly on
+the character actor, not through the helper), with its own `OnRep_PrimaryWeaponEquipped?()`. Decoded that (913
+bytes, zero errors after fixing a real bug below) — no `HasAuthority()` gate this time; it branches directly on
+the property's *own* current value, and the true-branch does real setup work (interface casts, calls
+referencing the already-known Primary-slot tag literal `1730659`). Since nothing had ever written this
+property, added `set_primary_weapon_equipped()` (direct raw write to the `0x1DC0` bool, same raw-offset
+pattern as the existing `+0x700` helper-pointer read) plus `call_on_rep_primary_weapon_equipped()`, gated to
+slot 11 specifically since that's the only slot with a real tag mapped so far. Live-tested: `set=1 rep=1`,
+still no visual.
+
+Added a final read-only diagnostic, `get_current_active_weapon()` (`BP_PlayerCharacter_C::
+GetCurrentActiveWeapon(AActor*& EquippedWeapon)`), and logged its result after the entire chain. **Result:
+`activeWeaponPtr=0x0` — no weapon actor exists at all**, after every single property/notification call in the
+whole 5-layer chain reported success. This is the real answer to why nothing renders: none of this chain ever
+spawns the actual physical weapon actor that a mesh/socket-attach step would need. For a real player, that
+spawn almost certainly happens somewhere else entirely — plausibly tied directly to the `MainJigContainers`/
+`PickupRef` data itself rather than to the `ActiveWeapon`-slot-change chain this session traced — and hasn't
+been located yet.
+
+### Found and fixed a real, unrelated mod bug along the way: invalid filename characters silently dropped bytecode dumps
+
+`check_bytecode_dump_trigger()` built its output filename directly from the requested function name with no
+sanitization. `OnRep_PrimaryWeaponEquipped?` (a real, correctly-typed function name — Blueprint authors in this
+codebase routinely suffix boolean-returning names with `?`) produced an invalid Windows filename; `std::ofstream`
+silently failed to open, and the trigger's own success-log line was unconditional, so it reported "wrote 913
+bytes" for a file that was never created at all. Fixed by sanitizing only the output filename (not the
+`className`/`funcName` strings used for the actual lookups) and making the log line reflect whether the
+`ofstream` genuinely opened and wrote successfully.
+
+### Infrastructure: two-client live-test loop with both machines fully scripted from one side
+
+Standardized the whole cycle for this session's many rebuild/redeploy/relaunch iterations: fetch a fresh
+ticket from the local dev server for each client (`POST :42201/v1/tickets`, LAN IP override for client 2's
+`gatewayHost` since the endpoint always returns `127.0.0.1`), write `session.cfg` directly (locally, or via
+`scp` for client 2), then launch — locally via `steam://run/1645820//`, and on client 2 via the existing
+`SDBLaunchGame` scheduled task (`schtasks /run`, working around the Session-0 SSH-launch isolation documented
+in Session 45) — all driven from the host machine's shell without needing hands-on-keyboard on client 2 at all
+except to read its screen.
+
+### Pivoted to spawning the visual directly — real actor now spawns and resolves correctly, still not visible
+
+Rather than keep chasing the real game's internal actor-spawn logic (open-ended — could live anywhere reacting
+to `MainJigContainers`/`PickupRef` replication, never found this session), implemented
+`spawn_and_attach_weapon_visual()` in `proxy_manager.cpp`: read the equipped item's own
+`JigsawItem_DataAsset_C::PickupClass` (`TSubclassOf<AActor>` @`0x0128`) and `EquipSocket` (`FName` @`0x0280`,
+both from `research/CXXHeaderDump/JigsawItem_DataAsset.hpp`), spawn that class directly via the already-proven
+`call_begin_deferred_spawn`/`call_finish_spawning` native-call pair (the same one `spawn_proxy()` uses, per
+Session 40), then attach it to the proxy via `K2_AttachToActor`. Added a `RemotePlayer::primaryWeaponVisualActor`
+/`primaryWeaponVisualItemId` pair (`state.hpp`) so it only respawns when the equipped item actually changes.
+
+Live-tested end to end, real two-client test again:
+- `PickupClass` resolved to a fully sensible, correct real class:
+  `/Game/Inventory/Items/Pickups/Weapons/Firearms/Rifles/BP_AK15Pickup.BP_AK15Pickup_C`.
+- Spawn succeeded (non-null actor pointer, no crash) — confirms `call_begin_deferred_spawn`/
+  `call_finish_spawning` works for arbitrary item classes, not just the proxy character class it was proven for.
+- `EquipSocket` resolved to `"Weapon_r"` — a legitimate, sensibly-named right-hand weapon socket.
+- `K2_AttachToActor` was found via reflection and called with no crash.
+- **Still no visual result.**
+
+Checked `research/CXXHeaderDump/BP_AK15Pickup.hpp` (empty subclass) up through
+`research/CXXHeaderDump/BP_FirearmPickup.hpp` and `BP_SkeletalMeshPickup.hpp` for what the Pickup actor itself
+needs. Found `JigMP_OnPickupEquipped(AActor* ActorRef, FName ToContainerName, FGuid UID, FGuid ToContainerUID,
+FRepItemInfo Info, bool& Result, AActor*& OverrideActor)` directly on `ABP_SkeletalMeshPickup_C` — the concrete
+implementation of the exact interface call already seen fired from the real `ServerFuncHandleEquipActor` chain
+earlier this session (`ci=1846532`). Added a call to it (with zeroed `UID`/`ToContainerUID`/`ToContainerName`,
+matching the established "no real UID for a cosmetic proxy" pattern, and an `Info` populated with just
+`ItemID`+`Count`) immediately after spawn, before the manual `K2_AttachToActor` call, on the theory that this
+is the real "you've just been equipped, transition your visual state" notification and might do a more correct
+attach internally.
+
+Live-tested: found, called, no crash — but **`Result=false`, `OverrideActor=0x0`**. Not a missing function or a
+crash this time, a deliberate rejection by whatever validation logic lives inside it, most plausibly rejecting
+the synthetic zeroed `UID`/`ToContainerUID`/`Info` fields as not matching something it expects to be real
+(consistent with everything else found this session about the real pipeline requiring a genuine prior pickup
+event). Stopped here rather than decoding a sixth Blueprint class's bytecode in one sitting.
+
+### Remaining work
+
+- Decode `JigMP_OnPickupEquipped` itself to find exactly what makes it reject a synthetic call — most likely
+  candidate given tonight's pattern: something checking `UID`/`ToContainerUID` against real, non-zero
+  identifiers, or checking `Info`'s mostly-zeroed fields (only `ItemID`/`Count` were populated) for a specific
+  required value.
+- If that doesn't converge quickly: try feeding it fabricated-but-plausible non-zero `UID`/`ToContainerUID`
+  values instead of zero, or try calling `K2_AttachToActor` targeting the spawned pickup's specific mesh
+  component (via `GetMainSceneComp` — also found on `ABP_SkeletalMeshPickup_C` this session) rather than its
+  root component, in case `"Weapon_r"` is a bone socket that only exists on that mesh, not the actor's root.
+- Independent of the above: confirmed real, durable wins from this whole line of investigation regardless of
+  the final visual outcome — `spawn_and_attach_weapon_visual()`'s spawn mechanism itself is proven correct
+  (right class resolved, real actor spawned, zero crashes) for *any* item's `PickupClass`, not just weapons.
+- Re-extract the other 20 slots' real `ComparisonIndex` values (still only Primary/slot 11 is mapped) — the
+  `Jig.PlayerSlot.PrimaryWeapon`/`SecondaryWeapon`/`SidearmWeapon` tag name strings turned up incidentally
+  while resolving FNames this session (`ComparisonIndex` 1730576/1730591/1730607, tightly clustered — plausibly
+  sequential tag-registration order), worth checking directly against the already-known slot 11 value
+  (1730659) before doing another full live IDA TMap walk.
+- Solve the "unequip doesn't clear the proxy" gap noted in `sync_equipment()`'s comments, once the underlying
+  write mechanism is fully understood — now further complicated by needing to also `K2_DestroyActor()` the
+  spawned `primaryWeaponVisualActor` on unequip, which the current code already does on *change* but not yet
+  on a clean unequip-to-empty transition.
+- Try calling `MC_AttachClothing_Implementation` (if it exists) directly, bypassing the RPC-wrapper theory
+  entirely, as a fast general test of whether the `_Implementation`-twin approach is right — not yet tried this
+  session, still an open, cheap thing to check next time.
+

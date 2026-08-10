@@ -11,6 +11,7 @@
 #include "state.hpp"
 #include "proxy_manager.hpp"
 #include "entity_manager.hpp"
+#include "debug_log.hpp"
 
 // UE4SS stub headers (derived from UE4SS.dll export table)
 #include <RC/Mod/CppUserModBase.hpp>
@@ -25,6 +26,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cstdlib>
+#include <fstream>
 #include <mutex>
 #include <string>
 #include <unordered_map>
@@ -832,6 +834,247 @@ static std::atomic<bool>     g_auto_open_fired{false};
 static std::atomic<uint64_t> g_last_open_try_us{0};
 static std::atomic<bool>     g_tcp_started{false};
 
+// Local player's BP_JigHelperComp_C instance, refreshed every do_game_tick()
+// call — used by on_process_event_pre's equip-trace diagnostic (temporary,
+// see research/04_ida_investigation_log.md: figuring out what a real
+// SetEquippedInfoBySlot call sequence actually looks like, since our own
+// synthetic call succeeds (ok=1) but silently doesn't persist).
+static std::atomic<uintptr_t> g_local_helper_ptr{0};
+
+// Broadened equip-trace: while now_micros() < this, on_process_event_pre logs
+// EVERY ProcessEvent call from ANY object (not just the helper component) —
+// the narrower helper-only trace caught nothing during a real equip, meaning
+// whatever handles it isn't reflected-called on that object at all. A short,
+// externally-triggered unthrottled window (see check_trace_trigger below)
+// keeps the log from exploding the way it would if this ran continuously.
+static std::atomic<uint64_t> g_trace_until_us{0};
+
+// Polled from do_game_tick() (already 5ms-throttled) for a flag file the
+// user/operator creates right before performing the action to trace — same
+// file-flag IPC pattern already used for character creation (init_cc_ipc_paths).
+static void check_trace_trigger()
+{
+    wchar_t path[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return;
+    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\trace_trigger.flag";
+    if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+
+    DeleteFileW(flag.c_str());
+    g_trace_until_us.store(sdb::now_micros() + 5'000'000ULL, std::memory_order_relaxed);
+    debug_log("check_trace_trigger: full trace window opened for 5s");
+}
+
+// One-shot diagnostic (temporary, see research/04_ida_investigation_log.md):
+// find JSI_Slot_C's OnDrop UFunction via the same safe GetFunctionByNameInChain
+// path already proven working (mod.cpp:847-style call), then dump raw struct
+// bytes around it so the UFunction/UStruct::Script (TArray<uint8> bytecode)
+// field's exact offset for this build can be identified empirically, without
+// any live IDA debugging (pure pointer-arithmetic reads only).
+// Flag file content: two lines, UTF-8, "<ClassName>\n<FunctionName>" — e.g.
+// "JigSDragOperation_C\nDrop". Reusable across candidates without a rebuild.
+// Script field confirmed live at UFunction+0x60 (TArray<uint8>: ptr@+0x60,
+// Count@+0x68 low32, Max@+0x68 high32) — JSI_Slot_C::OnDrop's 33 bytes ended
+// in the expected EX_EndOfScript (0x53) marker at exactly that length,
+// confirming the offset. Only 0x14 (EX_LetBool) x2 + 0x04 (EX_Return) — a
+// near-empty stub, meaning the real equip logic is not here.
+static void check_bytecode_dump_trigger()
+{
+    wchar_t path[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return;
+    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\bytecode_dump.flag";
+    if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+
+    std::ifstream in(flag, std::ios::binary);
+    std::string classNameU8, funcNameU8;
+    std::getline(in, classNameU8);
+    std::getline(in, funcNameU8);
+    in.close();
+    DeleteFileW(flag.c_str());
+
+    if (classNameU8.empty() || funcNameU8.empty()) {
+        debug_log("bytecode_dump: flag file missing class/function name lines");
+        return;
+    }
+    // strip trailing \r if present (file may have been written with CRLF)
+    if (!classNameU8.empty() && classNameU8.back() == '\r') classNameU8.pop_back();
+    if (!funcNameU8.empty() && funcNameU8.back() == '\r') funcNameU8.pop_back();
+
+    auto widen = [](const std::string& s) {
+        std::wstring w(s.size(), L'\0');
+        int n = MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), w.data(), (int)w.size());
+        w.resize(n);
+        return w;
+    };
+    std::wstring className = widen(classNameU8);
+    std::wstring funcName  = widen(funcNameU8);
+
+    UObject* widget = UObjectGlobals::FindFirstOf(className.c_str());
+    if (!widget) { debug_log("bytecode_dump: " + classNameU8 + " instance/CDO not found"); return; }
+
+    char line[512];
+    snprintf(line, sizeof(line), "bytecode_dump: found %s at 0x%llx", classNameU8.c_str(), (unsigned long long)(uintptr_t)widget);
+    debug_log(line);
+
+    UFunction* fn = widget->GetFunctionByNameInChain(funcName.c_str());
+    if (!fn) { debug_log("bytecode_dump: " + funcNameU8 + " function not found"); return; }
+
+    const uintptr_t base = reinterpret_cast<uintptr_t>(fn);
+    const uintptr_t scriptPtr = *reinterpret_cast<const uintptr_t*>(base + 0x60);
+    const int32_t   count     = *reinterpret_cast<const int32_t*>(base + 0x68);
+    const int32_t   maxv      = *reinterpret_cast<const int32_t*>(base + 0x6C);
+    snprintf(line, sizeof(line), "bytecode_dump: %s::%s UFunction*=0x%llx Script.Data=0x%llx Count=%d Max=%d",
+             classNameU8.c_str(), funcNameU8.c_str(), (unsigned long long)base,
+             (unsigned long long)scriptPtr, count, maxv);
+    debug_log(line);
+
+    if (scriptPtr && count > 0) {
+        // Raw binary, not hex text — 9KB+ functions make a hex dump into a
+        // single debug_log line impractical. Saved for offline disassembly
+        // with a proper Kismet bytecode tool (EExprToken opcodes), not
+        // intended to be hand-read from this file directly.
+        wchar_t outDir[MAX_PATH];
+        DWORD dn = GetEnvironmentVariableW(L"APPDATA", outDir, MAX_PATH);
+        if (dn > 0 && dn < MAX_PATH) {
+            // Some Blueprint-authored names contain characters Windows
+            // forbids in filenames (e.g. "OnRep_PrimaryWeaponEquipped?") —
+            // sanitize only the output filename, not the className/funcName
+            // used for the actual UObject/UFunction lookups above.
+            auto sanitize = [](std::wstring s) {
+                for (auto& c : s) {
+                    if (c == L'?' || c == L'*' || c == L':' || c == L'"' ||
+                        c == L'<' || c == L'>' || c == L'|' || c == L'\\' || c == L'/')
+                        c = L'_';
+                }
+                return s;
+            };
+            std::wstring outPath = std::wstring(outDir, dn) + L"\\SurrounDeadBridge\\" +
+                sanitize(className) + L"_" + sanitize(funcName) + L".bin";
+            std::ofstream out(outPath, std::ios::binary | std::ios::trunc);
+            const bool opened = out.is_open();
+            if (opened) out.write(reinterpret_cast<const char*>(scriptPtr), count);
+            const bool wrote = opened && static_cast<bool>(out);
+            out.close();
+            snprintf(line, sizeof(line), "bytecode_dump: %s %d bytes to %s_%s.bin",
+                     wrote ? "wrote" : "FAILED to write", count, classNameU8.c_str(), funcNameU8.c_str());
+            debug_log(line);
+        }
+    }
+}
+
+// Flag file content: one line "<ComparisonIndex> <Number>" (decimal, space
+// separated) — resolves an arbitrary raw FName pulled from hand-decoded
+// Kismet bytecode (e.g. an EX_LocalVirtualFunction's FName operand) to its
+// real string, via the same native FName::ToString path already proven safe
+// (native::fname_to_string, used throughout read_local_equipment() etc.) —
+// just constructs a temporary 8-byte FName-shaped struct on the stack instead
+// of pointing at a live property, since the native call only needs a valid
+// memory address with that layout.
+static void check_resolve_fname_trigger()
+{
+    wchar_t path[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return;
+    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\resolve_fname.flag";
+    if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+
+    std::ifstream in(flag, std::ios::binary);
+    std::string lineU8;
+    // One "<ci> <num>" pair per line — resolves the whole batch in one trigger.
+    while (std::getline(in, lineU8)) {
+        if (!lineU8.empty() && lineU8.back() == '\r') lineU8.pop_back();
+        if (lineU8.empty()) continue;
+
+        int32_t ci = 0, num = 0;
+        if (sscanf_s(lineU8.c_str(), "%d %d", &ci, &num) != 2) {
+            debug_log("resolve_fname: could not parse '<ci> <num>' from line '" + lineU8 + "'");
+            continue;
+        }
+
+        struct { int32_t ComparisonIndex; int32_t Number; } tempName{ ci, num };
+        std::string name = native::fname_to_string(reinterpret_cast<uintptr_t>(&tempName));
+        char line[256];
+        snprintf(line, sizeof(line), "resolve_fname: ci=%d num=%d -> \"%s\"", ci, num, name.c_str());
+        debug_log(line);
+    }
+    in.close();
+    DeleteFileW(flag.c_str());
+}
+
+// __try/__except can't share a stack frame with C++ objects that need
+// unwinding (MSVC C2712), so the guarded call is split into a plain function
+// (free to use std::wstring/std::string) invoked through this trampoline,
+// which itself declares nothing that needs a destructor.
+static bool seh_invoke(void (*fn)(void*), void* ctx)
+{
+    __try {
+        fn(ctx);
+        return true;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return false;
+    }
+}
+
+struct ResolvePtrCtx {
+    UObject* obj;
+    std::string result;
+};
+
+static void do_resolve_ptr(void* ctxRaw)
+{
+    auto* ctx = static_cast<ResolvePtrCtx*>(ctxRaw);
+    std::wstring wname = ctx->obj->GetFullName();
+    const int needed = WideCharToMultiByte(CP_UTF8, 0, wname.c_str(), -1, nullptr, 0, nullptr, nullptr);
+    std::string name(needed > 0 ? static_cast<size_t>(needed - 1) : 0, '\0');
+    if (needed > 0) WideCharToMultiByte(CP_UTF8, 0, wname.c_str(), -1, name.data(), needed, nullptr, nullptr);
+    ctx->result = std::move(name);
+}
+
+// Flag file content: one line, hex pointer value (e.g. "0x247776a0") extracted
+// from a hand-decoded Kismet bytecode dump (an EX_CallMath/EX_FinalFunction
+// "func=" operand). NOTE: raw pointer values from an OLD bytecode_dump.flag
+// .bin file are only valid within the SAME game process instance they were
+// captured from — ASLR/heap layout differs across relaunches, so this only
+// works run in the same session as the .bin file being analyzed, or against
+// a freshly re-captured dump. GetFullName() works on any UObject-derived
+// pointer, including UFunction*, since UFunction inherits UObject. A crash
+// here (bad/stale pointer) is now caught via SEH instead of taking the whole
+// game down — see seh_invoke above, added after two live crashes from
+// resolving a stale dump's pointers post-relaunch (2026-08-10).
+static void check_resolve_ptr_trigger()
+{
+    wchar_t path[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return;
+    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\resolve_ptr.flag";
+    if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+
+    std::ifstream in(flag, std::ios::binary);
+    std::string lineU8;
+    // One hex address per line — resolves the whole batch in one trigger.
+    while (std::getline(in, lineU8)) {
+        if (!lineU8.empty() && lineU8.back() == '\r') lineU8.pop_back();
+        if (lineU8.empty()) continue;
+
+        unsigned long long addr = 0;
+        if (sscanf_s(lineU8.c_str(), "%llx", &addr) != 1 || addr == 0) {
+            debug_log("resolve_ptr: could not parse hex address '" + lineU8 + "'");
+            continue;
+        }
+
+        auto* obj = reinterpret_cast<UObject*>(static_cast<uintptr_t>(addr));
+        ResolvePtrCtx ctx{ obj, {} };
+        if (seh_invoke(&do_resolve_ptr, &ctx)) {
+            debug_log("resolve_ptr: 0x" + lineU8 + " -> " + ctx.result);
+        } else {
+            debug_log("resolve_ptr: 0x" + lineU8 + " -> <access violation, not a live UObject here>");
+        }
+    }
+    in.close();
+    DeleteFileW(flag.c_str());
+}
+
 // Returns true if Continue was clicked (or already in-world); false = retry later.
 static bool try_open_world()
 {
@@ -864,6 +1107,11 @@ static void do_game_tick()
     const uint64_t now = sdb::now_micros();
     if (now - g_last_tick_us.load(std::memory_order_relaxed) < 5'000ULL) return;
     g_last_tick_us.store(now, std::memory_order_relaxed);
+
+    check_trace_trigger();
+    check_bytecode_dump_trigger();
+    check_resolve_fname_trigger();
+    check_resolve_ptr_trigger();
 
     // Lazy-connect: open TCP once a pawn exists (level fully loaded).
     if (!g_tcp.is_open()) {
@@ -947,6 +1195,11 @@ static void do_game_tick()
     auto& st    = sdb::g_state();
     AActor* pawn = find_local_pawn();
 
+    if (pawn) {
+        g_local_helper_ptr.store(*reinterpret_cast<uintptr_t*>(
+            reinterpret_cast<uintptr_t>(pawn) + 0x700), std::memory_order_relaxed);
+    }
+
     if (!pawn) {
         const bool had = st.hasPawn.exchange(false);
         if (had) st.noPlayerSinceUs.store(now);
@@ -1014,8 +1267,25 @@ static void do_game_tick()
 }
 
 // Fires on the game thread for every UObject::ProcessEvent call.
-static void on_process_event_pre(UObject* /*obj*/, UFunction* /*func*/, void* /*params*/)
+static void on_process_event_pre(UObject* obj, UFunction* func, void* /*params*/)
 {
+    // Equip-trace diagnostic (temporary, see research/04_ida_investigation_log.md):
+    // our own synthetic SetEquippedInfoBySlot call reports success but never
+    // persists, and a helper-only trace caught nothing during a real equip —
+    // meaning whatever handles it isn't reflected-called on that object at
+    // all. Broadened to log EVERY ProcessEvent call from ANY object, but only
+    // during a short externally-triggered window (check_trace_trigger) so
+    // this doesn't run continuously and flood the log the way an unthrottled
+    // full trace would (research/04_ida_investigation_log.md: SDB.log hit
+    // 106MB from an unrelated tight retry loop earlier this session).
+    if (func && sdb::now_micros() < g_trace_until_us.load(std::memory_order_relaxed)) {
+        std::wstring wname = reinterpret_cast<UObject*>(func)->GetFullName();
+        const int needed = WideCharToMultiByte(CP_UTF8, 0, wname.c_str(), -1, nullptr, 0, nullptr, nullptr);
+        std::string name(needed > 0 ? static_cast<size_t>(needed - 1) : 0, '\0');
+        if (needed > 0) WideCharToMultiByte(CP_UTF8, 0, wname.c_str(), -1, name.data(), needed, nullptr, nullptr);
+        debug_log("full-trace: " + name);
+    }
+
     // ProcessEvent fires thousands of times per frame; skip most calls so the
     // time-check (now_micros / QueryPerformanceCounter) isn't called every call.
     static uint32_t s_skip = 0;
@@ -1057,6 +1327,8 @@ public:
 
     void on_unreal_init() override
     {
+        debug_log("on_unreal_init: entered");
+
         init_cc_ipc_paths();
         auto sc = load_session_config();
 
@@ -1066,10 +1338,15 @@ public:
         cfg_join_ticket      = cfg_get(sc, "SDB_JOIN_TICKET");
         cfg_move_interval_us = cfg_ms_to_us(sc, "SDB_MOVE_INTERVAL_MS", 50'000);
 
+        debug_log("on_unreal_init: config loaded, gateway=" + cfg_gateway_host + ":" +
+                   std::to_string(cfg_gateway_port) + " ticket_len=" + std::to_string(cfg_join_ticket.size()));
+
         Output::send<LogLevel::Normal>(
             STR("SDB: starting  gateway port={:d}  interval={:d}ms\n"),
             cfg_gateway_port,
             static_cast<int>(cfg_move_interval_us / 1000));
+
+        debug_log("on_unreal_init: after first Output::send call");
 
         if (cfg_join_ticket.empty())
             Output::send<LogLevel::Warning>(
@@ -1096,6 +1373,7 @@ public:
 
         Output::send<LogLevel::Normal>(STR("SDB: ready\n"));
         g_init_time_us.store(sdb::now_micros());
+        debug_log("on_unreal_init: complete, hooks registered");
     }
 
     void on_uninstall() override
