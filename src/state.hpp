@@ -53,15 +53,6 @@ struct WorldEntity {
     void*       actor         = nullptr;
 };
 
-static constexpr int MAX_INV_SLOTS = 40;
-
-// One slot in the local player's inventory.
-struct LocalSlot {
-    std::string itemId;          // FName string, e.g. "DA_AK74"
-    uint16_t    quantity = 0;
-    bool        occupied = false;
-};
-
 struct BridgeState {
     // Frame counters – incremented atomically by senders.
     std::atomic<uint32_t> seq  {0};
@@ -89,9 +80,8 @@ struct BridgeState {
     std::mutex                               entityMtx;
     std::unordered_map<uint64_t, WorldEntity> entities;
 
-    // Local player inventory (string itemIds from game FNames).
+    // Local player progress-revision counter.
     std::mutex inventoryMtx;
-    LocalSlot  inventory[MAX_INV_SLOTS];
     uint32_t   progressRevision = 0;
 
     // Local player vitals read from game components (not from server).

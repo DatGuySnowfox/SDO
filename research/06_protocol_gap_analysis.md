@@ -269,6 +269,28 @@ TArray, not a fixed slot count. 40 may be too small or too large.
 > variable-length item list in the wire format instead — trying to pick "the right N" is solving the
 > wrong problem, since containers can be resized mid-game and the game itself never assumes a cap.
 
+**CLOSED — 2026-08-10.** `PlayerProgress`'s inventory field changed from a flat, globally-indexed
+`slots: InventorySlot[]` capped at `MAX_INV_SLOTS = 40` to `containers: InventoryContainer[]`, each
+carrying its own `columns`/`rows` and an independent, uncapped item list (`protocol.hpp`/`protocol.cpp`,
+mirrored in `server/src/lib/protocol.js`). `mod.cpp`'s `read_local_inventory()` now emits one
+`InventoryContainer` per real container found in `MainJigContainers` (columns/rows read directly, same
+placeholder-skipping logic as before), with no cap on container count or per-container item count.
+`state.hpp`'s `LocalSlot inventory[MAX_INV_SLOTS]` array was removed outright — it was genuinely dead code
+(declared, never read or written anywhere).
+
+This is a breaking wire-format change; no migration was written for `ProfileRevision` payloads persisted
+under the old flat format in the server's SQLite DB (dev-stage mod). `host-agent.js`'s separate, in-memory
+`MAX_INV_SLOTS = 40` flat array for live `ItemPickupRequest`/`ItemDropRequest` slot-targeting was left
+as-is and is unaffected — the authoritative save/restore path persists `ProfileRevision`'s raw payload
+bytes verbatim (`gateway.js`), so the full container structure round-trips correctly regardless of that
+separate, smaller live-session bookkeeping cap.
+
+Verified via cross-language round-trip rather than a live session (this is a pure encoding change, not an
+engine-behavior one): a standalone `protocol.cpp` build (no UE4SS dependency) encoded a `PlayerProgress`
+with two containers, decoded correctly on both the C++ and JS sides, and the JS decoder correctly parsed
+the raw C++-encoded bytes byte-for-byte; the reverse direction (JS-encoded bytes decoded by C++) was also
+confirmed. All 37 existing `tests/integration.js` cases still pass.
+
 ---
 
 ### 12. ~~`AllUIDs` is `TArray<int32>` — entityId mapping needed~~ — CLOSED, not applicable

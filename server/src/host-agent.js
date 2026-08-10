@@ -412,13 +412,24 @@ class HostAgent {
         const p = this._players.get(f.playerId);
         if (!p || f.payload.length < 51) return;
         try {
-            const { slots, forename, surname, zombieKills, daysSurvived, bossZombieKills,
+            const { containers, forename, surname, zombieKills, daysSurvived, bossZombieKills,
                      animalKills, humanKills, distanceTravelled, infestationsDestroyed } =
                 decodePlayerProgress(f.payload);
+            // p.inventory is a flat bookkeeping array used only for live
+            // ItemPickupRequest/ItemDropRequest slot-targeting during this
+            // session — the authoritative save data is the full container
+            // list, persisted verbatim as raw bytes (see gateway.js
+            // ProfileRevision handling), so flattening here is lossless for
+            // what actually gets restored on rejoin. Items beyond
+            // MAX_INV_SLOTS simply aren't targetable by slot index in this
+            // bookkeeping array — that cap is local to pickup/drop, not the
+            // wire format or the persisted save (gap 11).
             const inv = Array(MAX_INV_SLOTS).fill(null);
-            for (const s of slots) {
-                if (s.slotIndex < MAX_INV_SLOTS)
-                    inv[s.slotIndex] = { itemId: s.itemId, quantity: s.quantity };
+            for (const container of containers) {
+                for (const item of container.items) {
+                    if (item.slotIndex < MAX_INV_SLOTS && !inv[item.slotIndex])
+                        inv[item.slotIndex] = { itemId: item.itemId, quantity: item.quantity };
+                }
             }
             p.inventory = inv;
             // Extended stats trailer (gap 4/7) — absent (all defaults) on a

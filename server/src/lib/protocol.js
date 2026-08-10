@@ -199,10 +199,12 @@ function decodeBuildingState(state) {
 //   37–40  float32 posY
 //   41–44  float32 posZ
 //   45–48  float32 yaw
-//   49–50  uint16  slotCount
-//   51…    slots: [uint8 slotIndex, uint16 itemIdLen, itemId utf8, uint16 quantity] × slotCount
+//   49–50  uint16  containerCount
+//   51…    containers: [uint16 columns, uint16 rows, uint16 itemCount,
+//                        items: [uint8 slotIndex, uint16 itemIdLen, itemId utf8, uint16 quantity] × itemCount
+//                       ] × containerCount
 //   …      extended stats trailer (gap 4/7), optional — a payload persisted before this trailer
-//          existed just ends after the slots, and decode must tolerate that (see decodePlayerProgress):
+//          existed just ends after the containers, and decode must tolerate that (see decodePlayerProgress):
 //            uint16  forenameLen, forename utf8
 //            uint16  surnameLen,  surname utf8
 //            uint32  zombieKills
@@ -212,20 +214,28 @@ function decodeBuildingState(state) {
 //            uint32  humanKills
 //            float32 distanceTravelled
 //            uint32  infestationsDestroyed
+//
+// Gap 11 (2026-08-10): containers replaced a flat, globally-indexed slot list
+// capped at 40 — the game's own inventory has no fixed slot count and each
+// container is independently resizable, so a flat cap was solving the wrong
+// problem. Breaking wire-format change — payloads persisted under the old
+// flat format will not decode correctly against this container list (dev-stage
+// mod, no migration provided).
 
 const PLAYER_PROGRESS_HEADER_SIZE = 51;
 
 function encodePlayerProgress({ revision, health, hunger, thirst, stamina, radiation, level, xp,
-                                 posX, posY, posZ, yaw, slots,
+                                 posX, posY, posZ, yaw, containers,
                                  forename = '', surname = '', zombieKills = 0, daysSurvived = 0,
                                  bossZombieKills = 0, animalKills = 0, humanKills = 0,
                                  distanceTravelled = 0, infestationsDestroyed = 0 }) {
-    const itemIdBufs  = slots.map(s => Buffer.from(s.itemId, 'utf8'));
-    const slotsSize   = itemIdBufs.reduce((sum, b) => sum + 1 + 2 + b.length + 2, 0);
+    const containerItemIdBufs = containers.map(c => c.items.map(it => Buffer.from(it.itemId, 'utf8')));
+    const containersSize = containers.reduce((sum, c, ci) =>
+        sum + 2 + 2 + 2 + containerItemIdBufs[ci].reduce((s, b) => s + 1 + 2 + b.length + 2, 0), 0);
     const forenameBuf = Buffer.from(forename, 'utf8');
     const surnameBuf  = Buffer.from(surname, 'utf8');
     const trailerSize = 2 + forenameBuf.length + 2 + surnameBuf.length + 4 * 6 + 4;
-    const buf = Buffer.allocUnsafe(PLAYER_PROGRESS_HEADER_SIZE + slotsSize + trailerSize);
+    const buf = Buffer.allocUnsafe(PLAYER_PROGRESS_HEADER_SIZE + containersSize + trailerSize);
     buf.writeUInt8(1, 0);
     buf.writeUInt32BE(revision, 1);
     buf.writeFloatBE(health,    5);
@@ -239,14 +249,21 @@ function encodePlayerProgress({ revision, health, hunger, thirst, stamina, radia
     buf.writeFloatBE(posY,     37);
     buf.writeFloatBE(posZ,     41);
     buf.writeFloatBE(yaw,      45);
-    buf.writeUInt16BE(slots.length, 49);
+    buf.writeUInt16BE(containers.length, 49);
 
     let o = PLAYER_PROGRESS_HEADER_SIZE;
-    for (let i = 0; i < slots.length; i++) {
-        buf.writeUInt8(slots[i].slotIndex, o); o += 1;
-        buf.writeUInt16BE(itemIdBufs[i].length, o); o += 2;
-        itemIdBufs[i].copy(buf, o); o += itemIdBufs[i].length;
-        buf.writeUInt16BE(slots[i].quantity, o); o += 2;
+    for (let ci = 0; ci < containers.length; ci++) {
+        const container = containers[ci];
+        const itemIdBufs = containerItemIdBufs[ci];
+        buf.writeUInt16BE(container.columns, o); o += 2;
+        buf.writeUInt16BE(container.rows,    o); o += 2;
+        buf.writeUInt16BE(container.items.length, o); o += 2;
+        for (let i = 0; i < container.items.length; i++) {
+            buf.writeUInt8(container.items[i].slotIndex, o); o += 1;
+            buf.writeUInt16BE(itemIdBufs[i].length, o); o += 2;
+            itemIdBufs[i].copy(buf, o); o += itemIdBufs[i].length;
+            buf.writeUInt16BE(container.items[i].quantity, o); o += 2;
+        }
     }
 
     buf.writeUInt16BE(forenameBuf.length, o); o += 2;
@@ -266,17 +283,26 @@ function encodePlayerProgress({ revision, health, hunger, thirst, stamina, radia
 function decodePlayerProgress(payload) {
     if (payload.length < PLAYER_PROGRESS_HEADER_SIZE) throw new Error('progress_too_short');
 
-    const slotCount = payload.readUInt16BE(49);
-    const slots = [];
+    const containerCount = payload.readUInt16BE(49);
+    const containers = [];
     let o = PLAYER_PROGRESS_HEADER_SIZE;
-    for (let i = 0; i < slotCount; i++) {
-        if (o + 3 > payload.length) throw new Error('progress_slot_truncated');
-        const slotIndex = payload.readUInt8(o); o += 1;
-        const idLen     = payload.readUInt16BE(o); o += 2;
-        if (o + idLen + 2 > payload.length) throw new Error('progress_slot_truncated');
-        const itemId    = payload.toString('utf8', o, o + idLen); o += idLen;
-        const quantity  = payload.readUInt16BE(o); o += 2;
-        slots.push({ slotIndex, itemId, quantity });
+    for (let c = 0; c < containerCount; c++) {
+        if (o + 6 > payload.length) throw new Error('progress_container_truncated');
+        const columns   = payload.readUInt16BE(o); o += 2;
+        const rows      = payload.readUInt16BE(o); o += 2;
+        const itemCount = payload.readUInt16BE(o); o += 2;
+
+        const items = [];
+        for (let i = 0; i < itemCount; i++) {
+            if (o + 3 > payload.length) throw new Error('progress_slot_truncated');
+            const slotIndex = payload.readUInt8(o); o += 1;
+            const idLen     = payload.readUInt16BE(o); o += 2;
+            if (o + idLen + 2 > payload.length) throw new Error('progress_slot_truncated');
+            const itemId    = payload.toString('utf8', o, o + idLen); o += idLen;
+            const quantity  = payload.readUInt16BE(o); o += 2;
+            items.push({ slotIndex, itemId, quantity });
+        }
+        containers.push({ columns, rows, items });
     }
 
     // Extended stats trailer (gap 4/7) — optional. A payload persisted before
@@ -316,7 +342,7 @@ function decodePlayerProgress(payload) {
         posY:      payload.readFloatBE(37),
         posZ:      payload.readFloatBE(41),
         yaw:       payload.readFloatBE(45),
-        slots,
+        containers,
         forename, surname, zombieKills, daysSurvived, bossZombieKills, animalKills, humanKills,
         distanceTravelled, infestationsDestroyed,
     };
