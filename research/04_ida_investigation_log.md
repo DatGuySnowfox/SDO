@@ -3914,3 +3914,177 @@ immediately before each in-game test, not just once per session. Also found and 
 `play.ps1` itself: it checked a `$resp.ok` field that the actual ticket-issuing endpoint never returns,
 which would have caused it to always report failure even on a successful ticket fetch.
 
+---
+
+## Session 41: 2026-08-10 — Appearance Sync: Real Signature Found, Blocked on GameplayTag Discovery
+
+**Goal**: now that `spawn_proxy()` produces a real, visible actor (Session 40), apply cached
+`RemotePlayer.equipment` data to it so proxies actually look equipped instead of bare. Also closed gap 11
+in this same session (see the gap analysis doc, `06_protocol_gap_analysis.md`) — the two are unrelated,
+gap 11 is a pure wire-format change with no live dependency and is fully resolved separately.
+
+### Real signature confirmed, but two live unknowns remain
+
+`BP_JigHelperComp_C::SetEquippedInfoBySlot`'s actual signature, already captured in an earlier session's
+`CXXHeaderDump/BP_JigHelperComp.hpp` (line 64) but never acted on:
+
+```
+void SetEquippedInfoBySlot(FGameplayTag Slot, FRepItemInfo Info, FGuid UID, bool SkipUID);
+```
+
+Applying equipment to a proxy needs two things this doesn't have yet: (1) the actual `FGameplayTag`
+string value for each of the 21 equipment slots (the wire protocol's slot 0–20 order is a plain
+positional convention over `S_ServerEquippedItems`'s named struct fields — `EquippedFacewear`,
+`EquippedHeadwear`, etc., Session 16 — which is *not* the same thing as the `FGameplayTag` values this
+Blueprint function actually switches on internally), and (2) the correct Kismet parameter-buffer layout
+to call it via `ProcessEvent`, since it's Blueprint-authored and not in the vendored SDK's simpler
+by-address wrapper methods.
+
+### Static string search is a dead end for Blueprint tag/field names
+
+Tried finding tag or field name strings directly in the binary via `find_regex` (after confirming the
+strings cache needed `server_warmup(build_caches=true)` first — it silently returns zero matches
+otherwise, with no indication the cache itself was the problem). Searched for `Facewear`, `Headwear`,
+`Backpack`, `Equipped` — all zero matches, even the literal struct field names already known from
+Session 16's PropertyDumper output. Confirms (again) that Blueprint-defined reflection metadata isn't
+present as plain strings in a Shipping binary in a form IDA's string scanner recognizes — this needs live
+runtime introspection, not static analysis, same conclusion as the project's established methodology for
+all Blueprint-side gaps.
+
+### UE4SS Lua's `GetPropertyValue` doesn't support `MapProperty` in this version
+
+Wrote a diagnostic Lua script (`JigMPHookTest`, temporarily re-enabled in `mods.txt`) to dump
+`EquipmentIDSlotConfig` and `EquipmentUIDs` (both `TMap<FGameplayTag, ...>` — see the field table in this
+log's BP_JigHelperComp_C section) via `helper:GetPropertyValue(name)`. Both throw immediately (`pcall`
+catches an opaque `function: 0x...` error object, not a string — UE4SS's Lua binding error objects
+aren't descriptive strings in this build). `helper:GetPropertyValue("ActiveWeapon")` (a plain
+`FGameplayTag` `StructProperty`, not a map) partially worked — returned a `userdata` whose `tostring()` is
+`UScriptStruct: 0x...` — but this looks like the property's *type descriptor* object, not an instance
+wrapper with usable data: both `:ToString()` and `:GetTagName()` calls on it failed the same opaque-error
+way. `helper:GetFunction("SetEquippedInfoBySlot")` also failed identically — likely the wrong method name
+for this UE4SS Lua API surface entirely, not confirmed correct and then failing for a different reason.
+
+**None of these three failures were narrowed down further this session** — worth checking actual UE4SS
+Lua API documentation/source directly next time rather than guessing method names from general
+Unreal-modding conventions, since nothing tried here got far enough to even confirm which specific method
+call format this UE4SS build's Lua bindings expect for struct/map property access.
+
+### Raw `TMap` byte read attempted, not trusted enough to build on
+
+With the game still running and the helper component's raw address known from the Lua diagnostic's own
+`tostring()` output, attached IDA and read `EquipmentIDSlotConfig`'s raw 0x50-byte header
+(`helper+0xAF8`) directly. Got plausible-looking pointers and small integers back, but manually parsing
+UE5's `TSet`/`TSparseArray`/`FScriptMap` internal layout from raw bytes without any known-good reference
+point to validate against is a real risk of silently building on a wrong interpretation — this is
+`FMemory`-adjacent low-level container internals, not simple reflection metadata, and it's known to be
+sensitive to exact engine version/build config in ways this project hasn't needed to touch before.
+Deliberately stopped here rather than guessing further and shipping code built on an unverified struct
+layout.
+
+### Next steps identified, not yet attempted
+
+- Resolve `ActiveWeapon`'s `FName` directly via the same technique `mod.cpp`'s `native::fname_to_string()`
+  already uses for item IDs (`FName::ToString` at `0x140C9D940`, called on a raw pointer to the 8-byte
+  `FName` inside the `FGameplayTag`) — `ActiveWeapon` is a single plain `FGameplayTag` at
+  `helper+0xB98`, no `TMap` involved, so this should be low-risk and would give at least one *confirmed
+  real* tag string to anchor a naming-convention guess for the other 20.
+- Once at least one real tag string is known, try candidate tag strings for the other slots against the
+  **read-only** `GetEquippedInfoBySlot` getter via Lua (`(FGameplayTag Slot, FRepItemInfo& Info, bool&
+  Equipped)`) — side-effect-free, so wrong guesses cost nothing, and a slot known to be currently equipped
+  in a live test session can validate a candidate tag by checking `Equipped` comes back `true`.
+- Only after all 21 tags are confirmed real (not guessed) does building the `SetEquippedInfoBySlot`
+  `ProcessEvent` call (marshaling `FGameplayTag`/`FRepItemInfo`/`FGuid`/`bool` into a Kismet parameter
+  buffer) become worth attempting — this is itself unverified and carries real crash risk if the buffer
+  layout is wrong, so it needs its own careful live verification pass, not a blind first attempt.
+
+Paused here for the session — `JigMPHookTest` reverted to disabled in `mods.txt`, its diagnostic script
+left in place (disposable, repeatedly repurposed across sessions per established convention) for whoever
+picks this up next.
+
+---
+
+## Session 42: 2026-08-10 — Proxy Death Was Killing the Real Player; Fixed and Live-Verified With a Genuine Second Client
+
+### Found: killing a spawned proxy triggered the real player's own death sequence
+
+Live-tested with the Session 40 proxy spawn: attacking and killing a spawned proxy actor triggered the
+local player's own death handling — their own loot crate spawned, their own death-location marker
+appeared, and their own pawn froze in place (still standing, not ragdolled) — while the proxy itself was
+what had actually taken the fatal damage. `find_local_pawn()` (`mod.cpp`) was checked and ruled out as the
+cause: its primary path resolves the pawn via the local `PlayerController`'s own `AcknowledgedPawn`/`Pawn`
+property, which is unaffected by a second, unpossessed `BP_PlayerCharacter_C` instance's health. No
+`DeathRequest`/`RespawnRequest` activity appeared in `SDB.log` when this was reproduced, confirming it
+wasn't this mod's own death-detection misfiring — the game's own native death-handling logic itself is
+what's cross-wired.
+
+Root cause (inferred, not fully traced): `BP_PlayerCharacter_C`'s own on-death Blueprint logic —
+loot-crate spawn, death-location UI, input lock — appears to be keyed off *any* instance's health reaching
+zero, not off which instance is actually possessed by the local `PlayerController`. The Blueprint was
+never designed to have a second, locally-spawned instance of itself coexisting in the world at all, so
+this is a design assumption baked into the class, not a native engine bug and not something fixable by
+patching `find_local_pawn()` or similar mod-side logic.
+
+### Fix: disable the proxy's collision entirely
+
+The proxy is purely cosmetic — it never needs to take damage. `proxy_manager.cpp`'s `spawn_proxy()` now
+calls `SetActorEnableCollision(false)` on the freshly spawned+finished actor, preventing any damage trace
+from ever landing on it in the first place. This sidesteps the cross-wired death logic entirely rather
+than trying to patch it, and is a one-line, low-risk, easily-reversible change.
+
+### Live-verified with a genuine second client — real two-machine multiplayer test infrastructure now exists
+
+Previous sessions' live testing all used a single client with a synthetic fake remote player
+(`kTestProxyId`, removed in Session 40) or attempted (and failed) two-client tests via Sandboxie on one
+PC. This session set up a **real second client on a separate Proxmox VM** and used it for genuine
+two-machine verification — infrastructure worth keeping for future multiplayer-specific testing:
+
+- SSH access configured to both the Windows VM guest and the Proxmox host itself (key-based, matching the
+  existing `ironclaw` pattern — see `~/.ssh/config` entries `sdo-client2` and `sdo-proxmox`).
+- UE4SS + the mod's `Mods/` folder copied from the working host installation to the VM's copy of the game
+  (no game-side reinstall needed, UE4SS drops in as a normal file copy).
+- Local dev server (`server/`) fetches tickets directly via its own `/v1/tickets` endpoint
+  (no `adminToken` configured locally, so no auth needed) rather than going through `play.ps1`'s
+  remote-only `/v1/join` directory-service assumption — `session.cfg` written directly with
+  `SDB_GATEWAY_HOST` set to the *host's* LAN IP (not `127.0.0.1`) so the VM can actually reach it.
+- Hit and fixed three real environment issues along the way, all now resolved for future sessions:
+  1. **NVIDIA Code 43** on the passed-through GPU — the VM's `cpu:` line in
+     `/etc/pve/qemu-server/102.conf` had no hypervisor-hiding flag, and NVIDIA's consumer driver actively
+     disables itself when it detects it's running in a VM. Fixed by adding `hidden=1,flags=+pcid` to the
+     `cpu:` line (Proxmox-native equivalent of the common `-cpu host,kvm=off` trick, without resorting to
+     raw `args:` overrides).
+  2. **GPU still Code 43 after that** — the config only passed through the GPU's VGA function
+     (`0000:01:00.0`) and not its paired HD-audio function (`0000:01:00.1`, confirmed present and already
+     bound to `vfio-pci` via `lspci -nnk` on the Proxmox host). Fixed by changing `hostpci0` to
+     `0000:01:00,pcie=1` (dropping the explicit `.0` tells Proxmox to pass through *all* functions of that
+     PCI device together as one multi-function unit).
+  3. **"WGL: The driver does not appear to support OpenGL"** blocking the game from opening at all, after
+     the GPU itself showed `Status: OK` in Device Manager — the NVIDIA driver had only partially
+     initialized while stuck in the Code 43 state; a full silent reinstall
+     (`<installer>.exe -s -clean -noreboot`) followed by an in-guest restart fixed it (confirmed via
+     `Win32_VideoController.DriverVersion` going from blank to `32.0.16.1088`). Separately, disabled
+     UE4SS's `GuiConsoleEnabled`/`GuiConsoleVisible` in `UE4SS-settings.ini` — its debug console window
+     uses GLFW+OpenGL independently of the game's own DirectX rendering and was the specific thing
+     throwing the WGL error; the plain (non-GUI) `ConsoleEnabled` console doesn't need this and was left on.
+
+### Separate finding: two players creating characters concurrently causes one to fall through the world
+
+While setting up the second client, a `New Game`-flow character consistently fell through the world
+immediately on spawn — reproduced identically on both the earlier Sandboxie attempt and this VM, at
+multiple different coordinates (including a coordinate directly copied from a different, healthy player's
+own valid saved position, ruling out "bad coordinates" as the cause). Isolated by testing with only one
+client's character-creation flow running at a time: **a brand-new character spawns and stabilizes
+correctly when created in isolation**, but reliably falls through indefinitely when a *second* player's
+character creation happens concurrently with (or close in time to) another. This points at a race
+condition in shared, insufficiently-scoped server-side or mod-side state touched during character
+creation/first spawn — not an environment issue (it reproduced identically across two completely
+different environments: Sandboxie and a separate VM), and not related to the proxy/collision work above.
+**Not investigated further this session** — worth a dedicated look at `host-agent.js`'s and `mod.cpp`'s
+character-creation/first-spawn paths for anything keyed by a shared cursor, singleton, or un-keyed static
+rather than being properly scoped per-player.
+
+**Live-verified end to end**: with both a local-server-connected native client and the Proxmox VM client
+in the same session, each saw a real, visible proxy for the other. Attacking the VM client's view of the
+native client's proxy landed **zero damage** (collision fix confirmed working), and the native client
+side showed **no effect whatsoever** — no health change, no hit reaction, nothing. The death-cascade bug
+this session opened with is fully closed.
+

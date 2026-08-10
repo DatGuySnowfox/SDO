@@ -532,3 +532,13 @@ a future session.
   real, visible character actor with no crash and no UE4SS exceptions. This closes the biggest remaining
   gap toward the mod being visually functional in multiplayer. The Session 36 TEMP test hook in
   `mod.cpp` has been removed now that spawning is confirmed live.
+
+  **Session 42 follow-up — proxy death was killing the real player, now fixed**: live two-client testing
+  found that killing a spawned proxy triggered the *real* local player's own death sequence (their loot
+  crate, their death-location marker) — `BP_PlayerCharacter_C`'s on-death Blueprint logic isn't scoped to
+  which instance is actually possessed, since the class was never designed for a second, locally-spawned
+  instance to coexist. Fixed with `SetActorEnableCollision(false)` on the proxy right after spawning — it's
+  purely cosmetic and never needs to take damage, so this prevents the cross-wiring at the source rather
+  than patching the Blueprint's death logic. Live-verified with a genuine second client on a separate
+  machine (see `04_ida_investigation_log.md` Session 42): zero damage landed on the proxy, and zero effect
+  on the real player being represented.

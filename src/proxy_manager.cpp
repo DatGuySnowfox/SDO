@@ -227,6 +227,19 @@ AActor* ProxyManager::spawn_proxy(UWorld* world, float x, float y, float z, floa
 
     call_finish_spawning(pending, &xform);
 
+    // BP_PlayerCharacter_C's own death handling (loot-crate spawn, death-location
+    // UI, input lock) turns out to be keyed off any instance's health reaching
+    // zero, not off which instance is actually possessed by the local
+    // PlayerController — the Blueprint was never designed to have a second,
+    // locally-spawned instance coexisting. Live-confirmed 2026-08-10: killing a
+    // proxy actor triggered the real player's own death sequence (their loot
+    // crate, their death-location marker) while their own pawn remained
+    // standing, frozen. The proxy is purely cosmetic and never needs to take
+    // damage, so disabling its collision prevents any damage trace from ever
+    // landing on it in the first place, sidestepping the whole class of bug
+    // rather than trying to patch the Blueprint's death logic itself.
+    static_cast<AActor*>(pending)->SetActorEnableCollision(false);
+
     Output::send<LogLevel::Normal>(STR("SDB: proxy spawned\n"));
     return static_cast<AActor*>(pending);
 }
