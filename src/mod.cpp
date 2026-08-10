@@ -106,11 +106,24 @@ static int64_t cfg_ms_to_us(const std::unordered_map<std::string,std::string>& m
 static sdb::TcpClient g_tcp;
 static uint8_t        g_enc_buf[sdb::FRAME_HEADER_SIZE + sdb::FRAME_MAX_PAYLOAD];
 
-// Character creation IPC paths
-static constexpr wchar_t CC_REQUEST_FLAG[] =
-    L"C:\\temp\\SDB_cc_request.flag";
-static constexpr wchar_t CC_DONE_FILE[] =
-    L"C:\\temp\\SDB_cc_done.json";
+// Character creation IPC paths — suffixed with this process's PID so two mod
+// instances on the same machine (e.g. two Sandboxie-sandboxed game clients
+// sharing a filesystem) don't race on the same request/done files. The C++
+// side computes the PID and publishes it via an environment variable so the
+// Lua-side character-creation script (mods/SDOnline/Scripts/main.lua, which
+// runs in this same OS process) can build the matching paths independently —
+// env vars set in a process are visible to everything running inside it.
+static std::wstring CC_REQUEST_FLAG;
+static std::wstring CC_DONE_FILE;
+
+static void init_cc_ipc_paths()
+{
+    const DWORD pid = GetCurrentProcessId();
+    const std::wstring pidStr = std::to_wstring(pid);
+    CC_REQUEST_FLAG = L"C:\\temp\\SDB_cc_request_" + pidStr + L".flag";
+    CC_DONE_FILE    = L"C:\\temp\\SDB_cc_done_" + pidStr + L".json";
+    SetEnvironmentVariableW(L"SDB_CC_PID", pidStr.c_str());
+}
 
 // ── UE4SS helpers ─────────────────────────────────────────────────────────
 
@@ -884,7 +897,7 @@ static void do_game_tick()
         {
             st2.ccRequestWritten.store(true, std::memory_order_relaxed);
             // Write the flag file the Lua mod polls for.
-            HANDLE h = CreateFileW(CC_REQUEST_FLAG,
+            HANDLE h = CreateFileW(CC_REQUEST_FLAG.c_str(),
                 GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
                 FILE_ATTRIBUTE_NORMAL, nullptr);
             if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
@@ -899,7 +912,7 @@ static void do_game_tick()
         if (st2.ccRequestWritten.load(std::memory_order_relaxed)
             && !st2.ccDone.load(std::memory_order_relaxed))
         {
-            HANDLE h = CreateFileW(CC_DONE_FILE,
+            HANDLE h = CreateFileW(CC_DONE_FILE.c_str(),
                 GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
                 FILE_ATTRIBUTE_NORMAL, nullptr);
             if (h != INVALID_HANDLE_VALUE) {
@@ -907,7 +920,7 @@ static void do_game_tick()
                 DWORD n = 0;
                 ReadFile(h, buf, sizeof(buf) - 1, &n, nullptr);
                 CloseHandle(h);
-                DeleteFileW(CC_DONE_FILE);
+                DeleteFileW(CC_DONE_FILE.c_str());
 
                 // Parse character fields from done JSON.
                 std::string json(buf, n);
@@ -1044,6 +1057,7 @@ public:
 
     void on_unreal_init() override
     {
+        init_cc_ipc_paths();
         auto sc = load_session_config();
 
         cfg_gateway_host     = cfg_get(sc, "SDB_GATEWAY_HOST");

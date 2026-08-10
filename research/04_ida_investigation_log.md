@@ -4088,3 +4088,34 @@ native client's proxy landed **zero damage** (collision fix confirmed working), 
 side showed **no effect whatsoever** — no health change, no hit reaction, nothing. The death-cascade bug
 this session opened with is fully closed.
 
+### Concurrent character-creation race — one real bug found and fixed, one likely cause identified but unfixed
+
+Follow-up investigation (code review only, no live game access that session — see below): found a genuine,
+concrete bug in the character-creation IPC mechanism. `mod.cpp`'s `CC_REQUEST_FLAG`/`CC_DONE_FILE` (the
+flag/done files the C++ mod and the Lua-side `mods/SDOnline/Scripts/main.lua` character-creation UI use to
+hand off to each other) were hardcoded to fixed paths — `C:\temp\SDB_cc_request.flag` /
+`C:\temp\SDB_cc_done.json` — with no per-instance scoping at all. Any two mod instances on a machine
+sharing that filesystem path (confirmed true for the two Sandboxie boxes used earlier this session, which
+share `%APPDATA%` and, it turns out, presumably `C:\temp` too) would read and write the exact same files
+during character creation, racing on both the request flag and the done-JSON payload/deletion.
+
+**Fixed**: both files are now suffixed with the current process's PID, computed once in `mod.cpp`'s new
+`init_cc_ipc_paths()` (called from `on_unreal_init()`) and published via the `SDB_CC_PID` environment
+variable so `main.lua` — running in the same OS process — can independently build the matching suffixed
+paths (env vars set in a process are visible to everything running inside it, C++ and embedded Lua alike).
+Lua-side lookup is wrapped in `pcall` with a fallback to the old unsuffixed names and a warning print, in
+case `os.getenv` isn't available in this UE4SS Lua build. **Not live-verified this session** — the local
+game client was stuck at what appeared to be an animated menu/splash screen and neither synthetic keyboard
+input (`SendKeys` and raw `SendInput` hardware-level events) nor synthetic mouse clicks got it to
+progress, so this fix is implemented and builds cleanly but unconfirmed in practice.
+
+This fix does **not** fully explain the original two-machine (VM) reproduction, though — the VM's
+`C:\temp\` is a physically separate disk from the host's, so this specific file-race can't cross between
+them. Leading remaining hypothesis for that case: **resource contention, not a logic bug**. The Proxmox VM
+runs on the *same physical host* as the native client, sharing the same underlying CPU and — since the
+VM's GPU is passed through from that same physical card — GPU cycles too. Running two demanding UE5
+processes simultaneously on shared hardware is a very plausible way to induce exactly the kind of
+level-streaming/collision-registration stall that causes a freshly-spawned character to fall through the
+floor, without needing any shared mutable state at all. Not confirmed — would need reproducing with a
+genuinely separate, unloaded physical machine as the second client to rule resource contention in or out.
+
