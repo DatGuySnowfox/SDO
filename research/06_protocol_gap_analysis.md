@@ -187,8 +187,9 @@ passive skill levels, `playerForename`/`Surname`, `respawnLoc`.
 - `encode_equipment`/`decode_equipment` in `protocol.cpp`/`protocol.hpp`.
 - `dispatch_frame()` decodes inbound `Equipment` frames and forwards them to
   `ProxyManager::on_equipment()`, which caches `RemotePlayer.equipment` (`state.hpp`). Appearance
-  sync (mesh/anim per slot) is still a no-op — `ProxyManager` doesn't spawn real proxy actors yet
-  (`spawn_proxy()` is a Phase 2 stub) — but the data is cached for when that lands.
+  sync (mesh/anim per slot) is still a no-op — `spawn_proxy()` now spawns a real, visible proxy actor
+  (see the resolved `ProxyManager` spawn gap below), but applying per-slot mesh/anim to it is a
+  separate follow-up — the equipment data is cached and ready for when that lands.
 - `read_local_equipment()` walks all 21 `FS_ServerEquippedItems` slots off `BP_JigHelperComp_C+0xF8`
   (Session 30 offset table) and resolves each occupied slot's `ItemID` DA pointer to its `ItemId`
   FName string via a new `native::fname_to_string()` helper.
@@ -484,3 +485,28 @@ a future session.
   output, so there's no log evidence either way. Next step needs either a live IDA debugger session with a
   breakpoint at the resolved addresses, or finding and hooking whatever simpler native function the game's
   own zombie/loot spawners use internally instead of going through this generic reflection path.
+
+  **RESOLVED — Session 40**: root cause found and fixed via live tracing directly into `UE4SS.dll`
+  (`04_ida_investigation_log.md` Session 40). The Session 38 hypothesis was on the wrong binary — a live
+  breakpoint on the actual native `BeginDeferredActorSpawnFromClass`/`SpawnActor` chain in the game's own
+  executable never fired despite confirmed, continuous real `spawn_proxy()` retries, meaning the Session
+  38 trace had been watching an unrelated coincidental spawn (almost certainly the local player's own
+  pawn) rather than this mod's call. The real call path is `UE4SS.dll`'s own exported
+  `RC::Unreal::UWorld::SpawnActor`, found live by parsing the module's PE export table directly and
+  resolving its RVA. Tracing that function's real internals (not the vendored SDK header, the actual
+  compiled code) showed it calls UE4SS's own `BeginDeferredActorSpawnFromClass` and `FinishSpawningActor`
+  implementations, both of which bottom out in the same internal helper — an FNV-1a hash + hashtable
+  probe that never resolves on this build, permanently returning null regardless of class or world
+  validity. This is a single shared bug in UE4SS's own reflection-dispatch cache for this engine build,
+  not anything specific to this mod, this class, or the earlier `GetClassPrivate()` workaround.
+
+  Fixed by bypassing UE4SS's wrapper entirely: `spawn_proxy()` now calls the game's own native
+  `BeginDeferredActorSpawnFromClass` and `AActor::FinishSpawning` directly by resolved address (same
+  by-address-workaround pattern already used for `GetClassPrivate()`), constructing the native 96-byte
+  UE5 LWC `FTransform` by hand. `FinishSpawning`'s real implementation was identified by its signature
+  match to UE5 source — a one-time `bHasFinishedSpawning`-style guard flag at offset+92, then a full
+  parent-relative transform composition before applying it — found as the callee of the native
+  "Finish Spawning Actor" Kismet exec thunk. Live-tested end to end: the synthetic test proxy spawns as a
+  real, visible character actor with no crash and no UE4SS exceptions. This closes the biggest remaining
+  gap toward the mod being visually functional in multiplayer. The Session 36 TEMP test hook in
+  `mod.cpp` has been removed now that spawning is confirmed live.

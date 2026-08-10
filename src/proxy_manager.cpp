@@ -8,11 +8,67 @@
 #include <RC/DynamicOutput/Output.hpp>
 
 #include <windows.h>
+#include <cmath>
 
 using namespace RC;
 using namespace RC::Unreal;
 
 namespace sdb {
+
+// UE5 LWC FTransform's real memory layout: three SIMD-aligned 32-byte blocks
+// (Rotation quat XYZW, Translation XYZ+pad, Scale3D XYZ+pad), each stored as
+// doubles — confirmed via IDA decompile of the engine's own Kismet exec thunk
+// for BeginDeferredActorSpawnFromClass, which builds an identical 96-byte
+// default-identity transform from three constant xmmwords before Blueprint
+// pins override individual fields. Not the vendored SDK's FVector/FRotator —
+// those are just X/Y/Z doubles with no matching FTransform type at all.
+struct NativeFTransform {
+    double rotX = 0.0, rotY = 0.0, rotZ = 0.0, rotW = 1.0;
+    double locX = 0.0, locY = 0.0, locZ = 0.0, locPad = 0.0;
+    double scaleX = 1.0, scaleY = 1.0, scaleZ = 1.0, scalePad = 0.0;
+};
+
+// UE4SS.dll's own UWorld::SpawnActor wrapper unconditionally returns nullptr
+// on this build — live IDA tracing (research/04_ida_investigation_log.md
+// Session 40) followed its real call chain (UWorld::SpawnActor ->
+// RC::Unreal::UGameplayStatics::BeginDeferredActorSpawnFromClass) down into
+// an internal UE4SS reflection/type-cache lookup (FNV-1a hash + hashtable
+// probe) that never resolves, leaving the result permanently null — confirmed
+// live for every real spawn_proxy() attempt this session, independent of
+// class or world validity. Bypasses that broken wrapper entirely by calling
+// the game's own native engine function directly (resolved by RVA, same
+// pattern as get_class_private() above). This native
+// BeginDeferredActorSpawnFromClass was separately verified via full
+// Hex-Rays decompile: it resolves WorldContextObject -> UWorld via
+// UEngine::GetWorldFromContextObject, then calls the real, stock
+// UWorld::SpawnActor (confirmed 100% vanilla UE5 with no SurrounDead-specific
+// gate) with bDeferConstruction=true.
+static void* call_begin_deferred_spawn(void* world_context, void* actor_class,
+                                        const NativeFTransform* xform)
+{
+    // (WorldContextObject, ActorClass, SpawnTransform, CollisionHandlingOverride,
+    //  Owner, <unidentified trailing byte, always 0 for our use>)
+    using Fn = void*(__fastcall*)(void*, void*, const NativeFTransform*, char, void*, char);
+    static Fn fn = reinterpret_cast<Fn>(
+        reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr)) + 0x2E80E80);
+    return fn(world_context, actor_class, xform, 0, nullptr, 0);
+}
+
+// AActor::FinishSpawning()'s real native implementation — identified via its
+// signature match to UE5 source (a one-time bHasFinishedSpawning-style guard
+// flag at offset+92, then a full parent-relative transform composition before
+// applying it), found as the callee of the Kismet exec thunk for the
+// "Finish Spawning Actor" node. Real UGameplayStatics::FinishSpawningActor
+// is just `Actor->FinishSpawning(...); return Actor;` — FinishSpawning
+// itself is void in UE5 source, so its return value here is not used.
+static void call_finish_spawning(void* actor, const NativeFTransform* xform)
+{
+    // (this=Actor, SpawnTransform, bIsDefaultTransform, InstanceDataCache, TransformScaleMethod)
+    using Fn = void*(__fastcall*)(void*, const NativeFTransform*, char, void*, char);
+    static Fn fn = reinterpret_cast<Fn>(
+        reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr)) + 0x2AAAB90);
+    fn(actor, xform, 0, nullptr, 0);
+}
 
 // UObject::GetClassPrivate() in the vendored UE4SS stub header is declared
 // on the wrong class for its own mangled name (the header's comment shows
@@ -150,16 +206,29 @@ AActor* ProxyManager::spawn_proxy(UWorld* world, float x, float y, float z, floa
     }
     if (!s_proxy_class) return nullptr;
 
-    const FVector  loc{ static_cast<double>(x), static_cast<double>(y), static_cast<double>(z) };
-    const FRotator rot{ 0.0, static_cast<double>(yaw), 0.0 };
-    AActor* actor = world->SpawnActor(s_proxy_class, &loc, &rot);
-    if (!actor) {
+    // Pitch/roll are 0, so the FRotator->FQuat conversion collapses to a pure
+    // Z-axis rotation: (0, 0, sin(yaw/2), cos(yaw/2)).
+    const double yawRad = static_cast<double>(yaw) * (3.14159265358979323846 / 180.0);
+    NativeFTransform xform;
+    xform.rotZ = std::sin(yawRad * 0.5);
+    xform.rotW = std::cos(yawRad * 0.5);
+    xform.locX = static_cast<double>(x);
+    xform.locY = static_cast<double>(y);
+    xform.locZ = static_cast<double>(z);
+
+    // world doubles as its own WorldContextObject: UWorld::GetWorld() (the
+    // virtual call BeginDeferredActorSpawnFromClass resolves it through)
+    // trivially returns `this` — confirmed live during the same trace.
+    void* pending = call_begin_deferred_spawn(world, s_proxy_class, &xform);
+    if (!pending) {
         Output::send<LogLevel::Warning>(STR("SDB: proxy spawn failed\n"));
         return nullptr;
     }
 
+    call_finish_spawning(pending, &xform);
+
     Output::send<LogLevel::Normal>(STR("SDB: proxy spawned\n"));
-    return actor;
+    return static_cast<AActor*>(pending);
 }
 
 void ProxyManager::destroy_proxy(AActor* actor)

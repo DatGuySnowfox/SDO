@@ -972,28 +972,6 @@ static void do_game_tick()
         send_movement(pawn);
     }
 
-    // TEMP test hook (Session 36 live verification of spawn_proxy): real
-    // network auth isn't available this session, so synthesize a fake
-    // remote player near the local pawn to exercise
-    // ProxyManager::tick()->spawn_proxy() without a second real connection.
-    // Remove once proxy spawning is confirmed live.
-    {
-        static bool s_spawned_test_proxy = false;
-        if (!s_spawned_test_proxy) {
-            s_spawned_test_proxy = true;
-            constexpr uint64_t kTestProxyId = 0xDEADBEEFULL;
-            const FVector loc = pawn->K2_GetActorLocation();
-            sdb::Movement mv{};
-            mv.x = static_cast<float>(loc.X) + 300.0f;
-            mv.y = static_cast<float>(loc.Y);
-            mv.z = static_cast<float>(loc.Z);
-            sdb::g_proxy_manager().on_player_connected(kTestProxyId);
-            sdb::g_proxy_manager().on_movement(kTestProxyId, mv);
-            Output::send<LogLevel::Normal>(
-                STR("SDB: TEST spawning synthetic remote player 300 units away\n"));
-        }
-    }
-
     // 5. Drive proxy actors.
     UWorld* world = pawn->GetWorld();
     sdb::g_proxy_manager().tick(world, pawn);

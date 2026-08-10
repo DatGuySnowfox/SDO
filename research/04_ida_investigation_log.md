@@ -3792,3 +3792,125 @@ designed to carry statically-set breakpoints through into a live session correct
 the post-attach addressing ambiguity hit here. This session's attempt did it in the opposite order
 (attach first, then jump-to-address), which is the likely root cause of the confusion.
 
+---
+
+## Session 40: 2026-08-09 — SpawnActor Root Cause Found and Fixed
+
+**Goal**: retry the live debugger approach from Session 38's addendum with corrected methodology
+(breakpoints set before attach), to finally determine why `spawn_proxy()` is rejected.
+
+### False start: the earlier "engine spawn succeeds" trace was watching the wrong call
+
+Following the corrected order (breakpoints on `0x142EB0540`/`0x1434ACF40` set while static, attach
+afterward), the fix worked exactly as expected: address translation across attach was clean, and a full
+trace confirmed `GetWorldFromContextObject` resolves a valid `UWorld*`, the real native `SpawnActor`
+(`sub_14300FE50`) is called and returns a non-null actor with a class pointer that exactly matches the
+requested `UClass*`, and `BeginDeferredActorSpawnFromClass` itself returns that same non-null actor to
+its caller. Every check along this path passes.
+
+This looked like a full resolution — until re-arming the same breakpoints and confirming the mod's
+`SDB.log` was actively logging `proxy spawn failed` every 5 seconds (the `ProxyManager::tick()` retry
+cadence) at the same time. None of the breakpoints fired. Not even the well-established
+`BeginDeferredActorSpawnFromClass` exec thunk, despite dozens of confirmed real retries happening in the
+same window. The conclusion: the earlier "successful" trace was never watching this mod's call at all —
+it was almost certainly a coincidental, unrelated spawn of a `BP_PlayerCharacter_C` instance (most likely
+the local player's own pawn loading in), which happens to share the exact same `UClass*` pointer as the
+proxy target and is indistinguishable from it by class/world checks alone. The lesson from Session 24's
+`K2_TeleportTo` chase applies again here in a new form: confirming a breakpoint *can* fire on the
+expected code path is not the same as confirming *this specific call* took that path. A register/pointer
+match isn't enough in a live, busy game world — needed either a unique marker or, better, tracing from
+the actual call site outward instead of trusting an assumed call chain.
+
+### The real call site: UE4SS.dll's own SpawnActor, not the game's native reflection path
+
+`ProxyManager::spawn_proxy()` calls `world->SpawnActor(...)` — the vendored UE4SS C++ SDK wrapper
+(`RC::Unreal::UWorld::SpawnActor`), an exported function inside `UE4SS.dll`, a separate module from the
+game binary entirely. Found its live entry point directly and reliably by parsing `UE4SS.dll`'s own PE
+export table from live process memory (DOS header → NT header → export directory → name/ordinal/function
+RVA arrays, walked manually via `ida_bytes` reads while attached) and resolving the RVA for
+`?SpawnActor@UWorld@Unreal@RC@@QEAAPEAVAActor@23@PEAVUClass@23@PEBUFVector@23@PEBUFRotator@23@@Z` — far
+more reliable than guessing at (name-string, code-pointer) heuristics in a binary IDA has no analysis
+database for.
+
+A breakpoint at that address fired immediately and reliably on every real `spawn_proxy()` retry, with
+`RCX`/`RDX` matching the actual `UWorld*`/`UClass*` in play — this is unambiguously the correct call site.
+Disassembling it manually (IDA's own disasm/decompile tools fail outright on `UE4SS.dll` since it isn't
+loaded into this IDB — worked around by decoding raw bytes instruction-by-instruction via
+`ida_ua.decode_insn`/`insn_t` fields directly, bypassing the database-dependent `generate_disasm_line`
+which silently prints undefined bytes as `db XXh` for any address IDA hasn't marked as code) showed it
+calls two further UE4SS-internal, already-symbolized functions in sequence:
+
+```
+RC::Unreal::UGameplayStatics::BeginDeferredActorSpawnFromClass(WorldContextObject, ActorClass, &Transform, 0, nullptr)
+  -> if non-null: RC::Unreal::UGameplayStatics::FinishSpawningActor(result, &Transform)
+```
+
+A breakpoint immediately after the `BeginDeferredActorSpawnFromClass` call confirmed `RAX = 0` on every
+real attempt — UE4SS's own implementation of this function is what returns null, not anything in the
+game's native code.
+
+### Root cause: a shared, unresolved internal cache lookup inside UE4SS.dll
+
+Manually disassembling `BeginDeferredActorSpawnFromClass`'s real body (again via raw `decode_insn`, since
+no analysis database exists for this module) found two early boolean validation calls — both pass
+(`AL=1`) on every real attempt, ruling out a `WorldContext`/class-validity guard. Past those, the
+UE5-major-version branch (`RC::Unreal::Version::Major/Minor`, correctly read as `5`/`3` — not a
+misdetection) leads to a call into a shared internal helper (RVA `0x4C29C0` within `UE4SS.dll`) that
+computes an **FNV-1a hash** (recognized by the classic
+`0x100000001B3`/`0xCBF29CE484222325` constants) over repacked `FTransform` bytes and probes a small
+hashtable via a handful of fixed global pointers. The result slot is zero-initialized just before this
+call and never overwritten — this lookup is what's silently failing.
+
+Decompiling `UE4SS.dll`'s own `FinishSpawningActor` export (`?FinishSpawningActor@UGameplayStatics@...`,
+found the same way via PE export parsing) showed an **identical structure** — same two early checks, same
+UE5-version branch, same call into the exact same helper address, same zero-initialized result slot never
+overwritten. Both of UE4SS's `GameplayStatics` spawn-related wrappers bottom out in the same broken
+internal helper. This is a single, shared bug in UE4SS's own reflection-dispatch/type-cache mechanism for
+this specific engine build — not anything specific to this mod, to either function individually, to the
+`BP_PlayerCharacter_C`/`BP_Zombie_C` class choice (Session 36), or to the `GetClassPrivate()` workaround
+already in `proxy_manager.cpp`. Both Lua's and this mod's identical failure (Session 38) is now fully
+explained: both funnel through this exact same broken UE4SS-internal path.
+
+### Fix: bypass UE4SS's wrapper, call the game's own native functions directly
+
+Since UE4SS's wrapper is broken but the game's own native reflection-adjacent call chain (traced in the
+false-start section above, before its trigger was known to be miscredited) is 100% functional stock UE5
+code, the fix bypasses UE4SS entirely for this call, following the same by-address-resolution pattern
+already established for `get_class_private()`:
+
+- `BeginDeferredActorSpawnFromClass`'s real native body (`sub_142E80E80`, confirmed via full decompile in
+  Session 38: resolves `WorldContextObject` via `UEngine::GetWorldFromContextObject`, then calls the real
+  native `UWorld::SpawnActor` with `bDeferConstruction=true`) is called directly by resolved RVA.
+- The real native `AActor::FinishSpawning()` equivalent was identified by searching the second candidate
+  cluster of (name-string, code-pointer) pairs for `"FinishSpawningActor"` — critically, the cluster
+  physically adjacent to `BeginDeferredActorSpawnFromClass`'s own thunk address (`0x142EB0xxx`–
+  `0x142EB4xxx`), not the first, distant cluster tried (`0x1437Bxxx`), which under decompile turned out to
+  have `NewObject`-style construction semantics inconsistent with "finish an already-existing actor" and
+  was discarded. The exec thunk at `0x142EB4320` reads an Actor pointer, an `FTransform`, and a byte off
+  the Kismet frame and calls `sub_142AAAB90(Actor, &Transform, 0, 0, byte)` — matched with high confidence
+  to real `AActor::FinishSpawning()` by its signature: a one-time guard flag at `this+92`
+  (`bHasFinishedSpawning`-equivalent, checked-then-set exactly once) followed by a full parent-attachment-
+  aware transform composition before applying it. The calling thunk returns the *original* Actor pointer
+  read from the frame regardless of this call's own return value — matching real
+  `UGameplayStatics::FinishSpawningActor`'s actual UE5 source (`Actor->FinishSpawning(...); return Actor;`,
+  with `FinishSpawning` itself `void`).
+- `proxy_manager.cpp` now builds the native 96-byte UE5 LWC `FTransform` layout by hand (three
+  SIMD-aligned 32-byte blocks — Rotation quat XYZW, Translation XYZ+pad, Scale3D XYZ+pad, all doubles;
+  confirmed via the constant-xmmword identity-transform pattern both exec thunks build for unconnected
+  Blueprint pins) and calls both resolved functions directly instead of `world->SpawnActor(...)`.
+
+**Live-tested end to end and confirmed working**: `spawn_proxy()` now returns a real, non-null actor;
+`FinishSpawning`'s transform-composition and component-registration side effects run without exception in
+either `SDB.log` or `UE4SS.log`; and the synthetic test proxy actually renders as a visible character
+model in-game, 300 units from the local player, exactly as intended. No crash across the full change. This
+closes the biggest remaining gap toward the mod being visually functional in multiplayer. The Session 36
+TEMP test hook in `mod.cpp` (`kTestProxyId = 0xDEADBEEF`) has been removed now that spawning is confirmed
+live — future testing should exercise this through a second real client connection instead.
+
+**Unrelated infrastructure note**: this session's live testing was repeatedly blocked by the mod's join
+ticket expiring/being replayed (`[tcp] authentication rejected` loops) — tickets are short-lived
+(`scripts/play.ps1`, 2-minute TTL) and single-use server-side, so a fresh `play.ps1` run is needed
+immediately before each in-game test, not just once per session. Also found and fixed a real bug in
+`play.ps1` itself: it checked a `$resp.ok` field that the actual ticket-issuing endpoint never returns,
+which would have caused it to always report failure even on a successful ticket fetch.
+

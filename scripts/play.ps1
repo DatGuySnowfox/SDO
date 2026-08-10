@@ -36,7 +36,7 @@ try {
     exit 1
 }
 
-if (-not $resp.ok) {
+if ($resp.error -or -not $resp.ticket) {
     Write-Error "Server rejected join: $($resp.error)"
     exit 1
 }
