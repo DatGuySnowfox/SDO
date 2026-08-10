@@ -1,11 +1,22 @@
 -- SDB CharCreation: hook the game's CharacterBarberMenu (natural OR programmatic).
--- Opens programmatically when C:\temp\SDB_cc_request.flag exists.
+-- Opens programmatically when the request-flag file exists.
 -- Reads values from the widget's own properties (not just the controller).
--- Writes C:\temp\SDB_cc_done.json when menu closes.
-
-local DONE_FILE    = "C:\\temp\\SDB_cc_done.json"
-local REQUEST_FLAG = "C:\\temp\\SDB_cc_request.flag"
+-- Writes the done-file when menu closes.
+--
+-- File paths are suffixed with this process's PID (via the SDB_CC_PID env var,
+-- set by the C++ mod in the same process) so two mod instances on one machine
+-- don't race on the same request/done files — see mod.cpp's init_cc_ipc_paths().
+local pidOk, pidVal = pcall(function() return os.getenv("SDB_CC_PID") end)
+local PID_SUFFIX   = (pidOk and pidVal) or ""
+local DONE_FILE    = "C:\\temp\\SDB_cc_done_" .. PID_SUFFIX .. ".json"
+local REQUEST_FLAG = "C:\\temp\\SDB_cc_request_" .. PID_SUFFIX .. ".flag"
 local WIDGET_PATH  = "/Game/UI/Widgets/Player/CharacterBarberMenu.CharacterBarberMenu_C"
+
+if PID_SUFFIX == "" then
+    print("[SDB-CC] WARNING: SDB_CC_PID not set (os.getenv unavailable or C++ mod not loaded yet) — "
+        .. "falling back to unsuffixed IPC file names, which is not safe with a second instance "
+        .. "on this machine\n")
+end
 
 -- All plausible property names the widget might expose for character data.
 -- Covers: direct vars, text-box names, dropdown names, struct names.
