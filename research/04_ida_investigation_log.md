@@ -4119,3 +4119,139 @@ level-streaming/collision-registration stall that causes a freshly-spawned chara
 floor, without needing any shared mutable state at all. Not confirmed — would need reproducing with a
 genuinely separate, unloaded physical machine as the second client to rule resource contention in or out.
 
+---
+
+## Session 43: 2026-08-10 — Appearance Sync: All 21 Equipment Slot GameplayTags Found Live
+
+**Goal**: resume the paused appearance-sync investigation (Session 41) — specifically, discover the real
+`FGameplayTag` values `BP_JigHelperComp_C::SetEquippedInfoBySlot`/`GetEquippedInfoBySlot` expect for each
+of the 21 equipment slots, since these are distinct from the wire protocol's positional slot index and
+from `S_ServerEquippedItems`'s plain struct field names (`EquippedFacewear` etc., Session 16).
+
+### UE4SS Lua's `GetPropertyValue` still doesn't help with `MapProperty` — parsed the raw `TSet` manually instead
+
+Confirmed again this session that `helper:GetPropertyValue("EquipmentIDSlotConfig")` (a
+`TMap<FGameplayTag, FS_EquipmentIDInfo>`) throws immediately via this UE4SS Lua binding, same as Session
+41. Rather than continue fighting the Lua API, parsed the live `TMap`'s raw memory directly via IDA, now
+with a confirmed-valid `BP_JigHelperComp_C` instance to read from (found via the technique below).
+
+`EquipmentIDSlotConfig` at `helper+0xAF8` (`TMap`, reported size `0x50` in the CXXHeaderDump) decodes as a
+standard UE5 `TSet`-backed `TMap`:
+
+```
++0x00  void*   Data            — pointer to the TSparseArray's element storage
++0x08  int32   ArrayNum        = 21
++0x0C  int32   ArrayMax        = 22
++0x10  uint32  AllocationFlags = 0x1FFFFF  (21 low bits set — inline TBitArray storage,
+                                            indices 0–20 allocated, index 21 free)
++0x20  int32   FirstFreeIndex  = 0
++0x24  int32   NumFreeIndices  = 0
++0x28  ...     (hash-table fields — bucket count, sentinel 0xFFFFFFFF, etc.; not needed,
+                 didn't bother decoding fully since walking the sparse array directly
+                 is sufficient to enumerate every element)
++0x40  void*   Hash            — hash bucket array pointer (unused by this approach)
+```
+
+Each element is a `TPair<FGameplayTag, FS_EquipmentIDInfo>`, **28 bytes per stride**, laid out
+contiguously in the `Data` array — no free-list overhead to account for on allocated slots. The key
+(`FGameplayTag`, i.e. a plain 8-byte `FName{int32 ComparisonIndex; int32 Number}`) is the first 8 bytes of
+each 28-byte element; found the stride empirically by reading a large raw dump and spotting the repeating
+small-magnitude-FName pattern at regular intervals (all 21 `ComparisonIndex` values clustered within a
+span of ~261, consistent with sequential registration from one config asset at startup).
+
+### Found the local pawn without any new UE4SS API guesswork — caught an existing call in flight
+
+Needed a confirmed-valid `helper` pointer to read `EquipmentIDSlotConfig` from. Rather than orchestrating
+a fresh `FindFirstOf`-style call, resolved UE4SS.dll's exported
+`?GetValuePtrByPropertyNameInChain@UObject@Unreal@RC@@QEAAPEAXPEB_W@Z` (same PE-export-table-parsing
+technique as Session 40/42) and put a breakpoint on its entry — `mod.cpp`'s own `find_local_pawn()` already
+calls this every tick (`ctrl->GetValuePtrByPropertyNameInChain(L"AcknowledgedPawn")`), so the very first
+hit (`RCX` = the `PlayerController` instance, `RDX` → the wide string `"AcknowledgedPawn"`) was the
+correct one. Breakpointed the return address (read off `[RSP]` at entry, same pattern as Session 40) and
+dereferenced `RAX` once to get the actual pawn pointer. From there, `pawn+0x700` (established path,
+`mod.cpp`'s own `read_local_equipment()`) gave the `helper` pointer directly.
+
+### Resolved every tag's real string by live-calling the game's own `FName::ToString`
+
+With 21 raw `ComparisonIndex` values in hand, needed their string form. Rather than guess at a naming
+convention from just the local player's `ActiveWeapon` (Session 41's plan), called the game's own
+`FName::ToString` (`0x140C9D940`, the same function `mod.cpp`'s `native::fname_to_string()` uses) directly
+via the live debugger, once per key:
+
+1. Caught the process mid-execution at an arbitrary breakpoint (any suspend point works, since the calling
+   thread's own progress doesn't matter for this — the technique **temporarily hijacks** the current
+   thread's register state to make an unrelated call, then discards whatever the interrupted call's
+   original return value would have been).
+2. Set up a synthetic call: `RCX` = key address (the `FName` is already sitting in memory at the right
+   layout, no need to copy it anywhere), `RDX` = scratch output buffer (borrowed from well below the
+   current `RSP`, safely out of the way of any real stack usage), pushed the *current* breakpoint address
+   itself onto the scratch stack as the return address, then set `RIP` = `FName::ToString`'s live address
+   and continued.
+3. Hit the same breakpoint again (now acting as our controlled return point), read the output
+   `UnrealFString{wchar_t* data; int32 num; int32 max}` (`mod.cpp`'s own struct, `native::fname_to_string`
+   uses the identical layout) and decoded the UTF-16 string.
+4. Repeated for all 21 keys reusing the same scratch region and return breakpoint (fully synchronous,
+   request-response per key — no need to juggle multiple in-flight calls). Batched into groups of 5 to
+   stay under the MCP bridge's request timeout (a known hazard from earlier sessions).
+5. Restored the original `RIP`/`RSP`/`RCX`/`RDX` and continued normally — the one interrupted unrelated
+   call (whatever code originally called `GetValuePtrByPropertyNameInChain` for `AcknowledgedPawn`, in an
+   unidentified module outside both the game and UE4SS.dll) received a garbage return value in `RAX` as a
+   side effect, but the game remained fully stable afterward with no crash and normal continued mod
+   operation — this call site is evidently either extremely tolerant of an occasional bad result (a
+   generic per-frame UI/HUD property poll, most likely) or coincidentally didn't matter this one time.
+   **Worth using a dedicated, known-safe breakpoint (e.g. our own mod's code, or a location proven to
+   tolerate corruption) instead of an arbitrary in-flight call if this technique is reused.**
+
+### Result: all 21 real tags, a clean and entirely predictable naming convention
+
+| Slot (wire protocol index) | Real `FGameplayTag` |
+|---|---|
+| 0 Facewear | `Jig.PlayerSlot.Facewear` |
+| 1 Headwear | `Jig.PlayerSlot.Headwear` |
+| 2 Eyewear | `Jig.PlayerSlot.Eyewear` |
+| 3 Accessory | `Jig.PlayerSlot.Accessory` |
+| 4 Torso | `Jig.PlayerSlot.Torso` |
+| 5 Gloves | `Jig.PlayerSlot.Gloves` |
+| 6 Legs | `Jig.PlayerSlot.Legs` |
+| 7 Feet | `Jig.PlayerSlot.Feet` |
+| 8 Container | `Jig.PlayerSlot.Container` |
+| 9 BodyArmor | `Jig.PlayerSlot.BodyArmor` |
+| 10 Backpack | `Jig.PlayerSlot.Backpack` |
+| 11 Primary | `Jig.PlayerSlot.PrimaryWeapon` |
+| 12 Secondary | `Jig.PlayerSlot.SecondaryWeapon` |
+| 13 Sidearm | `Jig.PlayerSlot.SidearmWeapon` |
+| 14 Melee | `Jig.PlayerSlot.MeleeWeapon` |
+| 15 Throwable | `Jig.PlayerSlot.Throwable` |
+| 16 Flashlight | `Jig.PlayerSlot.Flashlight` |
+| 17 Binoculars | `Jig.PlayerSlot.Binoculars` |
+| 18 GPS | `Jig.PlayerSlot.GPS` |
+| 19 Compass | `Jig.PlayerSlot.Compass` |
+| 20 FishingRod | `Jig.PlayerSlot.FishingRod` |
+
+Every name matches the wire protocol's own slot naming exactly except the four weapon slots, which carry
+an extra `Weapon` suffix (`Primary` → `PrimaryWeapon`, etc.).
+
+**Independently cross-verified**: after this extraction, equipped a real weapon in-game and re-read
+`ActiveWeapon` (`helper+0xB98`, a single plain `FGameplayTag`) — its `ComparisonIndex` (`1730659`) matched
+`Jig.PlayerSlot.PrimaryWeapon` exactly, confirming the whole `TSet` decode and tag-resolution chain end to
+end against an independent, live ground truth.
+
+### Remaining work before `SetEquippedInfoBySlot` can actually be called
+
+Knowing the real tag strings closes one of the two blockers from Session 41. Still needed before wiring up
+`ProxyManager` to apply cached equipment to a spawned proxy:
+
+- **Constructing an `FGameplayTag` from a known string at runtime** — `ComparisonIndex` values are
+  name-pool indices for *this specific process instance*; almost certainly stable across relaunches of the
+  same build (the pool fills deterministically from the same assets in the same order) but not something
+  to hardcode and trust blindly. Need to find and resolve the native `FName` constructor (or an
+  `FGameplayTag`-specific request/registration function) the same way `FName::ToString` was resolved here,
+  so the proxy-equipping code can build the right tag from the plain string at runtime regardless of which
+  process/session it's running in.
+- **The `FRepItemInfo`/`FGuid`/`bool` parameter marshaling for the actual `SetEquippedInfoBySlot` call** —
+  still unverified. This is a Blueprint-authored function (no native by-address equivalent to bypass to,
+  unlike `SpawnActor`/`FinishSpawning` in Session 40), so it has to go through `ProcessEvent` with a
+  correctly-laid-out Kismet parameter buffer. Getting this wrong risks a crash, unlike everything read-only
+  done so far this session — this needs its own careful, incremental live-verification pass before being
+  called for real, not a first attempt built entirely from documentation/analogy.
+
