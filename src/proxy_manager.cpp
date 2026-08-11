@@ -600,6 +600,29 @@ static AActor* spawn_and_attach_weapon_visual(AActor* actor, void* itemAsset)
 
     auto* weaponActor = static_cast<AActor*>(pending);
     weaponActor->SetActorEnableCollision(false);
+    // Pickup actors very plausibly spawn hidden by default (bHidden=true)
+    // until the real pickup/equip flow explicitly reveals them — every
+    // mechanical step up to and including the attach itself (K2_AttachTo
+    // returned true, correct Arms SkeletalMeshComponent confirmed by name)
+    // has succeeded live yet nothing renders, matching that theory.
+    weaponActor->SetActorHiddenInGame(false);
+
+    // Live-tested 2026-08-11: attach succeeds (K2_AttachTo returns true) onto
+    // the correct, confirmed-by-name SkeletalMeshComponent — yet still
+    // nothing renders. Most plausible remaining explanation: the component
+    // has no actual mesh asset assigned yet. ABP_SkeletalMeshPickup_C
+    // declares PickupBuildFromGround() (research/CXXHeaderDump/
+    // BP_SkeletalMeshPickup.hpp) — very likely the real initialization
+    // routine that configures the mesh from item data when a pickup
+    // naturally spawns from a "dropped in world" event, which our direct
+    // BeginDeferredActorSpawnFromClass spawn never triggers. Best-effort:
+    // call it if present, ignore if not (no known params, no return value).
+    {
+        UFunction* buildFn = weaponActor->GetFunctionByNameInChain(L"PickupBuildFromGround");
+        debug_log(buildFn ? "spawn_and_attach_weapon_visual: PickupBuildFromGround found"
+                           : "spawn_and_attach_weapon_visual: PickupBuildFromGround NOT FOUND");
+        if (buildFn) weaponActor->ProcessEvent(buildFn, nullptr);
+    }
 
     const RawFGameplayTag socket = *reinterpret_cast<RawFGameplayTag*>(
         reinterpret_cast<uintptr_t>(itemAsset) + 0x280);
@@ -633,10 +656,32 @@ static AActor* spawn_and_attach_weapon_visual(AActor* actor, void* itemAsset)
         debug_log("spawn_and_attach_weapon_visual: proxy's Arms component is null");
         return weaponActor;
     }
+    {
+        std::wstring wname = armsComp->GetFullName();
+        const int needed = WideCharToMultiByte(CP_UTF8, 0, wname.c_str(), -1, nullptr, 0, nullptr, nullptr);
+        std::string name(needed > 0 ? static_cast<size_t>(needed - 1) : 0, '\0');
+        if (needed > 0) WideCharToMultiByte(CP_UTF8, 0, wname.c_str(), -1, name.data(), needed, nullptr, nullptr);
+        debug_log("spawn_and_attach_weapon_visual: armsComp=" + name);
+    }
 
-    UFunction* getRootFn = weaponActor->GetFunctionByNameInChain(L"GetRootComponent");
+    // Live-tested 2026-08-11: K2_GetRootComponent + K2_AttachTo both succeed
+    // (confirmed true return, correct Arms component by name) yet nothing
+    // renders — ABP_SkeletalMeshPickup_C inherits from the native engine
+    // ASkeletalMeshActor (research/CXXHeaderDump/BP_SkeletalMeshPickup.hpp),
+    // which owns its own dedicated SkeletalMeshComponent; the Blueprint
+    // layers on complex hierarchy (per BP_FirearmPickup.hpp's many
+    // components) that plausibly reparents the *root* to something else
+    // (a collision/interaction volume), leaving the actual visible mesh a
+    // sibling/child elsewhere — meaning we may have been attaching the
+    // wrong component the whole time. Try the actor's real mesh component
+    // directly instead of its root.
+    UFunction* getRootFn = weaponActor->GetFunctionByNameInChain(L"GetSkeletalMeshComponent");
     if (!getRootFn) {
-        debug_log("spawn_and_attach_weapon_visual: GetRootComponent NOT FOUND");
+        debug_log("spawn_and_attach_weapon_visual: GetSkeletalMeshComponent NOT FOUND, falling back to K2_GetRootComponent");
+        getRootFn = weaponActor->GetFunctionByNameInChain(L"K2_GetRootComponent");
+    }
+    if (!getRootFn) {
+        debug_log("spawn_and_attach_weapon_visual: no root/mesh component getter found");
         return weaponActor;
     }
     UObject* weaponRoot = nullptr;
@@ -644,6 +689,13 @@ static AActor* spawn_and_attach_weapon_visual(AActor* actor, void* itemAsset)
     if (!weaponRoot) {
         debug_log("spawn_and_attach_weapon_visual: weapon actor's root component is null");
         return weaponActor;
+    }
+    {
+        std::wstring wname = weaponRoot->GetFullName();
+        const int needed = WideCharToMultiByte(CP_UTF8, 0, wname.c_str(), -1, nullptr, 0, nullptr, nullptr);
+        std::string name(needed > 0 ? static_cast<size_t>(needed - 1) : 0, '\0');
+        if (needed > 0) WideCharToMultiByte(CP_UTF8, 0, wname.c_str(), -1, name.data(), needed, nullptr, nullptr);
+        debug_log("spawn_and_attach_weapon_visual: weaponRoot=" + name);
     }
 
     UFunction* fn = weaponRoot->GetFunctionByNameInChain(L"K2_AttachTo");
@@ -655,15 +707,21 @@ static AActor* spawn_and_attach_weapon_visual(AActor* actor, void* itemAsset)
             RawFGameplayTag InSocketName;              // FName is the same 8-byte shape
             uint8_t         AttachLocationType = 3;     // EAttachLocation::SnapToTarget
             bool            WeldSimulatedBodies = false;
+            bool            ReturnValue = false;        // K2_AttachTo returns bool
         } params;
         static_assert(offsetof(Params, InParent) == 0x00, "Kismet param layout");
         static_assert(offsetof(Params, InSocketName) == 0x08, "Kismet param layout");
         static_assert(offsetof(Params, AttachLocationType) == 0x10, "Kismet param layout");
         static_assert(offsetof(Params, WeldSimulatedBodies) == 0x11, "Kismet param layout");
+        static_assert(offsetof(Params, ReturnValue) == 0x12, "Kismet param layout");
 
         params.InParent = armsComp;
         params.InSocketName = socket;
         weaponRoot->ProcessEvent(fn, &params);
+
+        char buf[64];
+        snprintf(buf, sizeof(buf), "spawn_and_attach_weapon_visual: K2_AttachTo returned %d", params.ReturnValue);
+        debug_log(buf);
     }
 
     return weaponActor;

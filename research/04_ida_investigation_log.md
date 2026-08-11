@@ -5033,12 +5033,55 @@ throughout this file). Builds clean; not yet live-tested this session.
 
 ### Remaining work
 
-- Live-test the refined `Arms`-component attach in a two-client session — the natural next step, not done this
-  session due to time.
-- The 21 slot values above are confirmed to work for the getter/setter/activate/onrep/notify *data* chain, but
-  none of this session's testing re-confirmed the *visual* result for any slot besides what the attach-refinement
-  testing above would show — worth a full visual pass across a few different slot types (clothing vs. weapon)
-  once the `Arms` attach is verified.
-- Solve the "unequip doesn't clear the proxy" gap, still open from prior sessions.
+### Weapon-visual attach: every mechanical step now confirmed successful, still zero visual result
+
+Live-tested the `Arms`-component attach in a real two-client session immediately after writing this session's
+"Remaining work" above. Found and fixed one real bug along the way (`GetRootComponent` isn't found via
+reflection — matches the `K2_`-prefix convention already established for every other Blueprint-exposed engine
+function used tonight; the real name is `K2_GetRootComponent`), then iterated through a full chain of
+live-verified checks, each confirming success and each followed by "still no visual" from a live two-client
+check:
+
+1. `armsComp` resolved via `GetFullName()` to a genuine, correctly-identified `SkeletalMeshComponent` on the
+   right proxy instance (`...BP_PlayerCharacter_C_2147479186.Arms`) — not garbage from a wrong raw offset.
+2. `K2_AttachTo` returned `true` (added a `ReturnValue` field to the params struct at the correct trailing offset
+   to actually check this, rather than assuming success from "no crash" the way earlier sessions repeatedly got
+   burned).
+3. Added `weaponActor->SetActorHiddenInGame(false)` on the theory that pickup actors spawn hidden by default
+   until the real pickup flow reveals them (`SetActorHiddenInGame` is a plain direct binding already in the
+   vendored stub, no reflection needed) — no change.
+4. Tried `GetSkeletalMeshComponent` instead of the root, on the theory that `ABP_SkeletalMeshPickup_C` inheriting
+   from the native `ASkeletalMeshActor` might mean the Blueprint's *root* had been reparented to something else
+   (a collision/interaction volume) above the real mesh — not found via reflection, but logging what
+   `K2_GetRootComponent` actually returns settled the question anyway: it resolved to
+   `...BP_AK15Pickup_C_2147477446.SkeletalMeshComponent0` — already the genuine mesh component, ruling that
+   theory out directly.
+5. Called `PickupBuildFromGround()` (declared on `ABP_SkeletalMeshPickup_C`, research/CXXHeaderDump/
+   BP_SkeletalMeshPickup.hpp) on the theory that it's the real initialization routine that configures the mesh
+   asset from item data when a pickup naturally spawns from a "dropped in world" event, which our direct
+   `BeginDeferredActorSpawnFromClass` spawn never triggers — found and called successfully, still no visual
+   change.
+
+Six consecutive confirmed-successful mechanical steps with zero visual result is a strong, clear signal to stop
+this specific line of live trial-and-error — the real blocker is something this session's diagnostic style
+(flag-file-triggered reflection calls, checking return values) can't surface on its own. The next real lead would
+need actually decompiling `ABP_SkeletalMeshPickup_C`'s/`ABP_FirearmPickup_C`'s compiled Blueprint logic (the same
+`kismet_disasm.py` technique used all through Sessions 45–46) to find whatever gates the mesh's actual visibility
+or asset assignment, rather than more guessing at engine-level function names.
+
+### Remaining work
+
+- Decompile `ABP_SkeletalMeshPickup_C`'s/`ABP_FirearmPickup_C`'s own Construct/BeginPlay-equivalent bytecode to
+  find what actually assigns the mesh asset and/or gates its visibility — the real next step for the weapon
+  visual, now that six live-verified mechanical fixes in a row have ruled out every guessable engine-level cause.
+- The 21 slot values are confirmed to work for the getter/setter/activate/onrep/notify *data* chain (re-confirmed
+  again in this session's two-client tests, `ok=1` across clothing/tool/weapon slots on both clients) — worth a
+  visual check specifically for non-weapon slots (clothing), which don't depend on the still-broken weapon-visual
+  chain above and might already be working via whatever native visual system handles `MC_AttachClothing`.
+- Solve the "unequip doesn't clear the proxy" gap — now the more valuable of the two remaining gaps, since the
+  underlying data write is confirmed working for all 21 slots; a real player unequipping anything will leave
+  their proxy showing stale state indefinitely until this is fixed. `sync_equipment()` only iterates slots
+  present in the latest `Equipment` wire frame (which omits empty slots entirely), so nothing currently detects
+  or clears a slot that becomes unequipped — needs a per-player "previously applied slots" diff.
 - `MC_AttachClothing_Implementation` still untried, per Session 46's note.
 
