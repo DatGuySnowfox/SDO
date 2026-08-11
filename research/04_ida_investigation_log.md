@@ -4929,3 +4929,116 @@ event). Stopped here rather than decoding a sixth Blueprint class's bytecode in 
   entirely, as a fast general test of whether the `_Implementation`-twin approach is right — not yet tried this
   session, still an open, cheap thing to check next time.
 
+## Session 47 — Corrupted install traced and fixed, all 21 equipment slot tags found via a real TMap walk
+
+### A launcher crash saga turned out to be a corrupted install, not mod code
+
+Picked up mid-session to find the game stuck on a blank/loading screen indefinitely after the previous session's
+work. Chased this for a long stretch — tried auto-dismissing `PressAnyKeyWidget_C` (found via `UE4SS`'s own
+`GenerateSDK()`, triggered live with a hardware-level `SendInput` `Ctrl+H` since the earlier `SendKeys`/
+`AppActivate` approach silently did nothing against the fullscreen game window), tried clicking an orphaned
+`Play`-named bound event on `MenuWidget_C` (a classic Unreal quirk: the button was renamed to `NewGame` after its
+event-graph node was already generated, leaving the stale `Play` name baked into the compiled function), tried a
+generic `LoadingScreenWidget_C` dismiss — none of it reliably got past the screen, and one attempt produced a real
+engine crash: `LowLevelFatalError ... Pure virtual function being called`, with a call stack 100% inside
+`SurrounDead_Win64_Shipping` itself (no `UE4SS`/`main.dll` frames at all) showing an alternating recursive pattern
+consistent with a runaway UI state machine — almost certainly the `Play` click bypassing the game's normal menu
+navigation state.
+
+Root cause was more fundamental than any of that: the game install itself was corrupted, most likely from the
+many forceful `taskkill /F` calls across this whole multi-session investigation interrupting a file write at some
+point. Fixed by deleting the entire Steam install directory and the `.acf` manifest, then reinstalling fresh via
+`steam://install/<appid>`. Confirmed `UE4SS.dll`/`dwmapi.dll` are actually shipped as part of the official game
+depot (both restored with their original Feb 2024 timestamps) — not something that needs sourcing from a
+different game's UE4SS release or a separate RE-specific build, an assumption from earlier in the investigation
+that turned out to be wrong and cost an extra crash cycle (a `UE4SS.dll` pulled from an unrelated game's bundle,
+built against a different binary, crashed with `EXCEPTION_ACCESS_VIOLATION` deep inside `UE4SS`'s own init —
+signature-scanning built for the wrong executable). Only our own `Mods/SurrounDeadBridge/` needs manual
+redeployment after a reinstall.
+
+**Correction on the automated-menu-click diagnosis**: the `ContinueGame` auto-click (`try_open_world()`,
+unchanged since Session 45) was never the problem — confirmed by testing it in isolation, works reliably. The
+real problems were (a) the corrupted install itself, and (b) new-this-session automation (`PressAnyKeyWidget_C`
+auto-dismiss, the `Play` click) that either had no effect or actively broke things. Both were removed. A real
+keypress at the splash is required going forward; `try_open_world()` only handles the menu stage, unchanged
+from its original working form. Added `check_call_trigger()` (generic "find this class, call this zero-arg
+function on it" flag-file action) as a reusable replacement for one-off dedicated dismiss functions, and
+`check_mem_dump_trigger()` (raw qword dump from a helper-relative or absolute address, SEH-guarded) for the
+TMap work below.
+
+**Remote automation extended to client 2 as well**: since client 2 is a VM with no one physically present to
+press a key at the splash, replicated the same hardware-level `SendInput` technique there via a second
+interactive scheduled task (`SDBPressKey`, same `/it`/`/ru` pattern as the existing `SDBLaunchGame`) — confirmed
+working, both clients reachable fully hands-off from the host machine's shell.
+
+### All 21 equipment slot ComparisonIndex values found via a real TMap walk
+
+Returned to the long-standing gap: only slot 11 (Primary) had a real `ComparisonIndex` (`kSlotTagComparisonIndex`
+elsewhere was all zeros, safely no-op via `slot_tag()`). Rejected a tempting shortcut — resolving a range of
+FNames and matching by name against `Jig.PlayerSlot.*` tags found incidentally in Session 46 — because that tag
+family's values don't match the already-established-working slot 11 value (1730659 vs. this family's
+`PrimaryWeapon` at 1730576), meaning it's a different, unrelated tag namespace (very likely the one used for the
+active-weapon-slot UI switching traced in Session 46, not equipment-slot identity). Matching by name-similarity
+risked silently picking a plausible-but-wrong tag for the other 20 slots, the same class of trap that cost hours
+across the last two sessions.
+
+Went to the real authoritative source instead: `research/CXXHeaderDump/BP_JigHelperComp.hpp` declares
+`TMap<class FGameplayTag, class FS_EquipmentIDInfo> EquipmentIDSlotConfig;  // 0x0AF8 (size: 0x50)` — the actual
+config `SetEquippedInfoBySlot`/`GetEquippedInfoBySlot` presumably validate against, keyed by the *real* tag
+identity rather than a numeric slot index. `research/CXXHeaderDump/S_EquipmentIDInfo.hpp` gives the value type:
+`FS_EquipmentIDInfo { FName ContainerName; bool IsEquipment; bool IsPersistentActor?; bool IsSecondary?; bool
+UseLeaderPose?; }` (0xC/12 bytes).
+
+Walked the live TMap via `check_mem_dump_trigger()`, empirically (not by trusting an assumed struct layout,
+per this whole project's established methodology):
+1. Dumped `helper+0xAF8` directly: `[ptr, ArrayNum=21, ArrayMax=22, bitmask=0x1FFFFF (21 bits set), ...]` — the
+   `21`/`22`/21-bits-set triple lining up three independent ways was strong confirmation this was the right map
+   before touching a single actual entry.
+2. Followed the element-storage pointer (a separate heap allocation — required extending
+   `check_mem_dump_trigger()` with an `abs <address> <count>` mode, since the existing helper-relative-offset
+   mode can't express an arbitrary heap pointer) and dumped 256 raw qwords.
+3. The pair's own natural size (`FGameplayTag` key, 8 bytes + `FS_EquipmentIDInfo` value, 12 bytes = 20 bytes) did
+   *not* match the real per-element spacing — confirmed by testing every candidate stride from 8 to 200 bytes
+   against the modular distribution of every plausible "large CI + small Number" hit across the whole dump
+   (written as a small Python script over the raw dumped bytes) until one, 28 bytes, explained the data with no
+   stragglers: 21 clean, real-looking entries (indices 0–20) followed by exactly one all-zero record (index 21,
+   the map's one free/unallocated slot — matching `ArrayMax − ArrayNum = 1` precisely), then genuine unrelated
+   heap garbage beyond that. The extra 8 bytes over the pair's raw size is presumably TSparseArray/allocator
+   padding, never pinned down further since it didn't matter once the stride was confirmed working.
+4. Resolved all 21 keys via the existing batch `resolve_fname` trigger (a couple of batches silently produced
+   zero output despite valid input and a live, non-stale session — same unexplained-but-known flake from Session
+   46; the established workaround, smaller batches, worked immediately every time) and matched every one by name
+   against `protocol.hpp`'s already-documented declaration order (`slotIndex` 0–20: Facewear, Headwear, Eyewear,
+   Accessory, Torso, Gloves, Legs, Feet, Container, BodyArmor, Backpack, Primary, Secondary, Sidearm, Melee,
+   Throwable, Flashlight, Binoculars, GPS, Compass, FishingRod) — every single name matched cleanly with no
+   ambiguity.
+
+Replaced the old single-slot `kSlotTagComparisonIndex` (including the stale 1730659 Primary value, which — per
+the discrepancy noted above — was very likely from that same wrong `Jig.PlayerSlot.*` family all along, not a
+real regression) with all 21 freshly-verified values, live-tested immediately in a real two-client session:
+`ok=1` on every slot on both clients (BrownHeavyJeans/Legs, Boots1/Feet — including a confirmed
+`equipped=1` real-state read-back, Knife/Melee through the full activate/onrep/notify chain,
+Binoculars/GPS/Compass/FishingRod), a complete, clean result across the board.
+
+### Weapon-visual attach refined (not yet re-tested)
+
+Revisited `spawn_and_attach_weapon_visual()` from Session 46. Dropped the `JigMP_OnPickupEquipped` call entirely
+— it explicitly rejected the synthetic call (`Result=false`) with no way to know what it validates, and
+`K2_AttachToActor` alone already showed nothing visually even *before* that call was added, so it was never
+actually the blocker. Real suspect: `K2_AttachToActor` attaches relative to the target *actor's* root component,
+almost certainly a capsule with no `Weapon_r` bone socket — switched to a component-to-component attach instead
+(`weaponActor`'s own root component, via reflection-called `GetRootComponent()`, attached with `K2_AttachTo`
+directly onto the proxy's `Arms` `USkeletalMeshComponent`, read via the same raw-instance-offset pattern used
+throughout this file). Builds clean; not yet live-tested this session.
+
+### Remaining work
+
+- Live-test the refined `Arms`-component attach in a two-client session — the natural next step, not done this
+  session due to time.
+- The 21 slot values above are confirmed to work for the getter/setter/activate/onrep/notify *data* chain, but
+  none of this session's testing re-confirmed the *visual* result for any slot besides what the attach-refinement
+  testing above would show — worth a full visual pass across a few different slot types (clothing vs. weapon)
+  once the `Arms` attach is verified.
+- Solve the "unequip doesn't clear the proxy" gap, still open from prior sessions.
+- `MC_AttachClothing_Implementation` still untried, per Session 46's note.
+

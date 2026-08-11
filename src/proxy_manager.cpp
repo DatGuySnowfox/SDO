@@ -197,10 +197,45 @@ struct RawFGuid { uint32_t A = 0, B = 0, C = 0, D = 0; };
 // PrimaryWeapon is filled in below (confirmed live, Session 43). Slots with
 // index 0 here will silently fail slot_tag() below (returns false) rather
 // than send a bogus tag.
+// All 21 real values, live-verified 2026-08-11 via a raw memory walk of
+// BP_JigHelperComp_C.EquipmentIDSlotConfig (TMap<FGameplayTag,
+// FS_EquipmentIDInfo> @helper+0xAF8) — the actual authoritative source
+// SetEquippedInfoBySlot/GetEquippedInfoBySlot validate against, not the
+// "Jig.PlayerSlot.*" tags found earlier by name-matching (which turned out
+// to be a different, unrelated tag family used for the active-weapon-slot
+// UI switching, not equipment slot identity). TSparseArray element stride
+// empirically determined to be 28 bytes (8 more than the raw 8+12=20-byte
+// TPair<FGameplayTag,FS_EquipmentIDInfo> — extra padding from the
+// allocator, found by testing candidate strides against the modular
+// distribution of plausible-CI hit offsets until one cleanly explained all
+// 21 entries with zero stragglers). Replaces the single Primary value
+// (1730659) recorded in an earlier, separate session — that number never
+// matched this TMap's own PrimaryWeapon entry (1730576) even before tonight,
+// so it was very likely from that same wrong tag family, not a real
+// regression. Live-tested only as of this write — not yet confirmed to
+// persist correctly for slots 0-10/12-20 the way slot 11 was in Session 45.
 static constexpr int32_t kSlotTagComparisonIndex[EQUIPMENT_SLOT_COUNT] = {
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 0-10: Facewear, Headwear, Eyewear, Accessory, Torso, Gloves, Legs, Feet, Container, BodyArmor, Backpack
-    1730659,                         // 11 Primary -> Jig.PlayerSlot.PrimaryWeapon
-    0, 0, 0, 0, 0, 0, 0, 0, 0,       // 12-20: Secondary, Sidearm, Melee, Throwable, Flashlight, Binoculars, GPS, Compass, FishingRod
+    1730464, // 0  Facewear
+    1730538, // 1  Headwear
+    1730452, // 2  Eyewear
+    1730374, // 3  Accessory
+    1730635, // 4  Torso
+    1730516, // 5  Gloves
+    1730551, // 6  Legs
+    1730477, // 7  Feet
+    1730439, // 8  Container
+    1730414, // 9  BodyArmor
+    1730387, // 10 Backpack
+    1730576, // 11 Primary
+    1730591, // 12 Secondary
+    1730607, // 13 Sidearm
+    1730562, // 14 Melee
+    1730622, // 15 Throwable
+    1730502, // 16 Flashlight
+    1730400, // 17 Binoculars
+    1730528, // 18 GPS
+    1730427, // 19 Compass
+    1730488, // 20 FishingRod
 };
 
 // Returns false (and leaves *out untouched) for any slot whose
@@ -566,59 +601,6 @@ static AActor* spawn_and_attach_weapon_visual(AActor* actor, void* itemAsset)
     auto* weaponActor = static_cast<AActor*>(pending);
     weaponActor->SetActorEnableCollision(false);
 
-    // ABP_SkeletalMeshPickup_C::JigMP_OnPickupEquipped(AActor* ActorRef, FName
-    // ToContainerName, FGuid UID, FGuid ToContainerUID, FRepItemInfo Info,
-    // bool& Result, AActor*& OverrideActor) — research/CXXHeaderDump/
-    // BP_SkeletalMeshPickup.hpp. The exact interface notification already seen
-    // fired from the real ServerFuncHandleEquipActor chain earlier this
-    // session (resolved there as ci=1846532 on an InterfaceContext call) —
-    // implemented directly on the pickup actor itself, so this is very
-    // plausibly the real "you've just been equipped, transition your visual
-    // state" notification, called here before our own manual attach in case
-    // it does its own (more correct) attach internally. UID/ToContainerUID
-    // passed as zero GUIDs (same "no real UID for a cosmetic proxy" pattern
-    // as set_equipped_info_by_slot's SkipUID above); ToContainerName zeroed
-    // too since a bare visual double never had a real container name.
-    {
-        UFunction* eqFn = weaponActor->GetFunctionByNameInChain(L"JigMP_OnPickupEquipped");
-        debug_log(eqFn ? "spawn_and_attach_weapon_visual: JigMP_OnPickupEquipped found"
-                       : "spawn_and_attach_weapon_visual: JigMP_OnPickupEquipped NOT FOUND");
-        if (eqFn) {
-            struct Params {
-                AActor*         ActorRef = nullptr;
-                RawFGameplayTag ToContainerName;
-                RawFGuid        UID;
-                RawFGuid        ToContainerUID;
-                RawFRepItemInfo Info;
-                bool            Result = false;
-                AActor*         OverrideActor = nullptr;
-            } params;
-            static_assert(offsetof(Params, ActorRef) == 0x00, "Kismet param layout");
-            static_assert(offsetof(Params, ToContainerName) == 0x08, "Kismet param layout");
-            static_assert(offsetof(Params, UID) == 0x10, "Kismet param layout");
-            static_assert(offsetof(Params, ToContainerUID) == 0x20, "Kismet param layout");
-            static_assert(offsetof(Params, Info) == 0x30, "Kismet param layout");
-            static_assert(offsetof(Params, Result) == 0xA8, "Kismet param layout");
-            static_assert(offsetof(Params, OverrideActor) == 0xB0, "Kismet param layout");
-
-            params.ActorRef = actor;
-            params.Info.ItemID = itemAsset;
-            params.Info.Count = 1;
-            weaponActor->ProcessEvent(eqFn, &params);
-
-            char buf[160];
-            snprintf(buf, sizeof(buf),
-                     "spawn_and_attach_weapon_visual: JigMP_OnPickupEquipped result=%d overrideActor=0x%llx",
-                     params.Result, reinterpret_cast<unsigned long long>(params.OverrideActor));
-            debug_log(buf);
-
-            if (params.OverrideActor && params.OverrideActor != weaponActor) {
-                weaponActor = params.OverrideActor;
-                weaponActor->SetActorEnableCollision(false);
-            }
-        }
-    }
-
     const RawFGameplayTag socket = *reinterpret_cast<RawFGameplayTag*>(
         reinterpret_cast<uintptr_t>(itemAsset) + 0x280);
     {
@@ -630,24 +612,58 @@ static AActor* spawn_and_attach_weapon_visual(AActor* actor, void* itemAsset)
         debug_log(buf);
     }
 
-    UFunction* fn = weaponActor->GetFunctionByNameInChain(L"K2_AttachToActor");
-    debug_log(fn ? "spawn_and_attach_weapon_visual: K2_AttachToActor found"
-                 : "spawn_and_attach_weapon_visual: K2_AttachToActor NOT FOUND");
+    // Session 47: abandoning JigMP_OnPickupEquipped entirely — it explicitly
+    // rejected a synthetic call (Result=false) with no way to know what it's
+    // validating, and K2_AttachToActor alone (root-to-root) already showed
+    // nothing visually even before that was added, so it was never the
+    // blocker. Root cause of the "still invisible" symptom is more likely
+    // that K2_AttachToActor attaches relative to the *actor's* root
+    // component (probably a capsule) — "Weapon_r" is a bone socket that
+    // almost certainly only exists on a specific skeletal mesh component,
+    // not the capsule. research/CXXHeaderDump/BP_PlayerCharacter.hpp lists
+    // several per-body-part USkeletalMeshComponent* fields; "Arms" (@0x0788)
+    // is the most plausible owner of hand/weapon-hold bones. Attaching the
+    // weapon's own root *component* directly to that specific component
+    // (component-to-component, not actor-to-actor) via the same-era
+    // K2_AttachTo (component-level twin of K2_AttachToActor, same param
+    // shape) instead. Not yet live-verified.
+    auto* armsComp = *reinterpret_cast<UObject**>(
+        reinterpret_cast<uintptr_t>(actor) + 0x788);
+    if (!armsComp) {
+        debug_log("spawn_and_attach_weapon_visual: proxy's Arms component is null");
+        return weaponActor;
+    }
+
+    UFunction* getRootFn = weaponActor->GetFunctionByNameInChain(L"GetRootComponent");
+    if (!getRootFn) {
+        debug_log("spawn_and_attach_weapon_visual: GetRootComponent NOT FOUND");
+        return weaponActor;
+    }
+    UObject* weaponRoot = nullptr;
+    weaponActor->ProcessEvent(getRootFn, &weaponRoot);
+    if (!weaponRoot) {
+        debug_log("spawn_and_attach_weapon_visual: weapon actor's root component is null");
+        return weaponActor;
+    }
+
+    UFunction* fn = weaponRoot->GetFunctionByNameInChain(L"K2_AttachTo");
+    debug_log(fn ? "spawn_and_attach_weapon_visual: K2_AttachTo found"
+                 : "spawn_and_attach_weapon_visual: K2_AttachTo NOT FOUND");
     if (fn) {
         struct Params {
-            AActor*         ParentActor = nullptr;
-            RawFGameplayTag SocketName;               // FName is the same 8-byte shape
-            uint8_t         AttachLocationType = 3;    // EAttachLocation::SnapToTarget
+            UObject*        InParent = nullptr;
+            RawFGameplayTag InSocketName;              // FName is the same 8-byte shape
+            uint8_t         AttachLocationType = 3;     // EAttachLocation::SnapToTarget
             bool            WeldSimulatedBodies = false;
         } params;
-        static_assert(offsetof(Params, ParentActor) == 0x00, "Kismet param layout");
-        static_assert(offsetof(Params, SocketName) == 0x08, "Kismet param layout");
+        static_assert(offsetof(Params, InParent) == 0x00, "Kismet param layout");
+        static_assert(offsetof(Params, InSocketName) == 0x08, "Kismet param layout");
         static_assert(offsetof(Params, AttachLocationType) == 0x10, "Kismet param layout");
         static_assert(offsetof(Params, WeldSimulatedBodies) == 0x11, "Kismet param layout");
 
-        params.ParentActor = actor;
-        params.SocketName = socket;
-        weaponActor->ProcessEvent(fn, &params);
+        params.InParent = armsComp;
+        params.InSocketName = socket;
+        weaponRoot->ProcessEvent(fn, &params);
     }
 
     return weaponActor;
