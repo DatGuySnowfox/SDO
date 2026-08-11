@@ -25,6 +25,7 @@
 #include <windows.h>
 #include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cstdlib>
 #include <fstream>
 #include <mutex>
@@ -1075,7 +1076,86 @@ static void check_resolve_ptr_trigger()
     DeleteFileW(flag.c_str());
 }
 
+// Flag file content: one class name per line — one-off live diagnostic to
+// find the class name of whatever widget/actor is currently on screen (e.g.
+// the "press any key" splash), by trying FindFirstOf against each candidate
+// name in turn. Same lookup FindFirstOf/GetFunctionByNameInChain approach
+// already proven throughout this file (e.g. try_open_world's MenuWidget_C
+// lookup below) rather than ForEachUObject, whose linker binding in this
+// vendored stub turned out to be broken (name-mangling mismatch — the
+// pragma in UObjectGlobals.hpp doesn't match what this build actually needs).
+static void check_widget_scan_trigger()
+{
+    wchar_t path[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return;
+    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\widget_scan.flag";
+    if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+
+    std::ifstream in(flag, std::ios::binary);
+    std::string lineU8;
+    while (std::getline(in, lineU8)) {
+        if (!lineU8.empty() && lineU8.back() == '\r') lineU8.pop_back();
+        if (lineU8.empty()) continue;
+
+        std::wstring wname(lineU8.size(), L'\0');
+        int wn = MultiByteToWideChar(CP_UTF8, 0, lineU8.data(), static_cast<int>(lineU8.size()), wname.data(), static_cast<int>(wname.size()));
+        wname.resize(wn);
+
+        UObject* obj = UObjectGlobals::FindFirstOf(wname.c_str());
+        debug_log("widget_scan: " + lineU8 + " -> " + (obj ? "FOUND" : "not found"));
+    }
+    in.close();
+    DeleteFileW(flag.c_str());
+}
+
+// Flag file content: two lines, class name then no-arg function name — a
+// generic "find this class, call this zero-parameter function on it" live
+// action trigger, for one-off manual pokes (e.g. RemoveFromParent on a
+// stuck LoadingScreenWidget_C) without needing a new dedicated function and
+// rebuild cycle for every new case.
+static void check_call_trigger()
+{
+    wchar_t path[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return;
+    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\call.flag";
+    if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+
+    std::ifstream in(flag, std::ios::binary);
+    std::string classNameU8, funcNameU8;
+    std::getline(in, classNameU8);
+    std::getline(in, funcNameU8);
+    in.close();
+    DeleteFileW(flag.c_str());
+    if (!classNameU8.empty() && classNameU8.back() == '\r') classNameU8.pop_back();
+    if (!funcNameU8.empty() && funcNameU8.back() == '\r') funcNameU8.pop_back();
+    if (classNameU8.empty() || funcNameU8.empty()) { debug_log("call: missing class/func line"); return; }
+
+    auto widen = [](const std::string& s) {
+        std::wstring w(s.size(), L'\0');
+        int wn = MultiByteToWideChar(CP_UTF8, 0, s.data(), static_cast<int>(s.size()), w.data(), static_cast<int>(w.size()));
+        w.resize(wn);
+        return w;
+    };
+
+    UObject* obj = UObjectGlobals::FindFirstOf(widen(classNameU8).c_str());
+    if (!obj) { debug_log("call: " + classNameU8 + " not found"); return; }
+
+    UFunction* fn = obj->GetFunctionByNameInChain(widen(funcNameU8).c_str());
+    if (!fn) { debug_log("call: " + funcNameU8 + " not found on " + classNameU8); return; }
+
+    obj->ProcessEvent(fn, nullptr);
+    debug_log("call: " + classNameU8 + "." + funcNameU8 + "() done");
+}
+
 // Returns true if Continue was clicked (or already in-world); false = retry later.
+//
+// NOTE (2026-08-11): tried auto-dismissing PressAnyKeyWidget_C (the splash
+// overlay before this) twice this session, including a properly one-shot
+// gated RemoveFromParent() call — still left the game stuck on the same
+// screen. Dropped entirely per direct instruction; only handles the menu
+// stage now. A real key press is required to get past the splash.
 static bool try_open_world()
 {
     if (find_local_pawn()) return true; // already in-world
@@ -1112,6 +1192,8 @@ static void do_game_tick()
     check_bytecode_dump_trigger();
     check_resolve_fname_trigger();
     check_resolve_ptr_trigger();
+    check_widget_scan_trigger();
+    check_call_trigger();
 
     // Lazy-connect: open TCP once a pawn exists (level fully loaded).
     if (!g_tcp.is_open()) {
