@@ -741,6 +741,11 @@ static AActor* spawn_and_attach_weapon_visual(AActor* actor, void* itemAsset)
         debug_log("spawn_and_attach_weapon_visual: weaponRoot=" + name + buf);
     }
 
+    // Session 50: tried forcing SetMobility(Movable) here on the theory that
+    // AttachToComponent silently fails to reparent a Static component — a
+    // direct memory read afterward still showed AttachParent as NULL, ruling
+    // this out too. Removed; see research/04_ida_investigation_log.md.
+
     // Session 50: K2_AttachTo reports ReturnValue=true, but a direct memory
     // read of the resulting weaponRoot->AttachParent (USceneComponent+0xB0,
     // per research/CXXHeaderDump/Engine.hpp) confirmed it's actually still
@@ -940,11 +945,13 @@ void ProxyManager::sync_equipment(AActor* actor, RemotePlayer& player)
                         STR("SDB: equip-onrep slot={:d} itemId={} ok={:d}\n"),
                         slot.slotIndex, widen(slot.itemId), repped);
 
-                    // call_on_rep_active_weapon is a guaranteed no-op on a
-                    // proxy (HasAuthority() gate — see its comment above);
-                    // this is the call that actually reaches the visual
-                    // attach, by invoking the delegate's bound handler
-                    // directly instead of the delegate broadcast itself.
+                    // Session 50: tried skipping this call entirely (it runs
+                    // every sync_equipment() pass, not gated on item change,
+                    // unlike the spawn below) on the theory that its real
+                    // delegate handler was detaching our manually-spawned
+                    // weapon visual on each subsequent cycle — a direct
+                    // memory read afterward still showed AttachParent as
+                    // NULL, ruling this out too. Restored.
                     const bool notified = call_on_active_weapon_slot_changed(actor, slot.slotIndex);
                     Output::send<LogLevel::Normal>(
                         STR("SDB: equip-notify slot={:d} itemId={} ok={:d}\n"),

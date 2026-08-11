@@ -5426,3 +5426,76 @@ second parallel unsolved investigation.
 - Gloves: still untested (no accessible item this session) but expected to work given Legs' result.
 - Add `EX_SetMap` (opcode 0x3B) support to `kismet_disasm.py` if the Ubergraph investigation resumes.
 
+### Weapon-visual attempts 9-11: AttachParent confirmed genuinely NULL, three more theories ruled out
+
+Continued past attempt #8 (`EquipActorToSocket`, already ruled out above) using IDA's declared type info
+(`AActor_RE`/`USceneComponent_RE`/`USkinnedMeshComponent_RE`, added to IDA's local type library this session
+from `Engine.hpp`'s confirmed offsets — `AttachParent`@0xB0, `RelativeLocation`@0x128, `bVisible`@0x188 on
+`USceneComponent`; `SkinnedAsset`@0x5B8 on `USkinnedMeshComponent`; `bHidden`@0x58, `RootComponent`@0x1A0 on
+`AActor`) plus direct live memory reads (`mem_dump.flag`, following pointer chains: actor → `RootComponent` →
+`AttachParent`) to investigate why the weapon never renders despite every mechanical step reporting success.
+
+**Confirmed `SkinnedAsset` is correctly assigned**: read the weapon's `SkeletalMeshComponent0+0x5B8` live and
+resolved the pointer — `SkeletalMesh /Game/Meshes/Firearms/Rifle/AK15/AK15.AK15`, the exact correct mesh. Fully
+rules out "mesh never assigned," the theory that motivated the `PickupBuildFromGround` investigation above.
+
+**Confirmed `AttachParent`@0xB0 is the right offset, and it's genuinely NULL after every attach attempt**: read
+the *Arms* component's own `AttachParent` (a component we know for certain is properly attached, since it's a
+permanent part of the character) and got a real, resolvable pointer —
+`SkeletalMeshComponent .../BP_PlayerCharacter_C.Torso` — Arms is attached to Torso, exactly as expected. This
+proves the 0xB0 offset itself is correct. Reading the *weapon's* `AttachParent` at the identical offset,
+immediately after `K2_AttachTo`/`K2_AttachToComponent` both report `ReturnValue=true`, comes back NULL every
+single time. The reported success is not real — attachment genuinely never takes effect, regardless of which
+attach function is used.
+
+Systematically tested and ruled out three more explanations for the silent failure, each confirmed via the same
+live-memory-read method (not just theory):
+- **`EquipActorToSocket` interference** (Session 49's addition) — removed entirely; `AttachParent` still NULL
+  with just `K2_AttachTo`. (This alone was still worth doing — see below.)
+- **Deprecated `K2_AttachTo` vs. modern `K2_AttachToComponent`** — switched to the non-deprecated 6-param
+  version (`EAttachmentRule` × 3 instead of the packed `EAttachLocation::Type` byte); `AttachParent` still NULL.
+- **Interference from `call_on_active_weapon_slot_changed`** — this call runs on *every* `sync_equipment()`
+  pass (not gated on item change, unlike the spawn itself), and invokes the real game's own native equip-visual
+  delegate handler; theorized it might be detaching our actor on each subsequent cycle. Temporarily skipped
+  entirely — `AttachParent` still NULL. Restored (removing it provided no benefit and risked side effects on
+  data unrelated to the visual).
+- **Component `Mobility` not `Movable`** (a well-known real UE gotcha — `AttachToComponent` silently no-ops for
+  non-Movable components) — force-called `SetMobility(Movable)` (found, called successfully) immediately before
+  the attach; `AttachParent` still NULL. Removed.
+
+**Current honest state**: 11 attempts total across three sessions (46/47/50), all mechanically successful
+(correct components, correct mesh, correct confirmed-real offsets, functions found and reporting success), zero
+actual attachment, zero visual result, and every plausible interference/precondition theory tested and ruled
+out via direct live memory verification rather than inference. The genuine remaining possibility is that the
+*true* return value of the attach call is being misread as true when it's actually false (would need a live
+debugger attached to the game process to verify with certainty, not just static IDA analysis — the `ida-pro-mcp`
+bridge used this session is static-only, no live process access) — or that some deeper native-side gate (e.g. a
+network-role check on the attach path itself) silently no-ops for an actor with no owning connection, the same
+general shape of problem as every `MC_`/`Svr_`-prefixed RPC dead end found throughout this whole project. Both
+would need either live debugging or proper UE5 type/PDB info in IDA to resolve conclusively — genuinely beyond
+what static binary analysis without those tools can settle. Deferred again, now with a much more precisely
+bounded remaining unknown than before.
+
+### Digression: how much multiplayer infrastructure already exists in the base game
+
+Explained to the user mid-session, worth recording: the base game has substantial, real client/server
+architecture already built in, just dormant in the shipped single-player build — `OnRep_`-callback replicated
+properties throughout (`OnRep_ActiveWeapon`, `OnRep_PrimaryWeaponEquipped?`, `OnRep_FacewearEquipped?`, etc.),
+`MC_`/`Svr_`-prefixed NetMulticast/Server RPC variants of many gameplay systems (clothing, sound, stamina,
+montages), an entire dedicated `BP_JigMultiplayer_C` class, and an equip/interact system built around
+`BP_MpInteractInterface_C` ("Mp" almost certainly = Multiplayer) rather than plain local state. This explains
+the recurring pattern of `HasAuthority()` gates and RPC no-ops found throughout this project's whole history —
+they exist because the shipped game has no real second network connection for them to do anything over, not
+because the underlying systems were never built. Likely a planned or prototyped co-op mode that was disabled or
+left unfinished before release.
+
+### New IDA local types this session
+
+Declared in IDA's local type library (via `declare_type`) for future use — real offsets from `Engine.hpp`, not
+guesses:
+```c
+struct AActor_RE { char pad_0000[0x58]; unsigned __int8 bHidden; char pad_0059[0x147]; void* RootComponent; };
+struct USceneComponent_RE { char pad_0000[0xB0]; void* AttachParent; char pad_00B8[0x70]; double RelLocX; double RelLocY; double RelLocZ; char pad_0140[0x48]; unsigned __int8 bVisible; };
+struct USkinnedMeshComponent_RE { char pad_0000[0x5B8]; void* SkinnedAsset; };
+```
+
