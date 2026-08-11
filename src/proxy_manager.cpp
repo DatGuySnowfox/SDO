@@ -700,7 +700,9 @@ static AActor* spawn_and_attach_weapon_visual(AActor* actor, void* itemAsset)
         const int needed = WideCharToMultiByte(CP_UTF8, 0, wname.c_str(), -1, nullptr, 0, nullptr, nullptr);
         std::string name(needed > 0 ? static_cast<size_t>(needed - 1) : 0, '\0');
         if (needed > 0) WideCharToMultiByte(CP_UTF8, 0, wname.c_str(), -1, name.data(), needed, nullptr, nullptr);
-        debug_log("spawn_and_attach_weapon_visual: armsComp=" + name);
+        char buf[64];
+        snprintf(buf, sizeof(buf), " ptr=0x%llx", reinterpret_cast<unsigned long long>(armsComp));
+        debug_log("spawn_and_attach_weapon_visual: armsComp=" + name + buf);
     }
 
     // Live-tested 2026-08-11: K2_GetRootComponent + K2_AttachTo both succeed
@@ -739,38 +741,51 @@ static AActor* spawn_and_attach_weapon_visual(AActor* actor, void* itemAsset)
         debug_log("spawn_and_attach_weapon_visual: weaponRoot=" + name + buf);
     }
 
-    UFunction* fn = weaponRoot->GetFunctionByNameInChain(L"K2_AttachTo");
-    debug_log(fn ? "spawn_and_attach_weapon_visual: K2_AttachTo found"
-                 : "spawn_and_attach_weapon_visual: K2_AttachTo NOT FOUND");
+    // Session 50: K2_AttachTo reports ReturnValue=true, but a direct memory
+    // read of the resulting weaponRoot->AttachParent (USceneComponent+0xB0,
+    // per research/CXXHeaderDump/Engine.hpp) confirmed it's actually still
+    // NULL afterward — the reported success is not real. Switched to the
+    // non-deprecated K2_AttachToComponent (6 explicit params instead of
+    // K2_AttachTo's packed AttachLocationType byte) on the theory that
+    // K2_AttachTo is a thin/quirky legacy shim with a marshalling issue.
+    UFunction* fn = weaponRoot->GetFunctionByNameInChain(L"K2_AttachToComponent");
+    debug_log(fn ? "spawn_and_attach_weapon_visual: K2_AttachToComponent found"
+                 : "spawn_and_attach_weapon_visual: K2_AttachToComponent NOT FOUND");
     if (fn) {
         struct Params {
-            UObject*        InParent = nullptr;
-            RawFGameplayTag InSocketName;              // FName is the same 8-byte shape
-            uint8_t         AttachLocationType = 3;     // EAttachLocation::SnapToTarget
+            UObject*        Parent = nullptr;
+            RawFGameplayTag SocketName;                 // FName is the same 8-byte shape
+            uint8_t         LocationRule = 2;            // EAttachmentRule::SnapToTarget
+            uint8_t         RotationRule = 2;            // EAttachmentRule::SnapToTarget
+            uint8_t         ScaleRule = 2;                // EAttachmentRule::SnapToTarget
             bool            WeldSimulatedBodies = false;
-            bool            ReturnValue = false;        // K2_AttachTo returns bool
+            bool            ReturnValue = false;         // K2_AttachToComponent returns bool
         } params;
-        static_assert(offsetof(Params, InParent) == 0x00, "Kismet param layout");
-        static_assert(offsetof(Params, InSocketName) == 0x08, "Kismet param layout");
-        static_assert(offsetof(Params, AttachLocationType) == 0x10, "Kismet param layout");
-        static_assert(offsetof(Params, WeldSimulatedBodies) == 0x11, "Kismet param layout");
-        static_assert(offsetof(Params, ReturnValue) == 0x12, "Kismet param layout");
+        static_assert(offsetof(Params, Parent) == 0x00, "Kismet param layout");
+        static_assert(offsetof(Params, SocketName) == 0x08, "Kismet param layout");
+        static_assert(offsetof(Params, LocationRule) == 0x10, "Kismet param layout");
+        static_assert(offsetof(Params, RotationRule) == 0x11, "Kismet param layout");
+        static_assert(offsetof(Params, ScaleRule) == 0x12, "Kismet param layout");
+        static_assert(offsetof(Params, WeldSimulatedBodies) == 0x13, "Kismet param layout");
+        static_assert(offsetof(Params, ReturnValue) == 0x14, "Kismet param layout");
 
-        params.InParent = armsComp;
-        params.InSocketName = socket;
+        params.Parent = armsComp;
+        params.SocketName = socket;
         weaponRoot->ProcessEvent(fn, &params);
 
         char buf[64];
-        snprintf(buf, sizeof(buf), "spawn_and_attach_weapon_visual: K2_AttachTo returned %d", params.ReturnValue);
+        snprintf(buf, sizeof(buf), "spawn_and_attach_weapon_visual: K2_AttachToComponent returned %d", params.ReturnValue);
         debug_log(buf);
     }
 
-    // Session 49: try the real game-native attach function (found via
-    // OnRep_FacewearEquipped?'s bytecode) in addition to the manual
-    // K2_AttachTo above — this is what the game's own equip pipeline
-    // actually calls to make an equipped actor visible, not a guess at
-    // engine-level attach primitives.
-    equip_actor_to_socket(actor, weaponActor, false);
+    // Session 50: EquipActorToSocket (added here in Session 49) turned out
+    // to be actively harmful, not just ineffective — direct memory read
+    // confirmed weaponRoot->AttachParent was NULL after this call ran, i.e.
+    // it undoes the K2_AttachTo above (probably because BP_AK15Pickup_C
+    // doesn't satisfy whatever BP_MpInteractInterface_C contract
+    // EquipActorToSocket's own internal interface-cast expects, causing it
+    // to reset/detach rather than error out). Removed; see research/
+    // 04_ida_investigation_log.md Session 50 for the live memory evidence.
 
     return weaponActor;
 }
