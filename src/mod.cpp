@@ -1109,6 +1109,78 @@ static void check_widget_scan_trigger()
     DeleteFileW(flag.c_str());
 }
 
+// Flag file content: one line "<hex offset from g_local_helper_ptr> <count>"
+// — raw diagnostic dump of <count> consecutive qwords starting at
+// helper+offset, for manually eyeballing a live TMap's real layout (same
+// empirical technique used earlier to find UFunction::Script's +0x60
+// offset: dump raw memory, look for a plausible pattern, rather than
+// trusting an assumed struct layout). Logs each qword both as a raw hex
+// value and split into two int32 halves, since a TMap pair here is expected
+// to look like {int32 SlotIndex, FGameplayTag{int32 ComparisonIndex, int32
+// Number}} — a 12-byte struct straddling qword boundaries.
+static void check_mem_dump_trigger()
+{
+    wchar_t path[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return;
+    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\mem_dump.flag";
+    if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+
+    std::ifstream in(flag, std::ios::binary);
+    std::string lineU8;
+    std::getline(in, lineU8);
+    in.close();
+    DeleteFileW(flag.c_str());
+    if (!lineU8.empty() && lineU8.back() == '\r') lineU8.pop_back();
+
+    // Optional "abs " prefix: treat the hex value as an absolute address
+    // instead of a helper-relative offset (needed for following a pointer
+    // read out of an earlier helper-relative dump, e.g. a TMap's own
+    // separately-heap-allocated element storage).
+    bool isAbs = false;
+    const char* parseFrom = lineU8.c_str();
+    if (lineU8.rfind("abs ", 0) == 0) { isAbs = true; parseFrom += 4; }
+
+    unsigned long long offset = 0;
+    int count = 0;
+    if (sscanf_s(parseFrom, "%llx %d", &offset, &count) != 2 || count <= 0 || count > 256) {
+        debug_log("mem_dump: could not parse '[abs ]<hex offset/addr> <count>' from '" + lineU8 + "'");
+        return;
+    }
+
+    uintptr_t base;
+    if (isAbs) {
+        base = static_cast<uintptr_t>(offset);
+    } else {
+        const uintptr_t helper = g_local_helper_ptr.load(std::memory_order_relaxed);
+        if (!helper) { debug_log("mem_dump: no local helper pointer yet"); return; }
+        base = helper + static_cast<uintptr_t>(offset);
+    }
+    for (int i = 0; i < count; ++i) {
+        struct DumpCtx { uintptr_t addr; uint64_t val; bool ok; };
+        DumpCtx dctx{ base + static_cast<uintptr_t>(i) * 8, 0, false };
+        auto dumpFn = [](void* raw) {
+            auto* c = static_cast<DumpCtx*>(raw);
+            c->val = *reinterpret_cast<const uint64_t*>(c->addr);
+            c->ok = true;
+        };
+        if (!seh_invoke(dumpFn, &dctx)) {
+            char buf[96];
+            snprintf(buf, sizeof(buf), "mem_dump: [+0x%llx] <access violation>",
+                     static_cast<unsigned long long>(offset) + static_cast<unsigned long long>(i) * 8);
+            debug_log(buf);
+            continue;
+        }
+        char buf[128];
+        snprintf(buf, sizeof(buf), "mem_dump: [+0x%llx] qword=0x%016llx lo32=%d hi32=%d",
+                 static_cast<unsigned long long>(offset) + static_cast<unsigned long long>(i) * 8,
+                 dctx.val,
+                 static_cast<int32_t>(dctx.val & 0xFFFFFFFFu),
+                 static_cast<int32_t>(dctx.val >> 32));
+        debug_log(buf);
+    }
+}
+
 // Flag file content: two lines, class name then no-arg function name — a
 // generic "find this class, call this zero-parameter function on it" live
 // action trigger, for one-off manual pokes (e.g. RemoveFromParent on a
@@ -1194,6 +1266,7 @@ static void do_game_tick()
     check_resolve_ptr_trigger();
     check_widget_scan_trigger();
     check_call_trigger();
+    check_mem_dump_trigger();
 
     // Lazy-connect: open TCP once a pawn exists (level fully loaded).
     if (!g_tcp.is_open()) {
