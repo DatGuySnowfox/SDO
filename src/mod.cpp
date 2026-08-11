@@ -911,7 +911,22 @@ static void check_bytecode_dump_trigger()
     std::wstring className = widen(classNameU8);
     std::wstring funcName  = widen(funcNameU8);
 
-    UObject* widget = UObjectGlobals::FindFirstOf(className.c_str());
+    // "abs <hex address>" on the first line: use a raw live UObject* pointer
+    // directly (e.g. one already logged elsewhere, like spawn_and_attach_
+    // weapon_visual's spawnedPtr) instead of FindFirstOf — needed when
+    // FindFirstOf can't reliably locate a specific attached/spawned actor
+    // instance among possibly many of the same class.
+    UObject* widget = nullptr;
+    if (classNameU8.rfind("abs ", 0) == 0) {
+        unsigned long long addr = 0;
+        if (sscanf_s(classNameU8.c_str() + 4, "%llx", &addr) != 1 || addr == 0) {
+            debug_log("bytecode_dump: could not parse 'abs <hex address>' from '" + classNameU8 + "'");
+            return;
+        }
+        widget = reinterpret_cast<UObject*>(static_cast<uintptr_t>(addr));
+    } else {
+        widget = UObjectGlobals::FindFirstOf(className.c_str());
+    }
     if (!widget) { debug_log("bytecode_dump: " + classNameU8 + " instance/CDO not found"); return; }
 
     char line[512];
@@ -1231,6 +1246,13 @@ static void check_call_trigger()
 static bool try_open_world()
 {
     if (find_local_pawn()) return true; // already in-world
+
+    // Only auto-click through the menu when this launch is actually
+    // configured to join the bridge (a real ticket in session.cfg) — a
+    // plain solo/offline launch (no session.cfg, or an empty ticket) should
+    // leave the menu alone for the player to navigate normally instead of
+    // getting yanked into a game they didn't ask to join through us.
+    if (cfg_join_ticket.empty()) return false;
 
     UObject* menu = UObjectGlobals::FindFirstOf(L"MenuWidget_C");
     if (!menu) return false;
