@@ -423,6 +423,45 @@ static bool set_active_weapon_slot(AActor* actor, uint8_t slotIndex)
     return true;
 }
 
+// BP_JigHelperComp_C.EquipActorToSocket(AActor* ActorRef, bool IsSecondary) —
+// found by decompiling OnRep_FacewearEquipped?'s bytecode (research/
+// 04_ida_investigation_log.md Session 49): the real game-native function
+// that attaches an equipped item's actor for visual display, used for
+// Facewear/Headwear/Eyewear/Accessory instead of a mesh-swap. Trying it here
+// as a direct replacement for spawn_and_attach_weapon_visual's own manual
+// K2_AttachTo dance, which mechanically succeeds but has never produced a
+// visible weapon across six prior attempts — this is the actual function the
+// game itself uses to attach an equipped actor, not a guess at engine-level
+// attach primitives.
+static bool equip_actor_to_socket(AActor* actor, AActor* itemActor, bool isSecondary)
+{
+    if (!actor || !itemActor) return false;
+
+    const uintptr_t helper = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(actor) + 0x700);
+    if (!helper) return false;
+
+    auto* helperObj = reinterpret_cast<UObject*>(helper);
+    UFunction* fn = helperObj->GetFunctionByNameInChain(L"Equip Actor to Socket");
+    if (!fn) {
+        debug_log("equip_actor_to_socket: EquipActorToSocket NOT FOUND");
+        return false;
+    }
+
+    struct Params {
+        AActor* ActorRef = nullptr;
+        bool    IsSecondary = false;
+    } params;
+    static_assert(offsetof(Params, ActorRef) == 0x00, "Kismet param layout");
+    static_assert(offsetof(Params, IsSecondary) == 0x08, "Kismet param layout");
+
+    params.ActorRef = itemActor;
+    params.IsSecondary = isSecondary;
+    helperObj->ProcessEvent(fn, &params);
+    debug_log("equip_actor_to_socket: called");
+    return true;
+}
+
 // BP_JigHelperComp_C.OnRep_ActiveWeapon() — no parameters. Real networked
 // players never call SetActiveWeaponSlot's visual effects directly; UE5's
 // replication system calls this automatically on remote clients when the
@@ -695,7 +734,9 @@ static AActor* spawn_and_attach_weapon_visual(AActor* actor, void* itemAsset)
         const int needed = WideCharToMultiByte(CP_UTF8, 0, wname.c_str(), -1, nullptr, 0, nullptr, nullptr);
         std::string name(needed > 0 ? static_cast<size_t>(needed - 1) : 0, '\0');
         if (needed > 0) WideCharToMultiByte(CP_UTF8, 0, wname.c_str(), -1, name.data(), needed, nullptr, nullptr);
-        debug_log("spawn_and_attach_weapon_visual: weaponRoot=" + name);
+        char buf[64];
+        snprintf(buf, sizeof(buf), " ptr=0x%llx", reinterpret_cast<unsigned long long>(weaponRoot));
+        debug_log("spawn_and_attach_weapon_visual: weaponRoot=" + name + buf);
     }
 
     UFunction* fn = weaponRoot->GetFunctionByNameInChain(L"K2_AttachTo");
@@ -724,7 +765,74 @@ static AActor* spawn_and_attach_weapon_visual(AActor* actor, void* itemAsset)
         debug_log(buf);
     }
 
+    // Session 49: try the real game-native attach function (found via
+    // OnRep_FacewearEquipped?'s bytecode) in addition to the manual
+    // K2_AttachTo above — this is what the game's own equip pipeline
+    // actually calls to make an equipped actor visible, not a guess at
+    // engine-level attach primitives.
+    equip_actor_to_socket(actor, weaponActor, false);
+
     return weaponActor;
+}
+
+// BP_PlayerCharacter_C.EquipClothingToMesh(FName ItemId, AActor* ActorRef,
+// USkinnedMeshComponent* ClothingRef, FName BodyPart) — a plain function,
+// unlike MC_AttachClothing/Svr_AttachClothing (NetMulticast/Server RPCs,
+// which would just no-op into RPC dispatch on our non-networked proxy the
+// same way JigMP_OnPickupEquipped and friends turned out to for weapons).
+// Takes an existing Clothing_* SkeletalMeshComponent directly (research/
+// CXXHeaderDump/BP_PlayerCharacter.hpp) rather than needing to spawn any
+// actor — sidesteps the whole Pickup-actor visibility dead end entirely.
+// ItemId is the item DataAsset's own FName field, read directly from the
+// same raw offset (+0x30) already used in mod.cpp's read_local_equipment(),
+// not derived from our wire itemId string (no string->FName conversion
+// available). bodyPartCI is the live ComparisonIndex for the literal FName
+// BodyPartVisibility (called internally by EquipClothingToMesh) actually
+// switches on — recovered by disassembling its Kismet bytecode this session
+// (research/04_ida_investigation_log.md): "Torso"=1732801, "Gloves"=1732805,
+// "Legs"=1732809, "Feet"=1732812. No literal for Armor was found in
+// BodyPartVisibility at all, so that slot passes 0 (None).
+static bool equip_clothing_to_mesh(AActor* actor, void* itemAsset, uintptr_t clothingCompOffset, int32_t bodyPartCI)
+{
+    if (!actor || !itemAsset) return false;
+
+    UFunction* fn = actor->GetFunctionByNameInChain(L"EquipClothingToMesh");
+    if (!fn) {
+        debug_log("equip_clothing_to_mesh: EquipClothingToMesh NOT FOUND");
+        return false;
+    }
+
+    auto* clothingComp = *reinterpret_cast<UObject**>(
+        reinterpret_cast<uintptr_t>(actor) + clothingCompOffset);
+    if (!clothingComp) {
+        debug_log("equip_clothing_to_mesh: target Clothing_* component is null");
+        return false;
+    }
+
+    struct Params {
+        RawFGameplayTag ItemId;              // FName, same 8-byte shape
+        AActor*         ActorRef = nullptr;
+        UObject*        ClothingRef = nullptr;
+        RawFGameplayTag BodyPart;
+    } params;
+    static_assert(offsetof(Params, ItemId) == 0x00, "Kismet param layout");
+    static_assert(offsetof(Params, ActorRef) == 0x08, "Kismet param layout");
+    static_assert(offsetof(Params, ClothingRef) == 0x10, "Kismet param layout");
+    static_assert(offsetof(Params, BodyPart) == 0x18, "Kismet param layout");
+
+    params.ItemId = *reinterpret_cast<RawFGameplayTag*>(
+        reinterpret_cast<uintptr_t>(itemAsset) + 0x30);
+    params.ActorRef = actor;
+    params.ClothingRef = clothingComp;
+    params.BodyPart = RawFGameplayTag{ bodyPartCI, 0 };
+    // DIAGNOSTIC (temporary): confirm whether the resolved ItemId actually
+    // matches a DT_Clothing row name, or diverges from the wire display name.
+    debug_log("equip_clothing_to_mesh: resolved ItemId=\"" +
+        equip_native::fname_to_string(reinterpret_cast<uintptr_t>(itemAsset) + 0x30) +
+        "\" ci=" + std::to_string(params.ItemId.ComparisonIndex));
+    actor->ProcessEvent(fn, &params);
+    debug_log("equip_clothing_to_mesh: called");
+    return true;
 }
 
 static bool call_on_rep_primary_weapon_equipped(AActor* actor)
@@ -871,6 +979,31 @@ void ProxyManager::sync_equipment(AActor* actor, RemotePlayer& player)
                                 reinterpret_cast<uintptr_t>(visual));
                         }
                     }
+                }
+            } else if (wrote) {
+                // Clothing slots — call EquipClothingToMesh directly on one
+                // of the character's own pre-existing Clothing_* components
+                // (research/CXXHeaderDump/BP_PlayerCharacter.hpp) instead of
+                // the weapon path's spawn-a-real-actor dance. Only the 5
+                // slots with a confirmed matching component are wired up;
+                // Facewear/Headwear/Eyewear/Accessory use some other
+                // mechanism not yet identified.
+                uintptr_t clothingOffset = 0;
+                int32_t bodyPartCI = 0;
+                switch (slot.slotIndex) {
+                    case 4:  clothingOffset = 0x0770; bodyPartCI = 1732801; break; // Torso
+                    case 5:  clothingOffset = 0x0780; bodyPartCI = 1732805; break; // Gloves
+                    case 6:  clothingOffset = 0x0768; bodyPartCI = 1732809; break; // Legs
+                    case 7:  clothingOffset = 0x0760; bodyPartCI = 1732812; break; // Feet
+                    case 9:  clothingOffset = 0x07B8; bodyPartCI = 0;       break; // BodyArmor — no literal found
+                    default: break;
+                }
+                if (clothingOffset) {
+                    void* itemAsset = resolve_item_asset(slot.itemId);
+                    const bool called = itemAsset && equip_clothing_to_mesh(actor, itemAsset, clothingOffset, bodyPartCI);
+                    Output::send<LogLevel::Normal>(
+                        STR("SDB: equip-clothing slot={:d} itemId={} ok={:d}\n"),
+                        slot.slotIndex, widen(slot.itemId), called);
                 }
             }
         }

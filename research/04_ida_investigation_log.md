@@ -5098,3 +5098,331 @@ proxy — clean, immediate detection and clearing for both a weapon slot and a c
   whatever native visual system handles `MC_AttachClothing`.
 - `MC_AttachClothing_Implementation` still untried, per Session 46's note.
 
+## Session 48 — Clothing visual sync: real success (3/5 slots), unlike the weapon dead end
+
+Followed up on the previous session's note that clothing slots might already render via `EquipClothingToMesh`
+without needing the weapon path's actor-spawn dance. `BP_PlayerCharacter_C::EquipClothingToMesh(FName ItemId,
+AActor* ActorRef, USkinnedMeshComponent* ClothingRef, FName BodyPart)` is a plain (non-RPC) function, unlike
+`MC_AttachClothing`/`Svr_AttachClothing` — called directly via `ProcessEvent` on the proxy with one of the
+character's own pre-existing `Clothing_Torso`/`Clothing_Legs`/`Clothing_Feet`/`Clothing_Gloves`/`Clothing_Armor`
+`USkeletalMeshComponent*`s (raw offsets from `BP_PlayerCharacter.hpp`: Feet=0x0760, Legs=0x0768, Torso=0x0770,
+Gloves=0x0780, Armor=0x07B8) as `ClothingRef`, and the item DataAsset's own `ItemId` FName (same `+0x30` field
+used throughout `read_local_equipment()`) — no actor spawning needed at all.
+
+First pass left `BodyPart` zeroed (None), since its real expected value was unknown. Live result across both
+clients: **Torso rendered correctly both directions** (WinterCoat on PC1's proxy seen from PC2, BlueShirt on
+PC2's proxy seen from PC1) — immediately better than the weapon path ever achieved. Feet also rendered one
+direction (MilitaryBoots on PC1's proxy) but not the other (Boots1 on PC2's proxy). Legs, Gloves, and Armor
+never rendered on either proxy despite every call logging `ok=1` (function found, component non-null,
+`ProcessEvent` invoked) — the same "mechanically succeeds, silently does nothing" symptom as the weapon dead end.
+
+### Decompiling `EquipClothingToMesh` instead of guessing further
+
+Used `check_bytecode_dump_trigger()` (built in an earlier session, `bytecode_dump.flag` with class+function name
+lines, writes raw `UFunction::Script` bytes to a `.bin`) plus `kismet_disasm.py` to actually read the function's
+logic instead of more trial-and-error. `EquipClothingToMesh` (551 bytes) does, in order: (1) a 3-param lookup
+call on a fixed manager object using a fixed DataAsset reference and the item's `ItemId`, writing into a local
+result struct, with an early-return if it fails; (2) branches on the character's own `IsPlayerMale?`-style
+instance bool; (3) calls `BodyPartVisibility(Parts, IsPlayerMale, BodyPart, UpdateAllBodyParts)` on `ClothingRef`
+— our own `BodyPart` input param is forwarded here, confirming it's not a dead parameter; (4)
+`SetSkinnedAssetAndUpdate` on the clothing mesh itself using a mesh reference from the lookup struct; (5)
+`K2_AttachToComponent` of `ClothingRef` onto the character's base `Mesh` component; (6) `SetOwner(Self)`.
+
+Decompiled `BodyPartVisibility` itself (2800 bytes) to find what `BodyPart` values it actually branches on,
+rather than guessing strings — found exactly four `EX_NameConst` literals, resolved via the existing
+`resolve_fname.flag` mechanism: **"Torso" (ci=1732801), "Gloves" (ci=1732805), "Legs" (ci=1732809), "Feet"
+(ci=1732812)**. No literal for "Armor" anywhere in the function — Armor apparently doesn't need naked-mesh
+hiding at all (plausibly because it layers over torso clothing rather than replacing a skin region).
+`UpdateBodyParts(FName Name)` (a related but distinct function, decompiled first while chasing this) recognizes
+only three of the same four values (Torso/Legs/Feet, not Gloves) and uses them to swap the *naked* body mesh
+components' `SetSkinnedAssetAndUpdate`+`SetMaterial` — a different, adjacent system, not the direct answer, but
+its bytecode is what led to finding the real literal pool in the first place.
+
+### Wired in the real `BodyPart` values — Legs now works, Gloves still doesn't
+
+Passed the live-resolved `ComparisonIndex` values directly as `RawFGameplayTag{ci, 0}` (exactly like
+`kSlotTagComparisonIndex` already does for equipment tags — no string→FName conversion available or needed,
+since these are already-interned engine FNames read straight from the running process) for Torso/Gloves/Legs/
+Feet; Armor still passes 0/None since no literal exists. Rebuilt, redeployed to both clients, fetched fresh
+join tickets (see gotcha below), retested live.
+
+**Correction (Session 49):** initially misread a screenshot as showing tan/khaki pants on PC2's proxy after
+this fix and logged it as confirmed here — the user later corrected this directly: legs never actually
+rendered, in either direction, at any point. What was visible in that screenshot was almost certainly just the
+character's base skin-tone mesh, not equipped pants. Session 49's `DT_Clothing` row dump independently confirms
+this was never going to work regardless of the `BodyPart` fix: neither `BrownHeavyJeans` (PC2's real legs item)
+nor `BlackMilitaryPants` (PC1's) has a matching row in the table at all (only differently-named rows like
+`HeavyJeans`/`MilitaryPantsBlack` exist) — so Legs has *never* been validated with an item actually capable of
+rendering. The `BodyPart="Legs"` literal itself may well still be correct; it just hasn't been tested against
+an item that could possibly prove it either way (would need e.g. `HeavyJeans` or `MilitaryPantsBlack`
+specifically equipped to test cleanly).
+
+Actual confirmed result from this pass, per the user's direct correction: **Torso** works reliably (both
+`WinterCoat` and `BlueShirt` have real `DT_Clothing` rows and both render, both directions). **Feet** only
+works one-directionally — `MilitaryBoots` (PC1's item, has a row) renders on PC1's proxy as seen from PC2;
+`Boots1` (PC2's item, no row) does not render on PC2's proxy as seen from PC1 — consistent with the per-item
+DataTable-row theory, not a direction-dependent code bug. **Legs and Gloves have never been confirmed to render
+for any item tested** — every real item tested in either slot (`BrownHeavyJeans`/`BlackMilitaryPants` for Legs,
+`BlackFingerlessGloves` for Gloves) turned out to lack a matching `DT_Clothing` row, so neither slot's code path
+nor its `BodyPart` literal has actually been exercised against an item that could succeed. **Armor** likewise
+untested against a matching item (`MilitaryPlateCarrier` has no row either).
+
+### Gotcha: stale join tickets after a `taskkill`-based dll swap
+
+Swapping `main.dll` requires killing the running game (Windows won't let you overwrite a loaded dll) and
+relaunching — but the local dev server's join tickets are single-use per `worldId`, and the *old* session.cfg
+ticket the mod read at its previous startup was already exhausted/rejected, producing an infinite
+`[tcp] authentication rejected` retry loop on relaunch that looks identical to a real auth/network bug. Fixed
+by always fetching a fresh ticket (`POST http://127.0.0.1:42201/v1/tickets`) and rewriting
+`%APPDATA%\SurrounDeadBridge\session.cfg` for *both* clients immediately before each relaunch, not just once per
+session — client 2 additionally needs its `SDB_GATEWAY_HOST` overridden to the host's real LAN IP (the
+endpoint always returns `127.0.0.1`, per Session 46's note) written via a small scp'd helper script (inline
+`ssh ... powershell -Command` with nested quoting for a nested `$cfgFile`-style nested-variable write reliably
+broke the PowerShell parser — a real file + `-File` was far more reliable than fighting quoting through two
+layers of remote-shell escaping).
+
+### Remaining work
+
+- Find out why Gloves (with the correct `BodyPart` literal) and Armor still don't render — most likely a
+  per-item or per-slot content/data-asset gap rather than a code issue, given Legs just proved the same code
+  path works once given the right `BodyPart` value. Decompiling the lookup function at `EquipClothingToMesh`'s
+  step (1) (fixed object `0x64a20790`/`0x6654d780`-style addresses are process-instance-specific, would need
+  re-resolving) would confirm whether the lookup itself is failing for these items/slots.
+- Facewear/Headwear/Eyewear/Accessory slots still have no identified component/mechanism at all.
+- The weapon-visual dead end (Session 46/47) remains unresolved and deferred, per its own note above.
+
+## Session 49 — Gloves/Armor traced to a real content gap; local-equipment-restore is a second dead end
+
+### Clothing: Gloves/Armor failure traced to DT_Clothing DataTable row lookup, not a code bug
+
+Followed up on Session 48's partial clothing win (Torso/Legs/Feet render, Gloves/Armor don't) by decompiling
+`EquipClothingToMesh` fresh (live pointers go stale across relaunches — re-dumped via `bytecode_dump.flag`
+before each new analysis pass). Its real logic: (1) `UDataTableFunctionLibrary::GetDataTableRowFromName`
+against a fixed `DataTable /Game/PlayerModel/DT_Clothing` asset, keyed by the item's own `ItemId` FName, with
+an early-return if the row isn't found; (2) branches on `IsPlayerMale?`; (3) calls `BodyPartVisibility(Parts,
+IsPlayerMale, BodyPart, UpdateAllBodyParts)` — confirming `BodyPart` (Session 48 wired in real literals for
+Torso/Gloves/Legs/Feet, found via decompiling `BodyPartVisibility` itself) is genuinely consumed; (4)
+`SetSkinnedAssetAndUpdate` on the clothing mesh from the DataTable row's mesh field; (5) `K2_AttachToComponent`
++ `SetOwner(Self)`. Identified all of this via `resolve_ptr.flag` against the bytecode's `EX_ObjectConst`/
+`EX_FinalFunction` operands (found `DataTableFunctionLibrary`, `GetDataTableRowFromName`, and the `DT_Clothing`
+DataTable object by address).
+
+Walked `DT_Clothing`'s `RowMap` (a `TMap<FName, uint8*>`) directly via the same raw-TMap technique from Session
+47's `EquipmentIDSlotConfig` walk — found the UObject header layout (vtable/flags/ClassPrivate/NamePrivate/
+OuterPrivate, 0x28 bytes) empirically from a raw dump, then the TMap header immediately after at `+0x30`
+(pointer/Num/Max, Num=80 confirmed by dumping the header's own qword), then walked all 80 elements at 24 bytes
+each (`{HashNextId/HashIndex int32 pair}{FName ComparisonIndex,Number}{uint8* RowData}` — the `TSetElement`
+layout TMap is built on) and resolved every row name via `resolve_fname.flag`.
+
+Result: DT_Clothing has real rows for `WinterCoat`, `MilitaryBoots`, `BlueShirt`, `HeavyJeans` (and many other
+generic clothing items), but **no row at all for `BlackFingerlessGloves`, `BlackMilitaryPants`, or
+`MilitaryPlateCarrier`** (PC1's actual real equipped items in gloves/legs/armor) — the table does have
+`MilitaryGlovesBlack`, `MilitaryPantsBlack`, and body-armor rows like `WoodenBodyArmor`/`ScrapMetalBodyArmor`/
+`RiotPoliceArmor`, just under different names than what these specific items are actually called. This is a
+genuine base-game content/data gap (some items were never registered in the clothing render DataTable, or were
+registered under a different, inconsistent name) — not fixable from the mod side at all; `EquipClothingToMesh`
+correctly no-ops for any item with no matching row, by design — this fully explains why neither of PC1's Legs
+item (`BlackMilitaryPants`) nor PC2's (`BrownHeavyJeans`) ever rendered: **neither one has a matching
+`DT_Clothing` entry**, so Legs has never actually been tested against an item capable of succeeding (a claim in
+this log that `BrownHeavyJeans` rendered after the Session 48 `BodyPart` fix was a misread screenshot, corrected
+by the user directly — see the correction note under Session 48's clothing section above). Torso (`WinterCoat`/
+`BlueShirt`, both real rows) confirmed working both directions; Feet confirmed one-directional
+(`MilitaryBoots`, a real row, works; `Boots1`, no row, doesn't).
+
+**Legs confirmed working** later the same session: PC1 equipped `ParamedicPants` (a real `DT_Clothing` row,
+from this session's candidate list) — `equip-clothing slot=6 itemId=ParamedicPants ok=1` synced to client 2,
+and the user confirmed it actually rendered on PC1's proxy. This validates both the `BodyPart="Legs"`
+(ci=1732809) literal and the whole per-item-DataTable-row theory directly: the exact same code that failed for
+`BlackMilitaryPants`/`BrownHeavyJeans` (no matching row) succeeds immediately once given an item that has one.
+
+**Conclusion: the clothing sync code itself (Torso/Legs/Feet/Gloves wired with real `BodyPart` literals, Armor
+with none) is correctly built.** Torso, Feet, and Legs are now all directly confirmed working when the
+equipped item has a real `DT_Clothing` row. Gloves and Armor remain unvalidated only for lack of a test item —
+neither has been tried yet with a real-row item (`MilitaryGlovesBlack`/`RiotPoliceGloves` for Gloves;
+`WoodenBodyArmor`/`ScrapMetalBodyArmor`/`RiotPoliceArmor`/`SpecOpsPlateCarrier` for Armor) — but given Legs'
+result there's no remaining reason to expect they'd behave differently once tested with a matching item.
+
+### Menu auto-click now gated on an actual bridge ticket
+
+`try_open_world()`'s auto-click of `ContinueGame` previously fired unconditionally once `MenuWidget_C` was
+found, regardless of whether this launch was even configured to join the bridge. Added a guard: `if
+(cfg_join_ticket.empty()) return false;` before doing anything — a plain solo/offline launch (no session.cfg,
+or an empty ticket) now leaves the menu alone instead of being yanked into a game via our automation. Direct
+user request.
+
+### Dead end: "Create New Save Slot" wipes local equipment, and we have no way to restore it
+
+User discovered that using the game's own "Create New Save Slot" menu option resets the local player's
+equipment while a bridge session is still connected — a real, deliberate save-system reset (matches
+`UBFL_SaveGames_C::Reset Player Stats` found in `BFL_SaveGames.hpp`, part of the game's third-party
+"EasyMultiSave"-based save plugin), not a bridge bug, but disruptive since bridge progress is meant to be
+server-authoritative rather than locally saved.
+
+First attempt: a "cache last-known-good local equipment, restore on full wipe" watchdog in `send_equipment()`,
+using `set_equipped_info_by_slot` (the same function proven to work for proxies) via a new `restore_local_equipment()`
+exposed from `proxy_manager.hpp`. Live testing (via a temporary `wipe_local_equipment.flag`/
+`seed_local_equipment.flag` diagnostic pair that simulated the wipe/reseed without touching the real save
+system, to avoid repeatedly triggering the real menu action which correlated with the game process closing
+unexpectedly at least twice this session) revealed the fatal flaw: **`SetEquippedInfoBySlot` reports `ok=1`
+(item resolves to a real asset pointer, function found and called) but has literally zero effect on the LOCAL
+player's real equipped state or visuals** — confirmed by directly dumping the raw memory `read_local_equipment()`
+reads from (`BP_JigHelperComp_C::ServerEquippedItems` at `+0x0F8`, per `BP_JigHelperComp.hpp`) before and after
+a `SetEquippedInfoBySlot` call: every slot stayed exactly as it was, and the user confirmed no visual change
+either. This is the same "mechanically succeeds, silently does nothing" failure mode that blocked the
+weapon-visual work (Session 46) — `SetEquippedInfoBySlot` evidently only really works for *proxies* (unpossessed
+puppet actors with no real network ownership, where it's presumably the only/authoritative equip path), not for
+the real, network-owned local player character, where the actual authoritative equipped-state write must go
+through a different, real pipeline.
+
+Decompiled `BP_JigHelperComp_C::OnPickupEquipped(AActor* ActorRef, FName ToContainerName, FGuid& UID, FGuid&
+ToContainerUID, FRepItemInfo& Info, AActor*& OverrideActor)` as the next candidate (found via
+`BP_JigHelperComp.hpp`, right next to `SetEquippedInfoBySlot`/`GetEquippedInfoBySlot`, and matching the
+`JigMP_OnPickupEquipped`-style naming already seen in the weapon investigation). Its bytecode (1121 bytes, full
+clean decode) does an `EX_ObjToInterfaceCast` on `ActorRef` early on and drives the rest of its logic entirely
+through that interface (`EX_InterfaceContext` calls) — meaning it needs a *real* pickup actor already in the
+world implementing a specific container/pickup interface, not just a resolved item DataAsset pointer. This is
+the same class of problem as the still-unsolved weapon-visual dead end (spawn a real actor, get every
+interface/component exactly right, verify visually) rather than a simple reflection call — explicitly stopped
+here per direct instruction rather than open another multi-session investigation with no guaranteed payoff.
+
+**Reverted all of it** (the non-functional watchdog in `send_equipment()`, `restore_local_equipment()` and
+`debug_wipe_all_equipment_slots()` from `proxy_manager.hpp`/`.cpp`, and the two temporary diagnostic flag
+triggers in `mod.cpp`) — dead code that logs warnings but never actually restores anything is worse than no
+code. The ticket-gated menu-click fix (above) was kept; it's real and unrelated to this dead end.
+
+### Remaining work
+
+- **No known fix for local-equipment loss from "Create New Save Slot"** — the only current mitigation is not
+  clicking it while connected. A real fix needs either (a) a working `OnPickupEquipped` call with a properly
+  spawned+configured pickup actor (same effort class as the weapon-visual dead end), or (b) finding a UE4SS
+  UFunction-hook mechanism (none found in this project's vendored stub — `vendor/ue4ss-stub/include/RC/Hook/`
+  only exposes an `AActor::Tick` hook, nothing generic for intercepting arbitrary UFunction calls) to actually
+  prevent the save-reset menu action from running in the first place, rather than trying to undo its effect
+  after the fact.
+- Facewear/Headwear/Eyewear/Accessory slots still have no identified component/mechanism at all (unchanged
+  from Session 48).
+- **Legs confirmed working** (`ParamedicPants`, live-tested). **Gloves still unvalidated only for lack of a
+  test item** — try `MilitaryGlovesBlack` or `RiotPoliceGloves`; given Legs' result there's no reason to expect
+  it won't just work.
+- **Armor tested three times, all three real-world items name-mismatched the DataTable** — every armor item
+  PC1 had access to turned out to have a crafted/prefixed internal `ItemId` that doesn't match `DT_Clothing`'s
+  row name: `RiotPoliceBodyArmor` (table has `RiotPoliceArmor`), `MakeshiftWoodenArmor` (table has
+  `WoodenBodyArmor`), `MakeshiftMetalArmor` (table has `ScrapMetalBodyArmor`) — none rendered, confirmed live
+  each time. Crafted "Makeshift X Armor" items apparently always get a `Makeshift`-prefixed `ItemId` that never
+  matches the table's un-prefixed row names, unlike Legs where a plain item (`ParamedicPants`) happened to
+  match exactly. The one untried candidate, `SpecOpsPlateCarrier`, wasn't accessible this session. Still
+  genuinely unknown whether Armor renders at all given a matching item — and separately, whether it needs a
+  `BodyPart` literal, since none was found in `BodyPartVisibility`'s bytecode for Armor specifically (current
+  code passes `BodyPart=None` for slot 9). Try `SpecOpsPlateCarrier` (or any other exact-DT_Clothing-row-name
+  item, not a "Makeshift"-prefixed one) next time it's available.
+- The weapon-visual dead end (Session 46/47) remains unresolved and deferred, per its own note above.
+
+## Session 50 — Legs confirmed via real item, Armor still name-mismatched, IDA reconnected, weapon-visual attempt #8 and PickupBuildFromGround ruled out
+
+### Legs confirmed working with a real matching item
+
+Session 49's correction (Legs never actually validated) got resolved this session: PC1 equipped `ParamedicPants`
+(a real `DT_Clothing` row, ci=588300, from the 80-row list captured in Session 49) — `equip-clothing slot=6
+itemId=ParamedicPants ok=1` synced to client 2, and the user confirmed it rendered. This directly validates
+both the `BodyPart="Legs"` literal and the whole per-item-DataTable-row theory: identical code, only the item
+differs, success or failure tracks the DataTable row exactly.
+
+### Armor: three real items tried, three name mismatches, still genuinely unvalidated
+
+Tried three armor items PC1 had access to, all failed the same way — each one's actual `ItemId` is a
+differently-named variant of a real `DT_Clothing` row, not an exact match:
+
+| Equipped item (real `ItemId`) | Table row it should have matched | Rendered? |
+|---|---|---|
+| `RiotPoliceBodyArmor` | `RiotPoliceArmor` | No |
+| `MakeshiftWoodenArmor` | `WoodenBodyArmor` | No |
+| `MakeshiftMetalArmor` | `ScrapMetalBodyArmor` | No |
+
+Pattern: every crafted "Makeshift X Armor" item gets a `Makeshift`-prefixed `ItemId` that never matches the
+table's plain row name. `SpecOpsPlateCarrier` is the one remaining untried candidate (not accessible this
+session). Armor is still genuinely unknown — not proven broken, just never tested against a real matching item,
+and separately still unknown whether it needs a `BodyPart` literal at all (none found in `BodyPartVisibility`'s
+bytecode for Armor specifically; current code passes `BodyPart=None` for slot 9).
+
+### IDA MCP reconnected after a fresh re-analysis
+
+The IDA MCP server (`ida` in `~/.mcp.json`, bridging to `http://192.168.4.54:8744/mcp`) wasn't connected to this
+session even though its config exists and the bridge container was already running — MCP server connections
+are established when a Claude Code session starts, not dynamically mid-conversation, so simply having the
+bridge/IDA running doesn't make the tools appear without a session restart. Once reconnected, `server_health`
+confirmed `auto_analysis_ready` and `hexrays_ready`. The underlying IDA Pro GUI instance itself had to be
+launched fresh (`ida.exe` against the current `SurrounDead-Win64-Shipping.exe`) and given time to auto-analyze
+from scratch — the prior game reinstall (Session 47's corrupted-install fix) meant the old `.i64` database
+was gone. Verified the fresh re-analysis produced **identical addresses** to what earlier sessions documented
+(`0x140C9D940` still decompiles to the exact same `FName::ToString`-shaped hash-table-lookup code) — confirms
+all previously-documented native addresses in this log remain valid without needing rediscovery.
+
+### Weapon-visual attempt #8: the real native `EquipActorToSocket`, still no visual
+
+Decompiled `BP_PlayerCharacter_C::OnRep_FacewearEquipped?`'s bytecode while investigating the Facewear/Headwear/
+Eyewear/Accessory slots (see below) and found it calls, in order: `helper.GetEquippedActorBySlot(slot, false,
+out Actor, out ArrayIndex)` → `ObjToInterfaceCast(Actor, BP_MpInteractInterface_C)` → `Interface.GetItemInfo(...)`
+→ **`helper.EquipActorToSocket(ActorRef, IsSecondary)`** (the function's real name genuinely has spaces —
+`GetFunctionByNameInChain(L"EquipActorToSocket")` fails, `GetFunctionByNameInChain(L"Equip Actor to Socket")`
+succeeds) → `SetActorHiddenInGame`. Added `equip_actor_to_socket()` to `proxy_manager.cpp` and called it as an
+additional step at the end of `spawn_and_attach_weapon_visual()`, on the theory that this is the actual
+game-native attach function rather than a guessed engine primitive.
+
+Live-tested: `equip_actor_to_socket: called` logs successfully (function found, `ProcessEvent` completes) — but
+the user confirmed **still no visible weapon**. This is the 8th consecutive mechanically-successful,
+visually-null attempt for weapon visuals, now including the real function the game itself uses for this exact
+purpose elsewhere. Strongly suggests the blocker isn't attachment at all (six different attach approaches
+across two functions have now been tried) but something about the *spawned actor itself* never completing
+render/mesh initialization — which the next investigation (below) partially addresses but doesn't resolve.
+
+### `PickupBuildFromGround` ruled out — it's HUD/outline setup, not mesh assignment
+
+Long-held theory (since Session 46) was that `PickupBuildFromGround` — called on every spawn attempt, always
+found, always "succeeds" — was responsible for assigning the mesh asset from item data, and that our synthetic
+spawn triggering it out of its normal context might be why it silently no-ops. Decompiled it for real this
+session using a new address-based bytecode-dump mode (below) and found it's a 18-byte stub that just jumps into
+`ExecuteUbergraph_BP_SkeletalMeshPickup` at offset 363. Decompiling *that* segment (784 bytes, partial — the
+disassembler hit an unhandled `EX_SetMap` opcode, 0x3B, not yet added to `kismet_disasm.py`) showed calls to
+`SetRenderCustomDepth`, `SetAttachmentsCustomDepth`, `GameFunctionLibrary_C.GetHUD`, `KismetSystemLibrary.IsValid`,
+and `SetOption` — this is entirely about the world-interaction outline/highlight effect and HUD prompt, **not
+mesh or visibility assignment at all**. The whole "PickupBuildFromGround assigns the mesh" theory was wrong from
+the start; calling it was never going to help, mechanically succeeding or not. The real mesh almost certainly
+comes from the Blueprint's own default `SkeletalMeshComponent` property (baked into `BP_AK15Pickup_C` itself,
+not assigned at runtime) — meaning the actual blocker is elsewhere, still unidentified.
+
+Attempted to pin down the exact `SkinnedAsset` property's native offset via IDA reflection-table archaeology
+(found the `SetSkinnedAssetAndUpdate` and `SkinnedAsset` strings and their xrefs, read surrounding qwords
+looking for a literal offset constant) — inconclusive; UE5's native property/function registration tables need
+proper type info (a PDB or manually-modeled UE5 structs in IDA) to navigate reliably, which this IDB doesn't
+have. Stopped here rather than continue uncertain byte-level guessing, per direct instruction.
+
+### New tooling this session
+
+- `bytecode_dump.flag` now supports an `abs <hex address>` first line (instead of a class name) to dump a
+  UFunction's bytecode using a raw live `UObject*`/`AActor*` pointer directly (e.g. one already logged
+  elsewhere, like `spawn_and_attach_weapon_visual`'s `spawnedPtr=`) — needed because `FindFirstOf` proved
+  unreliable at locating a specific attached/spawned actor instance among possibly-many instances of the same
+  class (repeatedly returned "instance/CDO not found" for a `BP_AK15Pickup_C` actor confirmed alive and attached
+  via its own logged pointer).
+- Confirmed `Equip Actor to Socket` — like `Reset Player Stats` (Session 49) — is a real UFUNCTION name that
+  genuinely contains spaces; the header-dump tool's word-spacing is not a display artifact, at least not always.
+
+### Facewear/Headwear/Eyewear/Accessory: same actor-spawn pattern as weapons, not clothing's simple mesh-swap
+
+Decompiled `OnRep_FacewearEquipped?` (see above) specifically to scope this investigation: these 4 slots are
+represented by **spawned actors** retrieved via `GetEquippedActorBySlot`, then interface-cast and attached via
+`EquipActorToSocket` — the same actor-based category of problem as weapons, not the simple `Clothing_*`
+component mesh-swap that made Torso/Legs/Feet/Gloves/Armor tractable. Not pursued further this session — same
+risk/effort class as the still-unsolved weapon-visual dead end, explicitly deferred rather than opened as a
+second parallel unsolved investigation.
+
+### Remaining work
+
+- Weapon visuals: 8 attempts across two sessions, all mechanically successful, zero visual result. Next real
+  step (if resumed) needs proper UE5 type info in IDA to navigate native property offsets reliably, or finding
+  a way to compare a genuinely server-spawned pickup's component state byte-for-byte against our synthetic one.
+- Facewear/Headwear/Eyewear/Accessory: not started (same actor-spawn problem class as weapons, deferred).
+- Armor: needs `SpecOpsPlateCarrier` or another exact-row-name (non-"Makeshift") item to actually test.
+- Gloves: still untested (no accessible item this session) but expected to work given Legs' result.
+- Add `EX_SetMap` (opcode 0x3B) support to `kismet_disasm.py` if the Ubergraph investigation resumes.
+
