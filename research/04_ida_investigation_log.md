@@ -5069,19 +5069,32 @@ need actually decompiling `ABP_SkeletalMeshPickup_C`'s/`ABP_FirearmPickup_C`'s c
 `kismet_disasm.py` technique used all through Sessions 45–46) to find whatever gates the mesh's actual visibility
 or asset assignment, rather than more guessing at engine-level function names.
 
+### Unequip-doesn't-clear-the-proxy gap fixed and live-verified
+
+With the weapon-visual thread paused, picked up the other open gap instead: `sync_equipment()` only ever
+iterated slots present in the latest `Equipment` wire frame, which omits empty slots entirely
+(`read_local_equipment()`) — a slot going from equipped to unequipped simply vanished from the next frame rather
+than arriving with an empty `itemId`, so nothing ever detected or cleared it on the proxy. Fixed by adding
+`RemotePlayer::appliedSlotsMask` (a `uint32_t` bitmask, one bit per slot — 21 slots fits comfortably), set at the
+end of every `sync_equipment()` call to the current frame's slot set. On each subsequent call, any bit set in the
+*previous* mask but missing from the *new* one means that slot was just unequipped — explicitly calls
+`set_equipped_info_by_slot(actor, i, "")` (empty `itemId`, matching `resolve_item_asset()`'s existing "empty
+means unequip" contract) for each one, and additionally tears down `primaryWeaponVisualActor` if slot 11 was the
+one cleared. This only became worth doing now that all 21 slots have real tags (Session 47, above) — with only
+Primary mapped, the gap only ever mattered for one slot.
+
+Live-verified in the same two-client session: had PC1 unequip their melee weapon and a torso item, both
+immediately produced `SDB: equip-clear slot=14 ok=1` / `SDB: equip-clear slot=4 ok=1` on client 2's view of PC1's
+proxy — clean, immediate detection and clearing for both a weapon slot and a clothing slot.
+
 ### Remaining work
 
 - Decompile `ABP_SkeletalMeshPickup_C`'s/`ABP_FirearmPickup_C`'s own Construct/BeginPlay-equivalent bytecode to
   find what actually assigns the mesh asset and/or gates its visibility — the real next step for the weapon
   visual, now that six live-verified mechanical fixes in a row have ruled out every guessable engine-level cause.
-- The 21 slot values are confirmed to work for the getter/setter/activate/onrep/notify *data* chain (re-confirmed
-  again in this session's two-client tests, `ok=1` across clothing/tool/weapon slots on both clients) — worth a
-  visual check specifically for non-weapon slots (clothing), which don't depend on the still-broken weapon-visual
-  chain above and might already be working via whatever native visual system handles `MC_AttachClothing`.
-- Solve the "unequip doesn't clear the proxy" gap — now the more valuable of the two remaining gaps, since the
-  underlying data write is confirmed working for all 21 slots; a real player unequipping anything will leave
-  their proxy showing stale state indefinitely until this is fixed. `sync_equipment()` only iterates slots
-  present in the latest `Equipment` wire frame (which omits empty slots entirely), so nothing currently detects
-  or clears a slot that becomes unequipped — needs a per-player "previously applied slots" diff.
+- The 21 slot values are confirmed to work for the getter/setter/activate/onrep/notify/clear *data* chain
+  end to end, including now proxy-clear-on-unequip — worth a visual check specifically for non-weapon slots
+  (clothing), which don't depend on the still-broken weapon-visual chain above and might already be working via
+  whatever native visual system handles `MC_AttachClothing`.
 - `MC_AttachClothing_Implementation` still untried, per Session 46's note.
 

@@ -26,6 +26,16 @@ struct RemotePlayer {
     bool equipmentDirty = false; // set by on_equipment(), cleared once ProxyManager::tick() applies it
     void* primaryWeaponVisualActor = nullptr; // spawned PickupClass actor attached to the proxy's EquipSocket
     std::string primaryWeaponVisualItemId;    // itemId the actor above was spawned for — respawn only on change
+
+    // Bit i set = slot i was actually written to the proxy on a previous
+    // sync_equipment() pass. The wire Equipment frame omits empty slots
+    // entirely (see read_local_equipment()), so a slot that becomes
+    // unequipped simply vanishes from the next frame instead of arriving
+    // with an empty itemId — without this, nothing ever detects that and
+    // the proxy keeps showing stale equipped state forever. Compared against
+    // the new frame's slots each sync to find newly-missing (i.e. just
+    // unequipped) slots to explicitly clear, then updated to match.
+    uint32_t appliedSlotsMask = 0;
 };
 
 // Bridge session context.

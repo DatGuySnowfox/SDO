@@ -778,14 +778,10 @@ void ProxyManager::sync_equipment(AActor* actor, RemotePlayer& player)
     if (!actor || !player.equipmentDirty) return;
     player.equipmentDirty = false;
 
-    // KNOWN GAP: only iterates slots present in the latest Equipment frame
-    // (the wire format omits empty slots entirely — on_equipment()'s old
-    // comment about this being fine assumed equipment was just a cached map,
-    // never pushed onto a live actor). A slot that becomes unequipped won't
-    // appear here, so nothing clears it on the proxy — it'll keep showing
-    // whatever was last set. Needs a per-player "previously applied slots"
-    // diff before kEnableEquipmentWrite is safe to flip; not solved here
-    // since none of this has been live-verified yet either.
+    // The loop below only iterates slots present in the latest Equipment
+    // frame (the wire format omits empty slots entirely). Unequipped slots
+    // — present in player.appliedSlotsMask from a prior sync but missing
+    // here — are handled separately at the end of this function.
 
     // One-shot verification pass: for every slot we're about to touch, read
     // it back first via the safe, read-only getter and log the result. This
@@ -879,6 +875,38 @@ void ProxyManager::sync_equipment(AActor* actor, RemotePlayer& player)
             }
         }
     }
+
+    // Clear any slot that was written on a previous sync but is missing from
+    // this frame — the wire format omits empty slots entirely (see
+    // read_local_equipment()), so a slot going from equipped to unequipped
+    // simply vanishes from the next frame rather than arriving with an
+    // empty itemId. Without this, nothing ever detects an unequip and the
+    // proxy keeps showing stale state forever (the gap noted above/in
+    // earlier sessions). All 21 slots have real tags now (Session 47), so
+    // this applies uniformly rather than just to Primary.
+    uint32_t newMask = 0;
+    for (const auto& slot : player.equipment) newMask |= (1u << slot.slotIndex);
+
+    if (kEnableEquipmentWrite) {
+        for (uint8_t i = 0; i < EQUIPMENT_SLOT_COUNT; ++i) {
+            const uint32_t bit = 1u << i;
+            if ((player.appliedSlotsMask & bit) && !(newMask & bit)) {
+                const bool cleared = set_equipped_info_by_slot(actor, i, "");
+                Output::send<LogLevel::Normal>(
+                    STR("SDB: equip-clear slot={:d} ok={:d}\n"), i, cleared);
+
+                // Primary's spawned weapon-visual actor doesn't tear itself
+                // down just because the underlying data got cleared — do it
+                // explicitly, same as the "item changed" path above.
+                if (cleared && i == 11 && player.primaryWeaponVisualActor) {
+                    static_cast<AActor*>(player.primaryWeaponVisualActor)->K2_DestroyActor();
+                    player.primaryWeaponVisualActor = nullptr;
+                    player.primaryWeaponVisualItemId.clear();
+                }
+            }
+        }
+    }
+    player.appliedSlotsMask = newMask;
 }
 
 void ProxyManager::init()
