@@ -1932,6 +1932,151 @@ static void check_watch_rotation_trigger()
     }
 }
 
+// Read-only, one-shot diagnostic (2026-08-13): BP_PlayerCharacter_C::
+// GetCurrentActiveWeapon() is a real, directly-callable UFUNCTION (confirmed
+// via FModel export — FUNC_BlueprintCallable, returns an Actor* out-param
+// named "EquippedWeapon") — the working theory for the one-handed weapon
+// grip symptom is that whatever AnimGraph IK drives two-handed grip reads
+// this getter (or something feeding the same underlying inventory state),
+// and our proxy's weapon-visual actor (spawned separately via socket
+// attach, never run through the game's own real equip flow) never gets
+// returned by it, leaving the IK with nothing to target. Calls it on both
+// the local pawn and any connected proxy, logging the returned actor
+// address next to our own tracked weapon-visual actor pointers so they can
+// be compared by eye.
+static void check_active_weapon_trigger()
+{
+    wchar_t path[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return;
+    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\active_weapon.flag";
+    if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+    DeleteFileW(flag.c_str());
+
+    auto logOne = [](const char* label, AActor* pawn) {
+        if (!pawn) { debug_log(std::string("active_weapon: ") + label + " no pawn"); return; }
+        UFunction* fn = pawn->GetFunctionByNameInChain(L"GetCurrentActiveWeapon");
+        if (!fn) { debug_log(std::string("active_weapon: ") + label + " GetCurrentActiveWeapon NOT FOUND"); return; }
+        struct Params { AActor* EquippedWeapon = nullptr; } params;
+        pawn->ProcessEvent(fn, &params);
+        char buf[128];
+        snprintf(buf, sizeof(buf), "active_weapon: %s pawn=0x%llx -> EquippedWeapon=0x%llx",
+                 label, (unsigned long long)(uintptr_t)pawn, (unsigned long long)(uintptr_t)params.EquippedWeapon);
+        debug_log(buf);
+
+        // WeaponType (2026-08-13): a real, plain, directly-writable
+        // ByteProperty (Enum_Firearms) on BP_PlayerCharacter_C itself,
+        // confirmed via FModel export — Pistol=0, SMG=1, AR/LMG/Marksman=2,
+        // Sniper=3, Shotgun=4, ... Working theory for the one-handed-
+        // shotgun symptom: this drives the animation system's one-handed-
+        // vs-two-handed pose category (a pistol correctly renders one-
+        // handed even for the LOCAL player — live-confirmed by the user —
+        // so this isn't a generic "aiming" gate, it's weapon-type-specific).
+        // If this reads correctly on local but wrong/default on the proxy,
+        // that would explain the symptom directly.
+        if (auto* wt = static_cast<uint8_t*>(pawn->GetValuePtrByPropertyNameInChain(L"WeaponType"))) {
+            snprintf(buf, sizeof(buf), "active_weapon: %s WeaponType=%d", label, (int)*wt);
+            debug_log(buf);
+        } else {
+            debug_log(std::string("active_weapon: ") + label + " WeaponType not found");
+        }
+    };
+
+    logOne("local", find_local_pawn());
+
+    std::lock_guard<std::mutex> lk(sdb::g_state().playersMtx);
+    for (auto& [id, player] : sdb::g_state().players) {
+        if (!player.proxyActor) continue;
+        if (sdb::now_micros() - player.proxySpawnedAtUs < 2'000'000ULL) continue;
+        logOne("proxy", static_cast<AActor*>(player.proxyActor));
+        char buf[256];
+        snprintf(buf, sizeof(buf),
+            "active_weapon: proxy tracked visuals: primary=0x%llx secondary=0x%llx sidearm=0x%llx melee=0x%llx",
+            (unsigned long long)(uintptr_t)player.primaryWeaponVisualActor,
+            (unsigned long long)(uintptr_t)player.secondaryWeaponVisualActor,
+            (unsigned long long)(uintptr_t)player.sidearmVisualActor,
+            (unsigned long long)(uintptr_t)player.meleeVisualActor);
+        debug_log(buf);
+        break;
+    }
+}
+
+// Read-only, one-shot diagnostic (2026-08-13): dumps the raw 864-byte
+// AnimNode_Fabrik struct (AnimGraphNode_Fabrik_6/_7 — the two-handed weapon
+// grip IK solver nodes, confirmed real via FModel export) off both the
+// local player's and a proxy's live AnimInstance to .bin files, for a raw
+// byte-level diff. Deliberately NOT reading any specific named field (e.g.
+// "Alpha") — no verified offset exists for it in this build (no dedicated
+// struct-layout export was found, and guessing risks exactly the crash
+// class this project's own "never guess offsets" rule exists to prevent).
+// This instead reuses the same safe methodology already proven for finding
+// UFunction::Script's own offset earlier this session: dump raw bytes, diff
+// by eye for a plausible pattern, rather than guess a specific field.
+static void check_fabrik_dump_trigger()
+{
+    wchar_t path[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return;
+    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\fabrik_dump.flag";
+    if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+    DeleteFileW(flag.c_str());
+
+    wchar_t outDir[MAX_PATH];
+    DWORD dn = GetEnvironmentVariableW(L"APPDATA", outDir, MAX_PATH);
+    if (dn == 0 || dn >= MAX_PATH) return;
+
+    struct DumpCtx { const char* label; const wchar_t* wlabel; AActor* pawn; const wchar_t* outDir; DWORD dn; };
+
+    auto dumpOneRaw = [](void* rawCtx) {
+        auto* ctx = static_cast<DumpCtx*>(rawCtx);
+        const char* label = ctx->label;
+        AActor* pawn = ctx->pawn;
+        if (!pawn) { debug_log(std::string("fabrik_dump: ") + label + " no pawn"); return; }
+        auto** meshSlot = static_cast<UObject**>(pawn->GetValuePtrByPropertyNameInChain(L"Mesh"));
+        UObject* mesh = (meshSlot && *meshSlot) ? *meshSlot : nullptr;
+        if (!mesh) { debug_log(std::string("fabrik_dump: ") + label + " Mesh not found"); return; }
+        UFunction* getAnimFn = mesh->GetFunctionByNameInChain(L"GetAnimInstance");
+        if (!getAnimFn) { debug_log(std::string("fabrik_dump: ") + label + " GetAnimInstance NOT FOUND"); return; }
+        struct Params { UObject* ReturnValue = nullptr; } aparams;
+        mesh->ProcessEvent(getAnimFn, &aparams);
+        if (!aparams.ReturnValue) { debug_log(std::string("fabrik_dump: ") + label + " AnimInstance is null"); return; }
+
+        for (const wchar_t* nodeName : { L"AnimGraphNode_Fabrik_6", L"AnimGraphNode_Fabrik_7" }) {
+            void* structPtr = aparams.ReturnValue->GetValuePtrByPropertyNameInChain(nodeName);
+            if (!structPtr) {
+                debug_log(std::string("fabrik_dump: ") + label + " node not found");
+                continue;
+            }
+            std::wstring outPath = std::wstring(ctx->outDir, ctx->dn) + L"\\SurrounDeadBridge\\fabrik_" +
+                ctx->wlabel + L"_" + nodeName + L".bin";
+            std::ofstream out(outPath, std::ios::binary | std::ios::trunc);
+            if (out.is_open()) out.write(reinterpret_cast<const char*>(structPtr), 864);
+            debug_log(std::string("fabrik_dump: ") + label + " wrote node dump");
+        }
+    };
+
+    // SEH-guarded (2026-08-13): this is exploratory struct-property access
+    // on a name never previously read this session — if
+    // GetValuePtrByPropertyNameInChain doesn't actually resolve
+    // "AnimGraphNode_Fabrik_6/_7" the same clean way it does for simpler
+    // properties, better to catch and log than silently crash the whole
+    // do_game_tick call the way this did unguarded on the first attempt
+    // (flag consumed, zero log output, no other symptom).
+    DumpCtx localCtx{"local", L"local", find_local_pawn(), outDir, dn};
+    if (!seh_invoke(dumpOneRaw, &localCtx))
+        debug_log("fabrik_dump: local crashed, caught via SEH");
+
+    std::lock_guard<std::mutex> lk(sdb::g_state().playersMtx);
+    for (auto& [id, player] : sdb::g_state().players) {
+        if (!player.proxyActor) continue;
+        if (sdb::now_micros() - player.proxySpawnedAtUs < 2'000'000ULL) continue;
+        DumpCtx proxyCtx{"proxy", L"proxy", static_cast<AActor*>(player.proxyActor), outDir, dn};
+        if (!seh_invoke(dumpOneRaw, &proxyCtx))
+            debug_log("fabrik_dump: proxy crashed, caught via SEH");
+        break;
+    }
+}
+
 // Flag file content: one class name per line — one-off live diagnostic to
 // find the class name of whatever widget/actor is currently on screen (e.g.
 // the "press any key" splash), by trying FindFirstOf against each candidate
@@ -2261,6 +2406,8 @@ static void do_game_tick()
     check_watch_aimoffset_trigger();
     check_watch_rotation_trigger();
     check_watch_lefthand_trigger();
+    check_active_weapon_trigger();
+    check_fabrik_dump_trigger();
     check_widget_scan_trigger();
     check_scan_pickup_class_trigger();
     check_dump_clothing_table_trigger();

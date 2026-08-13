@@ -6255,3 +6255,86 @@ the mechanism is built. **Always verify a new `ProcessEvent` hook actually fires
 throwaway diagnostic log before trusting a "no visible effect" result as evidence the underlying idea failed** —
 this cost real time twice in a row this session (`Pitch`, then `IsCrouching`/`IsADS`/`Falling`) because the first
 attempt's failure was accepted at face value instead of checked.
+
+## Session 53 continued — one-handed weapon grip: five reflection dead ends, then a live-debug trail
+
+**Visual confirmation first.** Live screenshots (both machines) confirmed the actual symptom precisely: a proxy
+holding a shotgun shows a relaxed, **lowered**, one-handed carry pose (right hand on the grip, left hand hanging
+free, barrel down) while the real local player shows a raised, **two-handed**, aimed pose (both hands engaged,
+weapon up) for the identical weapon. A reference shot of a genuinely one-handed weapon (pistol) confirmed that
+one-handed idle carry is the *correct* rendering for that weapon class — so the bug is specifically "shotgun
+renders as if one-handed," not a generic aiming/stance gate.
+
+Five FModel/reflection-based hypotheses were checked and ruled out, each with real live evidence, not just
+"seemed to work":
+1. `BP_PlayerCharacter_C::GetCurrentActiveWeapon()` — a real, callable `UFUNCTION` (confirmed via FModel export)
+   returning an `Actor*` out-param — read `0x0` (null) on **both** local and proxy, even with the local player
+   confirmed actively holding the shotgun correctly. Rules this out entirely; it isn't what any grip logic reads.
+2. `LeftHandWeaponLocation`/`K2Node_PropertyAccess_13` (`GetLeftHandLoc`'s only output, a 30-byte function — see
+   above) — byte-identical between local and proxy live samples.
+3 & 4. Both `AnimGraphNode_Fabrik_6` and `_7` (the `AnimNode_Fabrik` IK solver node instances, 864 bytes each,
+   dumped raw via a new SEH-guarded diagnostic after an *unguarded* first attempt crashed `do_game_tick` silently
+   with zero log output — this project's "SEH-guard every new proxy/AnimInstance touch" rule paid for itself
+   again) — **byte-for-byte identical**, all 864 bytes, both nodes, local vs. proxy. Conclusively rules out the
+   Fabrik node's own stored state (including whatever `Alpha`/weight field it has) as the differentiator.
+5. `WeaponType` (a plain `ByteProperty` enum `Enum_Firearms` on `BP_PlayerCharacter_C`, confirmed via FModel,
+   Pistol=0/SMG=1/AR=2/Sniper=3/**Shotgun=4**/...) — read `0` (Pistol) on **both** local and proxy despite both
+   confirmed holding the shotgun. Rules this out too — it's evidently a loadout/primary-slot classification set
+   once, not a live "currently held" indicator, since local's grip renders correctly despite this reading wrong.
+
+**Conclusion from the five dead ends**: whatever actually decides one-handed-vs-two-handed grip pose is not
+reachable through the Blueprint reflection surface at all — it must be native C++ logic (most likely gating the
+`AnimNode_Fabrik`'s blend weight from outside the node's own stored struct, e.g. a native
+`IsTwoHandedWeapon(WeaponType)`-style check feeding into the anim graph's link/blend logic) that the
+`GetValuePtrByPropertyNameInChain`/bytecode-dump toolchain simply cannot see, since it isn't a `UFUNCTION` or
+reflected property at all.
+
+**Live IDA remote-debug session, take 2** — reused Session 52's remote-debug methodology (`win64_remote.exe` on
+the target, `idc.set_remote_debugger` + `idc.load_debugger("win32", 1)`) but hit **repeated IDA plugin hangs**
+this time, each requiring a full IDA restart to recover, with the actual cause different each time — real
+findings worth keeping for next time this happens:
+- Attaching (local *or* remote) to a live process with default debugger options breaks at **every single DLL
+  load event**, which looks identical to a genuine hang from the MCP client's side (request just times out) — no
+  visible dialog, no crash, just a debugger sitting suspended waiting for a manual Continue. Fixed for the rest
+  of the session with `ida_dbg.set_debugger_options(...)`, clearing `DOPT_LIB_BPT` (0x80) and `DOPT_THREAD_BPT`
+  (0x8) while keeping the `*_MSGS` flags (0x40/0x4/0x100/0x1/0x10) for output-panel visibility — i.e. log module
+  loads, don't break on them.
+- Separately, `ida_dbg.retrieve_exceptions()` / mutate `.flags` (clear `ida_idd.EXC_BREAK`) / `ida_dbg.
+  store_exceptions()` (no arguments — different signature than expected, operates on the vector already
+  retrieved) disables the exception-notification dialogs from Session 52, same as before.
+- **New finding this session**: any text/string search (`find`, or a manual `ida_search.find_text` loop) reliably
+  hung the plugin *while a debugger was attached*, even with the above options already set and the process
+  confirmed stable/running — requiring a full IDA restart every time. Root cause not fully identified (possibly
+  the live-process variant of string search reading over the remote debug protocol is just extremely slow; a
+  custom `ida_search.find_text` loop with placeholder `y`/`x` params of `0, 0` may also have been a genuinely
+  broken/infinite loop rather than a hang, since the same *shape* of failure occurred both via the tested `find`
+  tool and the hand-written loop). **Reliable workaround found**: do all string/text searching while the
+  debugger is *not yet attached* (fast, reliable, confirmed working — found `AnimNode_Fabrik`'s string address in
+  under a second on a fresh, un-attached IDB), then attach only afterward for the breakpoint/inspection phase
+  that actually needs a live process.
+- `server_health` (a trivial, non-mutating call) reliably timing out is a good signal the plugin's single request
+  thread is genuinely blocked on a prior call, not that the connection itself is dead — retrying `server_health`
+  a few times over ~10-30s often recovers on its own; if it doesn't, the IDA process itself needs restarting
+  (check `Get-Process -Name "ida*" | Select Responding` — "Responding: True" at the OS level does NOT mean the
+  MCP plugin's request thread is unstuck, these are independent).
+
+**Static analysis trail found before running out of time** (all via the fast un-attached `find`/`decompile`
+tools, no debugger needed): `AnimNode_Fabrik`'s string is referenced once, from a `UScriptStruct` registration
+table at `0x7ff770273308` containing — among other fields — two lazy-singleton getter functions.
+`sub_7FF76BB753E0` is `FAnimNode_Fabrik::StaticStruct()` (confirmed by its body: lazy-init a
+`qword_7FF7705F1DC8`, calling a registration function with the struct's construct-ops pointer and its name
+string). That construct-ops pointer (`sub_7FF76BBF06C0`) is itself another lazy singleton wrapping
+`sub_7FF76A4416F0(&cache, off_7FF7702732F0)` — and `off_7FF7702732F0` is a *second*, near-identical registration
+table containing `sub_7FF76BB796C0`, one level further in, which is yet another lazy singleton (likely
+`SuperStruct()`, the base-class `FAnimNode_SkeletalControlBase`'s own `StaticStruct()`, unconfirmed). **Stopped
+here for the night** — the actual field-offset table (analogous to what FModel's Blueprint export shows for
+Blueprint-added properties, but for `AnimNode_Fabrik`'s own native C++ fields like `Alpha`/`TipBone`/`RootBone`)
+is presumably one or two more hops down this same registration chain, not yet reached.
+
+**For next time**: keep following this exact chain (`sub_7FF76BB796C0` and whatever `off_7FF7702739B8` turns out
+to be) rather than restarting the search — this static analysis needs zero debugger attach at all and was fast
+and reliable throughout. Once the real field-offset table is found, reading `Alpha`'s live value on local vs.
+proxy (the same `GetValuePtrByPropertyNameInChain` + raw offset technique already used successfully for
+`Speed`/`Pitch` this session, just against this native struct instead of a Blueprint one) would directly confirm
+or rule out "the IK is just disabled/zero-weight on the proxy" — the leading remaining hypothesis, given the
+struct's own stored data is otherwise byte-identical.
