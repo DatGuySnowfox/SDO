@@ -6750,6 +6750,21 @@ decode round-trip tested (`tests/protocol_roundtrip.cpp`, 482/482 passing), `gat
 own `PlayMontage` — this receiver path is untested live since nothing has successfully triggered it yet
 (sender-side hook is the missing piece, not the relay/receiver plumbing).
 
+**Follow-up attempt: hooking the standard engine `UAnimInstance::Montage_Play` directly (public, documented
+UE5 API, not a guess) instead of continuing to chase custom character-level RPCs — also inconclusive, a
+genuine resolution mystery, not attempted further this session.** Added step-by-step diagnostic logging
+(`on_process_event_pre`) around the exact same `Mesh->GetAnimInstance()` chain `on_process_event_post`'s
+`s_lastUpdateFn` resolution already uses successfully elsewhere in this file. Result: consistently logs
+`find_local_pawn() null` on every throttled attempt, even minutes into a live session with a confirmed
+active pawn (other equip actions logging successfully in the same window) — genuinely puzzling, since the
+*other* hooks in this same function (`s_drop_fn`/`s_pickup_fn`/`s_playMontage_fn`/`s_mcMontage_fn`/
+`s_svrMontage_fn`) all resolved fine via the identical `find_local_pawn()` call pattern. Swapping to
+`cached_find_local_pawn()` wouldn't help (it's a 100ms cache wrapping the exact same underlying call, not a
+different lookup mechanism) so wasn't attempted live. **Left as-is, diagnostic-only, harmless** (the
+resolution block just keeps failing silently, no crash risk) — worth a fresh look next session, possibly by
+checking whether `find_local_pawn()`'s own implementation has some fragility (a class-name/component check
+that could intermittently miss) rather than assuming the calling pattern itself is at fault.
+
 **New bug spotted live, not yet investigated: weapon base mesh invisible while its attachments still
 render.** Screenshot evidence: a proxy's AK15 — its own base rifle mesh is missing/invisible entirely,
 while its attached items (scope, and at least one other attachment) render correctly and stay positioned
@@ -6767,6 +6782,16 @@ not just weapon and clothing slots. Doesn't change the existing hypothesis (`Jig
 deployed) since heads aren't a `JigPickup`-style spawned actor at all — worth a fresh look at whether headwear
 specifically (a real spawned/attached item, unlike the base head mesh) is the actual thing detaching, next
 time it's reproduced.
+
+**New finding, same session: aim-offset (pitch/yaw) sync partially works now, contradicting the earlier
+"no visible effect" note above.** Live-reported while testing other things: pitch (looking up/down) now
+visibly works on the proxy, just needs smoothing/interpolation (likely the same class of "teleporty" snap
+issue position/yaw sync already solved via exponential smoothing — see `RemotePlayer::renderX/Y/Z/Yaw` in
+`state.hpp`, not yet applied to pitch). Yaw (looking left/right) still doesn't work at all. Not yet
+investigated further this session (mid-flight on the melee-swing-animation thread when reported) — worth a
+dedicated look next: check whether the existing `Pitch` write (`on_process_event_post`, aim-offset section)
+has a yaw counterpart at all, or whether left/right look is actually meant to come from the existing body-yaw
+smoothing (`RemotePlayer::renderYaw`) rather than a separate `AimYaw`-style AnimBP property no one's added yet.
 
 **Confirmed 2026-08-13 (same session, later): it's headwear specifically, not the base head mesh.** Live
 screenshot: a gas mask/helmet (a real spawned/attached item actor, same `spawn_and_equip_item_visual` path as
