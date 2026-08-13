@@ -1895,6 +1895,75 @@ static void check_watch_lefthand_trigger()
     }
 }
 
+// Read-only diagnostic (2026-08-13, Session 54 weapon-grip investigation):
+// GetAnimationInfoFromCharacter's bytecode decode (bytecode_dump.flag) shows
+// it interface-casts the owning pawn and calls "GetAnimationInfo", storing
+// the FName it returns into an instance variable named "CActiveSlot"
+// (resolved via resolve_fprop.flag) — the first genuinely new, unruled-out
+// candidate for what drives one-handed-vs-two-handed grip pose, fed straight
+// from the character every relevant update. Comparing its live value on a
+// correctly-rendering local player against a proxy showing the bug is the
+// most direct test of that theory so far this session.
+static void log_activeslot_values(const char* label, AActor* pawn)
+{
+    if (!pawn) { debug_log(std::string("watch_activeslot: ") + label + " no pawn"); return; }
+    auto** meshSlot = static_cast<UObject**>(pawn->GetValuePtrByPropertyNameInChain(L"Mesh"));
+    UObject* mesh = (meshSlot && *meshSlot) ? *meshSlot : nullptr;
+    if (!mesh) { debug_log(std::string("watch_activeslot: ") + label + " Mesh not found"); return; }
+    UFunction* getAnimFn = mesh->GetFunctionByNameInChain(L"GetAnimInstance");
+    if (!getAnimFn) { debug_log(std::string("watch_activeslot: ") + label + " GetAnimInstance NOT FOUND"); return; }
+    struct Params { UObject* ReturnValue = nullptr; } aparams;
+    mesh->ProcessEvent(getAnimFn, &aparams);
+    if (!aparams.ReturnValue) { debug_log(std::string("watch_activeslot: ") + label + " AnimInstance is null"); return; }
+
+    auto* anim = aparams.ReturnValue;
+    auto* activeSlotPtr = anim->GetValuePtrByPropertyNameInChain(L"CActiveSlot");
+    std::string activeSlot = activeSlotPtr
+        ? native::fname_to_string(reinterpret_cast<uintptr_t>(activeSlotPtr))
+        : std::string("<not found>");
+
+    auto* inMeleeStance = static_cast<uint8_t*>(anim->GetValuePtrByPropertyNameInChain(L"InMeleeStance"));
+    auto* isCrouching    = static_cast<uint8_t*>(anim->GetValuePtrByPropertyNameInChain(L"IsCrouching"));
+    // Session 55: CombatState(int32 BlendSpace)'s entire decoded body is just
+    // "BlendSpaceInt = BlendSpace; return;" (bytecode_dump.flag + kismet_disasm.py,
+    // no branch/weapon-type check at all) — BlendSpaceInt itself, whatever
+    // selects a BlendSpace asset in the AnimGraph, is the next concrete
+    // candidate for what actually picks one-handed-vs-two-handed arm pose.
+    auto* blendSpaceInt = static_cast<int32_t*>(anim->GetValuePtrByPropertyNameInChain(L"BlendSpaceInt"));
+
+    char line[320];
+    snprintf(line, sizeof(line),
+        "watch_activeslot: %s CActiveSlot=\"%s\" InMeleeStance=%d IsCrouching=%d BlendSpaceInt=%d",
+        label, activeSlot.c_str(),
+        inMeleeStance ? (int)*inMeleeStance : -1, isCrouching ? (int)*isCrouching : -1,
+        blendSpaceInt ? *blendSpaceInt : -999);
+    debug_log(line);
+}
+
+static void check_watch_activeslot_trigger()
+{
+    wchar_t path[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return;
+    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\watch_activeslot.flag";
+    if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+
+    static uint64_t s_lastLogUs = 0;
+    const uint64_t now = sdb::now_micros();
+    if (now - s_lastLogUs < 1'000'000ULL) return;
+    s_lastLogUs = now;
+
+    log_activeslot_values("local", find_local_pawn());
+
+    std::lock_guard<std::mutex> lk(sdb::g_state().playersMtx);
+    for (auto& [id, player] : sdb::g_state().players) {
+        if (player.proxyActor && sdb::now_micros() - player.proxySpawnedAtUs >= 2'000'000ULL) {
+            log_activeslot_values("proxy", static_cast<AActor*>(player.proxyActor));
+            break;
+        }
+    }
+}
+
 // Read-only diagnostic (2026-08-13): compares the proxy's actual live
 // K2_GetActorRotation() against player.yaw (what we're actually sending it
 // every tick via teleport_proxy's SetActorLocationAndRotation call), to
@@ -2406,6 +2475,7 @@ static void do_game_tick()
     check_watch_aimoffset_trigger();
     check_watch_rotation_trigger();
     check_watch_lefthand_trigger();
+    check_watch_activeslot_trigger();
     check_active_weapon_trigger();
     check_fabrik_dump_trigger();
     check_widget_scan_trigger();
