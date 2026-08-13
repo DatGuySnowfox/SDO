@@ -6325,16 +6325,43 @@ table at `0x7ff770273308` containing — among other fields — two lazy-singlet
 `qword_7FF7705F1DC8`, calling a registration function with the struct's construct-ops pointer and its name
 string). That construct-ops pointer (`sub_7FF76BBF06C0`) is itself another lazy singleton wrapping
 `sub_7FF76A4416F0(&cache, off_7FF7702732F0)` — and `off_7FF7702732F0` is a *second*, near-identical registration
-table containing `sub_7FF76BB796C0`, one level further in, which is yet another lazy singleton (likely
-`SuperStruct()`, the base-class `FAnimNode_SkeletalControlBase`'s own `StaticStruct()`, unconfirmed). **Stopped
-here for the night** — the actual field-offset table (analogous to what FModel's Blueprint export shows for
-Blueprint-added properties, but for `AnimNode_Fabrik`'s own native C++ fields like `Alpha`/`TipBone`/`RootBone`)
-is presumably one or two more hops down this same registration chain, not yet reached.
+table containing `sub_7FF76BB796C0`, one level further in, which is yet another lazy singleton wrapping
+`off_7FF7702739B8` — that turned out to be a single-entry table pointing back to the same shared package-getter
+function (`sub_7FF76BB779A0`), a dead end for finding field offsets specifically (it's just package metadata,
+not `SuperStruct()` as guessed).
 
-**For next time**: keep following this exact chain (`sub_7FF76BB796C0` and whatever `off_7FF7702739B8` turns out
-to be) rather than restarting the search — this static analysis needs zero debugger attach at all and was fast
-and reliable throughout. Once the real field-offset table is found, reading `Alpha`'s live value on local vs.
-proxy (the same `GetValuePtrByPropertyNameInChain` + raw offset technique already used successfully for
-`Speed`/`Pitch` this session, just against this native struct instead of a Blueprint one) would directly confirm
-or rule out "the IK is just disabled/zero-weight on the proxy" — the leading remaining hypothesis, given the
-struct's own stored data is otherwise byte-identical.
+**Continued and found the actual property list.** `sub_7FF76BB75900` (referenced twice in the outer registration
+table) turned out to be the `ICppStructOps` builder — allocates a 16-byte descriptor with a vtable pointer
+(`off_7FF76EEE6B10`) and the struct's real size (496 bytes) and alignment (16). More importantly,
+`off_7FF76EEC7FA0` is a **flat array of property-name-pointers** — exactly analogous to what FModel's Blueprint
+export shows for Blueprint-added properties, just for this native C++ struct's own fields. Read in order, `AnimNode_Fabrik`'s
+own 8 declared fields are: `EffectorTransform`, `EffectorTarget`, `TipBone`, `RootBone`, `Precision`,
+`MaxIterations`, `EffectorTransformSpace`, `EffectorRotationSource` — no `Alpha` among them, confirming it's
+inherited from the base class, not redeclared by Fabrik itself.
+
+Searched for `"AnimNode_SkeletalControlBase"` directly (same fast un-attached `find`) and found its own
+registration table the same way: `ComponentPose`, `LODThreshold`, **`ActualAlpha`**, then enum metadata
+(`UnderlyingType`/`AlphaInputType`). **`ActualAlpha`, not `Alpha`, is almost certainly the real per-frame-resolved
+blend weight** — matching the standard UE5 `FAnimNode_SkeletalControlBase` pattern where `Alpha`/`AlphaScaleBias`/
+`AlphaCurveName` are just the *configured input*, and a separate `ActualAlpha` field holds what the engine
+actually resolves and applies each frame from whatever `AlphaInputType` selects. If this reads 0 on the proxy and
+non-zero on local, that would fully explain the visual symptom without needing anything from `AnimNode_Fabrik`'s
+own (already-proven-identical) struct data at all.
+
+Attempted to read the raw property-descriptor bytes at `ActualAlpha`'s entry directly (`get_bytes`, 64 bytes from
+the name-pointer) to extract its `Offset` field without a live debugger, but the UE5 UHT-generated
+`FPropertyParamsBase`-family struct layout for property offset/flags isn't confidently known for this exact
+engine build — decoding the raw bytes further risks exactly the kind of guessed-offset mistake this project's own
+rules exist to prevent (a previous unverified offset guess crashed the live game). **Deliberately stopped before
+guessing** rather than push an unverified interpretation.
+
+**For next time**: don't try to hand-decode the property-descriptor byte layout further. Instead, once a live
+debug session is stable (see the IDA stability notes above), call `FAnimNode_SkeletalControlBase::StaticStruct()`
+live (address chain already known: it's whatever `sub_7FF76BB796C0`-style singleton wraps
+`0x7ff7702739d0`/`0x7ff76eece570`'s owning registration — re-derive from `"AnimNode_SkeletalControlBase"`'s xref
+the same way `AnimNode_Fabrik`'s was found) to get a real, live `UScriptStruct*`, then walk its `ChildProperties`
+chain (same iteration mechanism used all session for class properties) to find the real `ActualAlpha` `FProperty*`
+and read its `Offset_Internal` at `+0x38` (already twice-verified this project, see the `PlayerArray`/`GameState`
+findings in Session 10) — the exact same safe, non-guessed technique already used successfully for `Speed`
+earlier this session, just reached via a live struct walk instead of a static byte read. Then compare
+`ActualAlpha`'s live value between local and proxy (the smoking-gun test) before deciding on any write.
