@@ -6388,3 +6388,241 @@ Start instead from candidate 3 (most actionable, no live debugger needed — jus
 `equip_actor_to_socket`/the weapon-visual actor's own socket setup compares to what the real equip flow would
 produce), or candidate 1 if that's a dead end (would need live `find`-while-unattached tracing of whatever
 upstream blend node exists, same safe methodology as this session).
+
+## Session 54: 2026-08-13 — Candidate 3 closed via existing raw dumps; new lead found; session.cfg staleness bug root-caused
+
+**Candidate 3 (weapon's own attach socket) is closed — structurally impossible, not just unconfirmed.** Reused
+the four raw struct dumps already sitting in `%APPDATA%\SurrounDeadBridge\` from a prior session
+(`fabrik_{local,proxy}_AnimGraphNode_Fabrik_{6,7}.bin`, 864 bytes each) rather than re-capturing live. First
+verified the dump's byte 0 aligns with `FAnimNode_Fabrik`'s own struct base (not some AnimInstance-relative
+offset) by scanning for the `Precision`/`MaxIterations` pair from `research/CXXHeaderDump/AnimGraphRuntime.hpp`'s
+declared offsets (`0x1E0`/`0x1E4`) — found `Precision=0.5, MaxIterations=10` at exactly `0x1E0` in all four
+files, confirming the offset table lines up. Using that same table (`EffectorTarget` `FBoneSocketTarget` @
+`0x130`, composed of `bUseSocket` bool @ +0x00, `BoneReference.BoneName` FName @ +0x04, `SocketReference.
+SocketName` FName @ +0x60 within the `FSocketReference` sub-struct — full chain worked out from `Engine.hpp`'s
+`FBoneSocketTarget`/`FBoneReference`/`FSocketReference` declarations), read `bUseSocket` directly: **`0` (false)
+in all four dumps** (`_6` and `_7`, local and proxy alike). `EffectorTarget` is configured as a plain **bone**
+reference, never a socket reference — it can never resolve through any socket exposed by a weapon actor,
+manually-attached or otherwise, because the socket path is switched off entirely. This closes candidate 3 as
+literally framed: the weapon-visual's own attach socket cannot be the differentiator for this specific IK
+node, regardless of how it compares to the real equip flow's socket setup.
+
+Raw values recovered (identical across all four files, `Number=0` for every FName): `BoneReference.BoneName`
+CI=`1743560`, `TipBone` CI=`1743556`, `RootBone` CI=`1788648`. Not yet resolved to strings — `all_ci.txt` in the
+same folder is a leftover from the unrelated GameplayTag CI-resolution work (Session 43) and doesn't cover
+these. Resolving them needs a live `FName::ToString` call (`0x140C9D940`, rebased — see Session 9/34) the same
+register-hijack way Session 43 did, at a frequently-hit, tolerant breakpoint; deliberately not attempted this
+session to avoid destabilizing a live 2-client setup that had just been fixed (see below) — do this first thing
+next live session, before anything else risks the connection.
+
+**New, not-yet-checked lead**: `BP_PlayerCharacter_C::IsAiming?()` (confirmed via `research/CXXHeaderDump/
+BP_PlayerCharacter.hpp`) — none of the five hypotheses ruled out in the previous entry touched this. Worth a
+live read (same safe `ProcessEvent`-based getter pattern already used throughout `proxy_manager.cpp`, not the
+riskier register-hijack technique — this is a plain callable `UFUNCTION`) on both local and proxy the next time
+a shotgun is equipped and reproduced.
+
+**Live reproduction reconfirmed today**: two-client setup (this machine as PC1, `win11-test` VM as PC2), PC2
+wielding a shotgun — PC1's rendering of PC2's proxy still shows the one-handed carry pose. Bug is still live,
+not something that self-resolved from any change since the previous entry.
+
+**Root-caused a real, previously-undocumented gotcha: `session.cfg` silently overrides fresh tickets/env vars,
+with no expiry-based self-correction.** `mod.cpp`'s `load_session_config()` reads `%APPDATA%\SurrounDeadBridge\
+session.cfg` **first** and only falls back to environment variables for keys *absent* from the file — so a
+`session.cfg` left over from a previous local-server instance (a different `worldId`, since `config.js`
+generates a fresh random `worldId` every time the dev server restarts unless one is pinned via `settings.json`/
+`SDB_WORLD_ID`) silently wins over any freshly-fetched ticket passed via `setx`/process env, with **no error
+until the moment auth is actually attempted** (`wrong_world` server-side, surfaced client-side only as a
+generic `[tcp] authentication rejected`) — cost most of a session's setup time before being traced to the file
+rather than the ticket-issuing flow. Recovery: overwrite `session.cfg` directly with a ticket from the
+currently-running server instance (matching `worldId`), not just env vars/`setx` — the game process must also
+be fully killed and relaunched, since `load_session_config()` only runs once at mod init, not per reconnect
+attempt. Separately (self-inflicted, not a project bug): a `cmd.exe echo TEXT > file` with a stray space before
+the redirection operator got recorded as a literal trailing space in `SDB_GATEWAY_HOST`, which — being read
+without trimming — broke `connect()` outright (`[tcp] connect failed`, distinct from an auth-level rejection);
+write `session.cfg` via a real templating approach (PowerShell here-string / `scp`'d file), never
+`cmd echo >>` line-by-line.
+
+**Bone names resolved live — Fabrik IK chain identified as left-hand-follows-right-hand, refocusing the
+investigation onto whatever picks the right arm's base pose.** With both clients back up, attached IDA
+(elevated — the process crashed once mid-session on a bad first attempt, see incident note below, but the
+technique itself worked cleanly once redone correctly) and reused the exact live `Player_AnimBP_C` instance
+already sitting in `RCX` at a `GetValuePtrByPropertyNameInChain(Yaw)` breakpoint hit (this build's `watch_
+aimoffset` diagnostic from Session 53, still active) — confirmed it was genuinely the AnimInstance by reading
+`Precision=0.5, MaxIterations=10` at `+0x810+0x1E0` (`AnimGraphNode_Fabrik_6`), matching the struct exactly.
+Read the **current** (this-process-valid) `ComparisonIndex` values directly from that live instance rather than
+trusting the stale ones from the offline dumps (`1743643`/`1743639`/`1788730` this run, vs. `1743560`/
+`1743556`/`1788648` in the old dump — a small but real per-process shift, confirming [[feedback-sdo-
+gameplaytag-ci-unstable]] applies to plain bone `FName`s too, not just `FGameplayTag`s). Resolved all three via
+a live `FName::ToString` register-hijack call (sanity-checked first against `CI=0` → `"None"` to confirm the
+`FString` layout assumption before trusting real output): **`EffectorTarget.BoneReference.BoneName = "hand_r"`,
+`TipBone = "hand_l"`, `RootBone = "clavicle_l"`** (`AnimGraphNode_Fabrik_6`; `bUseSocket=0` confirmed again on
+this fresh read, doubly closing candidate 3).
+
+**This fully reframes the bug.** `AnimGraphNode_Fabrik_6` is a left-arm IK chain (`clavicle_l` → `hand_l`)
+whose effector target is the character's own **`hand_r` bone** — i.e. this node makes the left hand IK-reach
+toward wherever the right hand currently is, the standard "off-hand follows the grip hand" rig for two-handed
+weapons. The left hand's placement is therefore not an independent decision at all — it's a pure consequence of
+wherever `hand_r` ends up, which is driven entirely by whatever upstream logic picks the *right* arm's own base
+pose/animation. This makes **candidate 1** (an upstream AnimGraph blend/state-machine node, not
+`AnimNode_Fabrik` itself) the clearly correct direction, now for a concrete, specific reason rather than "it's
+not candidate 2/3/the struct itself, so try candidate 1 next": **next session should trace what actually
+selects the right arm/hand's base pose** (state machine transition, layered-blend-per-bone alpha, or similar)
+and check what it reads on local vs. proxy — this is now a much narrower, better-targeted search than "find
+some upstream node" was before this session.
+
+**Incident: one crash during this live-debug work, root-caused and not repeated.** The first attempt at this
+resolution (using the stale `1743560`/`1743556`/`1788648` values from the old dump, before realizing they were
+per-process-invalid) produced garbled `FString` output (`Num` in the hundreds, content that looked like
+unrelated `DragonIK` plugin default-object names) and the game crashed shortly after resuming from that call.
+Root cause: those `ComparisonIndex` values were valid in *some earlier* process instance's `FName` pool but not
+in the one being debugged — calling `FName::ToString` with an out-of-range/reassigned index for the live
+process's pool is unsafe (not just "returns wrong data," genuinely crashed the game this time), on top of the
+technique's already-known return-value-corruption caveat for whatever real call gets hijacked. **Lesson**:
+never reuse `FName`/bone `ComparisonIndex` values captured in a previous process instance for a live call in a
+*different* instance — always re-read the current value fresh from a live object in the same session before
+resolving it, exactly as this session eventually did successfully. Also worth keeping: sanity-check the
+technique against `FName{0,0}` (`"None"`, universally stable) before trusting output for any real value, to
+separate "the hijack mechanism itself is broken" from "this specific input is invalid" — this is what caught
+the problem cleanly on the second attempt instead of repeating the same crash blind.
+
+**Candidate upstream-node cluster identified (static, no live debugger) for "what picks the right arm's base
+pose."** `research/CXXHeaderDump/Player_AnimBP.hpp` declaration order (`AnimGraphNode_StateMachine_2` @
+`0x3388` → `AnimGraphNode_SaveCachedPose_1` → `AnimGraphNode_LayeredBoneBlend` @ `0x34D0` →
+`AnimGraphNode_Slot_1` @ `0x35C0` → `AnimGraphNode_BlendListByBool_2` @ `0x3608`) is the classic UE5
+"upper-body slot layered over full-body locomotion" pattern: a `Slot` node (montage/procedural pose injection
+point) feeding a `LayeredBoneBlend` (blends that upper-body layer onto specific bones only — arms, plausibly),
+gated by a `BlendListByBool`. Two more `StateMachine`+`BlendListByBool` pairs exist elsewhere in the same class
+(`_1` @ `0x3770`/`0x3948`, unsuffixed @ `0x3A88`/`0x3B50`) — not yet distinguished which (if any of the three)
+actually governs weapon-holding arm pose specifically. `FAnimNode_BlendListByBool`/`FAnimNode_BlendListBase`'s
+own reflected fields in `AnimGraphRuntime.hpp` only show `BlendPose` (a `TArray<FPoseLink>`) — the real
+per-frame-resolved `ActiveChildIndex`/weight fields exist in the true engine struct but aren't UPROPERTYs in
+this build, so they're invisible to this reflection-based header dump; no `EvaluateGraphExposedInputs_...`
+function exists for any `BlendListByBool` instance either (checked, none found), meaning its bool input is
+likely a direct "Fast Path" property-copy rather than interpreted Kismet bytecode, or driven by a state-machine
+transition rather than a plain bound bool.
+
+**Deliberately stopped here rather than guess.** Two ways to actually resolve this, both requiring either live
+access or substantial dedicated time — neither attempted this session:
+1. **Live comparison** (fastest, needs a real 2-client session): dump raw bytes across the
+   `StateMachine_1/_2/(unsuffixed)` + `BlendListByBool_1/_2/(unsuffixed)` region for the same character
+   unarmed vs. holding the shotgun (same empirical byte-diff methodology already used successfully for
+   `AnimNode_Fabrik` — no offset guessing needed, just diff two live captures and see what actually changes).
+2. **Static bytecode decode**: find and manually decode (same `EX_*` opcode-parsing approach used throughout
+   this project since Session 40) whatever state-machine transition-rule functions or Fast-Path copy records
+   actually drive these three `StateMachine`/`BlendListByBool` pairs — a much larger, dedicated-session-sized
+   task, not attempted here.
+
+**Empirical byte-diff of the StateMachine/LayeredBoneBlend/BlendListByBool region attempted — inconclusive,
+too noisy to isolate cleanly.** Captured the same `0x3388`-`0x3FF8` region (`armpose_*.bin` files in
+`%APPDATA%\SurrounDeadBridge\`) three ways: PC1 local holding the shotgun (correct 2h render), PC1 local
+holding a pistol (correct 1h render — found the PC2-proxy comparison's ~166 differing bytes were dominated by
+per-instance heap-pointer noise, so switched to a same-object local-only comparison instead, which cleanly
+isolates real state from object-identity noise), and PC2's proxy holding the shotgun (buggy 1h render, found
+by re-arming the same `GetValuePtrByPropertyNameInChain` breakpoint repeatedly and catching a hit whose `RCX`
+differed from the known local address — proxies run their own real `Player_AnimBP_C` tick same as local, so
+this breakpoint fires for both). Local pistol vs. local shotgun diffed to just 12 bytes across 3 small regions
+(`0x33B0` 4 bytes, `0x3430`/`0x3438` 2 bytes each, mirrored identically at `0x34C0`/`0x34C8`) — promising at
+first given how much cleaner it was than the noisy proxy comparison. **But cross-checking against the proxy
+capture killed this lead**: at every one of those 5 offsets, the proxy-shotgun value matched *neither* the
+pistol pattern *nor* the local-shotgun pattern — a third, unrelated value each time. A real binary pose-state
+indicator would put the (buggy, 1h-looking) proxy's bytes on the *pistol* side of the diff; getting a third
+value instead means these particular bytes are far more likely continuously-varying internal state (elapsed
+per-state timers, blend-interpolation progress, or similar) that just happens to differ between any two
+non-simultaneous captures, not a stable behavioral flag. **Conclusion: raw byte-diffing this region, across
+different capture moments and/or object instances, doesn't cleanly surface the real differentiator** — the
+non-reflected (private, non-UPROPERTY) portions of `FAnimNode_StateMachine`/`FAnimNode_BlendListBase` that
+this reflection-based header dump can't see are exactly where the real "who's driving this pose" signal likely
+lives. Next attempt at this specific thread needs either genuine structural knowledge of those private fields
+(from actual bytecode/transition-rule decompilation, not guessing) or a much larger set of same-state repeat
+captures to first establish a noise floor before diffing across states — not attempted further this session.
+
+**Montage hypothesis checked live and ruled out.** Resolved two more `UE4SS.dll` exports the same PE-export-
+parsing way as `GetValuePtrByPropertyNameInChain` — `?GetFunctionByNameInChain@UObject@Unreal@RC@@...`
+(`0x7ffe87daa720`, wide-string overload) and `?ProcessEvent@UObject@Unreal@RC@@...` (`0x7ffe87db29c0`) — and
+used them for a genuine two-call live invocation (not just a memory read) of the local player's own
+`AnimInstance::GetCurrentActiveMontage()`, on the theory that the two-handed hold pose might come from an
+externally-triggered `UAnimMontage` playing through `AnimGraphNode_Slot_1`/`Slot` rather than being AnimGraph-
+internal state. **Result: `NULL`** — no montage is active even while the local player correctly renders the
+shotgun two-handed. This rules the montage/slot-injection theory out entirely; whatever drives the pose is
+either baseline AnimGraph blend logic (the state-machine/`BlendListByBool` cluster already investigated and
+found inconclusive above) or the separate `AnimGraphNode_ControlRig` node (`0x3B98`, size `0x460`) also present
+on this class — not yet investigated, and the next concrete thing to try.
+
+**Infrastructure note: one MCP hang + one more crash this session, both recovered.** A `continue_process()`/
+`wait_for_next_event()` call issued while polling for a *specific* AnimInstance address (cycling through many
+non-matching breakpoint hits) left the MCP plugin's request thread stuck hard enough that even `server_health`
+kept timing out — this time it did **not** self-recover within a normal retry window (contrast with the
+lesser hangs in Session 53's addendum) and needed a full IDA restart; the game crashed as a side effect of that
+restart/forced-detach. No data was lost (everything up to that point was already written to disk). Successfully
+recovered by relaunching IDA elevated, reattaching, and switching to a stricter one-hit-at-a-time polling style
+(single `continue_process`+`wait_for_next_event` per call, checked and abandoned individually rather than
+looped) for the rest of the session, which stayed stable. **Lesson**: prefer catching whatever the *next*
+breakpoint hit is and adapting, over repeatedly polling for one specific expected address across many hits in
+a row — the latter seems to be what actually triggers the known MCP-hang class of problem, not merely "many
+calls" in the abstract.
+
+**`AnimGraphNode_ControlRig` checked live — active on both, ruled out as a simple on/off gate.**
+`FAnimNode_ControlRig`'s own reflected fields (`ControlRig.hpp`) give real, verified (not guessed) offsets:
+`ControlRigClass`/`ControlRig` (live instance) pointers at struct offset `0x230`/`0x238`, `Alpha` at `0x240` —
+absolute from AnimInstance base: `+0x3DC8`/`+0x3DD0`/`+0x3DD8` (struct itself at `+0x3B98`). Read live on local
+(correct 2h shotgun render): `ControlRig` instance non-null, `Alpha=1.0`. Read live on PC2's proxy (buggy 1h
+render, found by re-arming the `GetValuePtrByPropertyNameInChain` breakpoint and batching through a burst of
+unrelated `BP_JigPickup` lookups until a `Pitch`/`Yaw` hit landed on a different, valid AnimInstance address)
+— **also non-null, also `Alpha=1.0`**. ControlRig is equally fully-active on both; whatever's wrong isn't
+"the rig doesn't run for proxies." Checked `InputMapping` (the `TMap<FName,FName>` that would show which
+Blueprint AnimBP variables feed named rig inputs, same raw `TMap` layout convention as
+[[sdo-mod-project]]'s `EquipmentIDSlotConfig` finding) — **empty (`ArrayNum=0`) on local too**, meaning
+whatever the rig depends on isn't injected via a Blueprint-exposed variable at all; it must read skeleton bone
+transforms directly inside its own RigVM graph, the same self-contained way the Fabrik node does. This is a
+genuine dead end for tonight without actual RigVM bytecode analysis (a different, more complex bytecode format
+than Kismet, not attempted this session) — noting it here rather than guessing further.
+
+**Where this leaves the investigation, end of session.** Ruled out with real evidence, not just elimination by
+exhaustion: candidate 3 as originally framed (weapon socket — `EffectorTarget` is bone-based, not socket-based,
+confirmed twice live); the montage/slot-injection system (`GetCurrentActiveMontage()` returns `NULL` even on a
+correctly-rendering local character); raw struct-field state in the `StateMachine`/`BlendListByBool`/
+`LayeredBoneBlend` region (proven to be 100% time-noise via a same-state double-capture, not a real signal);
+`ControlRig` simply not running for proxies (it runs identically, `Alpha=1.0`, on both). What's left: either
+the `ControlRig`'s own internal RigVM logic (would need real bytecode-level analysis of the rig graph itself,
+a substantially larger undertaking than anything attempted tonight), or the state-machine transition-rule
+functions gating `BlendListByBool`/`StateMachine` (same caveat — needs actual decompilation, not more
+memory-diffing, which this session already showed doesn't work for this specific data). Both are legitimate
+next targets, but sized more like their own dedicated session than a continuation of tonight's.
+
+**Candidate fix implemented for the mesh-detachment bug (code review, not live-verified — the bug has no
+reliable on-demand repro).** Traced `spawn_and_equip_item_visual`'s existing `JigSetCanInteract(false, false)`
+call (the fix for a related, already-documented physics-reassertion issue — see that function's own long
+comment trail, Session 51) and found it's a **one-shot call, only at initial spawn**. Every slot that skips
+reprocessing once already applied — the four early-`continue` clothing/accessory slots
+(Facewear/Headwear/Eyewear/Backpack) *and*, on closer reading, the weapon slots (11-14) too, since their whole
+write+visual-spawn path only runs inside `if (kEnableEquipmentWrite && equipItemChanged)` — never re-touches
+its visual actor again after that first spawn, for the rest of the session. If the game's own internal
+tick/timer logic can re-assert physics/interactability a second time later (unproven, but exactly the
+mechanism the original comment already theorized, and consistent with the reported symptom being intermittent/
+delayed rather than immediate), nothing would catch or correct that. Factored the existing call into a small
+`reassert_no_interact(AActor*)` helper (`proxy_manager.cpp`) and call it every `sync_equipment()` pass — on the
+already-applied path for the four clothing/accessory slots, and via a small switch on slot index for the four
+weapon slots — cheap enough (single `ProcessEvent`, no spawn/attach work) to not need its own change-gate.
+Builds clean, deployed to both machines' `Mods/SurrounDeadBridge/dlls/main.dll`. **Not yet live-verified**: the
+detachment bug's own report gave no reliable trigger to test against on demand, so this is a well-evidenced
+hypothesis fix, not a confirmed one — next session should watch for whether it recurs over a longer play
+session with this build active, same as any other "did the fix work" check in this log.
+
+**New bug reported live, not yet investigated: proxy meshes intermittently detach entirely (not a pose issue —
+the mesh visibly separates from the character).** Screenshot evidence from this session: PC2's proxy (rendered
+on PC1) had its equipped shirt, knife, and shotgun all lying/standing separately in the world, no longer
+attached to the character. Per the player: **also occasionally happens to the hands** (i.e. not limited to
+spawned/attached item actors — a body-part mesh too), which argues against this being purely the same class of
+bug as the physics-reassertion issue already fought and partially fixed in `spawn_and_equip_item_visual`
+(`proxy_manager.cpp` ~L908-1010: the game was found to silently re-enable physics/interactability on an
+equipped item's actor sometime after `SetSimulatePhysics(false)` was applied, worked around by also calling the
+item's own `JigSetCanInteract(CanInteract=false, EnablePhysics=false)`). That existing fix only covers spawned
+item actors going through this function — it can't explain hands (part of the character's own skeletal mesh,
+not a separately spawned/attached actor) detaching by the same mechanism. Two live testing sessions now
+independently report full detachment (this one; the equipped-item pulsing/flicker bugs fixed in Sessions 52/53
+were a *different*, already-closed symptom — visibility flicker, not physical separation). Worth its own
+dedicated investigation next session: reproduce deliberately, and check (a) whether the existing
+`JigSetCanInteract` re-assertion is actually still firing/effective over a longer play session, (b) whether
+hands detaching correlates with any specific trigger (backpack swap, clothing re-equip, proxy re-sync tick) or
+looks purely time-based/random, (c) whether it's specific to the proxy path at all or can be reproduced on a
+real local player's own hands too (would rule out anything proxy-specific).

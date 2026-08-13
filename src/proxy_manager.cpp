@@ -844,6 +844,30 @@ static void apply_item_equipped_transform(UObject* itemRoot, void* itemAsset)
     debug_log(buf);
 }
 
+// Re-issues BP_SkeletalMeshPickup_C::JigSetCanInteract(false, false) on an
+// already-equipped visual actor. Session 51 found the game silently
+// re-asserts physics/interactability on our spawned pickup sometime after
+// SetSimulatePhysics(false) + the initial JigSetCanInteract call
+// (spawn_and_equip_item_visual below) — theorized as some other internal
+// tick/timer on the pickup's own components re-running its "loose world
+// item" state. The original fix only ever called this once, at spawn time;
+// if the game's re-assertion can happen again later in a long play session
+// (not proven, but the leading theory for the "meshes just detach"
+// reports — Session 54), a one-shot fix can't catch that. Cheap enough
+// (single ProcessEvent, no spawn/attach work) to re-call every time
+// sync_equipment sees this slot, including the "already applied, skip the
+// rest" fast path — unlike the write-side equip pipeline, this isn't worth
+// gating on a change flag since it's a no-op state re-assertion, not a
+// visible action.
+static void reassert_no_interact(AActor* itemActor)
+{
+    if (!itemActor) return;
+    UFunction* canInteractFn = itemActor->GetFunctionByNameInChain(L"JigSetCanInteract");
+    if (!canInteractFn) return;
+    struct Params { bool CanInteract = false; bool EnablePhysics = false; bool Result = false; } params;
+    itemActor->ProcessEvent(canInteractFn, &params);
+}
+
 static AActor* spawn_and_equip_item_visual(AActor* actor, void* itemAsset, bool isSecondary,
                                             bool preferBackpackSocket = false)
 {
@@ -998,18 +1022,7 @@ static AActor* spawn_and_equip_item_visual(AActor* actor, void* itemAsset, bool 
     // state transition, so some other internal tick/timer logic on the
     // pickup (CheckDistanceFromActor, etc. on BP_JigPickupComponent) may be
     // re-asserting physics/interactability against our override. Call it.
-    {
-        UFunction* canInteractFn = itemActor->GetFunctionByNameInChain(L"JigSetCanInteract");
-        if (canInteractFn) {
-            struct Params { bool CanInteract = false; bool EnablePhysics = false; bool Result = false; } params;
-            itemActor->ProcessEvent(canInteractFn, &params);
-            char buf[64];
-            snprintf(buf, sizeof(buf), "spawn_and_equip_item_visual: JigSetCanInteract result=%d", params.Result);
-            debug_log(buf);
-        } else {
-            debug_log("spawn_and_equip_item_visual: JigSetCanInteract NOT FOUND");
-        }
-    }
+    reassert_no_interact(itemActor);
 
     if (itemRoot) {
         const void* attachParent = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(itemRoot) + 0xB0);
@@ -1362,15 +1375,19 @@ void ProxyManager::sync_equipment(AActor* actor, RemotePlayer& player)
         // its item is already applied and attached, instead of redoing the
         // full equip dance on every resend.
         if (slot.slotIndex == 0 && !slot.itemId.empty() && slot.itemId == player.facewearVisualItemId) {
+            reassert_no_interact(static_cast<AActor*>(player.facewearVisualActor));
             continue;
         }
         if (slot.slotIndex == 1 && !slot.itemId.empty() && slot.itemId == player.headwearVisualItemId) {
+            reassert_no_interact(static_cast<AActor*>(player.headwearVisualActor));
             continue;
         }
         if (slot.slotIndex == 2 && !slot.itemId.empty() && slot.itemId == player.eyewearVisualItemId) {
+            reassert_no_interact(static_cast<AActor*>(player.eyewearVisualActor));
             continue;
         }
         if (slot.slotIndex == 10 && !slot.itemId.empty() && slot.itemId == player.backpackVisualItemId) {
+            reassert_no_interact(static_cast<AActor*>(player.backpackVisualActor));
             continue;
         }
 
@@ -1388,6 +1405,23 @@ void ProxyManager::sync_equipment(AActor* actor, RemotePlayer& player)
         // can't be used as the "already applied" signal itself.
         const bool equipItemChanged =
             player.appliedEquipItemId[slot.slotIndex] != slot.itemId;
+
+        // Weapon slots (11-14) go through the full write pipeline below only
+        // when equipItemChanged — an already-applied, unchanged weapon slot
+        // never re-touches its visual actor at all otherwise, same gap as
+        // the facewear/headwear/eyewear/backpack early-continues above (see
+        // reassert_no_interact's own comment). Cover it here since the
+        // weapon path's spawn/attach logic is nested too deep inside the
+        // write pipeline below to cleanly add an else-branch there.
+        if (!equipItemChanged && !slot.itemId.empty()) {
+            switch (slot.slotIndex) {
+                case 11: reassert_no_interact(static_cast<AActor*>(player.primaryWeaponVisualActor));   break;
+                case 12: reassert_no_interact(static_cast<AActor*>(player.secondaryWeaponVisualActor)); break;
+                case 13: reassert_no_interact(static_cast<AActor*>(player.sidearmVisualActor));         break;
+                case 14: reassert_no_interact(static_cast<AActor*>(player.meleeVisualActor));           break;
+                default: break;
+            }
+        }
 
         if (kEnableEquipmentWrite && equipItemChanged) {
             player.appliedEquipItemId[slot.slotIndex] = slot.itemId;
