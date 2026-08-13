@@ -1,0 +1,5 @@
+{
+  "hostSecret":   "",
+  "ticketSecret": "",
+  "ticketTtlMs":  120000
+}

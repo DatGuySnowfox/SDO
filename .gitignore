@@ -23,6 +23,7 @@ launcher/obj/
 # Node
 node_modules/
 *.db
+server/settings.json
 
 # Logs / downloads
 wget-log
