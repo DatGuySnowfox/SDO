@@ -6197,3 +6197,61 @@ those don't visibly slide across the map. Confirmed working live ("Thats a lot b
 - Exponential/time-constant smoothing (`1 - exp(-dt/tau)`) toward a periodically-updated network target is a
   simple, jitter-tolerant fix for "teleporty" proxy movement — no need for precise two-point timestamp
   interpolation given this project's tolerance for a small amount of visual lag.
+
+## Session 53 continued — crouch/ADS/falling sync, and the real reason ProcessEvent post-hooks kept failing
+
+Found three more directly-settable, plain (non-bitpacked — `bIsNativeBool: true`, `FieldMask: 255`, each its own
+dedicated byte) `BoolProperty` class members on `Player_AnimBP_C`, in the same property block as `Pitch`/`Yaw`:
+`IsCrouching`, `IsADS`, `Falling`. Confirmed via FModel export before writing anything, same discipline as the
+rotation fix. Repurposed the wire's `Movement.movementState` byte (confirmed dead the same way `animationState`/
+`aimState` were earlier this session — never populated on send, never applied on receive) as a 3-bit flag byte
+(`0x01`=crouching, `0x02`=ADS, `0x04`=falling), read on the sender via the same `Mesh->GetAnimInstance()`
+reflection path already used for `Pitch`.
+
+First attempt applied the three flags directly from `ProxyManager::tick()`, same as the very first (failed)
+`Pitch` attempt. Live result: crouch **jittered** (won some frames, lost others — a genuine race, distinct from
+`Pitch`'s clean deterministic loss), jump/ADS showed **no effect at all**.
+
+**Extended the existing `Pitch` post-callback fix to cover these three too — still no effect, and this time a
+proper diagnostic revealed why the whole post-callback approach was subtly broken from the start, not just
+insufficiently targeted.** Rather than picking a single per-frame function to hook (as `Pitch`'s fix had hooked
+`GetAimOffset` specifically), reasoned that hooking the *last* function in `BlueprintThreadSafeUpdateAnimation`'s
+known per-frame call sequence (`GetThreadSafeBooleans -> GetSpeed&Direction -> GetHeadRot -> GetAimOffset ->
+GetLean -> GetLeftHandLoc`, from earlier bytecode tracing) and reapplying every proxy override there would
+guarantee last-writer-wins for the whole block regardless of which specific sub-function owns which property.
+Implemented, deployed, tested — user reported "still all the same," no change at all.
+
+**Added real diagnostics instead of guessing again** — logged (a) whether `s_lastUpdateFn` (the resolved
+`GetLeftHandLoc` `UFunction*`) was ever non-null, and (b) whether the post-hook's `func == s_lastUpdateFn` match
+ever fired, unconditionally, regardless of proxy match. Result: resolution succeeded, but the match **never fired
+even once**, despite `GetLeftHandLoc`'s own effects clearly happening every frame (proven by `Speed` correctly
+reflecting `Velocity` every frame all session). This is the real, previously-unverified gap flagged in this
+log's own "Reusable lessons" section further up — the earlier `Pitch` post-hook fix was deployed and tested
+("nothing") without ever confirming the hook itself fired for a matched proxy, so its failure was never actually
+diagnosed at the time; it was silently the same bug as this one.
+
+**Root cause**: `BlueprintThreadSafeUpdateAnimation` calls `GetThreadSafeBooleans`/`GetSpeed&Direction`/
+`GetHeadRot`/`GetAimOffset`/`GetLean`/`GetLeftHandLoc` via `EX_LocalVirtualFunction` — a Kismet compiler
+optimization for "call a function on `self`" that invokes directly within the *already-executing* `ProcessEvent`
+call rather than triggering a separate one. **No per-sub-function hook, pre or post, can ever intercept an
+`EX_LocalVirtualFunction`/`EX_LocalFinalFunction` call individually** — only the true *outer* function, the one
+the engine's own native anim-update system actually calls via a real `ProcessEvent` dispatch
+(`BlueprintThreadSafeUpdateAnimation` itself), is hookable this way.
+
+Fixed by re-pointing `s_lastUpdateFn`'s resolution at `BlueprintThreadSafeUpdateAnimation` instead of
+`GetLeftHandLoc`, and confirmed live with the same diagnostics: `owner=` now matches the known proxy address
+every time, and a write+readback check showed `movState=0x01` (crouch bit) -> `readback(crouch=1)` and
+`movState=0x04` (falling bit) -> `readback(fall=1)`, both landing and persisting correctly at write-time (the
+same technique that caught the `Speed`-scratch-var dead end back in the crash-investigation saga). Diagnostics
+then stripped back out, session paused before a full visual confirmation pass.
+
+**Reusable lesson, supersedes/refines the aim-pitch post-callback note above**: when hooking a `ProcessEvent`
+post-callback to override a value an AnimBP recomputes every frame, hook the **outermost** Blueprint-callable
+function actually invoked by the engine's native call path (usually the anim update entry point itself, e.g.
+`BlueprintThreadSafeUpdateAnimation`/`NativeUpdateAnimation`), not any function it calls *internally* — internal
+calls compiled as `EX_LocalVirtualFunction`/`EX_LocalFinalFunction` never trigger their own distinct
+`ProcessEvent` dispatch, so no hook on them (pre or post) will ever fire, regardless of how correctly the rest of
+the mechanism is built. **Always verify a new `ProcessEvent` hook actually fires for the intended target with a
+throwaway diagnostic log before trusting a "no visible effect" result as evidence the underlying idea failed** —
+this cost real time twice in a row this session (`Pitch`, then `IsCrouching`/`IsADS`/`Falling`) because the first
+attempt's failure was accepted at face value instead of checked.

@@ -182,6 +182,7 @@ static void send_header_only(sdb::MsgType type)
 // Defined later in this file, next to read_local_equipment.
 static uint8_t read_local_active_weapon_slot(AActor* pawn);
 static uint8_t read_local_aim_pitch(AActor* pawn);
+static uint8_t read_local_movement_flags(AActor* pawn);
 
 static void send_movement(AActor* pawn)
 {
@@ -206,6 +207,11 @@ static void send_movement(AActor* pawn)
     // comment for why pitch-only, and why this mirrors the engine's own
     // built-in ACharacter::RemoteViewPitch mechanism).
     mv.aimState = read_local_aim_pitch(pawn);
+
+    // movementState was likewise never populated or read anywhere —
+    // repurposed to carry a 3-bit crouch/ADS/falling flag byte. See
+    // read_local_movement_flags's own comment for the bit layout.
+    mv.movementState = read_local_movement_flags(pawn);
 
     // Velocity: not exposed via the UE4SS stub, so read it directly.
     // ACharacter::CharacterMovement (pawn+0x328) -> UMovementComponent::Velocity (+0xB8).
@@ -601,6 +607,40 @@ static uint8_t read_local_aim_pitch(AActor* pawn)
     }
 
     return quantized;
+}
+
+// Crouch/ADS/falling sync (2026-08-13): Player_AnimBP_C has three plain,
+// dedicated-byte (bIsNativeBool, FieldMask=255 — not bit-packed with
+// siblings) BoolProperty class members: "IsCrouching", "IsADS", "Falling"
+// (confirmed via FModel export, same class-property block as "Pitch"/"Yaw").
+// Read directly off the LOCAL player's own AnimInstance (same
+// Mesh->GetAnimInstance() reflection path used throughout this file) rather
+// than the underlying native ACharacter/CharacterMovementComponent state —
+// simpler, and these values are exactly what drives the local player's own
+// (correct) crouch/ADS/fall animation, so mirroring them is the right
+// source of truth for what a remote player should visually look like too.
+static uint8_t read_local_movement_flags(AActor* pawn)
+{
+    if (!pawn) return 0;
+    auto** meshSlot = static_cast<UObject**>(pawn->GetValuePtrByPropertyNameInChain(L"Mesh"));
+    UObject* mesh = (meshSlot && *meshSlot) ? *meshSlot : nullptr;
+    if (!mesh) return 0;
+    UFunction* getAnimFn = mesh->GetFunctionByNameInChain(L"GetAnimInstance");
+    if (!getAnimFn) return 0;
+    struct Params { UObject* ReturnValue = nullptr; } aparams;
+    mesh->ProcessEvent(getAnimFn, &aparams);
+    if (!aparams.ReturnValue) return 0;
+
+    auto* anim = aparams.ReturnValue;
+    auto* crouching = static_cast<uint8_t*>(anim->GetValuePtrByPropertyNameInChain(L"IsCrouching"));
+    auto* ads       = static_cast<uint8_t*>(anim->GetValuePtrByPropertyNameInChain(L"IsADS"));
+    auto* falling   = static_cast<uint8_t*>(anim->GetValuePtrByPropertyNameInChain(L"Falling"));
+
+    uint8_t flags = 0;
+    if (crouching && *crouching) flags |= 0x01;
+    if (ads && *ads)             flags |= 0x02;
+    if (falling && *falling)     flags |= 0x04;
+    return flags;
 }
 
 static sdb::Equipment read_local_equipment(AActor* pawn)
@@ -2598,21 +2638,41 @@ static void on_process_event_pre(UObject* obj, UFunction* func, void* params)
     do_game_tick();
 }
 
-// Look-direction sync, take 2 (2026-08-13): GetAimOffset unconditionally
-// hard-resets the AnimBP's own Pitch to 0 every single frame for a
-// non-locally-controlled proxy (confirmed live via bytecode tracing +
-// direct value sampling — see proxy_manager.cpp's apply_proxy_aim_pitch_safe
-// comment for the full chain of evidence). A same-tick property write can
-// never win that race. Fixed here instead: UE4SS.dll in this build DOES
-// export RegisterProcessEventPostCallback (verified live via GetProcAddress
-// against the actual on-disk DLL, same mangled-name pattern as the existing
-// Pre registration below with Pre->Post substituted) — an earlier comment
-// elsewhere in this file claiming "no post-callback resolved for this UE4SS
-// build" was simply never actually tested for this specific symbol. Once
-// registered, this runs immediately AFTER the real GetAimOffset call
-// completes (including its own Pitch=0 write), so writing here always wins
-// cleanly — no fight, no flicker, unlike a same-tick pre-write.
-static UFunction* s_getAimOffsetFn = nullptr;
+// Look-direction/crouch/ADS/falling sync, take 2 (2026-08-13): GetAimOffset
+// unconditionally hard-resets the AnimBP's own Pitch to 0 every single frame
+// for a non-locally-controlled proxy (confirmed live via bytecode tracing +
+// direct value sampling — see proxy_manager.cpp's old apply_proxy_aim_pitch_
+// safe comment, since removed, for the full chain of evidence). A same-tick
+// property write can never win that race, and live testing found
+// IsCrouching/IsADS jitter the same way (winning some ticks, losing others)
+// once actually tried — the same class of problem, not unique to Pitch.
+//
+// First attempt hooked GetLeftHandLoc specifically (the last function in
+// BlueprintThreadSafeUpdateAnimation's known per-frame call sequence:
+// GetThreadSafeBooleans -> GetSpeed&Direction -> GetHeadRot -> GetAimOffset
+// -> GetLean -> GetLeftHandLoc, resolved via resolve_fname against hand-
+// decoded bytecode) — its post-callback NEVER fired, confirmed live via a
+// diagnostic trace (zero hits despite the function's own effects clearly
+// happening every frame). Root cause: BlueprintThreadSafeUpdateAnimation
+// calls each of those via EX_LocalVirtualFunction, a Kismet compiler
+// optimization for "call a function on self" that invokes directly within
+// the *already-executing* ProcessEvent call rather than triggering its own
+// separate ProcessEvent dispatch — so no per-sub-function hook, pre or
+// post, can ever see them individually. Only the OUTER function
+// (BlueprintThreadSafeUpdateAnimation itself, which the engine's own native
+// anim-update system calls via a real ProcessEvent) is hookable this way.
+// Fixed by hooking that instead — reapplying ALL of our proxy overrides
+// (Pitch, IsCrouching, IsADS, Falling) right after it runs guarantees we're
+// the last writer for the entire per-frame update block, regardless of
+// which specific internal sub-function actually owns which property.
+//
+// UE4SS.dll in this build DOES export RegisterProcessEventPostCallback
+// (verified live via GetProcAddress against the actual on-disk DLL, same
+// mangled-name pattern as the existing Pre registration below with
+// Pre->Post substituted) — an earlier comment elsewhere in this file
+// claiming "no post-callback resolved for this UE4SS build" was simply
+// never actually tested for this specific symbol.
+static UFunction* s_lastUpdateFn = nullptr;
 
 static void on_process_event_post(UObject* obj, UFunction* func, void* /*params*/)
 {
@@ -2624,7 +2684,7 @@ static void on_process_event_post(UObject* obj, UFunction* func, void* /*params*
     // rest of the session. Throttled the same way s_drop_fn's lookup is
     // above: find_local_pawn() is an expensive reflection scan and this
     // fires on every ProcessEvent call otherwise.
-    if (!s_getAimOffsetFn) {
+    if (!s_lastUpdateFn) {
         static std::atomic<uint64_t> s_lastTryUs{0};
         const uint64_t now = sdb::now_micros();
         const uint64_t last = s_lastTryUs.load(std::memory_order_relaxed);
@@ -2639,7 +2699,7 @@ static void on_process_event_post(UObject* obj, UFunction* func, void* /*params*
                         struct Params { UObject* ReturnValue = nullptr; } aparams;
                         mesh->ProcessEvent(getAnimFn, &aparams);
                         if (aparams.ReturnValue)
-                            s_getAimOffsetFn = aparams.ReturnValue->GetFunctionByNameInChain(L"GetAimOffset");
+                            s_lastUpdateFn = aparams.ReturnValue->GetFunctionByNameInChain(L"BlueprintThreadSafeUpdateAnimation");
                     }
                 }
             }
@@ -2648,9 +2708,9 @@ static void on_process_event_post(UObject* obj, UFunction* func, void* /*params*
 
     // Cheap pointer-compare fast path — skips essentially every ProcessEvent
     // call in the game (this fires thousands of times per frame); only
-    // GetAimOffset calls (one per Player_AnimBP_C instance per frame, a
-    // small handful total) do any real work below.
-    if (func != s_getAimOffsetFn) return;
+    // BlueprintThreadSafeUpdateAnimation calls (one per Player_AnimBP_C
+    // instance per frame, a small handful total) do any real work below.
+    if (func != s_lastUpdateFn) return;
 
     UFunction* getOwnerFn = obj->GetFunctionByNameInChain(L"GetOwningActor");
     if (!getOwnerFn) return;
@@ -2667,6 +2727,13 @@ static void on_process_event_post(UObject* obj, UFunction* func, void* /*params*
         if (degrees > 180.0) degrees -= 360.0;
         if (auto* pitchSlot = static_cast<double*>(obj->GetValuePtrByPropertyNameInChain(L"Pitch")))
             *pitchSlot = degrees;
+
+        if (auto* crouching = static_cast<uint8_t*>(obj->GetValuePtrByPropertyNameInChain(L"IsCrouching")))
+            *crouching = (player.movState & 0x01) ? 1 : 0;
+        if (auto* ads = static_cast<uint8_t*>(obj->GetValuePtrByPropertyNameInChain(L"IsADS")))
+            *ads = (player.movState & 0x02) ? 1 : 0;
+        if (auto* falling = static_cast<uint8_t*>(obj->GetValuePtrByPropertyNameInChain(L"Falling")))
+            *falling = (player.movState & 0x04) ? 1 : 0;
         break;
     }
 }
