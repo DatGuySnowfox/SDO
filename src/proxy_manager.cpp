@@ -329,6 +329,48 @@ static std::string narrow(const std::wstring& w)
     return s;
 }
 
+// Montage cache, same shape as item_asset_cache above but for AnimMontage —
+// unlike JigsawItem_DataAsset_C (which has a real ItemId FName property),
+// UAnimMontage has no equivalent, so it's matched by the trailing
+// ".<Name>" component of GetFullName(), same technique dump_clothing_table
+// already uses for DataTable lookups.
+static std::unordered_map<std::string, UObject*>& montage_asset_cache()
+{
+    static std::unordered_map<std::string, UObject*> cache;
+    return cache;
+}
+
+static void rebuild_montage_asset_cache()
+{
+    std::vector<UObject*> assets;
+    UObjectGlobals::FindAllOf(L"AnimMontage", assets);
+
+    auto& cache = montage_asset_cache();
+    cache.clear();
+    cache.reserve(assets.size());
+    for (UObject* obj : assets) {
+        std::string full = narrow(obj->GetFullName());
+        const auto dot = full.find_last_of('.');
+        std::string shortName = (dot == std::string::npos) ? full : full.substr(dot + 1);
+        if (!shortName.empty()) cache.emplace(std::move(shortName), obj);
+    }
+}
+
+void* resolve_montage_asset(const std::string& montageName)
+{
+    if (montageName.empty()) return nullptr;
+
+    auto& cache = montage_asset_cache();
+    if (cache.empty()) rebuild_montage_asset_cache();
+
+    auto it = cache.find(montageName);
+    if (it == cache.end()) {
+        rebuild_montage_asset_cache();
+        it = cache.find(montageName);
+    }
+    return it != cache.end() ? it->second : nullptr;
+}
+
 // See proxy_manager.hpp. UDataTableFunctionLibrary::GetDataTableRowNames
 // (research/CXXHeaderDump/Engine.hpp) is a plain BlueprintCallable library
 // function — any live instance works as the ProcessEvent target since library
@@ -644,7 +686,9 @@ static int32_t combat_state_blendspace_for_slot(uint8_t slotIndex)
         case 11: return 1; // Primary — two-handed, same family as confirmed Secondary/shotgun
         case 12: return 1; // Secondary — confirmed (BenelliM4/shotgun -> 1)
         case 13: return 2; // Sidearm — confirmed (BattleReadyGlock/pistol -> 2)
-        case 14: return 1; // Melee — unconfirmed, guessing two-handed pending live test
+        case 14: return 3; // Melee — CONFIRMED live 2026-08-13 (InMeleeStance=1 -> BlendSpaceInt=3),
+                            // was wrongly guessed as 1 (two-handed) initially, produced an
+                            // incorrect ADS-longgun-style grip on the proxy until fixed
         default:  return 0; // no weapon active
     }
 }
@@ -2361,6 +2405,39 @@ void ProxyManager::on_pawn_appearance(uint64_t playerId, const PawnAppearance& a
 
     it->second.appearance = a;
     it->second.appearanceDirty = true;
+}
+
+// One-shot, fires immediately rather than waiting for the next tick() sync
+// pass — there's no persistent state to reconcile here (unlike equipment/
+// appearance), just a montage to play once. Session 55: root cause of the
+// (now-fixed) weapon-grip pose bug was proxies never getting a real
+// gameplay-triggered animation call at all; this is the general mechanism
+// for every other *discrete* animation (melee swings, etc.) that also never
+// reaches a proxy through its own manual equip/movement sync paths.
+void ProxyManager::on_play_montage(uint64_t playerId, const std::string& montageName, float playRate)
+{
+    void* montage = resolve_montage_asset(montageName);
+    if (!montage) {
+        debug_log("on_play_montage: montage \"" + montageName + "\" not found/loaded");
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(g_state().playersMtx);
+    auto it = g_state().players.find(playerId);
+    if (it == g_state().players.end() || !it->second.proxyActor) return;
+
+    // Same 2s post-spawn grace period every other proxy component touch
+    // uses — a freshly-spawned proxy's AnimInstance isn't ready yet.
+    if (now_micros() - it->second.proxySpawnedAtUs < 2'000'000ULL) return;
+
+    auto* actor = static_cast<AActor*>(it->second.proxyActor);
+    UFunction* playFn = actor->GetFunctionByNameInChain(L"PlayMontage");
+    if (!playFn) { debug_log("on_play_montage: PlayMontage NOT FOUND on proxy"); return; }
+
+    struct Params { UObject* Montage = nullptr; double PlayRate = 1.0; } params;
+    params.Montage  = static_cast<UObject*>(montage);
+    params.PlayRate = playRate;
+    actor->ProcessEvent(playFn, &params);
 }
 
 // Session 51 first tried writing ACharacter::CharacterMovement's Velocity

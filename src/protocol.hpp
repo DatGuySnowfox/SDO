@@ -50,6 +50,7 @@ enum class MsgType : uint16_t {
     PlayerProgressRestore = 42,
     WeaponAttachments     = 43,
     PawnAppearance        = 44,
+    PlayMontage           = 45,
     Error                 = 255,
 };
 
@@ -280,6 +281,18 @@ struct PawnAppearance {
     std::string accessory3MeshName;
 };
 
+// One-shot montage playback, relayed client-authoritative same as Equipment/
+// WeaponAttachments/PawnAppearance (gateway.js just forwards the raw frame,
+// no server-side decode). montageName is the asset's short object name
+// (e.g. "AM_Melee_Knife_1"), resolved on the receiving end the same way
+// itemId strings resolve to a live UObject* via a name-keyed FindAllOf scan
+// (see proxy_manager.cpp's item_asset_cache/resolve_item_asset — this reuses
+// that exact pattern for the "AnimMontage" class instead).
+struct PlayMontageData {
+    std::string montageName;
+    float       playRate = 1.0f;
+};
+
 // ── Encode / decode ───────────────────────────────────────────────────────────
 
 int  encode_frame(uint8_t* buf, int cap, const Frame& f, uint32_t& seq, uint32_t& tck);
@@ -329,6 +342,9 @@ std::optional<WeaponAttachments>  decode_weapon_attachments(const uint8_t* p, si
 
 std::vector<uint8_t>              encode_pawn_appearance(const PawnAppearance& a);
 std::optional<PawnAppearance>     decode_pawn_appearance(const uint8_t* p, size_t n);
+
+std::vector<uint8_t>              encode_play_montage(const PlayMontageData& m);
+std::optional<PlayMontageData>    decode_play_montage(const uint8_t* p, size_t n);
 
 uint64_t now_micros();
 

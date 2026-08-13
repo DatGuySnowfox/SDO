@@ -1196,6 +1196,14 @@ static void dispatch_frame(const sdb::Frame& f)
         }
         break;
 
+    case sdb::MsgType::PlayMontage:
+        if (f.playerId && f.playerId != st.session.playerId
+                       && !f.payload.empty()) {
+            if (auto m = sdb::decode_play_montage(f.payload.data(), f.payload.size()))
+                sdb::g_proxy_manager().on_play_montage(f.playerId, m->montageName, m->playRate);
+        }
+        break;
+
     case sdb::MsgType::Death:
         sdb::g_proxy_manager().on_player_disconnected(f.playerId);
         sdb::g_proxy_manager().on_player_connected(f.playerId);
@@ -2664,6 +2672,55 @@ static void do_game_tick()
 // unconditionally, same reasoning as the equip-trace diagnostic.
 static UFunction* s_drop_fn = nullptr;
 
+// Session 55: BP_PlayerCharacter_C::PlayMontage(UAnimMontage* Montage,
+// double PlayRate) is the single generic entry point the real game uses to
+// play any one-shot action animation (melee swings confirmed via
+// NormalMeleeAttackMontages/PowerMeleeAttackMontages on
+// BP_WeaponsPickupComponent_C — research/CXXHeaderDump/
+// BP_WeaponsPickupComponent.hpp — likely covers other actions too, not
+// specifically chased down one by one). Hooking this one function covers
+// every montage-driven action generically instead of needing a bespoke hook
+// per action type, same "resolved once, compared by pointer" pattern as
+// s_drop_fn/s_pickup_fn.
+static UFunction* s_playMontage_fn = nullptr;
+
+// Diagnostic (2026-08-13): PlayMontage resolves and the hook fires fine for
+// SOME action (confirmed live), but a melee swing specifically never hits
+// it — meaning melee goes through a different montage-playing path.
+// BP_PlayerCharacter.hpp declares MC_Montage(UAnimMontage*, float, bool
+// IncludeLocal?)/Svr_Montage(same signature) as separate functions from
+// PlayMontage — log-only for now (no params touched, signatures/offsets not
+// verified yet) purely to find out which one(s) actually fire during a real
+// melee swing before wiring anything up to them.
+static UFunction* s_mcMontage_fn  = nullptr;
+static UFunction* s_svrMontage_fn = nullptr;
+
+static void handle_play_montage_hook(void* params)
+{
+    if (!params) return;
+    auto* montage  = *reinterpret_cast<UObject**>(static_cast<uint8_t*>(params) + 0x00);
+    const double playRate = *reinterpret_cast<const double*>(static_cast<uint8_t*>(params) + 0x08);
+    if (!montage) return;
+
+    const std::string montageName = short_object_name(montage);
+    if (montageName.empty()) return;
+
+    sdb::PlayMontageData m;
+    m.montageName = montageName;
+    m.playRate    = static_cast<float>(playRate);
+
+    sdb::Frame f;
+    f.type    = sdb::MsgType::PlayMontage;
+    f.payload = sdb::encode_play_montage(m);
+    build_session_frame(f);
+    send_frame(f);
+
+    char buf[128];
+    snprintf(buf, sizeof(buf), "send_play_montage: montage=%s playRate=%.2f",
+             montageName.c_str(), playRate);
+    debug_log(buf);
+}
+
 static void handle_drop_hook(void* params)
 {
     if (!params) return;
@@ -2890,6 +2947,44 @@ static void on_process_event_pre(UObject* obj, UFunction* func, void* params)
     if (func && func == s_pickup_fn) {
         handle_pickup_hook(find_local_pawn(), params);
     }
+
+    // Same throttled-retry shape as s_pickup_fn above — PlayMontage is also
+    // declared directly on BP_PlayerCharacter_C.
+    static std::atomic<uint64_t> s_last_playmontage_fn_try_us{0};
+    if (func && !s_playMontage_fn) {
+        const uint64_t now = sdb::now_micros();
+        const uint64_t last = s_last_playmontage_fn_try_us.load(std::memory_order_relaxed);
+        if (last == 0 || now - last >= 1'000'000ULL) {
+            s_last_playmontage_fn_try_us.store(now, std::memory_order_relaxed);
+            if (AActor* pawn = find_local_pawn()) {
+                s_playMontage_fn = pawn->GetFunctionByNameInChain(L"PlayMontage");
+                debug_log(s_playMontage_fn ? "on_process_event_pre: PlayMontage resolved"
+                                           : "on_process_event_pre: PlayMontage NOT FOUND on pawn");
+            }
+        }
+    }
+    if (func && func == s_playMontage_fn) {
+        handle_play_montage_hook(params);
+    }
+
+    // Diagnostic-only resolution for MC_Montage/Svr_Montage — see their
+    // declaration comment above. Same throttled-retry shape.
+    static std::atomic<uint64_t> s_last_mcsvr_fn_try_us{0};
+    if (func && (!s_mcMontage_fn || !s_svrMontage_fn)) {
+        const uint64_t now = sdb::now_micros();
+        const uint64_t last = s_last_mcsvr_fn_try_us.load(std::memory_order_relaxed);
+        if (last == 0 || now - last >= 1'000'000ULL) {
+            s_last_mcsvr_fn_try_us.store(now, std::memory_order_relaxed);
+            if (AActor* pawn = find_local_pawn()) {
+                if (!s_mcMontage_fn)  s_mcMontage_fn  = pawn->GetFunctionByNameInChain(L"MC_Montage");
+                if (!s_svrMontage_fn) s_svrMontage_fn = pawn->GetFunctionByNameInChain(L"Svr_Montage");
+                debug_log(std::string("on_process_event_pre: MC_Montage=") + (s_mcMontage_fn ? "resolved" : "NOT FOUND") +
+                          " Svr_Montage=" + (s_svrMontage_fn ? "resolved" : "NOT FOUND"));
+            }
+        }
+    }
+    if (func && func == s_mcMontage_fn)  debug_log("montage_diag: MC_Montage fired");
+    if (func && func == s_svrMontage_fn) debug_log("montage_diag: Svr_Montage fired");
 
     // Equip-trace diagnostic (temporary, see research/04_ida_investigation_log.md):
     // our own synthetic SetEquippedInfoBySlot call reports success but never

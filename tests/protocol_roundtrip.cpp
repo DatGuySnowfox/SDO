@@ -835,6 +835,41 @@ static void test_pawn_appearance() {
 }
 
 // ---------------------------------------------------------------------------
+// 11b. PlayMontage — encode_play_montage / decode_play_montage
+// ---------------------------------------------------------------------------
+
+static void test_play_montage() {
+    std::printf("\n-- PlayMontage (encode_play_montage/decode_play_montage) --\n");
+
+    PlayMontageData m;
+    m.montageName = "AM_Melee_Knife_1";
+    m.playRate = 1.5f;
+
+    auto buf = encode_play_montage(m);
+    auto d = decode_play_montage(buf.data(), buf.size());
+    ok(d.has_value(), "decode_play_montage succeeds on encode_play_montage output");
+    if (!d) return;
+
+    ok(d->montageName == m.montageName, "PlayMontage.montageName round-trips");
+    ok(d->playRate == m.playRate, "PlayMontage.playRate round-trips");
+
+    // Empty name, negative play rate (unusual but shouldn't break the codec).
+    {
+        PlayMontageData m2;
+        m2.montageName = "";
+        m2.playRate = -1.0f;
+        auto b2 = encode_play_montage(m2);
+        auto d2 = decode_play_montage(b2.data(), b2.size());
+        ok(d2.has_value() && d2->montageName.empty() && d2->playRate == -1.0f,
+           "PlayMontage empty name + negative playRate round-trips");
+    }
+
+    // Truncated buffer (length prefix lies about available data).
+    ok(!decode_play_montage(buf.data(), buf.size() - 1).has_value(),
+       "decode_play_montage rejects a truncated buffer");
+}
+
+// ---------------------------------------------------------------------------
 // 12. World-action JSON envelope — encode_world_action / decode_world_action
 //     Used for: CharacterCreate, InteractionRequest, InteractionResult,
 //     ItemPickupResult, ItemDropResult (all flat single-level JSON objects).
@@ -898,6 +933,7 @@ int main() {
     test_equipment();
     test_weapon_attachments();
     test_pawn_appearance();
+    test_play_montage();
     test_world_action_json();
 
     std::printf("\n%d/%d assertions passed\n", g_total - g_failures, g_total);
