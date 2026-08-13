@@ -2415,6 +2415,15 @@ static void apply_proxy_velocity_safe(AActor* actor, float vx, float vy, float v
 // for the full mechanism (UE4SS.dll's RegisterProcessEventPostCallback,
 // verified live to actually exist in this build).
 
+// Crouch/ADS/falling sync (2026-08-13): applied via mod.cpp's
+// on_process_event_post instead of a tick()-driven write here — live
+// testing showed a tick()-based write to IsCrouching/IsADS jittering
+// (winning some frames, losing others) the same way Pitch lost its own
+// race against GetAimOffset outright. See on_process_event_post's own
+// comment for the fix (hooking GetLeftHandLoc, the last function in the
+// AnimBP's known per-frame update sequence, to reapply all four proxy
+// overrides — Pitch/IsCrouching/IsADS/Falling — after the whole block runs).
+
 struct ProxyBodyYawCtx { AActor* actor; RemotePlayer* player; double desiredYaw; };
 
 static void do_apply_proxy_body_yaw(void* ctxRaw)
@@ -2557,10 +2566,12 @@ void ProxyManager::tick(UWorld* world, AActor* /*local_pawn*/)
         // our own ProcessEvent hook) is fixed, not specific to this write.
         apply_proxy_velocity_safe(static_cast<AActor*>(player.proxyActor),
                                    player.velocityX, player.velocityY, player.velocityZ);
-        // Aim-pitch is applied via mod.cpp's on_process_event_post instead of
-        // here — GetAimOffset hard-resets Pitch to 0 every frame for a
-        // non-locally-controlled proxy, so a same-tick write here would just
-        // lose that race every time. See on_process_event_post's own comment.
+        // Aim-pitch/crouch/ADS/falling are applied via mod.cpp's
+        // on_process_event_post instead of here — GetAimOffset (and
+        // apparently whatever sets IsCrouching/IsADS too) gets recomputed
+        // every frame for a non-locally-controlled proxy, so a same-tick
+        // write here would just lose that race. See on_process_event_post's
+        // own comment.
 
         sync_equipment(static_cast<AActor*>(player.proxyActor), player);
         sync_active_weapon_hand(static_cast<AActor*>(player.proxyActor), player);
