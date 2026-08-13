@@ -6355,13 +6355,36 @@ engine build — decoding the raw bytes further risks exactly the kind of guesse
 rules exist to prevent (a previous unverified offset guess crashed the live game). **Deliberately stopped before
 guessing** rather than push an unverified interpretation.
 
-**For next time**: don't try to hand-decode the property-descriptor byte layout further. Instead, once a live
-debug session is stable (see the IDA stability notes above), call `FAnimNode_SkeletalControlBase::StaticStruct()`
-live (address chain already known: it's whatever `sub_7FF76BB796C0`-style singleton wraps
-`0x7ff7702739d0`/`0x7ff76eece570`'s owning registration — re-derive from `"AnimNode_SkeletalControlBase"`'s xref
-the same way `AnimNode_Fabrik`'s was found) to get a real, live `UScriptStruct*`, then walk its `ChildProperties`
-chain (same iteration mechanism used all session for class properties) to find the real `ActualAlpha` `FProperty*`
-and read its `Offset_Internal` at `+0x38` (already twice-verified this project, see the `PlayerArray`/`GameState`
-findings in Session 10) — the exact same safe, non-guessed technique already used successfully for `Speed`
-earlier this session, just reached via a live struct walk instead of a static byte read. Then compare
-`ActualAlpha`'s live value between local and proxy (the smoking-gun test) before deciding on any write.
+**Self-correction, same session — `ActualAlpha` is actually already ruled out too, no live read needed.**
+`FAnimNode_SkeletalControlBase` is `AnimNode_Fabrik`'s *base class* — in C++, a base-class subobject is embedded
+at the start of the derived struct's own memory, meaning `ActualAlpha` (declared on the base) physically lives
+*inside* the same 864-byte `AnimNode_Fabrik` memory region already raw-dumped and diffed earlier this session
+(dead end #3/#4 above), which was **byte-for-byte identical, all 864 bytes**, between local and proxy. That diff
+necessarily already covered `ActualAlpha`'s bytes too, at whatever offset it turns out to be — so it's already
+proven identical without needing to find its exact offset at all. This is a sixth dead end, arrived at by
+re-deriving a lead already disproven by earlier evidence — worth remembering *why* before chasing a named field
+by excitement alone: check whether a "new" candidate is actually already covered by prior evidence before
+spending time re-confirming it.
+
+**Where this actually leaves the investigation**: every property stored *inside* the `AnimNode_Fabrik` struct
+(including its inherited base-class portion) is now proven identical between local and proxy. Whatever causes
+the visual difference must be **outside this struct entirely** — leading candidates, in rough order of
+likelihood, none yet checked:
+1. A different, upstream AnimGraph node (e.g. a "Layered blend per bone" or state-machine blend node) deciding
+   how much of the whole arm-IK *chain*, not just this one Fabrik node, to blend into the final pose — would have
+   its own separate alpha/weight, not part of `AnimNode_Fabrik`'s struct at all.
+2. Bone *resolution* at runtime — `TipBone`/`RootBone`/`EffectorTarget` store bone *names* (proven identical), but
+   the actual runtime bone *index* lookup against the skeleton could still fail differently, if e.g. the proxy's
+   mesh/skeleton setup differs subtly from a real equipped-weapon setup in a way that doesn't show up in the
+   static name data.
+3. The weapon mesh's own attachment socket — our weapon-visual is attached via a separate manual socket-attach
+   path (`equip_actor_to_socket`/`spawn_and_equip_item_visual`), not the game's real equip flow. If
+   `EffectorTarget` is a bone-*socket* reference that expects a socket living on the currently-equipped weapon
+   actor specifically (not just the character skeleton), our differently-attached weapon actor might not expose
+   that socket the same way the game's own equip flow would.
+
+**For next time**: don't re-chase anything inside `AnimNode_Fabrik`'s own struct (proven identical, closed).
+Start instead from candidate 3 (most actionable, no live debugger needed — just inspect how
+`equip_actor_to_socket`/the weapon-visual actor's own socket setup compares to what the real equip flow would
+produce), or candidate 1 if that's a dead end (would need live `find`-while-unattached tracing of whatever
+upstream blend node exists, same safe methodology as this session).
