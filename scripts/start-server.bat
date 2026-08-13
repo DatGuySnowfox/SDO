@@ -2,7 +2,7 @@
 setlocal
 
 set NODE=C:\Users\mccau\AppData\Local\Programs\SD-Online\runtime\node.exe
-set SERVER=C:\temp\GIT\sd-online-bridge\server\src\index.js
+set SERVER=C:\temp\GIT\SDO\server\src\index.js
 set LOG=C:\temp\sdb-server.log
 
 :: Check if server is already running
