@@ -15,6 +15,7 @@ target("SurrounDeadBridge")
     set_kind("shared")
     set_languages("cxx20")
     set_arch("x64")
+    set_symbols("debug")
 
     add_files("src/protocol.cpp", "src/tcp_client.cpp", "src/proxy_manager.cpp",
               "src/entity_manager.cpp", "src/mod.cpp")

@@ -281,6 +281,21 @@ std::vector<uint8_t> encode_world_action(const std::string& json)
     return out;
 }
 
+std::vector<uint8_t> encode_item_drop_request(const std::string& itemId, uint16_t quantity,
+                                               float x, float y, float z)
+{
+    const auto idLen = static_cast<uint16_t>(itemId.size());
+    std::vector<uint8_t> out(17 + idLen);
+    out[0] = 1; // version
+    w16(out.data() + 1, quantity);
+    w32(out.data() + 3, f2u(x));
+    w32(out.data() + 7, f2u(y));
+    w32(out.data() + 11, f2u(z));
+    w16(out.data() + 15, idLen);
+    std::memcpy(out.data() + 17, itemId.data(), itemId.size());
+    return out;
+}
+
 std::optional<std::string> decode_world_action(const uint8_t* p, size_t n)
 {
     if (n < 2) return std::nullopt;
@@ -555,6 +570,130 @@ std::optional<Equipment> decode_equipment(const uint8_t* p, size_t n)
     }
 
     return e;
+}
+
+std::vector<uint8_t> encode_weapon_attachments(const WeaponAttachments& a)
+{
+    size_t total = 3; // tag + entryCount
+    for (const auto& e : a.entries)
+        total += 1 + 1 + 2 + e.itemId.size();
+
+    std::vector<uint8_t> buf(total);
+    uint8_t* p = buf.data();
+
+    p[0] = 1;
+    w16(p + 1, static_cast<uint16_t>(a.entries.size()));
+
+    size_t off = 3;
+    for (const auto& e : a.entries) {
+        buf[off++] = e.weaponSlotIndex;
+        buf[off++] = e.containerIndex;
+        const uint16_t idLen = static_cast<uint16_t>(e.itemId.size());
+        w16(buf.data() + off, idLen); off += 2;
+        if (idLen) {
+            std::memcpy(buf.data() + off, e.itemId.data(), idLen);
+            off += idLen;
+        }
+    }
+
+    return buf;
+}
+
+std::optional<WeaponAttachments> decode_weapon_attachments(const uint8_t* p, size_t n)
+{
+    if (n < 3 || p[0] != 1) return std::nullopt;
+
+    WeaponAttachments a;
+    const uint16_t entryCount = r16(p + 1);
+    size_t off = 3;
+    a.entries.reserve(entryCount);
+    for (uint16_t i = 0; i < entryCount; ++i) {
+        if (off + 4 > n) return std::nullopt;
+        WeaponAttachmentEntry e;
+        e.weaponSlotIndex = p[off++];
+        e.containerIndex  = p[off++];
+        const uint16_t idLen = r16(p + off); off += 2;
+        if (off + idLen > n) return std::nullopt;
+        e.itemId = std::string(reinterpret_cast<const char*>(p + off), idLen);
+        off += idLen;
+        a.entries.push_back(std::move(e));
+    }
+
+    return a;
+}
+
+std::vector<uint8_t> encode_pawn_appearance(const PawnAppearance& a)
+{
+    size_t total = 1 + 1
+                 + 2 + a.hairMeshName.size()
+                 + 2 + a.hairColorName.size()
+                 + 2 + a.beardMeshName.size()
+                 + 2 + a.beardColorName.size()
+                 + 2 + a.skinColorName.size()
+                 + 2 + a.mouthMeshName.size()
+                 + 2 + a.eyebrowsMeshName.size()
+                 + 2 + a.accessory1MeshName.size()
+                 + 2 + a.accessory2MeshName.size()
+                 + 2 + a.accessory3MeshName.size();
+    for (const auto& s : a.bodyPartMeshNames) total += 2 + s.size();
+
+    std::vector<uint8_t> buf(total);
+    uint8_t* p = buf.data();
+
+    p[0] = 1;
+    p[1] = a.isMale ? 1 : 0;
+
+    size_t off = 2;
+    auto writeStr = [&](const std::string& s) {
+        w16(buf.data() + off, static_cast<uint16_t>(s.size())); off += 2;
+        if (!s.empty()) { std::memcpy(buf.data() + off, s.data(), s.size()); off += s.size(); }
+    };
+    writeStr(a.hairMeshName);
+    writeStr(a.hairColorName);
+    writeStr(a.beardMeshName);
+    writeStr(a.beardColorName);
+    writeStr(a.skinColorName);
+    for (const auto& s : a.bodyPartMeshNames) writeStr(s);
+    writeStr(a.mouthMeshName);
+    writeStr(a.eyebrowsMeshName);
+    writeStr(a.accessory1MeshName);
+    writeStr(a.accessory2MeshName);
+    writeStr(a.accessory3MeshName);
+
+    return buf;
+}
+
+std::optional<PawnAppearance> decode_pawn_appearance(const uint8_t* p, size_t n)
+{
+    if (n < 2 || p[0] != 1) return std::nullopt;
+
+    PawnAppearance a;
+    a.isMale = p[1] != 0;
+
+    size_t off = 2;
+    auto readStr = [&](std::string& out) -> bool {
+        if (off + 2 > n) return false;
+        const uint16_t len = r16(p + off); off += 2;
+        if (off + len > n) return false;
+        out = std::string(reinterpret_cast<const char*>(p + off), len);
+        off += len;
+        return true;
+    };
+    if (!readStr(a.hairMeshName))  return std::nullopt;
+    if (!readStr(a.hairColorName)) return std::nullopt;
+    if (!readStr(a.beardMeshName)) return std::nullopt;
+    if (!readStr(a.beardColorName)) return std::nullopt;
+    if (!readStr(a.skinColorName)) return std::nullopt;
+    for (auto& s : a.bodyPartMeshNames) {
+        if (!readStr(s)) return std::nullopt;
+    }
+    if (!readStr(a.mouthMeshName))    return std::nullopt;
+    if (!readStr(a.eyebrowsMeshName)) return std::nullopt;
+    if (!readStr(a.accessory1MeshName)) return std::nullopt;
+    if (!readStr(a.accessory2MeshName)) return std::nullopt;
+    if (!readStr(a.accessory3MeshName)) return std::nullopt;
+
+    return a;
 }
 
 // ---------------------------------------------------------------------------

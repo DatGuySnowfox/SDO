@@ -64,6 +64,20 @@ const _getProgress = db.prepare('SELECT data FROM player_progress WHERE playerId
 
 const _spawnEntity   = db.prepare(
     'INSERT OR REPLACE INTO world_entities (entityId, spawnFrame, spawnedAt) VALUES (?, ?, ?)');
+// Appends a follow-up EntityState frame's bytes onto the stored descriptor
+// frame so a late joiner's replay (see gateway.js) gets both frames back to
+// back — the client's own frame decoder splits them apart exactly as if
+// they'd arrived as two separate writes. No-op if the entity isn't tracked
+// (e.g. an EntityState for something other than a world entity).
+//
+// Concatenated in JS, not via SQL `spawnFrame || ?` — that raw-SQL BLOB
+// concat got coerced through SQLite's TEXT/UTF-8 affinity, replacing any
+// byte sequence that wasn't valid UTF-8 with U+FFFD (0xEF 0xBF 0xBD),
+// corrupting the binary frame and breaking every later replay of that
+// entity (decodeFrame: bad_magic) — which broke EVERY subsequent client
+// join, not just drops, once any entity had been dropped (2026-08-12).
+const _getEntityFrame = db.prepare('SELECT spawnFrame FROM world_entities WHERE entityId = ?');
+const _setEntityFrame = db.prepare('UPDATE world_entities SET spawnFrame = ? WHERE entityId = ?');
 const _despawnEntity = db.prepare('DELETE FROM world_entities WHERE entityId = ?');
 const _allEntities   = db.prepare(
     'SELECT spawnFrame FROM world_entities ORDER BY spawnedAt ASC');
@@ -93,6 +107,12 @@ module.exports = {
 
     spawnEntity(entityId, frameBytes) {
         _spawnEntity.run(String(entityId), frameBytes, Date.now());
+    },
+    appendEntityState(entityId, frameBytes) {
+        const idStr = String(entityId);
+        const row = _getEntityFrame.get(idStr);
+        if (!row) return; // not a tracked world entity
+        _setEntityFrame.run(Buffer.concat([row.spawnFrame, frameBytes]), idStr);
     },
     despawnEntity(entityId) {
         _despawnEntity.run(String(entityId));

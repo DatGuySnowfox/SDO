@@ -48,6 +48,8 @@ enum class MsgType : uint16_t {
     PlayerDamage          = 40,
     CharacterCreate       = 41,
     PlayerProgressRestore = 42,
+    WeaponAttachments     = 43,
+    PawnAppearance        = 44,
     Error                 = 255,
 };
 
@@ -220,6 +222,64 @@ struct Equipment {
 
 static constexpr int EQUIPMENT_SLOT_COUNT = 21;
 
+// ── WeaponAttachments payload (from BP_JigPickupComponent_C.RepAttachments) ───
+// One entry per attachment currently installed on one of the local player's
+// equipped weapon slots (11 Primary / 12 Secondary / 13 Sidearm / 14 Melee).
+// Flat list (not grouped per weapon) — same style as EquipmentSlot, simpler
+// to encode/decode and there are rarely more than a handful of entries.
+// Wire format: [tag=1][entryCount:u16BE], per entry:
+//   [weaponSlotIndex:u8][containerIndex:u8][itemIdLen:u16BE][itemId...]
+struct WeaponAttachmentEntry {
+    uint8_t     weaponSlotIndex = 0; // 11-14, which equipped weapon this attachment is on
+    uint8_t     containerIndex  = 0; // FS_RepAttachmentInfo.AttachmentContainerIndex
+    std::string itemId;              // attachment's own DA_ ItemID, e.g. "HolographicSight"
+};
+
+struct WeaponAttachments {
+    std::vector<WeaponAttachmentEntry> entries;
+};
+
+// ── PawnAppearance payload (from BP_PlayerCharacter_C's own customization
+// fields — IsPlayerMale?/HairMesh/Hair Color/BeardMesh/Beard Color) ───────────
+// Asset references are carried as their short object name (e.g.
+// "Chr_MaleHair3"), resolved on the receiving end via
+// UObjectGlobals::FindObject against already-loaded assets — the small,
+// fixed set of character-creation options is always resident in memory once
+// any character exists, no on-demand asset loading needed. Empty string =
+// not set (e.g. no beard).
+// Wire format: [tag=1][isMale:u8][hairMeshLen:u16BE][hairMesh...]
+//   [hairColorLen:u16BE][hairColor...][beardMeshLen:u16BE][beardMesh...]
+//   [beardColorLen:u16BE][beardColor...]
+// bodyPartMeshNames order matches proxy_manager.cpp's kBodyPartOffsets /
+// mod.cpp's kBodyPartOffsets exactly: Torso, Biceps, LowerThighs, head, Arms,
+// Feet, LowerLegs, Legs, Hands. Needed because just syncing isMale doesn't
+// retroactively change which body-shape mesh a proxy (spawned once, at a
+// fixed default gender) is using — the actual per-part SkeletalMesh has to
+// be synced too, same as hair/beard. Read/matched from the real assigned
+// mesh rather than computed from a naming convention: the male variants
+// aren't uniformly named (e.g. Biceps is "SK_Chr_Underwear_Male_01_Biceps",
+// not "SK_Chr_Male_Biceps").
+static constexpr int BODY_PART_COUNT = 9;
+
+struct PawnAppearance {
+    bool        isMale = true;
+    std::string hairMeshName;
+    std::string hairColorName;
+    std::string beardMeshName;
+    std::string beardColorName;
+    std::string skinColorName;
+    std::array<std::string, BODY_PART_COUNT> bodyPartMeshNames;
+    std::string mouthMeshName;     // BP_PlayerCharacter.hpp Mouth @0x0740, no dedicated color property
+    std::string eyebrowsMeshName;  // BP_PlayerCharacter.hpp EyebrowsMesh @0x0790, no dedicated color property
+    // Accessory1/2/3 (BP_PlayerCharacter.hpp @0x0758/@0x0750/@0x0748) — three
+    // separate face-prop slots (piercings/etc.), confirmed via the real
+    // CharacterCreatorMenu Blueprint's AccessoryType1/2/3 functions, same
+    // preset-mesh-dropdown mechanism as Hair/Beard/Mouth/Eyebrows.
+    std::string accessory1MeshName;
+    std::string accessory2MeshName;
+    std::string accessory3MeshName;
+};
+
 // ── Encode / decode ───────────────────────────────────────────────────────────
 
 int  encode_frame(uint8_t* buf, int cap, const Frame& f, uint32_t& seq, uint32_t& tck);
@@ -237,6 +297,13 @@ std::optional<EntityStateData>      decode_entity_state(const uint8_t* p, size_t
 // World-action JSON codec: uint16BE length + UTF-8 JSON (no tag byte)
 std::vector<uint8_t>       encode_world_action(const std::string& json);
 std::optional<std::string> decode_world_action(const uint8_t* p, size_t n);
+
+// ItemDropRequest: itemId-based (see server/src/lib/protocol.js decodeItemDropRequest
+// for the full rationale — matches by itemId server-side, not a container slot
+// index the client can't cleanly reproduce from the RequestDropAsPickup hook).
+// Format: [version=1][quantity:u16BE][posX/Y/Z:f32BE][itemIdLen:u16BE][itemId utf8]
+std::vector<uint8_t> encode_item_drop_request(const std::string& itemId, uint16_t quantity,
+                                               float x, float y, float z);
 
 // Flat JSON field extraction for result payloads
 std::string json_str(const std::string& json, const std::string& key);
@@ -256,6 +323,12 @@ std::optional<PlayerProgress>   decode_player_progress(const uint8_t* p, size_t 
 
 std::vector<uint8_t>            encode_equipment(const Equipment& e);
 std::optional<Equipment>        decode_equipment(const uint8_t* p, size_t n);
+
+std::vector<uint8_t>              encode_weapon_attachments(const WeaponAttachments& a);
+std::optional<WeaponAttachments>  decode_weapon_attachments(const uint8_t* p, size_t n);
+
+std::vector<uint8_t>              encode_pawn_appearance(const PawnAppearance& a);
+std::optional<PawnAppearance>     decode_pawn_appearance(const uint8_t* p, size_t n);
 
 uint64_t now_micros();
 

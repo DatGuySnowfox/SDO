@@ -5499,3 +5499,701 @@ struct USceneComponent_RE { char pad_0000[0xB0]; void* AttachParent; char pad_00
 struct USkinnedMeshComponent_RE { char pad_0000[0x5B8]; void* SkinnedAsset; };
 ```
 
+## Session 51 — A whole day chasing "PC2 is slow" turned out to be a mod bug, not the VM
+
+### The setup
+
+PC2 (a Proxmox VM, VMID 102, NVIDIA RTX 3080 Ti via VFIO passthrough, accessed through Parsec) had been sitting at
+~10 FPS. A full day was spent on VM-level tuning, all individually real and verified, none of it the actual fix:
+
+- `cores` was over-allocated (12 vCPUs on an 8-core/16-thread host) — reduced to 8.
+- `cpu` type was a generic `x86-64-v2-AES` baseline instead of `host,hidden=1` (loses real instruction set
+  exposure and doesn't hide the hypervisor from the NVIDIA driver).
+- Memory ballooning was active on an already memory-constrained host — disabled.
+- `hostpci0` was missing `x-vga=1`.
+- Background bloat inside the guest (Microsoft Edge, Windows Defender real-time scanning the game folder,
+  Xbox Game Bar) was competing for the same 8 cores — cleaned up, Defender exclusion added.
+- The GPU was stuck in P8 (idle power state, ~495MHz) even under load, confirmed via `nvidia-smi` — force-locked
+  to 1800-2100MHz via `nvidia-smi -lgc`.
+- Windows was on the Balanced power plan with default TSC/platform-clock settings — switched to High
+  Performance, `bcdedit /set useplatformclock false` + `disabledynamictick yes` (a fix sourced from an unrelated
+  Unraid forum thread about the exact same "low GPU utilization despite fine hardware" symptom).
+- CPU affinity pinning (`qm set --affinity 0-7`) to reserve hyperthread siblings for the host.
+
+Cumulative result of all of the above: ~10 FPS → ~17 FPS. Real, but nowhere near where a 3080 Ti should be.
+
+### The actual bottleneck
+
+The user mentioned having successfully run Diablo 4 on the same physical host before (via Hyper-V + GPU-P, a
+completely different virtualization stack — not directly comparable) and, more usefully, that **Stationeers hits
+~200 FPS on this exact VM**. That's the finding that mattered: if a different game gets excellent performance on
+the identical hardware/passthrough/VM config, the VM isn't the bottleneck at all — something specific to
+SurrounDead (or our own mod) is.
+
+Isolation test, done properly in stages:
+1. Fully vanilla SurrounDead (UE4SS's `dwmapi.dll` proxy renamed aside, no injection at all): **~170 FPS**. Proves
+   the game itself, GPU, and passthrough are all fine.
+2. Official UE4SS (matched to PC1's exact build via MD5, since a nightly build from a different source crashed
+   the game outright — ABI mismatch against our stub headers) with **zero mods loaded**: **~130 FPS**. Proves
+   UE4SS's own hooking overhead is acceptable.
+3. UE4SS + **only** `SurrounDeadBridge` enabled: **~6 FPS at the main menu** — before even loading into the
+   world. This nailed it down to our own mod's code, not UE4SS, not any other leftover dev mod
+   (`PropertyDumper`/`JigMPHookTest`/etc. were also found still enabled on PC2 from earlier sessions and
+   disabled, but weren't the actual cause either — this exact test isolated our mod specifically).
+
+### Root cause: `find_local_pawn()` called unthrottled inside `do_game_tick()`
+
+`do_game_tick()` itself is only rate-limited to once per 5ms (200Hz) via `g_last_tick_us` — reasonable for the
+tick body as a whole, but two call sites inside it called `find_local_pawn()` directly on every one of those
+200 ticks/sec with no additional throttle: the lazy-connect check and step 2's own pawn lookup.
+
+`find_local_pawn()` is a UE4SS reflection scan (`FindFirstOf`) — cheap once a pawn exists (found quickly), but
+worst-case (no pawn at all — sitting at the main menu, a loading screen, or briefly on death) it has to exhaust
+the whole search before concluding "not found". Running that worst case 200 times a second is exactly the same
+shape of bug already fixed once this project for the drop/pickup hook resolution's own `find_local_pawn()` calls
+(`s_drop_fn`/`s_pickup_fn` in `mod.cpp`, fixed for a different reason earlier this same day) — throttling
+*those* calls to 1/sec was done, but `do_game_tick()`'s own separate calls were missed entirely.
+
+PC1 never surfaced this because it auto-clicks through the main menu in a few seconds (`try_open_world()`), so
+the "no pawn yet" window is always brief. Anything that sits in that state longer — a slower-loading fresh
+install, or this session's explicit menu-FPS test — fully exposes it.
+
+**Fix**: added `cached_find_local_pawn()`, wrapping `find_local_pawn()` with its own 100ms throttle (independent
+of `do_game_tick()`'s 5ms body throttle), and switched both `do_game_tick()` call sites to use it. 100ms is
+still more than responsive enough for detecting pawn/death/respawn transitions.
+
+**Result, live-tested**: ~6 FPS → 60-100 FPS on PC2, with the exact same VM config, exact same hardware, exact
+same UE4SS build. All the VM-level tuning above likely still helped marginally, but this was the actual
+dominant bottleneck the whole time.
+
+**Lesson for next time**: when a "slow VM" complaint comes with a mod running, isolate the mod (or the whole
+UE4SS injection layer) *before* spending a day tuning virtualization config, not after. A vanilla-game FPS
+check and a stock-UE4SS-no-mods FPS check are cheap, fast, and would have pointed here almost immediately.
+
+---
+
+## Session 51 (continued) — the weapon/equipment-visual AttachParent mystery finally resolved
+
+After the FPS fix above, picked the long-standing weapon-visual investigation back up. Three real bugs were
+found and fixed in sequence, each one uncovering the next; the mystery that survived 11+ attempts across
+Sessions 46/47/49/50 turned out to be three separate, independent problems stacked on top of each other.
+
+### Bug 1: wrong target component (Arms, not the character's real root Mesh)
+
+Every prior attach attempt targeted Arms (BP_PlayerCharacter_C's per-body-part SkeletalMeshComponent,
+actor+0x788) - a real component, but not the one carrying the gameplay socket set. Confirmed two independent
+ways: live DoesSocketExist(Weapon_r) on Arms returned false, and the FModel export of
+SK_Chr_ToplessMale_01_Skeleton.json (the skeleton actually driving ACharacter's native root Mesh component,
+CharacterMesh0 - wired up completely separately from the modular per-body-part meshes) confirmed Weapon_r
+(and all the other gameplay sockets) live there instead. AttachToComponent silently no-ops when the socket
+name doesn't exist on the target component while still reporting ReturnValue=true - exactly the "succeeds but
+AttachParent stays NULL" symptom chased for three sessions. Fixed by reading the actor's own Mesh UPROPERTY
+directly (GetMesh() isn't a reflected UFunction on this build) instead of Arms.
+
+### Bug 2: EquipActorToSocket needs a real ItemDataAsset on the pickup, which our synthetic spawn never set
+
+With the component fixed, a manual K2_AttachToComponent call started actually attaching for the first time -
+but the visual still never rendered correctly. Pulled BP_JigHelperComp_C's real "Equip Actor to Socket"
+function's property list from the FModel export (research/Exports/.../BP_JigHelperComp.json) instead of
+guessing further: its locals show it calls GetComponentByClass(BP_JigPickupComponent_C) on the equipped actor
+and a custom GetMeshFromOwner() on the owner, then a Select(Name) node (keyed on IsSecondary) feeding a
+K2_AttachToComponent call. This means EquipActorToSocket - the real, game-native function used for this exact
+purpose everywhere else - reads the equipped actor's own BP_JigPickupComponent.ItemDataAsset
+(research/CXXHeaderDump/BP_JigPickupComponent.hpp @0x0A8) to resolve which socket to use. Session 50's
+conclusion that EquipActorToSocket was "actively harmful" (it un-set AttachParent after running) was recorded
+*before* Bug 1 was found - the manual attach it was "undoing" was itself already broken by the wrong-component
+bug, so that conclusion was likely a misread. Fixed by writing the item's own UJigsawItem_DataAsset_C* directly
+into the spawned pickup's ItemDataAsset field before calling EquipActorToSocket (set_pickup_item_data()).
+Live-verified afterward via AttachParent reading a real, non-null, stable pointer, RelativeLocation reading
+exactly (0,0,0) (a clean SnapToTarget snap), and K2_GetComponentToWorld() returning a sane in-world position
+right at the character - all confirmed via a live bytecode_dump.flag capture of the real function plus
+mem_dump.flag/resolve_fname.flag resolving its FField* operands' NamePrivate (UE5's FField layout: NamePrivate
+FName at +0x20) to real property/socket names, rather than inferring anything from symptoms alone.
+
+### Bug 3: pickups need to be explicitly told "you're equipped now, stop acting like a loose world item"
+
+Even with a proven-correct attach, the item still visibly detached and fell through the floor a moment after
+spawning. Ruled out (with live evidence each time): physics simulation on the pickup's own root (disabled via
+SetSimulatePhysics(false), no change), KeepRelative/KeepWorld vs SnapToTarget attachment rules (the real
+EquipActorToSocket bytecode was decoded to confirm LocationRule=2/RotationRule=2/ScaleRule=1/
+WeldSimulatedBodies=true - genuinely correct), wrong socket name (resolved via the FField::NamePrivate
+technique above - PrimaryUnequipSocket = "Mask", a real, valid, existing socket), and redundant
+SetEquippedInfoBySlot resends re-triggering some internal validation (gated out, no change). The real cause:
+ABP_SkeletalMeshPickup_C::JigSetCanInteract(CanInteract, EnablePhysics, Result) is the actual Blueprint-level
+"this is now equipped, not a loose pickup" signal - our own SetSimulatePhysics call is a raw engine-level
+override that doesn't stop the pickup's own internal tick/timer logic (CheckDistanceFromActor and friends on
+BP_JigPickupComponent) from re-asserting "world item" behavior against it. Calling
+JigSetCanInteract(false, false) right after the attach fixed it - confirmed live, held steady across repeated
+re-equips.
+
+### Bonus fix 1: EquipActorToSocket doesn't know about backpack state - do that part ourselves
+
+Once weapons and facewear/eyewear were rendering correctly, a backpack + two weapons test showed one weapon
+landing on the backpack and the other landing on the bare back/spine - not a bug in the fix above, just an
+incomplete one. Equip Actor to Socket's own socket-select only branches on IsSecondary (PrimaryUnequipSocket vs
+SecondaryUnequipSocket) - it never checks whether a backpack is actually equipped, so it always resolves to the
+no-backpack socket ("PrimaryWeapon"/"SecondaryWeapon" on the skeleton) even when a backpack is worn. The
+skeleton has genuinely separate, dedicated sockets for the backpack-worn case (confirmed via the
+SK_Chr_ToplessMale_01_Skeleton.json FModel export: "PrimaryWeaponBackpack", "SecondaryWeaponBackpack", both
+real), and JigsawItem_DataAsset carries the matching FName in PrimaryUnequipSocketBackpack (@0x290) /
+SecondaryUnequipSocketBackpack (@0x3F8). Fixed by doing a second, manual K2_AttachToComponent re-attach to the
+correct backpack-aware socket ourselves, right after EquipActorToSocket runs, whenever the proxy currently has
+a backpack equipped (tracked via player.backpackVisualItemId).
+
+### Bonus fix 2: per-item EquippedTransform rotation was never applied
+
+Once every slot attached mechanically correctly (RelativeLocation consistently (0,0,0)), several items -
+Eyewear/Glasses, the Backpack, the melee axe - still rendered at a visibly wrong orientation. Neither
+EquipActorToSocket nor the manual re-attach above ever apply JigsawItem_DataAsset_C::EquippedTransform
+(FTransform @0x0220) - a per-item transform confirmed via the FModel export of DA_BlackFaceMask.json to carry
+a real non-identity Rotation. The socket's own bone rotation alone had been rendering, which happened to look
+right for Facewear/Primary but not for others. Fixed by raw-writing RelativeLocation/RelativeRotation directly
+on the item's root component (USceneComponent @0x0128/@0x0140) from EquippedTransform's stored quaternion -
+converted to Euler via the standard UE FQuat::Rotator() formula - rather than risking a ProcessEvent call to
+K2_SetRelativeTransform, whose FHitResult mid-parameter is undocumented in this project (the vendored SDK pads
+FHitResult to a generous 256 bytes specifically for this reason, per RC/Unreal/Core.hpp).
+
+### Final state, live-confirmed by the user
+
+Weapon (Primary), Secondary, Sidearm, Melee, Facewear, Headwear, Eyewear, and Backpack all render correctly and
+stay attached - including correct backpack-aware socket switching for both weapon slots and correct per-item
+orientation. Only Accessory remains unwired (same spawn_and_equip_item_visual pattern should apply directly).
+
+### Weapon attachments (scopes/grips/mags/etc.) - full wire sync implemented
+
+Attachments turned out to be architecturally simpler than equipment once the actual data was found: each
+attachment DataAsset carries its own Local_ActorClass (TSubclassOf<ABP_AMainLocalAttachment_C> @0x03D8) and
+Local_AttachSocket (FName @0x0398) - a socket on the *weapon's own mesh*, not the character's - so no
+GetMeshFromOwner/EquipActorToSocket involvement is needed at all, just a direct spawn + K2_AttachToComponent
+onto the weapon's own root. The local player's actually-installed attachments live in
+BP_JigPickupComponent_C::RepAttachments (FS_RepWeaponAttachment @0x0110 - research/CXXHeaderDump/
+S_RepWeaponAttachment.hpp + S_RepAttachmentInfo.hpp), read off the real equipped weapon actor (found via
+BP_JigHelperComp_C::GetEquippedActorBySlot, the same call proxy_manager.cpp already used for proxies, called
+here on the *local* player's own helper instead).
+
+This is the first feature this session that needed actual wire-protocol work (everything else was purely
+client-side visual code) - added MsgType::WeaponAttachments (43) end to end: protocol.hpp/.cpp (flat
+[weaponSlotIndex][containerIndex][itemId] entry list, same style as Equipment), mod.cpp
+(read_local_weapon_attachments() + periodic 2s send alongside send_equipment()), the Node.js gateway (identical
+client-authoritative relay pattern already used for Equipment - the server treats the payload as opaque bytes),
+and proxy_manager.cpp (ProxyManager::sync_weapon_attachments(), spawning attachment actors onto whichever
+proxy weapon visual actor currently exists, gated by a cheap itemId-signature comparison so an unchanged resend
+doesn't respawn anything). Not yet live-tested end to end as of this write-up - built and deployed, server
+restarted, but the game clients were closed before a live pass could confirm it.
+
+### Lesson for next time
+
+The FModel-exported .json for a Blueprint class's own compiled Function entries - even though it's just a flat
+property/local-variable list, not a full disassembly with control flow - names every CallFunc_X local after the
+actual function it calls, and typed ObjectProperty locals name their PropertyClass. This alone was enough to
+determine the real call sequence and parameter types of EquipActorToSocket (GetComponentByClass,
+GetMeshFromOwner, a Select(Name), K2_AttachToComponent) without any live decompilation, and turned out to be
+far more reliable than continuing to guess from trial-and-error live tests. Use it *before* spending another
+multi-attempt guessing session on a native/Blueprint function whose real behavior is unknown - it's static,
+free, and doesn't require a live game process at all. When it isn't enough (no control-flow/branch info), the
+live bytecode_dump.flag + kismet_disasm.py pair fills the gap, and its raw FField*/UFunction* operands can be
+resolved to real names via mem_dump.flag reading FField::NamePrivate (+0x20) into resolve_fname.flag, rather
+than left as opaque pointers.
+
+### Weapon attachments live-tested end to end; two follow-up bugs found and fixed
+
+Live-tested with a real loadout (AK15 with 5 attachments, plus a secondary and sidearm) — scope, grip, magazine,
+suppressor, and laser/light combo all rendered correctly on the other client. Finding the local player's actual
+equipped-item actors needed a different approach than planned: `GetEquippedActorBySlot` returns null for every
+slot even when genuinely equipped (confirmed live — a `FindAllOf(BP_AK15Pickup_C)` scan proved a real actor
+exists and is genuinely `AttachParent`'d to the character's own Mesh, so the getter itself just isn't the right
+tool). Switched to walking `USceneComponent::AttachChildren` (Engine.hpp `@0x00C0`) on the character's own Mesh
+directly instead, matching each attached actor back to a slot via its own `BP_JigPickupComponent.ItemDataAsset`.
+
+Two bugs found while extending this to non-weapon slots (helmets, night vision):
+1. **Crash from an unverified offset guess**: tried generalizing `BP_JigPickupComponent` lookup (only reliable
+   at `owner+0x320` for firearms) via a reflected `GetComponentByClass` call, sourcing the needed `UClass*` from
+   a guessed, never-verified `ClassPrivate` offset (`+0x10`) on a known-good component instance. Wrong guess,
+   crashed the live game (`EXCEPTION_ACCESS_VIOLATION` reading `0x9006`) — reverted immediately. Helmet/glasses/
+   backpack attachment support is deferred until the real offset (or another verified way to get the class) is
+   confirmed, not guessed.
+2. **Stale-pointer crash during a concurrent native unequip**: removing an attachment from a helmet in-game
+   crashed twice with the identical exception address, both times with the debug log cut off mid-iteration near
+   the end of the `AttachChildren` array — a native unequip action destroying/detaching a component while this
+   scan was concurrently reading through the same array. Fixed by running the whole `AttachChildren` walk under
+   an SEH guard (same trampoline pattern as this file's own `seh_invoke`/`destroy_actor_safe`) — a crash there
+   now just discards that cycle's read instead of taking down the game. Confirmed live: no crash on a repeat of
+   the exact same action.
+
+**Lesson**: any raw memory read walking a live engine collection (`TArray`, `AttachChildren`, etc.) that isn't
+gated behind the game's own thread-safety guarantees should assume the data can mutate mid-read from native
+game logic running the same frame, and be SEH-guarded accordingly — this isn't unique to `AttachChildren`, it
+applies to any live collection read triggered by our own polling rather than an in-response-to-event hook.
+
+### Pawn appearance sync (gender/hair/beard) — proxies stopped being generic clones
+
+Extended the mod so a proxy actually shows the real player's gender, hairstyle, hair color, and beard instead of
+always spawning as a generic default `BP_PlayerCharacter_C`. Fields all confirmed via real header dumps
+(`research/CXXHeaderDump/BP_PlayerCharacter.hpp`): `IsPlayerMale?` (`@0x15A0`), `HairMesh`/`BeardMesh` (two plain
+`UStaticMeshComponent`s, `@0x7C0`/`@0x7C8`, whose current `StaticMesh` `@+0x5B8` is the chosen style), and
+`Hair Color`/`Beard Color` material instances (`@0x15C8`/`@0x15D0`). Skin color was deliberately left out of this
+pass — unlike hair/beard, it applies across many separate body-part meshes via a mechanism not yet
+reverse-engineered.
+
+Since assets like hairstyles aren't `JigsawItem_DataAsset_C` items with a wire-friendly `ItemID`, they're synced
+by their own short object name (e.g. `"Chr_MaleHair3"`, taken from the tail of `GetFullName()`) and resolved on
+the receiving end via `UObjectGlobals::FindObject`. Two real bugs found and fixed live:
+
+1. **`FindObject`'s `InOuter=nullptr` doesn't mean "search everywhere"** — every lookup returned null even
+   though `SetStaticMesh`/`SetMaterial` were both confirmed present via reflection. Real UE5's actual "search
+   every package" sentinel for `StaticFindObject`-family calls is `ANY_PACKAGE` (`(UObject*)-1`) — a
+   **documented public API constant**, not a guess at internal layout (unlike the `ClassPrivate` incident
+   above) — `nullptr` for `InOuter` means "no outer at all," a far narrower search that excludes nearly every
+   real asset. Fixed by passing `(UObject*)-1` instead. Confirmed live: all four lookups (hair mesh, hair
+   color, beard mesh, beard color) started resolving successfully.
+2. **Beard visibility overcorrection**: the beard component didn't render at all even once the mesh assignment
+   started working, so `SetVisibility(true)` was added unconditionally after `SetStaticMesh` — but beards are a
+   male-only customization in this game, and a female character's `BeardMesh` component can still have some
+   placeholder mesh assigned while normally staying hidden. Forcing visibility unconditionally incorrectly
+   revealed a beard on female proxies too. Fixed by explicitly hiding (not touching) the beard component when
+   the synced appearance's `isMale` is false, gated separately from the mesh/color assignment.
+
+Extended the same session to add `SkinColor` (`@0x15A8`) — unlike hair/beard's one dedicated component each, it
+applies uniformly (`SetMaterial(0, ...)`) across all nine naked-body `SkeletalMeshComponent`s (`Torso`/`Arms`/
+`Legs`/`Feet`/`Hands`/`head`/`Biceps`/`LowerThighs`/`LowerLegs`, all confirmed offsets from the same header
+dump). No new bugs — the `ANY_PACKAGE` fix and the object-resolution pipeline already worked for hair/beard, so
+skin color worked on the first live test.
+
+### Appearance sync, continued: body shape, and the real character-creator options
+
+User immediately caught a real gap: PC2's own character is female, correctly read/sent as such
+(`isMale=0`, `hairMesh=Chr_FemaleHair6`), but the proxy on PC1's screen still looked male. Root cause: flipping
+the `IsPlayerMale?` bool alone doesn't retroactively change which body-*shape* mesh a proxy — spawned once at a
+fixed default gender — is using. Fixed by syncing the actual assigned `SkeletalMesh` (`SkinnedAsset @+0x5B8`,
+same offset convention as `HairMesh`) for all nine body-part components too, rather than computing a target
+mesh name from `isMale` + a naming convention — the male variants aren't uniformly named (e.g. Biceps is
+`SK_Chr_Underwear_Male_01_Biceps`, not `SK_Chr_Male_Biceps`, confirmed via `pak_all_files.txt`), so reading the
+real assigned mesh from source sidesteps that entirely. Applied via `SetSkinnedAssetAndUpdate` (the same
+UFUNCTION `equip_clothing_to_mesh` already uses), *before* the `SetMaterial` skin-color call so the mesh swap
+doesn't reset the material override.
+
+User then asked about "nose and 3 others" they recalled from character creation. Rather than guess at a
+morph-target system, checked the real `CharacterCreatorMenu` Blueprint FModel export directly
+(`research/Exports/.../CharacterCreatorMenu.json`) — its function list (`HairType`, `BeardType`,
+`EyebrowsType`, `MouthType`, `AccessoryType1/2/3`, `SkinColor`, `Sex`, plus non-visual `EditableTextBox_Age`/
+`Forename`/`Surname`) confirmed there's **no morph-target/facial-sculpting system in this game at all** — every
+option is a dropdown selecting one of ~15-28 preset meshes via `CallFunc_SetStaticMesh`, the exact same
+mechanism already used for hair/beard. No `SetMorphTarget` call appears anywhere in the whole Blueprint. Added
+`Mouth`/`EyebrowsMesh` (`@0x0740`/`@0x0790`, mesh-only, no dedicated color property) and `Accessory1/2/3`
+(`@0x0758`/`@0x0750`/`@0x0748`) using the same mesh-swap pattern — the "nose and 3 others" the user
+remembered was almost certainly `AccessoryType1/2/3`.
+
+**Third bug found and fixed**: PC2's proxy showed a scar accessory PC2's real character didn't have. The
+mesh-only sync loop only *applied* a mesh when the source had one (`if (meshName.empty()) continue;`), so a
+proxy that spawned with some non-empty default accessory already assigned never got it cleared when the real
+player had nothing in that slot — same root cause as the earlier beard-visibility bug, just for a different set
+of components. Fixed by explicitly hiding (`SetVisibility(false)`) the component when the synced name is empty,
+instead of skipping entirely.
+
+**Lesson (recurring this session)**: "only apply when there's data" is not the same as "match the source" —
+any sync loop needs an explicit empty/cleared case, not just a happy-path case, or a proxy's spawn-time defaults
+leak through permanently. This bit beard visibility and then accessories in the same session; check for it
+proactively in any future appearance-sync field.
+
+Final state, live-confirmed by the user across three rounds of testing: gender (including actual body shape,
+not just the bool), hair (mesh + color), beard (mesh + color, correct male-only visibility), skin tone, mouth,
+eyebrows, and all three accessory slots all sync correctly and clear correctly when unset.
+
+### Three more small, real bugs found and fixed the same session
+
+1. **Dropped item stacks always showed as 1**: `EntityManager::spawn_entity_actor()` (world-loot/ground-item
+   spawning, separate code path from equipment) never populated the spawned pickup's own
+   `BP_JigPickupComponent.ItemDataAsset` or called `SetCount` at all — despite the wire protocol
+   (`EntityDescriptorData.quantity`) already carrying the real quantity correctly. Fixed using the exact same
+   reflection-based `GetValuePtrByPropertyNameInChain(L"BP_JigPickupComponent")` lookup already proven
+   layout-agnostic tonight (works whether the pickup extends `ABP_SkeletalMeshPickup_C` or
+   `ABP_StaticMeshPickup_C`), calling `SetCount` with the real `entity.quantity` instead of a hardcoded 1.
+   Live-confirmed immediately.
+
+2. **Unequipping clothing (Torso/Gloves/Legs/Feet/BodyArmor) never removed it visually**: `equip_clothing_to_mesh`
+   only ever pushes a mesh onto the `Clothing_*` component — nothing ever reset it, so the unequip-clear block
+   (which already handled every actor-spawn slot: weapons, facewear, backpack, etc.) had no case for these five
+   at all. Same "sync needs a clear case" lesson as the appearance-sync bugs above, just for a system built in an
+   earlier session before that lesson was learned. Fixed by hiding (`SetVisibility(false)`) the `Clothing_*`
+   component on unequip, and re-showing it (`SetVisibility(true)`) in `equip_clothing_to_mesh` itself so
+   re-equipping the same slot after a prior unequip doesn't stay invisible.
+
+3. **Disconnecting a player left all their spawned visuals behind**: `on_player_disconnected` only ever called
+   `destroy_proxy()` on the main pawn actor. Every weapon/equipment visual and weapon attachment is a *separate*
+   spawned actor merely attached to the proxy — UE5 does not cascade-destroy attached actors when their parent
+   is destroyed (only attached components die with their owner) — so a backpack, weapons, attachments, etc. all
+   leaked into the world permanently on disconnect. Fixed by destroying every tracked visual/attachment actor
+   (`destroy_actor_safe`, already SEH-guarded) before destroying the proxy itself. Live-confirmed via an Alt+F4
+   disconnect — everything was cleaned up correctly.
+
+## Session 51 (continued) — "respawn treadmill" mitigation, redundant equip-resync, and an unresolved clothing pulse
+
+A screenshot at the very end of the prior entry showed PC1 seeing duplicated/stacked weapons and backpacks around
+PC2's proxy. Root-caused across three layers, in order:
+
+1. **Duplicate visual-actor pile-up ("respawn treadmill")**: `SDB.log` showed `slot=14 itemId=Knife` respawning
+   with a brand-new actor pointer dozens of times in a row despite the itemId never actually changing. Mitigated
+   (not root-caused) with a per-slot cooldown — `RemotePlayer::lastVisualRespawnUs` + `respawn_cooldown_ok()` in
+   `proxy_manager.cpp` — capping any one slot's visual actor to one real respawn per 2s regardless of what the
+   itemId comparison says.
+
+2. **The real cause turned out to be one level up**: `sync_equipment`'s per-slot loop called
+   `set_equipped_info_by_slot` + (for weapon slots) `set_active_weapon_slot`/`call_on_rep_active_weapon`/
+   `call_on_active_weapon_slot_changed`, and (for clothing slots) `equip_clothing_to_mesh`, **unconditionally on
+   every `sync_equipment` pass** — the wire resends a full Equipment snapshot every ~2s even when nothing
+   changed, and this whole write pipeline had no "did this slot's data actually change" gate at all, unlike the
+   `*VisualItemId` checks that already guarded the separate actor-spawn logic. Every ~2s resend re-fired
+   `OnRep_ActiveWeaponSlot`/etc, which visibly re-triggers the game's own draw/holster handling — this is what
+   read as "pulsing" once the pile-up mitigation stopped the actor-count symptom. Fixed with a new
+   `RemotePlayer::appliedEquipItemId` map, gating the entire write block on `slot.itemId` actually differing from
+   what was last applied. Confirmed via direct log diffing (`equip-setter`/`equip-activate`/`equip-onrep`/
+   `equip-notify`/`equip-clothing` all went from firing every ~2s pass to firing exactly once per real change).
+
+3. **That surfaced a third layer**: even with the gate above, the *same* slot (Torso/BlueShirt) still refired
+   periodically. Traced to a genuine `equip-clear slot=4` sandwiched between two identical `BlueShirt` reads —
+   PC2's own `read_local_equipment()` (a raw, unsynchronized pointer read off `BP_JigHelperComp`'s Equipped
+   array) intermittently reports a still-equipped slot as empty for exactly one ~2s frame, a sender-side read
+   race, not a receiver bug. Mitigated with a 2-consecutive-miss debounce (`RemotePlayer::missingSlotStreak`)
+   before the unequip-clear path actually fires — a single-frame miss no longer triggers a real clear+reapply
+   cycle. (Root-causing the sender-side race itself is still open — this is a receiver-side debounce, not a fix
+   for why PC2's own read occasionally comes back empty.)
+
+Despite all three fixes confirmed via log evidence (the equip write-pipeline genuinely stopped re-firing), the
+user still reported visible "pulsing" specifically on shirt+pants. A Medal clip (`C:\Medal\Clips\SurrounDead`)
+let this be inspected directly for the first time this session — frames extracted with `cv2.VideoCapture` (no
+`ffmpeg` on this machine; the already-installed `opencv-python` read the `.mp4` directly) at ~0.15s spacing
+showed the pants rhythmically alternating between their real tan texture and a dark/black appearance on a
+roughly ~0.9–1.2s period, localized to the legs, in a spot with a sharp environmental shadow line — consistent
+with the character playing a walk-cycle animation (legs swinging) while its actual position stays put.
+
+**Attempted fix**: proxies are spawned as real `BP_PlayerCharacter_C` instances (same class as the local player,
+confirmed via `spawn_proxy`'s `FindFirstOf`), so feeding the sender's real velocity
+(already read in `mod.cpp`'s `send_movement` off `ACharacter::CharacterMovement@+0x328` /
+`UMovementComponent::Velocity@+0xB8`, already wired through the wire protocol, just never applied on the
+receiving end) into the *proxy's own* CharacterMovementComponent should let its already-existing AnimBP drive a
+real walk/idle blend instead of sitting in a static default pose. Added a write in `ProxyManager::tick()` doing
+exactly that, plus (once the raw feed proved to be the actual mechanism behind the clip's swinging-legs pattern)
+a small deadzone so a standing-still player's non-exactly-zero residual velocity reading doesn't make the proxy
+"walk in place" and cross the shadow line every stride.
+
+**This crashed the mod outright.** Live-tested 2026-08-12: `SDB.log` showed `SDB: ready` immediately followed by
+`SDB: unloaded` (twice) with no further activity — the game process itself stayed alive and responsive
+(`Get-Process` showed `Responding=True`, no new crash dump), consistent with UE4SS catching an exception from
+this write and uninstalling the mod rather than a hard process crash. Reverted the velocity-write block entirely
+(kept `RemotePlayer::velocityX/Y/Z` being populated from the wire — that part is inert and harmless, just
+currently unused). **Lesson, same family as the ClassPrivate incident**: `moveComp` being a non-null pointer
+read off `proxyActor+0x328` doesn't guarantee it's safe to write through immediately after `spawn_proxy()` —
+non-null is necessary but not sufficient; this needs actual verification (does the proxy's
+CharacterMovementComponent exist/finish-initializing synchronously within `BeginDeferredActorSpawnFromClass`/
+`FinishSpawning`, or does it lag a tick or more?) before retrying, not another blind offset write.
+
+**Also discovered along the way**: after redeploying, PC1 appeared to be stuck in the same "ready → unloaded ×2"
+loop even *after* reverting the crash — this turned out to be a false alarm. The mod was actually fine; the game
+itself was sitting on the "Press Any Key" splash screen (per the standing project note: this screen was
+deliberately left to require a real keypress, auto-dismiss attempts were dropped in an earlier session), and the
+`SDB.log` tail was just stale content from the *previous* two relaunch cycles' genuine `on_uninstall()` calls,
+not a live symptom. `debug.log` (which was still actively growing with `on_process_event_pre` entries) was the
+tell that the mod was alive and just waiting on `find_local_pawn()`. Sent a keypress via
+`[System.Windows.Forms.SendKeys]::SendWait(" ")` after `AppActivate`-ing the game window, which unstuck it
+immediately. **Takeaway for future relaunch cycles**: if `SDB.log` looks stuck right after a relaunch, check
+`debug.log` before assuming a crash — a live-but-un-poked splash screen produces the exact same "no new SDB.log
+lines" symptom as a genuinely dead mod.
+
+**End state**: actor pile-up and redundant equip-resync are both fixed and confirmed live. The shirt/pants
+pulsing is still unresolved — confirmed *not* caused by either of those two bugs, most likely tied to the
+complete absence of real animation driving on proxies, but the specific velocity-feed approach tried tonight
+crashes the mod and was reverted. Next attempt needs to verify the CharacterMovementComponent's readiness timing
+on a freshly-spawned proxy before writing to it again.
+
+## Session 52 — weapon-in-hand attach: a real GameplayTag family, a stale FModel-export string, and per-item hand sockets
+
+Reported bug: every equipped weapon visual (spawned via `spawn_and_equip_item_visual`/`equip_actor_to_socket`)
+always renders in its *holstered* position — `EquipActorToSocket`'s own internal socket-select only ever
+branches Primary vs Secondary `UnequipSocket`, with no concept of "currently drawn". A weapon never actually
+moves to the hand when it becomes the active slot.
+
+**The missing piece**: `JigsawItem_DataAsset_C::EquipSocket` (`FName @0x0280`, distinct from
+`Primary/SecondaryUnequipSocket`) is exactly the in-hand socket — confirmed via the FModel export of
+`DA_AK15.json`'s class defaults (`Exports/.../JigsawItem_DataAsset.json`: `"EquipSocket": "Weapon_r"`,
+`"PrimaryUnequipSocket": "PrimaryWeapon"`) — but nothing had ever read or attached to it. Also confirmed a melee
+weapon (`DA_Knife.json`) uses a *different* EquipSocket (`"MeleeWeapon_r"`) — per-item, not a single hardcoded
+name, so it has to be read from each item's own DataAsset rather than assumed constant.
+
+**Determining "is this slot currently active" required a second GameplayTag family.** The wire protocol had
+never transmitted which weapon slot is actually drawn at all. `BP_JigHelperComp_C::GetActiveWeaponSlot(FGameplayTag&)`
+is the real getter (research/CXXHeaderDump/BP_JigHelperComp.hpp) — repurposed the wire's dead
+`Movement.animationState` byte (populated but never read anywhere) to carry the resolved slot index (11-14, or
+0xFF) instead of adding a new protocol field.
+
+The first attempt hardcoded this tag family's `ComparisonIndex` values, captured live by cycling through all 4
+weapon slots in one game session (1730633/48/64/19 for Primary/Secondary/Sidearm/Melee — confirmed self-consistent
+by cycling back to Primary and getting the same number again). **This broke on the very next relaunch** — the
+same held weapon returned a completely different, unmapped CI (1730553) in the new process. Unlike
+`kSlotTagComparisonIndex` (proxy_manager.cpp's equipment-identity tags, which have held up across dozens of
+restarts all of last session), this "Jig.PlayerSlot.*" tag family's ComparisonIndex evidently isn't stable
+across process restarts — different registration path/order, never fully explained. Fixed by resolving the
+tag's real string name via `FName::ToString` (the same native call itemId strings already go through) instead of
+comparing a baked-in number — `RawFGameplayTag`/`FName` share the same `{ComparisonIndex,Number}` layout, already
+relied on elsewhere in this file for the backpack-socket case, so the tag's own address can be passed straight
+into `fname_to_string`.
+
+**FModel's own export was subtly wrong for one case.** `Exports/.../BP_JigHelperComp.json` lists this tag family
+as `Jig.PlayerSlot.Primary/Secondary/Pistol/Melee` — matched string substrings "Primary"/"Secondary"/"Pistol"/
+"Melee" against that. Live-tested: `GetActiveWeaponSlot()` actually returns `"Jig.PlayerSlot.SidearmWeapon"` for
+the real sidearm slot at runtime, not anything containing "Pistol" — the static export's enumerated tag list
+apparently isn't the exact string this specific function call returns (possibly a different context/dropdown
+than the live getter). Live values win over static export when they disagree; fixed by matching "Sidearm"
+instead once the mismatch was caught from a real "pistol doesn't show at all" repro.
+
+**Re-attaching also had to reapply the per-item orientation correction.** `apply_item_equipped_transform`
+(`JigsawItem_DataAsset_C::EquippedTransform`, `FTransform @0x0220`) was already being applied once at spawn time
+in `spawn_and_equip_item_visual`, but a `SnapToTarget` `K2_AttachToComponent` re-attach resets relative
+transform to identity each time — so re-attaching to the hand socket (or back to the holster socket when a
+different slot becomes active) needs the same correction reapplied afterward, every time, not just once at
+spawn. Extracted into a shared helper so both the original spawn path and the new hand/holster re-attach path
+call it identically. Live-tested: melee weapon appeared in-hand with correct orientation immediately once this
+was added (previously showed up in-hand but rotated wrong).
+
+**End state, live-confirmed**: Primary/Secondary/Melee/Sidearm all correctly move to the hand socket when active
+and revert to the holster socket when a different slot becomes active, with correct per-item orientation in both
+positions.
+
+## Session 52 (continued) — the real root cause of last session's shirt/pants "pulsing": a fourth clear-case gap
+
+Finally root-caused the clothing pulse left unresolved at the end of last session (the velocity-feed/animation
+theory was reverted after crashing the mod, and z-fighting was suspected but never confirmed). The user's own
+theory — "maybe the game removes the underwear when a shirt goes on" — turned out to be exactly right, confirmed
+by directly watching `send_pawn_appearance`'s live output while removing a shirt on PC2: `bodyParts[0]` (Torso)
+went from empty to `SK_Chr_Female_Torso` the instant the shirt came off, and back to empty the instant it went
+back on. The real game genuinely clears a body-part slot's own mesh when clothing covers it.
+
+`sync_pawn_appearance`'s body-part loop (`proxy_manager.cpp`) already received this correctly over the wire, but
+`if (meshName.empty()) continue;` meant it only ever *applied* a non-empty mesh and silently skipped empty
+ones — never hiding anything. A freshly-spawned proxy's own default per-part mesh (e.g. an underwear-style
+torso, matching the existing `SK_Chr_Underwear_Male_01_Biceps` naming already noted in this file) stayed
+permanently visible regardless of what the real player had equipped, z-fighting against the `Clothing_Torso`
+mesh layered on top the instant a shirt was applied — this is what read as "pulsing". Same "sync needs a clear
+case" gap as the beard/accessory/clothing-unequip bugs from last session, just never caught in the body-part
+loop specifically because nothing had directly compared its behavior against the real game's own live behavior
+until now. Fixed with the same pattern as those three: explicit `SetVisibility(false)` when the source mesh name
+is empty, `SetVisibility(true)` when re-applying a real mesh (in case a previous cycle hid it). Live-confirmed
+fixed by the user immediately after deploying.
+
+## Session 52 (continued) — retrying proxy velocity-feed animation: SEH doesn't help when the crash is downstream
+
+Retried the velocity-into-CharacterMovementComponent approach reverted at the end of last session, this time
+with two changes: (1) first confirmed via FModel export (`Player_AnimBP.json`'s `GetSpeed&Direction` function —
+`CallFunc_VSize_ReturnValue` + `CallFunc_CalculateDirection_ReturnValue`, both standard velocity-driven Kismet
+nodes) that Velocity genuinely is the right signal driving the walk/idle blend, not a guess; (2) wrapped the
+write itself in the same `seh_invoke` SEH trampoline `destroy_actor_safe` already uses, specifically to survive
+a repeat of last session's crash.
+
+**The SEH guard did not help.** Live-tested 2026-08-13: PC2's entire game process crashed for real this time —
+confirmed via a fresh `SurrounDead-Win64-Shipping.exe.*.dmp` in `CrashDumps`, not just the mod silently
+unloading like last session's incident. This proves the fault isn't a synchronous access violation inside the
+write call itself (which SEH around that call would have caught) — it's downstream, in some later engine tick
+(animation update or movement replication) reacting to the now-nonzero `Velocity` on an actor that was never
+possessed by a `PlayerController`. Reverted the call site again (left the now-unused
+`apply_proxy_velocity_safe`/`do_apply_proxy_velocity` helpers in place, commented as not-currently-called, so
+the FModel-verification work and the "SEH doesn't cover this" finding aren't lost if revisited).
+
+**Where this leaves animation sync**: the AnimBP side is no longer in question (confirmed via FModel that it
+genuinely wants Velocity). The blocker is specifically that `CharacterMovementComponent` on an unpossessed proxy
+pawn can't tolerate having its `Velocity` written, for a reason not yet identified — a real fix needs either (a)
+finding what internal state a possessed pawn's movement component has that an unpossessed one lacks and safely
+populating just that (not blindly possessing the proxy, which would fight with teleport_proxy's own positioning),
+or (b) driving the AnimBP's `Speed`/`Direction` values directly rather than through Velocity at all, bypassing
+`CharacterMovementComponent` entirely — not yet investigated whether that's exposed as settable state.
+
+**Second crash, same session, on a read-only diagnostic.** Went with option (a) — first tried the cheapest
+possible test: a *read-only* `GetController()` ProcessEvent call on the proxy (zero writes at all), to check
+whether the proxy has any Controller (AI characters have an AIController and animate fine; the proxy has
+nothing). Live-tested 2026-08-13: PC2 crashed again — UE5's own in-engine crash reporter popped up this time
+(not caught by a Windows crash dump in `%LOCALAPPDATA%\CrashDumps`, and this game's `Saved/Crashes` directory
+doesn't currently exist on PC2 at all, so no dump was recoverable either way). Reverted immediately out of
+caution. Not confirmed whether `GetController()` itself was the actual cause (a plain reflected getter call
+crashing is a much stranger failure mode than a raw memory write crashing) or something unrelated coincided —
+but two crashes in a row while touching proxy-actor movement/controller state in the same session is enough to
+stop taking further live risks against the active session today. Animation sync is paused here; next attempt
+should be tried far more cautiously (isolated/offline repro before running against a live session) rather than
+continuing to iterate live.
+
+## Session 52 (continued, next day) — a real breakthrough, a real deadlock, and a strong new lead
+
+Picked animation sync back up. Rather than continue guessing at `CharacterMovementComponent`, went looking for
+what `Player_AnimBP_C`'s own locomotion blend actually reads. Live value-correlation on the local player's
+`__AnimBlueprintMutables` (reached via `GetValuePtrByPropertyNameInChain(L"__AnimBlueprintMutables")` on the
+`AnimInstance`, a real named UPROPERTY even though its 53 individual fields are compiler-anonymized
+`__FloatProperty_N` in this Shipping build's FModel export) found several plausible "Speed" candidates across
+idle/walk/sprint/crouch-walk tests, but the theory broke on aim-walking (ADS while moving) — every 4-byte-float
+candidate either read 0 while genuinely moving or a nonzero value while genuinely idle at some point.
+
+**Went to real bytecode instead of more guessing**, per direct instruction ("remember to use fmodel output to
+not guess" / "decompile the code"), using this project's existing `bytecode_dump.flag` + `kismet_disasm.py`
+tooling:
+1. Dumped `Player_AnimBP_C::BlueprintThreadSafeUpdateAnimation` — small (191 bytes), showed a call sequence of
+   6 `EX_LocalVirtualFunction`s. Resolved their raw ComparisonIndex operands via `resolve_fname.flag` to real
+   names: `GetThreadSafeBooleans`, `GetSpeed&Direction`, `GetHeadRot`, `GetAimOffset`, `GetLean`,
+   `GetLeftHandLoc` — confirming `GetSpeed&Direction` really is called every frame (gated behind one early-out
+   boolean check, not per-branch on aim state as originally suspected).
+2. Dumped `GetSpeed&Direction` itself (169 bytes) — showed exactly two `EX_Let` instance-property writes:
+   `VSize(velocity)` into one property, `CalculateDirection(...)` (cast) into another. This is the ground truth:
+   Speed and Direction are each a single, unconditionally-written instance property, not context-dependent.
+3. The bytecode only gives an `FProperty*` for that property, not its byte offset. Live-dumped raw memory at
+   that property's own address (`mem_dump.flag`'s `abs <addr> <count>` form) and found `FField::NamePrivate`
+   at the SAME `+0x20` offset already established elsewhere in this project — resolving it via
+   `resolve_fname.flag` returned literally `"Speed"`, confirming the whole chain end-to-end. Further into the
+   same dump found `ArrayDim=1`/`ElementSize=8` (an 8-byte **double**, not one of the 4-byte floats the earlier
+   live-correlation pass was reading — explaining why nothing lined up cleanly before) and a plausible
+   `Offset_Internal` value of `23232`.
+4. Verified `23232` directly and empirically: read a `double` at `(AnimInstance object base) + 23232` on the
+   LOCAL player live across idle/walk/aim-walk — `0.000` / `400.000` / `250.000`. Clean, sensible, and critically
+   correct on the exact case (aim-walking) that had broken the earlier guess. High confidence.
+
+**Wired it in** (`apply_proxy_speed_safe` in `proxy_manager.cpp`): compute `sqrt(vx²+vy²+vz²)` from
+`player.velocityX/Y/Z` (already on the wire, no protocol change needed) with the same 15 cm/s idle deadzone as
+the reverted Velocity attempt, write the double directly at `AnimInstance_base + kAnimBPSpeedOffset` — no
+`CharacterMovementComponent`, no `Controller`, SEH-guarded regardless given the day's history.
+
+**First live test**: PC2 crashed immediately on load, right as it would have first spawned PC1's proxy — no
+Windows crash dump, no event log entry, matching the `GetController()` crash's dump-less pattern from
+yesterday. Reverted.
+
+**Re-enabled for further diagnosis** (explicit instruction, to find the actual cause rather than stop
+guessing). **Second live test produced a genuine, diagnosable deadlock instead of a crash** — PC2's process
+stayed `Responding=True` at the Windows level, but both `SDB.log` and `debug.log` demonstrably stopped
+advancing (confirmed stale across a re-check, not just slow). `debug.log`'s last line: `equip_clothing_to_mesh:
+about to ProcessEvent SetSkinnedAssetAndUpdate clothingComp=...` for the Legs slot (`BlackMilitaryPants`) — no
+matching "ProcessEvent returned" ever appeared. The `ProcessEvent` call itself never returned.
+
+**This is a strong, concrete lead, not just another guess**: `equip_clothing_to_mesh` (an entirely different
+function) calls `SetSkinnedAssetAndUpdate` (`bReinitPose=true`) on the *same* proxy actor's skeleton/animation
+system that `apply_proxy_speed_safe` was concurrently writing raw `AnimInstance` memory into, both driven off
+the same `tick()` — but UE5 commonly evaluates animation on a separate Parallel Anim Update worker thread, so
+"same `tick()`" doesn't guarantee "same thread" relative to whatever internal lock `SetSkinnedAssetAndUpdate`'s
+reinit path takes. An unsynchronized write contending with or corrupting that lock is a very plausible
+mechanism for a genuine deadlock, and would also explain the first test's crash-with-no-dump (a livelock
+captured mid-transaction can manifest as an unrecoverable, dump-less failure too).
+
+**Reverted again**, call site commented out with the finding preserved. Where this leaves things: the *value*
+(Speed, at `AnimInstance_base + 23232`) is now solidly verified correct — that work doesn't need to be redone.
+The remaining problem is purely about *how* to write it without racing the engine's own animation/skeletal-mesh
+update path. Next attempt should establish whether this game's `AnimInstance` actually runs Parallel Anim
+Update (and if so, find the right synchronization or a write path that doesn't contend with it), rather than
+retrying the same unsynchronized write a third time.
+
+## Session 53 — gloves clothing pulse, aim-offset investigation, body-yaw fix, movement interpolation
+
+**Gloves-flashing fix**: same "sync needs a clear case" bug class as the earlier Torso clothing pulse this
+session, applied to the Gloves slot specifically. The bare "Hands" body-part mesh (`kBodyPartOffsets` index 8,
+offset `0x7B0`) was never hidden when Gloves clothing (slot 5, `clothingOffset=0x0780`) was equipped, so it
+z-fought against the Clothing_Gloves mesh — invisible while the proxy stood still, only became visually obvious
+once animation sync started working (walk-cycle deformation made the static flicker much more noticeable). Fixed
+with the same paired hide-on-equip/show-on-clear pattern already proven for Torso: hide the Hands body-part
+`SetVisibility(false)` when Gloves applies successfully; re-show it in the existing `clearClothingOffset`
+unequip block. Confirmed fixed live via an equip/unequip test cycle.
+
+**Aim/look-direction sync — extensive investigation, real progress, still not visibly working.**
+
+First attempt: wrote the sender's real camera pitch (`GetControlRotation()` via reflection on the local pawn,
+quantized to a byte — same [0,255) scale UE's own `RemoteViewPitch` uses) into the proxy's own native
+`ACharacter::RemoteViewPitch` property. No visible effect. Root-caused via full bytecode tracing (see below):
+this game's AnimBP doesn't read `RemoteViewPitch` at all — that was an assumption from general UE knowledge, not
+verified against this specific game, and the user correctly called this out ("did you check the fmod exports?")
+before more time was sunk into it.
+
+**Full `GetAimOffset` bytecode trace** (this game's `Player_AnimBP_C::GetAimOffset(DeltaTime)`), using the
+existing `bytecode_dump.flag`/`kismet_disasm.py` toolchain plus two new diagnostics added this session:
+- `resolve_fprop.flag`/`check_resolve_fprop_trigger` — resolves a raw `FProperty*` pointer (an
+  `EX_InstanceVariable`/`EX_LocalVariable` bytecode operand) to its declared name by reading `FField::NamePrivate`
+  at `prop+0x20` and calling `native::fname_to_string` directly. Needed because `resolve_ptr`'s `GetFullName()`
+  approach only works on real `UObject`-derived pointers — UE5's Field system makes `FProperty` an `FField`, not a
+  `UObject`, so calling a UObject vtable method on one access-violates. An earlier version of this trigger
+  (`check_resolve_propname_trigger`, briefly added and replaced) tried comparing bytecode operand pointers against
+  `GetValuePtrByPropertyNameInChain`'s return value — a category error: the bytecode operand is a pointer to the
+  property *descriptor*, not the value's storage address, so they were never going to match regardless of name.
+- A live-value watcher (`watch_aimoffset.flag`) reading the resolved properties' actual values off both the local
+  player and a proxy once per second, to see what really varies with camera movement vs. what's fixed/garbage.
+
+Found: `GetAimOffset` does
+`SelectRotator(K2Node_PropertyAccess_9, K2Node_PropertyAccess_10, K2Node_PropertyAccess_8) -> NormalizedDeltaRotator(_, K2Node_PropertyAccess_11) -> MakeRotator -> RInterpTo -> BreakRotator -> write Pitch/Yaw`.
+`RInterpTo`'s `InterpSpeed` is a hardcoded `0.0` literal — dead smoothing, per UE's own implementation this makes
+it return `Target` unconditionally. Live sampling on the **local player** (`bSel8` always `1`/true) showed
+`K2Node_PropertyAccess_9` tracking real, continuously varying camera rotation (`GetControlRotation()`-like) and
+`_10` sitting close to actor/body rotation (the untaken branch). Live sampling on the **actual proxy**
+(`bSel8=0`/false, confirming a `SelectRotator` condition that reads false for anything not locally controlled,
+regardless of whether it has a `Controller` — this ruled out "give the proxy a Controller" as a fix, since
+`IsLocallyControlled`-style checks are about *whose local machine* possesses the pawn, not merely having *any*
+controller) showed `_10`/`_11` both **exactly 0.0**, deterministically, on every sample, no exceptions —
+`GetAimOffset` hard-resets `Pitch` to `NormalizedDeltaRotator(0,0) = 0` every single frame for a
+non-locally-controlled proxy in this game. (An earlier sample taken on a stale/older proxy connection showed
+`_10` jumping wildly rather than sitting at a clean zero — inconsistent with a deterministic reset, most likely
+an artifact of sampling a proxy mid-transition rather than genuine uninitialized memory; the fresh-proxy result
+is the one to trust.)
+
+Since `GetAimOffset` runs every render frame and unconditionally overwrites `Pitch`, a same-tick write (from
+`ProxyManager::tick()`, throttled to ~5ms via `do_game_tick`) can never win that race — confirmed live, direct
+writes had zero visible effect. **Found a real (non-patch) fix for the race**: verified live via `GetProcAddress`
+against the actual on-disk `UE4SS.dll` that `RegisterProcessEventPostCallback` exists in this build (same mangled
+name pattern as the already-used `RegisterProcessEventPreCallback`, with Pre substituted for Post) — an earlier
+comment elsewhere in `mod.cpp` claiming "no post-callback resolved for this UE4SS build" was simply never
+actually tested for this specific symbol. Registered `on_process_event_post` (`mod.cpp`), which does a cheap
+`func == s_getAimOffsetFn` pointer-compare fast path (skips ~every ProcessEvent call in the game), then on a
+match resolves the calling AnimInstance's owning actor (`GetOwningActor()`) and, if it matches a known proxy,
+writes `Pitch` immediately after the real `GetAimOffset` call completes — structurally this should always win
+cleanly (last writer for that frame) rather than fight every frame. Removed the now-redundant tick()-based
+`apply_proxy_aim_pitch_safe` call and its helpers from `proxy_manager.cpp`.
+
+**Deployed and tested live — still no visible effect** ("nothing"). The post-callback registered without error
+and the mechanism is structurally sound (verified export exists, correct signature, correct fast-path filter),
+but the end-to-end result wasn't visually confirmed working. Did not further diagnose before the session moved
+on to body-yaw (a real, confirmed win) at the user's request — worth a proper write+readback check next time
+(confirm the post-hook is actually firing for the proxy's `GetAimOffset` calls at all, and that the `Pitch`
+write is actually landing and surviving to the next render) before assuming the post-hook itself is broken vs.
+some other, still-undiagnosed piece (e.g. the AnimGraph's own `AimOffset` blend space node might read Pitch/Yaw
+through a different, cached path than the raw instance property, similar to the `__AnimBlueprintMutables`
+indirection seen for `Speed` earlier this session).
+
+**Body rotation (yaw) — real, confirmed win.** Live sampling (`watch_rotation.flag`) comparing `player.yaw` (what
+we send) against the proxy's actual `K2_GetActorRotation()` showed `actualYaw` pinned at exactly `0.00`
+regardless of what `teleport_proxy`'s `K2_SetActorLocationAndRotation` call sent — rotation was silently a no-op
+the whole time location worked fine. **Root cause confirmed via FModel export** (not guessed):
+`BP_PlayerCharacter`'s `CharacterMovementComponent` CDO has `bOrientRotationToMovement: true` and
+`bUseControllerRotationYaw: false` — the classic UE mechanism that resets the actor root's rotation from
+`Velocity` every physics tick, silently overriding any external `SetActorRotation`/
+`K2_SetActorLocationAndRotation` call. Since we also write real `Velocity` onto the proxy (for animation), this
+was actively fighting our explicit rotation write every tick.
+
+Fix: write yaw onto the proxy's own `Mesh` component's `RelativeRotation` instead of the actor root —
+`bOrientRotationToMovement` only touches the actor root, not the mesh's separate relative transform. Same raw
+`USceneComponent::RelativeRotation @ 0x0140` offset already proven safe for weapon-transform application
+elsewhere in `proxy_manager.cpp`. Captured the mesh's own baked-in art-alignment offset (`RemotePlayer::
+meshBaseline{Pitch,Yaw,Roll}`, typically ~-90° yaw for a UE mannequin-based character) once on first use and
+added the desired body yaw on top of it, rather than overwriting it outright (which would have rendered the
+proxy rotated 90° off). Confirmed working live.
+
+**Movement interpolation.** With body rotation fixed, movement looked "teleporty" — `teleport_proxy` hard-snaps
+position every `do_game_tick` (~5ms) to whatever `RemotePlayer::x/y/z` currently holds, which only changes once
+per received network packet (~50ms, per `SDB_MOVE_INTERVAL_MS`), so between packets it kept re-snapping to an
+unchanged value, then jumped instantly on the next one. Added `RemotePlayer::render{X,Y,Z,Yaw}`, exponentially
+smoothed toward the raw `x/y/z/yaw` each tick (`update_proxy_render_smoothing`, time-constant `kTau=0.08s`,
+tuned around the ~50ms packet interval) rather than a fixed-duration lerp, so it self-corrects regardless of
+actual packet jitter. Yaw interpolation handles the ±180° wraparound explicitly (shortest-angle delta). A
+distance-based snap (`kTeleportDistSq`, 500 units) bypasses smoothing entirely for a genuine teleport/respawn, so
+those don't visibly slide across the map. Confirmed working live ("Thats a lot better!").
+
+**Reusable lessons for next time**:
+- `RegisterProcessEventPostCallback` **does exist** in this UE4SS.dll build — don't trust the old "no
+  post-callback resolved" comment without re-testing; it was apparently never actually checked for this specific
+  symbol, just assumed.
+- When an explicit reflection-based property/rotation write has no visible effect, check whether a native
+  Component (most commonly `CharacterMovementComponent`) is fighting it every physics tick before assuming the
+  write itself is broken — `bOrientRotationToMovement`/`bUseControllerRotationYaw` are the two properties to
+  check first for rotation specifically, findable in a Blueprint's CDO property dump in FModel's JSON export
+  without needing any live testing at all.
+- Writing onto a child **component's** own relative transform (Mesh's `RelativeRotation`, same offset already
+  proven for weapon transforms) is a reliable way to route around an actor-root-level native override, so long
+  as the component's own existing baseline offset is preserved rather than clobbered.
+- Exponential/time-constant smoothing (`1 - exp(-dt/tau)`) toward a periodically-updated network target is a
+  simple, jitter-tolerant fix for "teleporty" proxy movement — no need for precise two-point timestamp
+  interpolation given this project's tolerance for a small amount of visual lag.

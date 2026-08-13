@@ -21,17 +21,13 @@ const db  = require('./db');
 const { FrameDecoder } = require('./lib/frame-decoder');
 const {
     MsgType,
-    EntityType,
+    EntityKind,
     InteractionType,
     encodeFrame,
     encodeString,
     decodeString,
-    encodeEntitySpawn,
-    encodeLootState,
-    decodeLootState,
-    encodeBuildingState,
-    decodeBuildingState,
-    decodeEntitySpawn,
+    encodeEntityDescriptor,
+    encodeEntityState,
     decodeItemDropRequest,
     decodeItemPickupRequest,
     encodeItemPickupResult,
@@ -88,15 +84,38 @@ class HostAgent {
 
     // ── private ────────────────────────────────────────────────────────────
 
-    // Parse raw EntitySpawn frame bytes back into in-memory entity state.
+    // Parse raw stored bytes back into in-memory entity state. Each row is
+    // an EntitySpawn (descriptor) frame followed by an EntityState (position)
+    // frame appended later (see db.appendEntityState / gateway.js) — walk
+    // the buffer decoding frames back to back rather than assuming exactly one.
     _loadEntities() {
-        const { decodeFrame } = require('./lib/protocol');
-        for (const frameBytes of db.getAllEntities()) {
+        const { decodeFrame, HEADER_SIZE } = require('./lib/protocol');
+        for (const stored of db.getAllEntities()) {
+            let offset = 0;
+            let entityId = null;
+            let entry = null;
             try {
-                const frame = decodeFrame(frameBytes);
-                if (!frame || frame.type !== MsgType.EntitySpawn) continue;
-                const e = decodeEntitySpawn(frame.payload);
-                this._entities.set(frame.entityId, e);
+                while (offset < stored.length) {
+                    const frame = decodeFrame(stored.subarray(offset));
+                    if (!frame) break;
+                    if (frame.type === MsgType.EntitySpawn) {
+                        entityId = frame.entityId;
+                        const p = frame.payload;
+                        const quantity = p.readUInt16BE(6);
+                        const classPathLen = p.readUInt16BE(16);
+                        const itemIdOff = 18 + classPathLen;
+                        const itemIdLen = p.readUInt16BE(itemIdOff);
+                        const itemId = p.subarray(itemIdOff + 2, itemIdOff + 2 + itemIdLen).toString('utf8');
+                        entry = { kind: p.readUInt8(1), quantity, itemId };
+                    } else if (frame.type === MsgType.EntityState && entry) {
+                        entry.x = frame.payload.readFloatBE(6);
+                        entry.y = frame.payload.readFloatBE(10);
+                        entry.z = frame.payload.readFloatBE(14);
+                        entry.yaw = frame.payload.readFloatBE(18);
+                    }
+                    offset += HEADER_SIZE + frame.payload.length;
+                }
+                if (entityId !== null && entry) this._entities.set(entityId, entry);
             } catch { /* corrupt row — ignore */ }
         }
         console.log(`[host] loaded ${this._entities.size} world entities from DB`);
@@ -236,54 +255,86 @@ class HostAgent {
             // Equipment updates are informational for the host (future: validate loadout).
             break;
 
+        case MsgType.WeaponAttachments:
+            // Same as Equipment above — informational only, purely cosmetic.
+            break;
+
+        case MsgType.PawnAppearance:
+            // Same as Equipment above — informational only, purely cosmetic.
+            break;
+
         // ── Item drop ─────────────────────────────────────────────────────────
 
         case MsgType.ItemDropRequest: {
             const p = this._players.get(f.playerId);
             if (!p) break;
             try {
-                const req  = decodeItemDropRequest(f.payload);
-                const slot = p.inventory[req.slotIndex];
+                const req = decodeItemDropRequest(f.payload);
 
-                if (!slot || slot.itemId === 0) {
+                if (!req.itemId || req.quantity <= 0) {
                     p.connectionId && this._sendTo(p.connectionId, MsgType.ItemDropResult,
                         f.playerId, p.entityId,
                         encodeItemDropResult({ success: false, reason: 0 })); // 0 = slot_empty
                     break;
                 }
 
-                const qty = Math.min(req.quantity, slot.quantity);
-                slot.quantity -= qty;
-                if (slot.quantity <= 0) p.inventory[req.slotIndex] = null;
+                // Trust the client's itemId/quantity directly rather than
+                // requiring a match in p.inventory — that array is only ever
+                // populated from ProfileRevision's *container* contents
+                // (Equipment messages are explicitly informational-only, see
+                // the Equipment case above), so a drop of a currently
+                // EQUIPPED/in-hand item (the common case — this hook fires
+                // from the in-world drop action, not a backpack reorganize)
+                // would never be found there and would always silently fail.
+                // Same client-authoritative trust already given to
+                // ProfileRevision's raw payload elsewhere in this file.
+                const qty = req.quantity;
+                const slotIndex = p.inventory.findIndex(
+                    s => s && s.itemId === req.itemId && s.quantity > 0);
+                if (slotIndex >= 0) {
+                    // Best-effort bookkeeping when it does happen to be a
+                    // tracked container item — not required for the drop to
+                    // succeed.
+                    const slot = p.inventory[slotIndex];
+                    slot.quantity -= Math.min(qty, slot.quantity);
+                    if (slot.quantity <= 0) p.inventory[slotIndex] = null;
+                }
 
-                // Spawn a world entity for the dropped item.
+                // Spawn a world entity for the dropped item: descriptor frame
+                // (kind/quantity/itemId, no position) followed by a state
+                // frame (position) — see protocol.js encodeEntityDescriptor.
                 const entityId = this._randomEntityId();
-                const spawnPayload = encodeEntitySpawn(
-                    EntityType.LOOT_ITEM,
-                    req.posX, req.posY, req.posZ, 0,
-                    encodeLootState(slot.itemId, qty),
-                );
                 this._entities.set(entityId, {
-                    entityType: EntityType.LOOT_ITEM,
-                    posX: req.posX, posY: req.posY, posZ: req.posZ, yaw: 0,
-                    state: encodeLootState(slot.itemId, qty),
+                    kind: EntityKind.GroundItem,
+                    itemId: req.itemId, quantity: qty,
+                    x: req.posX, y: req.posY, z: req.posZ, yaw: 0,
                 });
 
-                const spawnFrame = encodeFrame({
-                    type:      MsgType.EntitySpawn,
-                    sessionId: SESSION_ID,
-                    worldId:   cfg.worldId,
-                    entityId,
-                    payload:   spawnPayload,
+                const descPayload = encodeEntityDescriptor({
+                    kind: EntityKind.GroundItem,
+                    quantity: qty,
+                    ownerPlayerId: f.playerId,
+                    itemId: req.itemId,
                 });
-                // Gateway intercepts this and stores to DB automatically.
-                this._socket.write(spawnFrame);
+                // Gateway intercepts EntitySpawn/EntityState and persists to DB.
+                this._socket.write(encodeFrame({
+                    type: MsgType.EntitySpawn, sessionId: SESSION_ID, worldId: cfg.worldId,
+                    entityId, payload: descPayload,
+                }));
+                this._socket.write(encodeFrame({
+                    type: MsgType.EntityState, sessionId: SESSION_ID, worldId: cfg.worldId,
+                    entityId,
+                    payload: encodeEntityState({
+                        kind: EntityKind.GroundItem,
+                        x: req.posX, y: req.posY, z: req.posZ, yaw: 0,
+                    }),
+                }));
 
                 this._sendTo(p.connectionId, MsgType.ItemDropResult,
                     f.playerId, p.entityId,
                     encodeItemDropResult({ success: true }));
 
-                console.log(`[host] player ${f.playerId} dropped item ${slot.itemId}×${qty}  eid=${entityId}`);
+                console.log(`[host] player ${f.playerId} dropped item ${req.itemId}×${qty}  eid=${entityId}`);
             } catch (e) {
                 console.error(`[host] ItemDropRequest: ${e.message}`);
             }
@@ -299,14 +350,14 @@ class HostAgent {
                 const req    = decodeItemPickupRequest(f.payload);
                 const entity = this._entities.get(f.entityId);
 
-                if (!entity || entity.entityType !== EntityType.LOOT_ITEM) {
+                if (!entity || entity.kind !== EntityKind.GroundItem) {
                     this._sendTo(p.connectionId, MsgType.ItemPickupResult,
                         f.playerId, p.entityId,
                         encodeItemPickupResult({ success: false, reason: 0 })); // entity_gone
                     break;
                 }
 
-                const { itemId, quantity } = decodeLootState(entity.state);
+                const { itemId, quantity } = entity;
                 const targetSlot = req.targetSlot === AUTO_SLOT
                     ? p.inventory.findIndex(s => s === null)
                     : req.targetSlot;
@@ -353,25 +404,38 @@ class HostAgent {
 
                 if (req.interactionType === InteractionType.BUILD) {
                     const entityId = this._randomEntityId();
-                    const state    = encodeBuildingState(req.pieceTypeId, 255);
-                    const spawnPayload = encodeEntitySpawn(
-                        EntityType.BUILDING_PIECE,
-                        req.posX, req.posY, req.posZ, req.yaw,
-                        state,
-                    );
+                    // pieceTypeId has no itemId/DataAsset equivalent — stashed
+                    // in the itemId field as a numeric string for now.
+                    // entity_manager.cpp's spawn_entity_actor only resolves
+                    // GroundItem kind via the item-asset cache, so
+                    // PlacedStructure entities won't render client-side yet;
+                    // this only makes the wire protocol well-formed instead
+                    // of the previous mismatched byte layout.
+                    const pieceIdStr = String(req.pieceTypeId);
 
                     this._entities.set(entityId, {
-                        entityType: EntityType.BUILDING_PIECE,
-                        posX: req.posX, posY: req.posY, posZ: req.posZ, yaw: req.yaw,
-                        state,
+                        kind: EntityKind.PlacedStructure,
+                        itemId: pieceIdStr, quantity: 0,
+                        x: req.posX, y: req.posY, z: req.posZ, yaw: req.yaw,
                     });
 
                     this._socket.write(encodeFrame({
-                        type:      MsgType.EntitySpawn,
-                        sessionId: SESSION_ID,
-                        worldId:   cfg.worldId,
+                        type: MsgType.EntitySpawn, sessionId: SESSION_ID, worldId: cfg.worldId,
                         entityId,
-                        payload:   spawnPayload,
+                        payload: encodeEntityDescriptor({
+                            kind: EntityKind.PlacedStructure,
+                            ownerPlayerId: f.playerId,
+                            itemId: pieceIdStr,
+                        }),
+                    }));
+                    this._socket.write(encodeFrame({
+                        type: MsgType.EntityState, sessionId: SESSION_ID, worldId: cfg.worldId,
+                        entityId,
+                        payload: encodeEntityState({
+                            kind: EntityKind.PlacedStructure,
+                            x: req.posX, y: req.posY, z: req.posZ, yaw: req.yaw,
+                            health: 1.0,
+                        }),
                     }));
 
                     this._sendTo(p.connectionId, MsgType.InteractionResult,
