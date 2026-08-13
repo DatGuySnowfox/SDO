@@ -697,6 +697,31 @@ std::optional<PawnAppearance> decode_pawn_appearance(const uint8_t* p, size_t n)
 }
 
 // ---------------------------------------------------------------------------
+// PlayMontage: [nameLen:u16BE][name utf8][playRate:f32BE]
+// ---------------------------------------------------------------------------
+
+std::vector<uint8_t> encode_play_montage(const PlayMontageData& m)
+{
+    std::vector<uint8_t> buf(2 + m.montageName.size() + 4);
+    w16(buf.data(), static_cast<uint16_t>(m.montageName.size()));
+    std::memcpy(buf.data() + 2, m.montageName.data(), m.montageName.size());
+    w32(buf.data() + 2 + m.montageName.size(), f2u(m.playRate));
+    return buf;
+}
+
+std::optional<PlayMontageData> decode_play_montage(const uint8_t* p, size_t n)
+{
+    if (n < 2) return std::nullopt;
+    const uint16_t len = r16(p);
+    if (n < static_cast<size_t>(2 + len + 4)) return std::nullopt;
+
+    PlayMontageData m;
+    m.montageName = std::string(reinterpret_cast<const char*>(p + 2), len);
+    m.playRate    = u2f(r32(p + 2 + len));
+    return m;
+}
+
+// ---------------------------------------------------------------------------
 // now_micros
 // ---------------------------------------------------------------------------
 

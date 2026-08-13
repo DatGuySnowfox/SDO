@@ -44,6 +44,7 @@ const MsgType = Object.freeze({
     PlayerProgressRestore: 42,
     WeaponAttachments:     43,
     PawnAppearance:        44,
+    PlayMontage:           45,
 });
 
 function decodeFrame(buf) {

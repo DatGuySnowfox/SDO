@@ -6720,10 +6720,35 @@ live-tested). Built, deployed to both machines, **live-verified working** — th
 shotgun two-handed, correctly. This is the real fix for the entire weapon-grip-pose investigation that ran
 across Sessions 53-55.
 
-**Not yet confirmed**: Melee's mapping (guessed, no live weapon of that class tested), and whether every
-Primary/Secondary weapon is actually two-handed by this game's own convention (true for every case tested so
-far, not exhaustively verified against every weapon type in the game). Both cheap to verify next session —
-equip a melee weapon and any other untested weapon class, check the render.
+**Melee mapping corrected and confirmed live, same day.** The initial guess (Melee -> BlendSpace `1`, same
+family as Primary/Secondary) was wrong — live-tested via the same `watch_activeslot.flag` technique
+(`InMeleeStance=1` on a genuinely-correct local render -> `BlendSpaceInt=3`, not `1`) and produced a visibly
+wrong "holding it like ADS with a long gun" pose on the proxy until corrected. Fixed in
+`combat_state_blendspace_for_slot` (slot 14 -> `3`) and confirmed live: proxy grip now looks correct.
+`kEnableEquipmentWrite`-style caveat still applies — every other weapon *type* within Primary/Secondary/
+Sidearm hasn't been individually tested, only one representative of each so far (BenelliM4, BattleReadyGlock,
+TacticalHatchet).
+
+**Separate, still-open thread from the same testing pass: syncing the actual melee *swing* animation, not
+just the static grip pose.** `BP_PlayerCharacter_C::PlayMontage`/`MC_Montage`/`Svr_Montage` were all hooked
+(resolved successfully, confirmed via log) but **none of the three fire during a real melee swing** — ruling
+out the "one generic montage-player function" theory this session started with. The actual swing-montage
+selection (`NormalMeleeAttackMontages`/`PowerMeleeAttackMontages` on `BP_WeaponsPickupComponent_C`, confirmed
+present via `research/CXXHeaderDump/BP_WeaponsPickupComponent.hpp`) is very likely invoked directly via the
+engine's own `UAnimInstance::Montage_Play` from within the *weapon component's* own Blueprint graph, not
+through any character-level wrapper — next step is hooking `Montage_Play` itself (a standard engine
+UFUNCTION every AnimInstance has, so expect it to be noisy/fire for other animations too — will need a
+filter, e.g. only relay if the played montage's name matches one of the two confirmed melee-attack-montage
+array properties) rather than continuing to chase player-character-level RPCs.
+
+**Protocol/relay infrastructure for this already built and confirmed working end-to-end for the mechanism
+itself** (just needs the right sender-side hook once found): `MsgType::PlayMontage` (=45), full encode/
+decode round-trip tested (`tests/protocol_roundtrip.cpp`, 482/482 passing), `gateway.js` relay wired
+(client-authoritative, same pattern as Equipment/WeaponAttachments/PawnAppearance), receiver-side
+`ProxyManager::on_play_montage()` resolves a montage by name (`resolve_montage_asset`, new cache mirroring
+`resolve_item_asset`'s pattern for `AnimMontage` instead of `JigsawItem_DataAsset_C`) and calls the proxy's
+own `PlayMontage` — this receiver path is untested live since nothing has successfully triggered it yet
+(sender-side hook is the missing piece, not the relay/receiver plumbing).
 
 **New bug spotted live, not yet investigated: weapon base mesh invisible while its attachments still
 render.** Screenshot evidence: a proxy's AK15 — its own base rifle mesh is missing/invisible entirely,
@@ -6742,6 +6767,13 @@ not just weapon and clothing slots. Doesn't change the existing hypothesis (`Jig
 deployed) since heads aren't a `JigPickup`-style spawned actor at all — worth a fresh look at whether headwear
 specifically (a real spawned/attached item, unlike the base head mesh) is the actual thing detaching, next
 time it's reproduced.
+
+**Confirmed 2026-08-13 (same session, later): it's headwear specifically, not the base head mesh.** Live
+screenshot: a gas mask/helmet (a real spawned/attached item actor, same `spawn_and_equip_item_visual` path as
+weapons/clothing) visibly detached and floated away from the proxy's head — exactly the hypothesis above. This
+is the same one-shot-`JigSetCanInteract` mechanism as the other detached slots, just not yet observed for
+headwear specifically before now — corroborating evidence the already-deployed fix (`335a5b1`) has the right
+scope, not a sign of a new gap.
 
 **New bug reported live, not yet investigated: proxy meshes intermittently detach entirely (not a pose issue —
 the mesh visibly separates from the character).** Screenshot evidence from this session: PC2's proxy (rendered

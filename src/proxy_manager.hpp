@@ -15,6 +15,11 @@ namespace sdb {
 // if no matching DataAsset is loaded. See proxy_manager.cpp for the cache.
 void* resolve_item_asset(const std::string& itemId);
 
+// Looks up a live UAnimMontage* by its short object name (e.g.
+// "AM_Melee_Knife_1"), same name-keyed FindAllOf("AnimMontage") pattern as
+// resolve_item_asset. Returns nullptr if no matching montage is loaded.
+void* resolve_montage_asset(const std::string& montageName);
+
 // Diagnostic: dumps every row name in the named UDataTable (e.g. L"DT_Clothing")
 // plus every loaded clothing-capable item's raw ItemId, flagging ItemIds that
 // don't exactly match a row name (research/04_ida_investigation_log.md
@@ -50,6 +55,7 @@ public:
     void on_equipment(uint64_t playerId, const Equipment& e);
     void on_weapon_attachments(uint64_t playerId, const WeaponAttachments& a);
     void on_pawn_appearance(uint64_t playerId, const PawnAppearance& a);
+    void on_play_montage(uint64_t playerId, const std::string& montageName, float playRate);
 
     // Per-frame update – world and local_pawn may be null (proxies are skipped).
     void tick(RC::Unreal::UWorld* world, RC::Unreal::AActor* local_pawn);

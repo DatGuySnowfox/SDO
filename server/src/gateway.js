@@ -415,6 +415,21 @@ class Gateway {
             break;
         }
 
+        // Same client-authoritative relay as Equipment/WeaponAttachments/
+        // PawnAppearance — one-shot montage playback (melee attacks etc.),
+        // purely cosmetic, no server-side state to validate.
+        case MsgType.PlayMontage: {
+            const out = encodeFrame({
+                ...f,
+                connectionId: conn.id,
+                playerId:     conn.playerId,
+                entityId:     conn.entityId,
+            });
+            this._broadcast(conn.playerId, out);
+            if (this._host) this._host.write(out);
+            break;
+        }
+
         // Forward to host-agent for authoritative processing.
         // ItemPickupRequest is the odd one out: entityId here means "the
         // world entity being picked up" (set by the client to a value it
