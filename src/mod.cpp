@@ -2798,17 +2798,32 @@ static void on_process_event_post(UObject* obj, UFunction* func, void* /*params*
     AActor* owner = oparams.ReturnValue;
     if (!owner) return;
 
-    std::lock_guard<std::mutex> lk(sdb::g_state().playersMtx);
+    // MUST be non-blocking. This hook fires on every ProcessEvent call
+    // globally, including ones nested *inside* ProxyManager::tick()'s own
+    // sync burst (tick() holds this exact mutex for its whole duration
+    // while making many ProcessEvent calls, any of which can indirectly
+    // trigger a BlueprintThreadSafeUpdateAnimation call that matches this
+    // hook's fast path). A blocking std::lock_guard here is the *exact*
+    // same self-deadlock/UB class as the original do_game_tick reentrancy
+    // bug (see [[feedback_sdo_isolate_risky_proxy_changes]] — locking a
+    // non-recursive std::mutex twice on the same thread) — just through a
+    // brand new acquisition site that do_game_tick's own reentry guard
+    // doesn't cover, since this function doesn't go through do_game_tick
+    // at all. Live-tested 2026-08-13: PC1 crashed the instant PC2's proxy
+    // spawned in even with a 2s post-spawn grace period added (a real but
+    // secondary concern, not the actual cause). If the lock isn't
+    // immediately available, just skip this one frame's override — the
+    // same override gets reattempted on the very next per-frame call,
+    // completely harmless to skip once.
+    std::unique_lock<std::mutex> lk(sdb::g_state().playersMtx, std::try_to_lock);
+    if (!lk.owns_lock()) return;
+
     for (auto& [id, player] : sdb::g_state().players) {
         if (static_cast<AActor*>(player.proxyActor) != owner) continue;
 
         // Same 2s post-spawn grace period ProxyManager::tick() already uses
         // before its own heavy sync calls (RemotePlayer::proxySpawnedAtUs) —
-        // a freshly-spawned proxy's components aren't fully ready yet, and
-        // this hook fires unconditionally on every BlueprintThreadSafe
-        // UpdateAnimation call, including ones on a just-spawned proxy this
-        // gate was missing here originally. Live-tested 2026-08-13: PC1
-        // crashed the instant PC2's proxy spawned in without this check.
+        // a freshly-spawned proxy's components aren't fully ready yet.
         if (sdb::now_micros() - player.proxySpawnedAtUs < 2'000'000ULL) break;
 
         double degrees = player.aimPitchByte * (360.0 / 256.0);
