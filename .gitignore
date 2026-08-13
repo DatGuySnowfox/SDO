@@ -28,6 +28,12 @@ node_modules/
 wget-log
 wget-log.1
 wget-log*
+Logs/
+server/*.log
+server/*.log.err
+
+# FModel asset exports (large, regenerable from the game's own paks)
+Exports/
 
 # Screenshots
 *.png
@@ -41,6 +47,7 @@ wget-log*
 *.id2
 *.nam
 *.til
+*.$$$
 *.exe
 *.dll
 *.pdb

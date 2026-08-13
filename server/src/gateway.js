@@ -261,8 +261,17 @@ class Gateway {
             break;
         }
 
+        case MsgType.EntityState: {
+            const buf = encodeFrame(f);
+            // Append onto the stored descriptor frame so a late joiner's
+            // replay (below) gets both frames — no-op for entityId 0 / not
+            // a tracked world entity.
+            if (f.entityId) db.appendEntityState(f.entityId, buf);
+            for (const [, c] of this._joined) c.write(buf);
+            break;
+        }
+
         case MsgType.WorldState:
-        case MsgType.EntityState:
         case MsgType.SaveAcknowledgement: {
             const buf = encodeFrame(f);
             for (const [, c] of this._joined) c.write(buf);
@@ -378,12 +387,56 @@ class Gateway {
             break;
         }
 
-        // Forward to host-agent for authoritative processing
+        // Same client-authoritative relay as Equipment above — which
+        // attachments are installed on an equipped weapon, purely cosmetic.
+        case MsgType.WeaponAttachments: {
+            const out = encodeFrame({
+                ...f,
+                connectionId: conn.id,
+                playerId:     conn.playerId,
+                entityId:     conn.entityId,
+            });
+            this._broadcast(conn.playerId, out);
+            if (this._host) this._host.write(out);
+            break;
+        }
+
+        // Same client-authoritative relay as Equipment/WeaponAttachments —
+        // gender/hair/beard appearance, purely cosmetic.
+        case MsgType.PawnAppearance: {
+            const out = encodeFrame({
+                ...f,
+                connectionId: conn.id,
+                playerId:     conn.playerId,
+                entityId:     conn.entityId,
+            });
+            this._broadcast(conn.playerId, out);
+            if (this._host) this._host.write(out);
+            break;
+        }
+
+        // Forward to host-agent for authoritative processing.
+        // ItemPickupRequest is the odd one out: entityId here means "the
+        // world entity being picked up" (set by the client to a value it
+        // read from the entity list), not "my own entity" like every other
+        // message in this block — normalizing it to conn.entityId silently
+        // clobbered the pickup target with the sender's own id, so pickups
+        // could never resolve server-side no matter what triggered the send
+        // client-side (found 2026-08-12 after five ruled-out hook attempts
+        // and a working polling-based sender that still didn't work end to
+        // end — the bug was here all along).
+        case MsgType.ItemPickupRequest:
+            if (this._host) this._host.write(encodeFrame({
+                ...f,
+                connectionId: conn.id,
+                playerId:     conn.playerId,
+            }));
+            break;
+
         case MsgType.DeathRequest:
         case MsgType.RespawnRequest:
         case MsgType.InteractionRequest:
         case MsgType.ItemDropRequest:
-        case MsgType.ItemPickupRequest:
         case MsgType.ZombieAttackRequest:
             if (this._host) this._host.write(encodeFrame({
                 ...f,

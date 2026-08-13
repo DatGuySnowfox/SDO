@@ -42,6 +42,8 @@ const MsgType = Object.freeze({
     ItemDropResult:        39,
     PlayerDamage:          40,
     PlayerProgressRestore: 42,
+    WeaponAttachments:     43,
+    PawnAppearance:        44,
 });
 
 function decodeFrame(buf) {
@@ -100,12 +102,16 @@ function decodeString(buf, offset = 0) {
     return buf.subarray(offset + 2, offset + 2 + len).toString('utf8');
 }
 
-// ── Entity type constants ──────────────────────────────────────────────────────
-// These values appear in EntitySpawn payload byte 1.
-const EntityType = Object.freeze({
-    LOOT_ITEM:      0,   // dropped or spawned item pickup
-    BUILDING_PIECE: 1,   // player-placed structure
-    CONTAINER:      2,   // loot crate / chest
+// ── Entity kind constants ──────────────────────────────────────────────────────
+// Must match src/protocol.hpp's `enum class EntityKind` numeric values exactly
+// (the client decodes this byte directly into that enum) — NOT the same
+// numbering as the old, unused EntityType/WorldEntityKind design.
+const EntityKind = Object.freeze({
+    Unknown:         0,
+    Zombie:          1,
+    GroundItem:      2,   // dropped or spawned item pickup
+    Vehicle:         3,
+    PlacedStructure: 4,   // player-placed building piece
 });
 
 // ── Interaction type constants ────────────────────────────────────────────────
@@ -116,67 +122,54 @@ const InteractionType = Object.freeze({
     USE:   3,   // generic use / activate
 });
 
-// ── EntitySpawn payload ───────────────────────────────────────────────────────
+// ── EntitySpawn payload (entity descriptor — NO position, see EntityState) ────
+// Must match src/protocol.cpp's decode_entity_descriptor exactly.
 // Byte layout:
 //   0      uint8   format version (1)
-//   1      uint8   entityType (EntityType constant)
-//   2–5    float32 posX
-//   6–9    float32 posY
-//   10–13  float32 posZ
-//   14–17  float32 yaw
-//   18–19  uint16  stateLength
-//   20…    bytes   state[stateLength]   (entity-type-specific, see below)
+//   1      uint8   kind (EntityKind constant)
+//   2–5    uint32  revision
+//   6–7    uint16  quantity
+//   8–15   uint64  ownerPlayerId
+//   16–17  uint16  classPathLen
+//   18…    bytes   classPath utf8
+//   …–…+1  uint16  itemIdLen
+//   …      bytes   itemId utf8
 //
-// state for LOOT_ITEM:      uint32 itemId  +  uint16 quantity
-// state for BUILDING_PIECE: uint32 pieceTypeId  +  uint8 health (0-255)
-// state for CONTAINER:      uint32 containerTypeId
-
-function encodeEntitySpawn(entityType, posX, posY, posZ, yaw, state) {
-    const stateLen = state ? state.length : 0;
-    const buf = Buffer.allocUnsafe(20 + stateLen);
+// classPath is left empty for items — the client resolves the pickup
+// Blueprint locally from itemId (it already has the DataAsset loaded), so
+// the server doesn't need an itemId->asset-path table at all.
+function encodeEntityDescriptor({ kind, revision = 1, quantity = 0, ownerPlayerId = 0n,
+                                   classPath = '', itemId = '' }) {
+    const classPathBuf = Buffer.from(classPath, 'utf8');
+    const itemIdBuf    = Buffer.from(itemId, 'utf8');
+    const buf = Buffer.allocUnsafe(18 + classPathBuf.length + 2 + itemIdBuf.length);
     buf.writeUInt8(1, 0);
-    buf.writeUInt8(entityType, 1);
-    buf.writeFloatBE(posX,  2);
-    buf.writeFloatBE(posY,  6);
-    buf.writeFloatBE(posZ, 10);
-    buf.writeFloatBE(yaw,  14);
-    buf.writeUInt16BE(stateLen, 18);
-    if (state && stateLen > 0) state.copy(buf, 20);
+    buf.writeUInt8(kind, 1);
+    buf.writeUInt32BE(revision, 2);
+    buf.writeUInt16BE(quantity, 6);
+    buf.writeBigUInt64BE(BigInt(ownerPlayerId), 8);
+    buf.writeUInt16BE(classPathBuf.length, 16);
+    classPathBuf.copy(buf, 18);
+    buf.writeUInt16BE(itemIdBuf.length, 18 + classPathBuf.length);
+    itemIdBuf.copy(buf, 18 + classPathBuf.length + 2);
     return buf;
 }
 
-function decodeEntitySpawn(payload) {
-    if (payload.length < 20) throw new Error('entity_spawn_too_short');
-    const stateLen = payload.readUInt16BE(18);
-    return {
-        entityType: payload.readUInt8(1),
-        posX:       payload.readFloatBE(2),
-        posY:       payload.readFloatBE(6),
-        posZ:       payload.readFloatBE(10),
-        yaw:        payload.readFloatBE(14),
-        state:      Buffer.from(payload.subarray(20, 20 + stateLen)),
-    };
-}
-
-// Entity-type-specific state blobs
-function encodeLootState(itemId, quantity) {
-    const b = Buffer.allocUnsafe(6);
-    b.writeUInt32BE(itemId,   0);
-    b.writeUInt16BE(quantity, 4);
-    return b;
-}
-function decodeLootState(state) {
-    return { itemId: state.readUInt32BE(0), quantity: state.readUInt16BE(4) };
-}
-
-function encodeBuildingState(pieceTypeId, health = 255) {
-    const b = Buffer.allocUnsafe(5);
-    b.writeUInt32BE(pieceTypeId, 0);
-    b.writeUInt8(health, 4);
-    return b;
-}
-function decodeBuildingState(state) {
-    return { pieceTypeId: state.readUInt32BE(0), health: state.readUInt8(4) };
+// ── EntityState payload (position/health — exactly 27 bytes) ──────────────────
+// Must match src/protocol.cpp's decode_entity_state exactly.
+// Byte layout: [tag=1][kind:u8][revision:u32BE][x/y/z/yaw/health:5×f32BE][state:u8]
+function encodeEntityState({ kind, revision = 1, x, y, z, yaw = 0, health = 0, state = 0 }) {
+    const buf = Buffer.allocUnsafe(27);
+    buf.writeUInt8(1, 0);
+    buf.writeUInt8(kind, 1);
+    buf.writeUInt32BE(revision, 2);
+    buf.writeFloatBE(x,      6);
+    buf.writeFloatBE(y,     10);
+    buf.writeFloatBE(z,     14);
+    buf.writeFloatBE(yaw,   18);
+    buf.writeFloatBE(health, 22);
+    buf.writeUInt8(state, 26);
+    return buf;
 }
 
 // ── PlayerProgress payload (ProfileRevision / PlayerProgressRestore) ──────────
@@ -349,22 +342,32 @@ function decodePlayerProgress(payload) {
 }
 
 // ── ItemDropRequest payload ───────────────────────────────────────────────────
+// itemId-based rather than slotIndex-based: the client's real drop hook
+// (BP_JigHelperComp_C::RequestDropAsPickup) hands us the dropped item's
+// identity directly, not a container slot index — and since p.inventory's
+// slotIndex is a flattened-across-containers bookkeeping array (gap 11, can
+// collide across containers), matching by itemId+quantity server-side is
+// actually more correct here than trusting a slot number the client can't
+// cleanly compute from this hook anyway.
 // Byte layout:
 //   0      uint8   format version (1)
-//   1      uint8   slotIndex
-//   2–3    uint16  quantity
-//   4–7    float32 posX  (world position to drop at)
-//   8–11   float32 posY
-//   12–15  float32 posZ
+//   1–2    uint16  quantity
+//   3–6    float32 posX  (world position to drop at)
+//   7–10   float32 posY
+//   11–14  float32 posZ
+//   15–16  uint16  itemIdLen
+//   17…    bytes   itemId utf8
 
 function decodeItemDropRequest(payload) {
-    if (payload.length < 16) throw new Error('drop_request_too_short');
+    if (payload.length < 17) throw new Error('drop_request_too_short');
+    const itemIdLen = payload.readUInt16BE(15);
+    if (payload.length < 17 + itemIdLen) throw new Error('drop_request_truncated');
     return {
-        slotIndex: payload.readUInt8(1),
-        quantity:  payload.readUInt16BE(2),
-        posX:      payload.readFloatBE(4),
-        posY:      payload.readFloatBE(8),
-        posZ:      payload.readFloatBE(12),
+        quantity:  payload.readUInt16BE(1),
+        posX:      payload.readFloatBE(3),
+        posY:      payload.readFloatBE(7),
+        posZ:      payload.readFloatBE(11),
+        itemId:    payload.subarray(17, 17 + itemIdLen).toString('utf8'),
     };
 }
 
@@ -379,28 +382,27 @@ function decodeItemPickupRequest(payload) {
 }
 
 // ── ItemPickupResult payload ──────────────────────────────────────────────────
-// On success (9 bytes): version=1, success=1, slotIndex, uint32 itemId, uint16 quantity
-// On failure (3 bytes): version=1, success=0, reason (0=entity_gone, 1=inv_full)
+// Same JSON-via-encodeString codec as ItemDropResult (mod.cpp decodes both
+// with decode_world_action) — the previous fixed-binary layout also wrote
+// itemId (a string, see p.inventory) through writeUInt32BE, which would have
+// thrown at runtime on any successful pickup.
 
 function encodeItemPickupResult({ success, slot, itemId, quantity, reason }) {
-    if (success) {
-        const b = Buffer.allocUnsafe(9);
-        b.writeUInt8(1, 0); b.writeUInt8(1, 1); b.writeUInt8(slot, 2);
-        b.writeUInt32BE(itemId, 3); b.writeUInt16BE(quantity, 7);
-        return b;
-    }
-    const b = Buffer.allocUnsafe(3);
-    b.writeUInt8(1, 0); b.writeUInt8(0, 1); b.writeUInt8(reason ?? 0, 2);
-    return b;
+    return encodeString(JSON.stringify(
+        success ? { success: true, slot, itemId, quantity }
+                : { success: false, reason: reason ?? 0 }
+    ), 512);
 }
 
 // ── ItemDropResult payload ────────────────────────────────────────────────────
-// 3 bytes: version=1, success (0/1), reason on fail (0=slot_empty, 1=bad_slot)
+// The client decodes this via decode_world_action (mod.cpp: "JSON via
+// encodeWorldAction") — [uint16BE length][utf8 JSON], no tag byte — not a
+// fixed binary layout, so this must go through encodeString, matching the
+// same JSON codec ItemPickupResult was already written to expect.
+// reason on fail: 0=slot_empty, 1=bad_slot
 
 function encodeItemDropResult({ success, reason }) {
-    const b = Buffer.allocUnsafe(3);
-    b.writeUInt8(1, 0); b.writeUInt8(success ? 1 : 0, 1); b.writeUInt8(reason ?? 0, 2);
-    return b;
+    return encodeString(JSON.stringify({ success: !!success, reason: reason ?? 0 }), 512);
 }
 
 // ── InteractionRequest payload ────────────────────────────────────────────────
@@ -445,12 +447,10 @@ function encodeInteractionResult({ success, interactionType }) {
 module.exports = {
     FRAME_MAGIC, PROTOCOL_VERSION, HEADER_SIZE, MAX_PAYLOAD,
     MsgType,
-    EntityType,
+    EntityKind,
     InteractionType,
     decodeFrame, encodeFrame, encodeString, decodeString,
-    encodeEntitySpawn, decodeEntitySpawn,
-    encodeLootState, decodeLootState,
-    encodeBuildingState, decodeBuildingState,
+    encodeEntityDescriptor, encodeEntityState,
     encodePlayerProgress, decodePlayerProgress,
     decodeItemDropRequest, decodeItemPickupRequest,
     encodeItemPickupResult, encodeItemDropResult,

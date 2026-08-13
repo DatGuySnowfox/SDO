@@ -15,17 +15,151 @@ struct RemotePlayer {
     float    x = 0, y = 0, z = 0;
     float    yaw        = 0.0f;
     float    aimYaw     = 0.0f;
+    // Smoothed position/yaw actually applied to the proxy each tick,
+    // separate from the raw x/y/z/yaw above (which jump directly to whatever
+    // the last-received network packet said, every ~50ms per
+    // SDB_MOVE_INTERVAL_MS). teleport_proxy calling K2_SetActorLocationAnd-
+    // Rotation with bTeleport=true every do_game_tick (~5ms) against the raw
+    // fields just re-snaps to an unchanged value between packets, then jumps
+    // instantly on the next one — visually "teleporty" (live-tested
+    // 2026-08-13; body-rotation fix landed clean, this is the separate,
+    // remaining issue). ProxyManager::tick() exponentially smooths render*
+    // toward x/y/z/yaw each tick instead, snapping directly only on a large
+    // jump (a real teleport/respawn, not just normal movement).
+    bool     renderInitialized = false;
+    float    renderX = 0, renderY = 0, renderZ = 0, renderYaw = 0;
+    uint64_t lastRenderTickUs = 0;
     float    health     = 100.0f;
     bool     dead       = false;
     uint8_t  movState   = 0;
-    uint8_t  animState  = 0;
+    // Repurposed from the wire's unused Movement.animationState byte
+    // (2026-08-13) — carries the sender's real active/drawn weapon slot
+    // (11-14) from BP_JigHelperComp_C::GetActiveWeaponSlot(), or 0xFF for
+    // none. Applied in ProxyManager::sync_active_weapon_hand to move the
+    // right weapon visual onto the proxy's hand socket instead of leaving
+    // every weapon sitting in its holstered/unequipped socket regardless of
+    // which one is actually being held.
+    uint8_t  activeWeaponSlot = 0xFF;
+    // Which slot (if any) is currently re-attached to the hand socket —
+    // compared against activeWeaponSlot each tick so a change reverts the
+    // previous weapon to its holster socket before attaching the new one.
+    uint8_t  handAttachedSlot = 0xFF;
+    // Real velocity read straight off the sending player's own
+    // CharacterMovementComponent (mod.cpp's send_movement) — applied to the
+    // proxy's own CharacterMovementComponent::Velocity in ProxyManager::tick()
+    // so the proxy's AnimBP (same Blueprint class as the real player, so the
+    // same Speed/MovementState blend logic already exists) drives real
+    // walk/run animation instead of a static default pose. Position itself
+    // is still hard-teleported each tick; only velocity feeds the animation.
+    float    velocityX = 0, velocityY = 0, velocityZ = 0;
+    // Repurposed from the wire's unused Movement.aimState byte (2026-08-13)
+    // — a quantized look-pitch, read via GetControlRotation() on the
+    // sender's pawn. NOT applied via RemoteViewPitch (this game's AnimBP
+    // doesn't read it) — applied by mod.cpp's on_process_event_post
+    // straight into the AnimBP's own "Pitch" instance property immediately
+    // after GetAimOffset's own per-frame recompute, since a same-tick write
+    // here always loses that race. See on_process_event_post's own comment.
+    uint8_t  aimPitchByte = 0;
+    // Mesh component's own RelativeRotation the first time it's read after
+    // spawn (2026-08-13) — captured once and reused as the baseline every
+    // subsequent tick's body-yaw write. Needed because BP_PlayerCharacter's
+    // CharacterMovementComponent has bOrientRotationToMovement=true and
+    // bUseControllerRotationYaw=false (confirmed via FModel export), which
+    // resets the actor root's own rotation from Velocity every physics
+    // tick — any K2_SetActorLocationAndRotation call on the actor root gets
+    // silently overridden (confirmed live: actualYaw stayed pinned at 0.00
+    // regardless of what was sent). Writing yaw onto the Mesh component's
+    // RelativeRotation instead sidesteps that mechanism entirely, but the
+    // mesh has its own baked-in alignment offset (typically ~-90 degrees
+    // for a UE mannequin-based character) that must be preserved, not
+    // overwritten, or the proxy would render rotated 90 degrees off.
+    bool     meshBaselineCaptured = false;
+    double   meshBaselinePitch = 0, meshBaselineYaw = 0, meshBaselineRoll = 0;
     void*    proxyActor = nullptr;
     uint64_t updatedUs  = 0;
     uint64_t lastSpawnAttemptUs = 0; // throttles retry after a failed spawn_proxy()
+    // Set the moment spawn_proxy() succeeds. Live-tested 2026-08-13: a
+    // freshly-spawned proxy hit by sync_equipment/sync_weapon_attachments/
+    // sync_pawn_appearance's full burst of ProcessEvent calls immediately
+    // crashed/deadlocked PC2 twice, at two different specific call sites
+    // each time — consistent with the proxy's own components (mesh,
+    // skeleton) not being fully ready the instant FinishSpawning() returns,
+    // not one specific bad call. ProxyManager::tick() holds off on all the
+    // heavy sync calls until now_micros() - proxySpawnedAtUs clears a short
+    // grace period.
+    uint64_t proxySpawnedAtUs = 0;
     std::vector<EquipmentSlot> equipment; // last Equipment frame received, for proxy appearance sync
     bool equipmentDirty = false; // set by on_equipment(), cleared once ProxyManager::tick() applies it
     void* primaryWeaponVisualActor = nullptr; // spawned PickupClass actor attached to the proxy's EquipSocket
     std::string primaryWeaponVisualItemId;    // itemId the actor above was spawned for — respawn only on change
+    void* facewearVisualActor = nullptr; // spawned PickupClass actor equipped via the real EquipActorToSocket path
+    std::string facewearVisualItemId;    // itemId the actor above was spawned for — respawn only on change
+    void* headwearVisualActor = nullptr; // spawned PickupClass actor equipped via the real EquipActorToSocket path
+    std::string headwearVisualItemId;    // itemId the actor above was spawned for — respawn only on change
+    void* eyewearVisualActor = nullptr; // spawned PickupClass actor equipped via the real EquipActorToSocket path
+    std::string eyewearVisualItemId;    // itemId the actor above was spawned for — respawn only on change
+    void* backpackVisualActor = nullptr; // spawned PickupClass actor equipped via the real EquipActorToSocket path
+    std::string backpackVisualItemId;    // itemId the actor above was spawned for — respawn only on change
+    void* secondaryWeaponVisualActor = nullptr; // spawned PickupClass actor equipped via the real EquipActorToSocket path
+    std::string secondaryWeaponVisualItemId;    // itemId the actor above was spawned for — respawn only on change
+    void* sidearmVisualActor = nullptr; // spawned PickupClass actor equipped via the real EquipActorToSocket path
+    std::string sidearmVisualItemId;    // itemId the actor above was spawned for — respawn only on change
+    void* meleeVisualActor = nullptr; // spawned PickupClass actor equipped via the real EquipActorToSocket path
+    std::string meleeVisualItemId;    // itemId the actor above was spawned for — respawn only on change
+
+    // "Respawn treadmill" mitigation (long-documented, never root-caused —
+    // live-tested 2026-08-12: slot 14/Knife respawned dozens of times with a
+    // new actor pointer every time despite the itemId genuinely never
+    // changing, piling up orphaned duplicate visuals). The itemId-change
+    // check alone isn't reliable enough to prevent this — cap how often any
+    // one equipment slot is allowed to actually respawn its visual actor,
+    // regardless of what the comparison says, as a safety net independent of
+    // whatever the real underlying cause turns out to be.
+    std::unordered_map<uint8_t, uint64_t> lastVisualRespawnUs;
+
+    // Tracks, per equipment slot, the itemId last actually pushed through the
+    // core equip-flag pipeline (SetEquippedInfoBySlot + ActiveWeaponSlot
+    // activate/onRep/notify for weapon slots, equip_clothing_to_mesh for
+    // clothing slots) — separate from the *VisualItemId fields above, which
+    // only track the spawned-actor side. Equipment frames resend the full
+    // snapshot every ~2s even when nothing changed (live-tested 2026-08-12:
+    // this pipeline was re-running unconditionally on every resend, and for
+    // weapon slots the onRep/notify calls visibly re-trigger the game's own
+    // draw/holster handling each time — the "pulsing" a proxy showed even
+    // with no real equipment change). Gate the write-side calls on this
+    // instead of re-running them for byte-identical data every pass.
+    std::unordered_map<uint8_t, std::string> appliedEquipItemId;
+
+    // Consecutive-missing counter per slot for the unequip-clear check below.
+    // Live-tested 2026-08-12: PC2's own read_local_equipment() occasionally
+    // reports a genuinely-still-equipped slot as absent for exactly one
+    // ~2s frame (e.g. slot 4/BlueShirt vanishing then reappearing on the very
+    // next frame) — a one-frame read glitch on the sender, not a real
+    // unequip. Clearing immediately on a single missing frame turned that
+    // glitch into a real clear+reapply cycle on the proxy (the residual
+    // "flashing" after the change-gate above). Require a slot to be missing
+    // for 2 consecutive frames before treating it as a real unequip.
+    std::unordered_map<uint8_t, int> missingSlotStreak;
+
+    // Last WeaponAttachments frame received (flat list across all 4 weapon
+    // slots), applied in ProxyManager::sync_equipment once the owning
+    // weapon's own visual actor exists. weaponAttachmentsAppliedKey[slot] is
+    // a cheap signature (concatenated itemIds) of what's currently spawned
+    // for that slot, so a resend with no real change doesn't respawn
+    // anything — same "don't reprocess unchanged data" lesson as the
+    // redundant-resend gate above for Facewear/Eyewear/Backpack.
+    std::vector<WeaponAttachmentEntry> weaponAttachments;
+    bool weaponAttachmentsDirty = false;
+    std::unordered_map<uint8_t, std::string> weaponAttachmentsAppliedKey;
+    std::unordered_map<uint8_t, std::vector<void*>> weaponAttachmentActors;
+
+    // Last PawnAppearance frame received, applied in
+    // ProxyManager::sync_pawn_appearance. appliedAppearanceKey is a cheap
+    // signature of what's currently applied, so a resend with no real change
+    // is a no-op.
+    PawnAppearance appearance;
+    bool appearanceDirty = false;
+    std::string appliedAppearanceKey;
 
     // Bit i set = slot i was actually written to the proxy on a previous
     // sync_equipment() pass. The wire Equipment frame omits empty slots
@@ -64,6 +198,11 @@ struct WorldEntity {
     float       health        = 0.0f;
     uint8_t     state         = 0;
     void*       actor         = nullptr;
+    // Throttles retrying actor resolution in EntityManager::tick() — without
+    // this, a failed attempt (e.g. an owned entity whose native pickup can't
+    // be found) gets retried every single frame forever, and the owned-entity
+    // path does a full FindAllOf UObject scan (2026-08-12: caused 1-2 FPS).
+    uint64_t    lastActorAttemptUs = 0;
 };
 
 struct BridgeState {

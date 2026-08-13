@@ -26,11 +26,13 @@
 #include <algorithm>
 #include <atomic>
 #include <cctype>
+#include <cmath>
 #include <cstdlib>
 #include <fstream>
 #include <mutex>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 using namespace RC;
 using namespace RC::Unreal;
@@ -177,6 +179,10 @@ static void send_header_only(sdb::MsgType type)
     send_frame(f);
 }
 
+// Defined later in this file, next to read_local_equipment.
+static uint8_t read_local_active_weapon_slot(AActor* pawn);
+static uint8_t read_local_aim_pitch(AActor* pawn);
+
 static void send_movement(AActor* pawn)
 {
     const FVector  loc = pawn->K2_GetActorLocation();
@@ -188,6 +194,18 @@ static void send_movement(AActor* pawn)
     mv.z      = static_cast<float>(loc.Z);
     mv.yaw    = static_cast<float>(rot.Yaw);
     mv.aimYaw = static_cast<float>(rot.Yaw);
+
+    // animationState was never populated or read anywhere in this project —
+    // repurposed here to carry the active weapon slot (11-14, or 0xFF for
+    // none) instead of adding a new wire field. See
+    // read_local_active_weapon_slot's own comment for what this is verifying.
+    mv.animationState = read_local_active_weapon_slot(pawn);
+
+    // aimState was likewise never populated or read anywhere — repurposed to
+    // carry a quantized look-pitch byte (see read_local_aim_pitch's own
+    // comment for why pitch-only, and why this mirrors the engine's own
+    // built-in ACharacter::RemoteViewPitch mechanism).
+    mv.aimState = read_local_aim_pitch(pawn);
 
     // Velocity: not exposed via the UE4SS stub, so read it directly.
     // ACharacter::CharacterMovement (pawn+0x328) -> UMovementComponent::Velocity (+0xB8).
@@ -370,6 +388,221 @@ static sdb::LocalVitals read_local_progress(AActor* pawn)
 //
 // Live-confirmed Session 34 (resolved real item names, no crash across a
 // full play session) — see research/04_ida_investigation_log.md.
+// Object paths (GetFullName()) always end "....PackagePath.ObjectName" — take
+// the substring after the last '.' as the asset's own short, stable name
+// (e.g. "Chr_MaleHair3"), matching the naming convention already used
+// project-wide for itemId-based asset resolution. Empty string in/out means
+// "no asset" (e.g. a null HairMesh/BeardMesh component's StaticMesh).
+static std::string short_object_name(UObject* obj)
+{
+    if (!obj) return {};
+    std::wstring wname = obj->GetFullName();
+    const int need = WideCharToMultiByte(CP_UTF8, 0, wname.c_str(), -1, nullptr, 0, nullptr, nullptr);
+    std::string name(need > 0 ? static_cast<size_t>(need - 1) : 0, '\0');
+    if (need > 0) WideCharToMultiByte(CP_UTF8, 0, wname.c_str(), -1, name.data(), need, nullptr, nullptr);
+    const size_t dot = name.find_last_of('.');
+    return dot == std::string::npos ? name : name.substr(dot + 1);
+}
+
+// Reads BP_PlayerCharacter_C's own character-creation fields — IsPlayerMale?
+// (@0x15A0), HairMesh/BeardMesh components (@0x7C0/@0x7C8, each a plain
+// UStaticMeshComponent whose current StaticMesh @+0x5B8 is the chosen hair/
+// beard style), the "Hair Color"/"Beard Color" material instances
+// (@0x15C8/@0x15D0), and SkinColor (@0x15A8) — all confirmed via
+// research/CXXHeaderDump/BP_PlayerCharacter.hpp, not guessed. Unlike hair/
+// beard (a single dedicated component each), skin color applies across many
+// separate naked-body SkeletalMeshComponents (Arms/Torso/Legs/Feet/Hands/
+// head/Biceps/LowerThighs/LowerLegs) — see proxy_manager.cpp's
+// sync_pawn_appearance for the apply side.
+static sdb::PawnAppearance read_local_pawn_appearance(AActor* pawn)
+{
+    sdb::PawnAppearance out;
+    if (!pawn) return out;
+
+    out.isMale = *reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(pawn) + 0x15A0);
+
+    const uintptr_t hairMeshComp = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(pawn) + 0x7C0);
+    if (hairMeshComp) {
+        auto* hairMesh = *reinterpret_cast<UObject**>(hairMeshComp + 0x5B8);
+        out.hairMeshName = short_object_name(hairMesh);
+    }
+    auto* hairColor = *reinterpret_cast<UObject**>(reinterpret_cast<uintptr_t>(pawn) + 0x15C8);
+    out.hairColorName = short_object_name(hairColor);
+
+    const uintptr_t beardMeshComp = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(pawn) + 0x7C8);
+    if (beardMeshComp) {
+        auto* beardMesh = *reinterpret_cast<UObject**>(beardMeshComp + 0x5B8);
+        out.beardMeshName = short_object_name(beardMesh);
+    }
+    auto* beardColor = *reinterpret_cast<UObject**>(reinterpret_cast<uintptr_t>(pawn) + 0x15D0);
+    out.beardColorName = short_object_name(beardColor);
+
+    auto* skinColor = *reinterpret_cast<UObject**>(reinterpret_cast<uintptr_t>(pawn) + 0x15A8);
+    out.skinColorName = short_object_name(skinColor);
+
+    // Naked-body SkeletalMeshComponents (BP_PlayerCharacter.hpp) — order
+    // matches sdb::PawnAppearance::bodyPartMeshNames / proxy_manager.cpp's
+    // own copy of this table exactly. Reading the actual assigned mesh
+    // (SkinnedAsset @+0x5B8, same offset convention as HairMesh's
+    // StaticMesh) rather than computing it from isMale + a naming
+    // convention: the male variants aren't uniformly named (e.g. Biceps is
+    // "SK_Chr_Underwear_Male_01_Biceps", not "SK_Chr_Male_Biceps").
+    static constexpr uintptr_t kBodyPartOffsets[sdb::BODY_PART_COUNT] = {
+        0x06B8, // Torso
+        0x0710, // Biceps
+        0x0718, // LowerThighs
+        0x0778, // head
+        0x0788, // Arms
+        0x0798, // Feet
+        0x07A0, // LowerLegs
+        0x07A8, // Legs
+        0x07B0, // Hands
+    };
+    for (int i = 0; i < sdb::BODY_PART_COUNT; ++i) {
+        const uintptr_t comp = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(pawn) + kBodyPartOffsets[i]);
+        if (!comp) continue;
+        auto* mesh = *reinterpret_cast<UObject**>(comp + 0x5B8);
+        out.bodyPartMeshNames[i] = short_object_name(mesh);
+    }
+
+    const uintptr_t mouthComp = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(pawn) + 0x0740);
+    if (mouthComp) out.mouthMeshName = short_object_name(*reinterpret_cast<UObject**>(mouthComp + 0x5B8));
+
+    const uintptr_t eyebrowsComp = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(pawn) + 0x0790);
+    if (eyebrowsComp) out.eyebrowsMeshName = short_object_name(*reinterpret_cast<UObject**>(eyebrowsComp + 0x5B8));
+
+    const uintptr_t acc1Comp = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(pawn) + 0x0758);
+    if (acc1Comp) out.accessory1MeshName = short_object_name(*reinterpret_cast<UObject**>(acc1Comp + 0x5B8));
+    const uintptr_t acc2Comp = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(pawn) + 0x0750);
+    if (acc2Comp) out.accessory2MeshName = short_object_name(*reinterpret_cast<UObject**>(acc2Comp + 0x5B8));
+    const uintptr_t acc3Comp = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(pawn) + 0x0748);
+    if (acc3Comp) out.accessory3MeshName = short_object_name(*reinterpret_cast<UObject**>(acc3Comp + 0x5B8));
+
+    return out;
+}
+
+// Mirrors proxy_manager.cpp's RawFGameplayTag — kept as a separate local
+// struct since these two translation units don't share one (see that file's
+// own copy for why).
+struct RawFGameplayTag { int32_t ComparisonIndex = 0; int32_t Number = 0; };
+
+// Reads BP_JigHelperComp_C.GetActiveWeaponSlot(FGameplayTag& ActiveWeapon) —
+// the slot currently drawn/held in-hand, a distinct concept from
+// SetEquippedInfoBySlot's per-slot item identity (research/CXXHeaderDump/
+// BP_JigHelperComp.hpp). Returns 0xFF if no weapon slot is active.
+//
+// 2026-08-13: first tried hardcoding this tag family's ComparisonIndex
+// values (mapped live once by cycling through all 4 slots: 1730633/48/64/19
+// for Primary/Secondary/Sidearm/Melee). That worked within the same game
+// session it was captured in, but on the next relaunch GetActiveWeaponSlot
+// returned a completely different, unmapped CI (1730553) for the exact same
+// held weapon — this specific "Jig.PlayerSlot.*" tag family's
+// ComparisonIndex evidently isn't stable across process restarts (unlike
+// kSlotTagComparisonIndex's equipment-identity tags in proxy_manager.cpp,
+// which HAVE held up across many restarts all last session — apparently a
+// different registration path). Resolve the tag's real string name instead,
+// the same FName::ToString call itemId strings already go through
+// elsewhere in this file — RawFGameplayTag/FName share the same
+// {ComparisonIndex,Number} layout (already relied on by
+// proxy_manager.cpp's backpack-socket re-attach), so its address can be
+// passed straight in.
+static uint8_t read_local_active_weapon_slot(AActor* pawn)
+{
+    if (!pawn) return 0xFF;
+    const uintptr_t helper = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(pawn) + 0x700);
+    if (!helper) return 0xFF;
+
+    auto* helperObj = reinterpret_cast<UObject*>(helper);
+    UFunction* fn = helperObj->GetFunctionByNameInChain(L"GetActiveWeaponSlot");
+    if (!fn) {
+        debug_log("read_local_active_weapon_slot: GetActiveWeaponSlot NOT FOUND");
+        return 0xFF;
+    }
+
+    struct Params { RawFGameplayTag ActiveWeapon; } params;
+    static_assert(sizeof(RawFGameplayTag) == 8, "FGameplayTag Kismet param size");
+    helperObj->ProcessEvent(fn, &params);
+
+    if (params.ActiveWeapon.ComparisonIndex == 0) return 0xFF; // no active weapon
+
+    const std::string tagName = native::fname_to_string(
+        reinterpret_cast<uintptr_t>(&params.ActiveWeapon));
+
+    char buf[160];
+    snprintf(buf, sizeof(buf), "read_local_active_weapon_slot: ci=%d tag=\"%s\"",
+             params.ActiveWeapon.ComparisonIndex, tagName.c_str());
+    debug_log(buf);
+
+    // FModel's export of BP_JigHelperComp.json listed this tag family as
+    // Jig.PlayerSlot.Primary/Secondary/Pistol/Melee, but live-tested
+    // 2026-08-13: GetActiveWeaponSlot() actually returns
+    // "Jig.PlayerSlot.SidearmWeapon" for the real sidearm slot at runtime —
+    // the static export's tag list apparently isn't the exact string this
+    // function returns. Matched on "Sidearm" (a substring of
+    // "SidearmWeapon") based on the live value, not the export.
+    if (tagName.find("Primary") != std::string::npos)   return 11;
+    if (tagName.find("Secondary") != std::string::npos) return 12;
+    if (tagName.find("Sidearm") != std::string::npos)   return 13;
+    if (tagName.find("Melee") != std::string::npos)     return 14;
+    return 0xFF;
+}
+
+// Look-direction sync (2026-08-13): only Pitch is transmitted, not a
+// separate aim Yaw. Reasoning: mv.yaw (body rotation) already drives the
+// proxy's own actor rotation every tick (see ProxyManager::tick's
+// teleport_proxy call), and this game's own AnimBP has no engine-exposed
+// remote-yaw mechanism to feed even if we wanted one — but it DOES have
+// ACharacter's built-in RemoteViewPitch byte, the exact stock-engine
+// mechanism third-person games use to replicate camera pitch to *other*
+// clients' AnimBPs for spine/head aim-offset posing on simulated proxies.
+// Mirrors the Velocity-not-Speed lesson from tonight's animation-sync work:
+// feed the upstream input the engine's own per-frame AimOffset computation
+// already reads (GetBaseAimRotation() -> RemoteViewPitch for non-locally-
+// controlled pawns), not a derived/scratch AnimBP variable that would just
+// get recomputed and overwritten.
+//
+// GetControlRotation() is a real BlueprintCallable UFUNCTION on APawn
+// (calls through to Controller->GetControlRotation()), reachable via the
+// same GetFunctionByNameInChain/ProcessEvent reflection pattern already
+// used above — always valid here since this is called on our own locally-
+// controlled pawn, which always has a live Controller.
+static uint8_t read_local_aim_pitch(AActor* pawn)
+{
+    if (!pawn) return 0;
+
+    UFunction* fn = pawn->GetFunctionByNameInChain(L"GetControlRotation");
+    if (!fn) {
+        debug_log("read_local_aim_pitch: GetControlRotation NOT FOUND");
+        return 0;
+    }
+
+    struct Params { FRotator ReturnValue; } params{};
+    pawn->ProcessEvent(fn, &params);
+
+    // Same compression UE's own RemoteViewPitch setter uses internally
+    // (FRotator::CompressAxisToByte): wrap to [0,360) then scale to a byte.
+    double pitch = params.ReturnValue.Pitch;
+    pitch = std::fmod(pitch, 360.0);
+    if (pitch < 0.0) pitch += 360.0;
+    const uint8_t quantized = static_cast<uint8_t>(pitch * (256.0 / 360.0));
+
+    // Temporary diagnostic (2026-08-13): confirm the sender is actually
+    // seeing a live, varying camera pitch before trusting the receive side.
+    // Throttled to ~1/sec so it doesn't flood debug.log at movement-tick rate.
+    static uint64_t s_lastLogUs = 0;
+    const uint64_t nowUs = sdb::now_micros();
+    if (nowUs - s_lastLogUs > 1'000'000ULL) {
+        s_lastLogUs = nowUs;
+        char buf[128];
+        snprintf(buf, sizeof(buf), "read_local_aim_pitch: rawPitch=%.2f quantized=%u",
+                 params.ReturnValue.Pitch, quantized);
+        debug_log(buf);
+    }
+
+    return quantized;
+}
+
 static sdb::Equipment read_local_equipment(AActor* pawn)
 {
     static constexpr uintptr_t kSlotOffsets[sdb::EQUIPMENT_SLOT_COUNT] = {
@@ -405,6 +638,198 @@ static sdb::Equipment read_local_equipment(AActor* pawn)
     }
 
     return eq;
+}
+
+// Reads BP_JigPickupComponent_C.RepAttachments (FS_RepWeaponAttachment,
+// research/CXXHeaderDump/S_RepWeaponAttachment.hpp +
+// S_RepAttachmentInfo.hpp) off each of the local player's equipped actors
+// that the proxy side can actually render an attachment onto — i.e. every
+// slot proxy_manager.cpp spawns a real visual actor for (spawn_and_equip_item_visual):
+// Facewear/Headwear/Eyewear/Backpack and the 4 weapon slots. This isn't
+// weapon-specific at all — night vision on a helmet or a battery in a
+// flashlight uses the identical BP_JigPickupComponent/RepAttachments
+// mechanism as a weapon scope, just a different owning slot. Clothing slots
+// (Torso/Gloves/Legs/Feet/BodyArmor) use the separate mesh-swap path with no
+// spawned actor at all, so there's nothing to attach onto there — skipped.
+// BP_JigPickupComponent lives at pickup-actor+0x320 (research/CXXHeaderDump/
+// BP_SkeletalMeshPickup.hpp), matching the raw direct-offset style already
+// used throughout this function rather than a reflection getter. Only the
+// attachment's own DataAsset ItemID + container index are extracted — UID/
+// Stats/ActivateState aren't needed for the proxy-side visual sync this feeds.
+// GetEquippedActorBySlot was live-tested 2026-08-12 and found to return null
+// for *every* slot, including ones definitely, visibly equipped (the AK15
+// scan below proved a real actor genuinely exists and is genuinely
+// AttachParent'd to the character's own Mesh — this getter just isn't the
+// right way to find it). Walk USceneComponent::AttachChildren (Engine.hpp
+// @0x00C0) on the character's own Mesh directly instead — every actor
+// actually attached to the character (weapon, facewear, backpack, etc., all
+// attached via K2_AttachToComponent onto Mesh per this project's own
+// equip-visual work) shows up as an entry here, no per-slot lookup or class
+// name needed at all. Each attached actor is then matched back to a slot by
+// comparing its own BP_JigPickupComponent.ItemDataAsset's itemId against the
+// already-read Equipment slot list.
+// Defined later in this file — forward-declared here so the SEH-guarded scan
+// below (which needs it) can come first, keeping read_local_weapon_attachments
+// next to read_local_equipment.
+static bool seh_invoke(void (*fn)(void*), void* ctx);
+
+struct WeaponAttachScanCtx {
+    UObject* mesh;
+    const std::unordered_map<std::string, uint8_t>* itemIdToSlot;
+    sdb::WeaponAttachments* out;
+};
+
+// The actual AttachChildren walk, split out from read_local_weapon_attachments
+// so it can run under an SEH guard (see that function's own comment on why:
+// live-tested 2026-08-12, crashed twice with an identical
+// EXCEPTION_ACCESS_VIOLATION reading 0x9006, both times cut off mid-iteration
+// near the end of the AttachChildren array — a native equip/unequip action
+// (removing an attachment from a helmet) most likely destroyed/detached one
+// of these components while this scan was concurrently reading through the
+// same array, leaving a stale pointer this code then dereferenced. __try/
+// __except can't share a stack frame with C++ objects needing unwinding
+// (MSVC C2712), hence the trampoline split — same pattern as this file's own
+// seh_invoke/destroy_actor_safe uses elsewhere.
+static void do_weapon_attach_scan(void* ctxRaw)
+{
+    auto* ctx = static_cast<WeaponAttachScanCtx*>(ctxRaw);
+    UObject* mesh = ctx->mesh;
+    const auto& itemIdToSlot = *ctx->itemIdToSlot;
+    sdb::WeaponAttachments& out = *ctx->out;
+
+    const uintptr_t childrenData  = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(mesh) + 0x00C0);
+    int32_t         childrenCount = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(mesh) + 0x00C0 + 0x08);
+    debug_log("read_local_weapon_attachments: Mesh AttachChildren count=" + std::to_string(childrenCount));
+    if (!childrenData || childrenCount <= 0) return;
+    // Sanity cap: a genuine character never has more than a couple dozen
+    // things attached. If a native equip/unequip mutates this TArray mid-read
+    // (the same race that caused the earlier crash), the count field could
+    // transiently read as a huge garbage value, turning this loop into an
+    // effective hang grinding through billions of bogus entries — SEH
+    // doesn't catch that (it's not an exception). Clamp defensively.
+    if (childrenCount > 64) {
+        debug_log("read_local_weapon_attachments: AttachChildren count=" + std::to_string(childrenCount) +
+                  " implausible, clamping to 0 (likely mid-mutation read)");
+        return;
+    }
+
+    for (int32_t c = 0; c < childrenCount; ++c) {
+        UObject* childComp = *reinterpret_cast<UObject**>(childrenData + static_cast<size_t>(c) * 8);
+        if (!childComp) continue;
+
+        UFunction* getOwnerFn = childComp->GetFunctionByNameInChain(L"GetOwner");
+        AActor* owner = nullptr;
+        if (getOwnerFn) childComp->ProcessEvent(getOwnerFn, &owner);
+        if (!owner) {
+            debug_log("read_local_weapon_attachments: child[" + std::to_string(c) + "] no owner (getOwnerFn found=" +
+                      std::to_string(getOwnerFn != nullptr) + ")");
+            continue;
+        }
+
+        std::string ownerName;
+        {
+            std::wstring wname = owner->GetFullName();
+            int need = WideCharToMultiByte(CP_UTF8, 0, wname.c_str(), -1, nullptr, 0, nullptr, nullptr);
+            ownerName.resize(need > 0 ? (size_t)(need - 1) : 0);
+            if (need > 0) WideCharToMultiByte(CP_UTF8, 0, wname.c_str(), -1, ownerName.data(), need, nullptr, nullptr);
+        }
+
+        // BP_JigPickupComponent_C's offset differs by pickup base class
+        // (weapons/melee extend ABP_SkeletalMeshPickup_C @0x320, while
+        // Facewear/Headwear/Eyewear/Backpack extend ABP_StaticMeshPickup_C
+        // @0x2B0 instead — confirmed via real UE4SS header dumps, not
+        // guessed; see research/CXXHeaderDump/BP_StaticMeshPickup.hpp vs.
+        // BP_SkeletalMeshPickup.hpp). Rather than hardcode both, use the
+        // same reflection-based, layout-agnostic lookup
+        // proxy_manager.cpp's set_pickup_item_data() already uses
+        // successfully for the exact same field on both pickup families.
+        auto** pickupCompSlot = static_cast<UObject**>(
+            owner->GetValuePtrByPropertyNameInChain(L"BP_JigPickupComponent"));
+        const uintptr_t pickupComp = (pickupCompSlot && *pickupCompSlot)
+            ? reinterpret_cast<uintptr_t>(*pickupCompSlot) : 0;
+        if (!pickupComp) {
+            debug_log("read_local_weapon_attachments: child[" + std::to_string(c) + "] owner=" + ownerName + " no BP_JigPickupComponent");
+            continue;
+        }
+
+        // Identify which equipped slot this attached actor belongs to by
+        // matching its own ItemDataAsset (BP_JigPickupComponent_C.ItemDataAsset
+        // @0x00A8) against the already-read Equipment list.
+        const uintptr_t ownItemDA = *reinterpret_cast<uintptr_t*>(pickupComp + 0x00A8);
+        if (!ownItemDA) {
+            debug_log("read_local_weapon_attachments: child[" + std::to_string(c) + "] owner=" + ownerName + " ItemDataAsset null");
+            continue;
+        }
+        std::string ownItemId = native::fname_to_string(ownItemDA + 0x30);
+        auto slotIt = itemIdToSlot.find(ownItemId);
+        if (slotIt == itemIdToSlot.end()) {
+            debug_log("read_local_weapon_attachments: child[" + std::to_string(c) + "] owner=" + ownerName +
+                      " itemId=" + ownItemId + " no matching equipped slot");
+            continue;
+        }
+        const uint8_t slotIndex = slotIt->second;
+
+        // FS_RepWeaponAttachment RepAttachments @0x0110 on BP_JigPickupComponent_C:
+        // FGuid MainUID @+0x00 (unused here), TArray<FS_RepAttachmentInfo> Attachments @+0x10.
+        const uintptr_t repAttachments = pickupComp + 0x0110;
+        const uintptr_t arrayData  = *reinterpret_cast<uintptr_t*>(repAttachments + 0x10 + 0x00);
+        const int32_t   arrayCount = *reinterpret_cast<int32_t*>(repAttachments + 0x10 + 0x08);
+        debug_log("read_local_weapon_attachments: slot=" + std::to_string(slotIndex) +
+                  " itemId=" + ownItemId + " arrayCount=" + std::to_string(arrayCount));
+        if (!arrayData || arrayCount <= 0) continue;
+
+        // FS_RepAttachmentInfo, 0x48 bytes each: AttachmentID (DataAsset*)
+        // @0x00, AttachmentContainerIndex (int32) @0x18.
+        constexpr size_t kStride = 0x48;
+        for (int32_t i = 0; i < arrayCount; ++i) {
+            const uintptr_t entry = arrayData + static_cast<size_t>(i) * kStride;
+            const uintptr_t attachmentDA = *reinterpret_cast<uintptr_t*>(entry + 0x00);
+            if (!attachmentDA) continue;
+
+            std::string attItemId = native::fname_to_string(attachmentDA + 0x30);
+            if (attItemId.empty()) continue;
+
+            sdb::WeaponAttachmentEntry wae;
+            wae.weaponSlotIndex = slotIndex;
+            wae.containerIndex  = static_cast<uint8_t>(*reinterpret_cast<int32_t*>(entry + 0x18));
+            wae.itemId          = std::move(attItemId);
+            out.entries.push_back(std::move(wae));
+        }
+    }
+}
+
+static sdb::WeaponAttachments read_local_weapon_attachments(AActor* pawn)
+{
+    sdb::WeaponAttachments out;
+    if (!pawn) return out;
+
+    static constexpr uint8_t kAttachableSlots[] = {0, 1, 2, 10, 11, 12, 13, 14};
+    const sdb::Equipment eq = read_local_equipment(pawn);
+    std::unordered_map<std::string, uint8_t> itemIdToSlot;
+    for (const auto& slot : eq.slots) {
+        for (uint8_t s : kAttachableSlots) {
+            if (slot.slotIndex == s) { itemIdToSlot[slot.itemId] = s; break; }
+        }
+    }
+    {
+        std::string line = "read_local_weapon_attachments: itemIdToSlot:";
+        for (const auto& [id, s] : itemIdToSlot)
+            line += " [" + std::to_string(s) + "]=" + id;
+        debug_log(line);
+    }
+
+    auto** meshSlot = static_cast<UObject**>(pawn->GetValuePtrByPropertyNameInChain(L"Mesh"));
+    UObject* mesh = (meshSlot && *meshSlot) ? *meshSlot : nullptr;
+    if (!mesh) return out;
+
+    WeaponAttachScanCtx ctx{ mesh, &itemIdToSlot, &out };
+    if (!seh_invoke(&do_weapon_attach_scan, &ctx)) {
+        debug_log("read_local_weapon_attachments: SEH caught a crash mid-scan "
+                  "(stale pointer, likely a concurrent native equip/unequip change) "
+                  "— discarding this cycle's partial result");
+        out.entries.clear();
+    }
+    return out;
 }
 
 // Walks BP_JigMultiplayer_C.MainJigContainers (comp+0xA8, TArray of
@@ -489,43 +914,30 @@ static std::vector<sdb::InventoryContainer> read_local_inventory(AActor* pawn)
 
 // ── Outbound senders ──────────────────────────────────────────────────────
 
-// entityId must be the decimal string representation so JS can BigInt() it.
-[[maybe_unused]] static void send_item_pickup_request(uint64_t entityId)
+// Wire format matches server's decodeItemPickupRequest exactly:
+// [version=1][targetSlot=0xFF (auto-assign)] — entityId is a frame-header
+// field (f.entityId), not part of the payload; the server looks the entity
+// up via f.entityId directly. (The previous JSON-via-encode_world_action
+// version didn't match this at all — same category of bug ItemDropRequest
+// had.)
+static void send_item_pickup_request(uint64_t entityId)
 {
-    const std::string rid = sdb::next_request_id();
-    const std::string json =
-        "{\"requestId\":\"" + rid + "\","
-        "\"entityId\":\"" + std::to_string(entityId) + "\"}";
-
     sdb::Frame f;
     f.type = sdb::MsgType::ItemPickupRequest;
     build_session_frame(f);
-    f.payload = sdb::encode_world_action(json);
+    f.entityId = entityId;
+    const uint8_t payload[2] = { 1, 0xFF };
+    f.payload.assign(payload, payload + 2);
     send_frame(f);
 }
 
-// classPath must start with /Game/Inventory/, /Game/JigSInventory/,
-// /Game/Items/, or /Game/Blueprints/Items/ to pass host-agent validation.
-[[maybe_unused]] static void send_item_drop_request(const std::string& itemId,
-                                    const std::string& classPath,
-                                    uint16_t quantity,
-                                    float x, float y, float z, float yaw)
+static void send_item_drop_request(const std::string& itemId, uint16_t quantity,
+                                    float x, float y, float z)
 {
-    const std::string rid = sdb::next_request_id();
-    const std::string json =
-        "{\"requestId\":\"" + rid + "\","
-        "\"itemId\":\"" + itemId + "\","
-        "\"classPath\":\"" + classPath + "\","
-        "\"quantity\":" + std::to_string(quantity) + ","
-        "\"x\":" + std::to_string(x) + ","
-        "\"y\":" + std::to_string(y) + ","
-        "\"z\":" + std::to_string(z) + ","
-        "\"yaw\":" + std::to_string(yaw) + "}";
-
     sdb::Frame f;
     f.type = sdb::MsgType::ItemDropRequest;
     build_session_frame(f);
-    f.payload = sdb::encode_world_action(json);
+    f.payload = sdb::encode_item_drop_request(itemId, quantity, x, y, z);
     send_frame(f);
 }
 
@@ -632,6 +1044,48 @@ static void send_equipment(AActor* pawn)
     send_frame(f);
 }
 
+static void send_weapon_attachments(AActor* pawn)
+{
+    const sdb::WeaponAttachments wa = read_local_weapon_attachments(pawn);
+
+    {
+        std::string line = "send_weapon_attachments: entries=" + std::to_string(wa.entries.size());
+        for (const auto& e : wa.entries) {
+            line += " [slot=" + std::to_string(e.weaponSlotIndex) +
+                    " container=" + std::to_string(e.containerIndex) +
+                    " itemId=" + e.itemId + "]";
+        }
+        debug_log(line);
+    }
+
+    sdb::Frame f;
+    f.type    = sdb::MsgType::WeaponAttachments;
+    f.payload = sdb::encode_weapon_attachments(wa);
+    build_session_frame(f);
+    send_frame(f);
+}
+
+static void send_pawn_appearance(AActor* pawn)
+{
+    const sdb::PawnAppearance pa = read_local_pawn_appearance(pawn);
+
+    {
+        std::string line = "send_pawn_appearance: isMale=" + std::to_string(pa.isMale) +
+              " hairMesh=" + pa.hairMeshName + " hairColor=" + pa.hairColorName +
+              " beardMesh=" + pa.beardMeshName + " beardColor=" + pa.beardColorName +
+              " skinColor=" + pa.skinColorName + " bodyParts=[";
+        for (const auto& s : pa.bodyPartMeshNames) line += s + ",";
+        line += "]";
+        debug_log(line);
+    }
+
+    sdb::Frame f;
+    f.type    = sdb::MsgType::PawnAppearance;
+    f.payload = sdb::encode_pawn_appearance(pa);
+    build_session_frame(f);
+    send_frame(f);
+}
+
 // ── Incoming frame dispatcher ─────────────────────────────────────────────
 
 static void dispatch_frame(const sdb::Frame& f)
@@ -683,6 +1137,22 @@ static void dispatch_frame(const sdb::Frame& f)
                        && !f.payload.empty()) {
             if (auto eq = sdb::decode_equipment(f.payload.data(), f.payload.size()))
                 sdb::g_proxy_manager().on_equipment(f.playerId, *eq);
+        }
+        break;
+
+    case sdb::MsgType::WeaponAttachments:
+        if (f.playerId && f.playerId != st.session.playerId
+                       && !f.payload.empty()) {
+            if (auto wa = sdb::decode_weapon_attachments(f.payload.data(), f.payload.size()))
+                sdb::g_proxy_manager().on_weapon_attachments(f.playerId, *wa);
+        }
+        break;
+
+    case sdb::MsgType::PawnAppearance:
+        if (f.playerId && f.playerId != st.session.playerId
+                       && !f.payload.empty()) {
+            if (auto pa = sdb::decode_pawn_appearance(f.payload.data(), f.payload.size()))
+                sdb::g_proxy_manager().on_pawn_appearance(f.playerId, *pa);
         }
         break;
 
@@ -862,7 +1332,7 @@ static void check_trace_trigger()
     if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
 
     DeleteFileW(flag.c_str());
-    g_trace_until_us.store(sdb::now_micros() + 5'000'000ULL, std::memory_order_relaxed);
+    g_trace_until_us.store(sdb::now_micros() + 20'000'000ULL, std::memory_order_relaxed);
     debug_log("check_trace_trigger: full trace window opened for 5s");
 }
 
@@ -1018,6 +1488,98 @@ static void check_resolve_fname_trigger()
     DeleteFileW(flag.c_str());
 }
 
+// Flag file's single line is the target UDataTable's own object name, e.g.
+// "DT_Clothing" — see sdb::dump_clothing_table in proxy_manager.cpp.
+static void check_dump_clothing_table_trigger()
+{
+    wchar_t path[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return;
+    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\dump_clothing_table.flag";
+    if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+
+    std::ifstream in(flag, std::ios::binary);
+    std::string tableNameU8;
+    std::getline(in, tableNameU8);
+    in.close();
+    DeleteFileW(flag.c_str());
+
+    if (!tableNameU8.empty() && tableNameU8.back() == '\r') tableNameU8.pop_back();
+    if (tableNameU8.empty()) {
+        debug_log("dump_clothing_table: flag file missing table name line");
+        return;
+    }
+
+    std::wstring tableName(tableNameU8.size(), L'\0');
+    int wn = MultiByteToWideChar(CP_UTF8, 0, tableNameU8.data(), (int)tableNameU8.size(),
+                                  tableName.data(), (int)tableName.size());
+    tableName.resize(wn);
+
+    sdb::dump_clothing_table(tableName.c_str());
+}
+
+// One-off diagnostic: flag file content is a class name (e.g.
+// "BP_AK15Pickup_C"). FindAllOf every live instance and log its own
+// AttachParent (root component +0xB0) alongside the local player's own Mesh
+// pointer, to determine whether a real, persistent equipped-weapon actor
+// exists at all for the local player (GetEquippedActorBySlot returned null
+// for every slot live-tested 2026-08-12, contradicting the assumption it
+// tracks one) — and if one does exist, find it by attachment relationship
+// instead of by the apparently-unreliable per-slot actor array.
+static void check_scan_pickup_class_trigger()
+{
+    wchar_t path[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return;
+    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\scan_pickup_class.flag";
+    if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+
+    std::ifstream in(flag, std::ios::binary);
+    std::string classNameU8;
+    std::getline(in, classNameU8);
+    in.close();
+    DeleteFileW(flag.c_str());
+    if (!classNameU8.empty() && classNameU8.back() == '\r') classNameU8.pop_back();
+    if (classNameU8.empty()) { debug_log("scan_pickup_class: flag file missing class name"); return; }
+
+    std::wstring className(classNameU8.size(), L'\0');
+    int wn = MultiByteToWideChar(CP_UTF8, 0, classNameU8.data(), (int)classNameU8.size(),
+                                  className.data(), (int)className.size());
+    className.resize(wn);
+
+    AActor* pawn = find_local_pawn();
+    if (pawn) {
+        auto** meshSlot = static_cast<UObject**>(pawn->GetValuePtrByPropertyNameInChain(L"Mesh"));
+        UObject* mesh = (meshSlot && *meshSlot) ? *meshSlot : nullptr;
+        char buf[64];
+        snprintf(buf, sizeof(buf), "scan_pickup_class: local pawn=0x%llx Mesh=0x%llx",
+                 (unsigned long long)(uintptr_t)pawn, (unsigned long long)(uintptr_t)mesh);
+        debug_log(buf);
+    } else {
+        debug_log("scan_pickup_class: find_local_pawn() returned null");
+    }
+
+    std::vector<UObject*> instances;
+    UObjectGlobals::FindAllOf(className.c_str(), instances);
+    debug_log("scan_pickup_class: " + classNameU8 + " instances=" + std::to_string(instances.size()));
+
+    for (UObject* inst : instances) {
+        auto* actor = static_cast<AActor*>(inst);
+        UFunction* rootFn = actor->GetFunctionByNameInChain(L"GetSkeletalMeshComponent");
+        if (!rootFn) rootFn = actor->GetFunctionByNameInChain(L"K2_GetRootComponent");
+        UObject* root = nullptr;
+        if (rootFn) actor->ProcessEvent(rootFn, &root);
+        const void* attachParent = root
+            ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(root) + 0xB0)
+            : nullptr;
+        char buf[128];
+        snprintf(buf, sizeof(buf), "scan_pickup_class: instance=0x%llx root=0x%llx AttachParent=0x%llx",
+                 (unsigned long long)(uintptr_t)actor, (unsigned long long)(uintptr_t)root,
+                 (unsigned long long)(uintptr_t)attachParent);
+        debug_log(buf);
+    }
+}
+
 // __try/__except can't share a stack frame with C++ objects that need
 // unwinding (MSVC C2712), so the guarded call is split into a plain function
 // (free to use std::wstring/std::string) invoked through this trampoline,
@@ -1089,6 +1651,167 @@ static void check_resolve_ptr_trigger()
     }
     in.close();
     DeleteFileW(flag.c_str());
+}
+
+struct ResolveFPropCtx { uintptr_t addr; std::string result; };
+
+static void do_resolve_fprop(void* ctxRaw)
+{
+    auto* ctx = static_cast<ResolveFPropCtx*>(ctxRaw);
+    // FField::NamePrivate sits at +0x20 off any FField-derived pointer
+    // (FProperty included) — same offset already empirically confirmed live
+    // this session resolving the AnimBP's "Speed" scratch property (see
+    // dump_animbp_mutables's own comment). native::fname_to_string reads an
+    // in-place FName directly (no ProcessEvent/reflection needed), so this
+    // works on FProperty* even though FProperty isn't a UObject and
+    // GetFullName() (resolve_ptr's approach) can't be used on it at all.
+    ctx->result = native::fname_to_string(ctx->addr + 0x20);
+}
+
+// Flag file content: one raw hex FProperty* pointer per line, pulled from an
+// EX_InstanceVariable/EX_LocalVariable "prop=0x..." operand in a Kismet
+// bytecode dump (same "same live session only" ASLR caveat as resolve_ptr —
+// only valid against a .bin captured from the SAME process instance).
+// Superseded an earlier, wrong version of this trigger (2026-08-13) that
+// compared these pointers against GetValuePtrByPropertyNameInChain's return
+// value — a category error: EX_InstanceVariable's operand is a pointer to
+// the FProperty *descriptor* (reflection metadata), not the value's storage
+// address, so the two were never going to match regardless of name.
+static void check_resolve_fprop_trigger()
+{
+    wchar_t path[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return;
+    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\resolve_fprop.flag";
+    if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+
+    std::ifstream in(flag, std::ios::binary);
+    std::string lineU8;
+    while (std::getline(in, lineU8)) {
+        if (!lineU8.empty() && lineU8.back() == '\r') lineU8.pop_back();
+        if (lineU8.empty()) continue;
+
+        unsigned long long addr = 0;
+        if (sscanf_s(lineU8.c_str(), "%llx", &addr) != 1 || addr == 0) {
+            debug_log("resolve_fprop: could not parse hex address '" + lineU8 + "'");
+            continue;
+        }
+
+        ResolveFPropCtx ctx{ static_cast<uintptr_t>(addr), {} };
+        if (seh_invoke(&do_resolve_fprop, &ctx)) {
+            debug_log("resolve_fprop: 0x" + lineU8 + " -> \"" + ctx.result + "\"");
+        } else {
+            debug_log("resolve_fprop: 0x" + lineU8 + " -> <access violation>");
+        }
+    }
+    in.close();
+    DeleteFileW(flag.c_str());
+}
+
+// Read-only, live-value diagnostic (2026-08-13): after resolve_fprop
+// identified WHICH four instance vars feed GetAimOffset (K2Node_
+// PropertyAccess_8 = bool selector, _9/_10 = SelectRotator's two branches,
+// _11 = NormalizedDeltaRotator's second/baseline operand), reads their
+// actual LIVE VALUES off the LOCAL player's own AnimInstance once per
+// second while this flag file exists (not one-shot — stays active until the
+// file is deleted), to see empirically what varies with real camera
+// movement before deciding what a proxy would need fed. Purely read-only,
+// zero proxy risk — nothing here touches any proxy or Controller state.
+static void log_aimoffset_values(const char* label, AActor* pawn)
+{
+    if (!pawn) { debug_log(std::string("watch_aimoffset: ") + label + " no pawn"); return; }
+    auto** meshSlot = static_cast<UObject**>(pawn->GetValuePtrByPropertyNameInChain(L"Mesh"));
+    UObject* mesh = (meshSlot && *meshSlot) ? *meshSlot : nullptr;
+    if (!mesh) { debug_log(std::string("watch_aimoffset: ") + label + " Mesh not found"); return; }
+    UFunction* getAnimFn = mesh->GetFunctionByNameInChain(L"GetAnimInstance");
+    if (!getAnimFn) { debug_log(std::string("watch_aimoffset: ") + label + " GetAnimInstance NOT FOUND"); return; }
+    struct Params { UObject* ReturnValue = nullptr; } aparams;
+    mesh->ProcessEvent(getAnimFn, &aparams);
+    if (!aparams.ReturnValue) { debug_log(std::string("watch_aimoffset: ") + label + " AnimInstance is null"); return; }
+
+    auto* anim = aparams.ReturnValue;
+    auto* b8  = static_cast<uint8_t*>(anim->GetValuePtrByPropertyNameInChain(L"K2Node_PropertyAccess_8"));
+    auto* r9  = static_cast<double*>(anim->GetValuePtrByPropertyNameInChain(L"K2Node_PropertyAccess_9"));
+    auto* r10 = static_cast<double*>(anim->GetValuePtrByPropertyNameInChain(L"K2Node_PropertyAccess_10"));
+    auto* r11 = static_cast<double*>(anim->GetValuePtrByPropertyNameInChain(L"K2Node_PropertyAccess_11"));
+    auto* pitchP = static_cast<double*>(anim->GetValuePtrByPropertyNameInChain(L"Pitch"));
+    auto* yawP   = static_cast<double*>(anim->GetValuePtrByPropertyNameInChain(L"Yaw"));
+
+    char line[420];
+    snprintf(line, sizeof(line),
+        "watch_aimoffset: %s bSel8=%d R9(P/Y/R)=%.1f/%.1f/%.1f R10(P/Y/R)=%.1f/%.1f/%.1f R11(P/Y/R)=%.1f/%.1f/%.1f Pitch=%.2f Yaw=%.2f",
+        label,
+        b8 ? (int)(*b8 & 1) : -1,
+        r9 ? r9[0] : 0.0, r9 ? r9[1] : 0.0, r9 ? r9[2] : 0.0,
+        r10 ? r10[0] : 0.0, r10 ? r10[1] : 0.0, r10 ? r10[2] : 0.0,
+        r11 ? r11[0] : 0.0, r11 ? r11[1] : 0.0, r11 ? r11[2] : 0.0,
+        pitchP ? *pitchP : 0.0, yawP ? *yawP : 0.0);
+    debug_log(line);
+}
+
+static void check_watch_aimoffset_trigger()
+{
+    wchar_t path[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return;
+    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\watch_aimoffset.flag";
+    if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+
+    static uint64_t s_lastLogUs = 0;
+    const uint64_t now = sdb::now_micros();
+    if (now - s_lastLogUs < 1'000'000ULL) return;
+    s_lastLogUs = now;
+
+    log_aimoffset_values("local", find_local_pawn());
+
+    // Read-only peek at the first connected proxy's own AnimInstance, using
+    // the exact same property names (same AnimBP class) — checking whether
+    // bSel8 (the SelectRotator condition) is true or false for a
+    // non-locally-controlled proxy, before deciding whether giving it a
+    // Controller would even change anything.
+    {
+        std::lock_guard<std::mutex> lk(sdb::g_state().playersMtx);
+        for (auto& [id, player] : sdb::g_state().players) {
+            if (player.proxyActor) {
+                log_aimoffset_values("proxy", static_cast<AActor*>(player.proxyActor));
+                break;
+            }
+        }
+    }
+}
+
+// Read-only diagnostic (2026-08-13): compares the proxy's actual live
+// K2_GetActorRotation() against player.yaw (what we're actually sending it
+// every tick via teleport_proxy's SetActorLocationAndRotation call), to
+// check whether something in the proxy's own CharacterMovementComponent
+// (e.g. bOrientRotationToMovement, a well-known UE gotcha for exactly this
+// symptom) is overriding our explicit rotation write every frame, before
+// guessing at a fix.
+static void check_watch_rotation_trigger()
+{
+    wchar_t path[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return;
+    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\watch_rotation.flag";
+    if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+
+    static uint64_t s_lastLogUs = 0;
+    const uint64_t now = sdb::now_micros();
+    if (now - s_lastLogUs < 1'000'000ULL) return;
+    s_lastLogUs = now;
+
+    std::lock_guard<std::mutex> lk(sdb::g_state().playersMtx);
+    for (auto& [id, player] : sdb::g_state().players) {
+        if (!player.proxyActor) continue;
+        auto* actor = static_cast<AActor*>(player.proxyActor);
+        const FRotator rot = actor->K2_GetActorRotation();
+        char line[200];
+        snprintf(line, sizeof(line),
+            "watch_rotation: sentYaw=%.2f actualYaw=%.2f actualPitch=%.2f actualRoll=%.2f",
+            player.yaw, rot.Yaw, rot.Pitch, rot.Roll);
+        debug_log(line);
+        break;
+    }
 }
 
 // Flag file content: one class name per line — one-off live diagnostic to
@@ -1273,11 +1996,141 @@ static bool try_open_world()
     return false;
 }
 
+static void check_pending_pickup(AActor* pawn);   // defined below, near the pickup-hook implementation
+static void check_inventory_pickup(AActor* pawn); // defined below, alongside check_pending_pickup
+
+// find_local_pawn() is a UE4SS reflection scan over live UObjects — cheap
+// once a pawn exists (found quickly), but worst-case (no pawn at all, e.g.
+// sitting at the main menu or briefly on death) it has to exhaust the whole
+// search before concluding "not found". do_game_tick() itself is only
+// throttled to 5ms (200Hz), and previously called find_local_pawn()
+// directly on every one of those ticks with no additional throttle — live
+// tested 2026-08-12: this alone pegged the menu at ~6 FPS on a second
+// client (PC1 masked it by auto-clicking through the menu in a few
+// seconds; anything that sits at "no pawn yet" longer fully exposes it).
+// This is the exact same class of bug already fixed once for the drop/
+// pickup hook resolution's own find_local_pawn() calls (see s_drop_fn
+// above) — throttling the *tick's* lookup was missed. 100ms is plenty
+// responsive for detecting death/respawn pawn transitions.
+// Read-only diagnostic (2026-08-13): Player_AnimBP_C's own Speed/Direction
+// variables are compiler-anonymized in this Shipping build's FModel export
+// (Exports/.../Player_AnimBP.json's CDO shows a "__AnimBlueprintMutables"
+// struct of 53 fields named "__FloatProperty_N"/"__IntProperty_N"/
+// "__BoolProperty_N", no real names preserved) — but the struct itself IS a
+// real, named UPROPERTY, reachable via the same GetValuePtrByPropertyNameInChain
+// reflection lookup already used throughout this project (e.g. "Mesh",
+// "BP_JigPickupComponent"), sidestepping the need to know AnimInstance's own
+// base-class size to locate it. Dumps all 53 as raw floats (some are really
+// int32/bool, but those will just show as 0 or a garbage-looking float,
+// easy to tell apart from a real Speed value visually) so the LOCAL
+// player's own values can be diffed stationary vs walking to identify which
+// index is Speed, entirely read-only — no risk to the proxy or to this
+// pawn's own state, unlike the CharacterMovementComponent write attempts
+// that crashed the game twice already this session.
+static void dump_animbp_mutables(AActor* pawn)
+{
+    static uint64_t s_lastDumpUs = 0;
+    const uint64_t now = sdb::now_micros();
+    if (now - s_lastDumpUs < 1'000'000ULL) return;
+    s_lastDumpUs = now;
+
+    auto** meshSlot = static_cast<UObject**>(pawn->GetValuePtrByPropertyNameInChain(L"Mesh"));
+    UObject* mesh = (meshSlot && *meshSlot) ? *meshSlot : nullptr;
+    if (!mesh) { debug_log("dump_animbp_mutables: Mesh not found"); return; }
+
+    UFunction* getAnimFn = mesh->GetFunctionByNameInChain(L"GetAnimInstance");
+    if (!getAnimFn) { debug_log("dump_animbp_mutables: GetAnimInstance NOT FOUND"); return; }
+    struct Params { UObject* ReturnValue = nullptr; } aparams;
+    mesh->ProcessEvent(getAnimFn, &aparams);
+    if (!aparams.ReturnValue) { debug_log("dump_animbp_mutables: AnimInstance is null"); return; }
+
+    const float* vals = static_cast<const float*>(
+        aparams.ReturnValue->GetValuePtrByPropertyNameInChain(L"__AnimBlueprintMutables"));
+    if (!vals) { debug_log("dump_animbp_mutables: __AnimBlueprintMutables not found"); return; }
+
+    std::string line = "dump_animbp_mutables:";
+    for (int i = 0; i < 53; ++i) {
+        char buf[24];
+        snprintf(buf, sizeof(buf), " [%d]=%.2f", i, vals[i]);
+        line += buf;
+    }
+    debug_log(line);
+
+    // Bytecode analysis (2026-08-13, GetSpeed&Direction) found "Speed" is an
+    // 8-byte DoubleProperty, not one of the 4-byte floats in the list above
+    // — reading it as two adjacent floats there would misinterpret it.
+    // FField::NamePrivate (confirmed live at the property's own +0x20,
+    // resolved via resolve_fname to literally "Speed") sits right next to
+    // FProperty::Offset_Internal further into the same struct, empirically
+    // read as 23232 from that property's own memory — trying it here
+    // directly as a byte offset from the AnimInstance object's own base,
+    // not from __AnimBlueprintMutables, since Offset_Internal for a
+    // Blueprint-compiled AnimGraph mutable appears to be object-relative.
+    {
+        struct Ctx { uintptr_t animBase; double result; } ctx{
+            reinterpret_cast<uintptr_t>(aparams.ReturnValue), 0.0 };
+        auto readFn = [](void* raw) {
+            auto* c = static_cast<Ctx*>(raw);
+            c->result = *reinterpret_cast<const double*>(c->animBase + 23232);
+        };
+        char buf[96];
+        if (seh_invoke(readFn, &ctx)) {
+            snprintf(buf, sizeof(buf), "dump_animbp_mutables: animBase=0x%llx offset23232_asDouble=%.3f",
+                     static_cast<unsigned long long>(ctx.animBase), ctx.result);
+        } else {
+            snprintf(buf, sizeof(buf), "dump_animbp_mutables: animBase=0x%llx offset23232 read CRASHED (SEH caught)",
+                     static_cast<unsigned long long>(ctx.animBase));
+        }
+        debug_log(buf);
+    }
+}
+
+static AActor* cached_find_local_pawn()
+{
+    static std::atomic<uint64_t> s_last_try_us{0};
+    static AActor* s_cached = nullptr;
+    const uint64_t now = sdb::now_micros();
+    const uint64_t last = s_last_try_us.load(std::memory_order_relaxed);
+    if (last == 0 || now - last >= 100'000ULL) {
+        s_last_try_us.store(now, std::memory_order_relaxed);
+        s_cached = find_local_pawn();
+    }
+    return s_cached;
+}
+
 // Core game-tick logic — called from both on_actor_tick and on_process_event_pre.
 // Rate-limited to once per 5 ms via g_last_tick_us; safe because both callers
 // are always on the game thread.
+//
+// Root-caused live 2026-08-13 (IDA remote-debugger attach, real call stack
+// captured at the fault): on_process_event_pre calls this on ~1-in-256
+// ProcessEvent calls. ProxyManager::tick() (called from here) holds
+// g_state().playersMtx for its whole duration while calling
+// comp->ProcessEvent(...) many times per proxy (sync_equipment/
+// sync_pawn_appearance/etc) — and every one of *those* ProcessEvent calls
+// re-enters UE4SS's hook, i.e. on_process_event_pre, recursively. If enough
+// wall-clock time (which the many-ProcessEvent-call loop can easily spend)
+// passes during that recursion, the 5ms throttle above alone let a nested
+// do_game_tick() call proceed, re-entering ProxyManager::tick() and trying
+// to lock playersMtx a second time on the very thread that already holds
+// it — undefined behavior on a plain (non-recursive) std::mutex. This
+// manifested as a debug-STL/CRT internal `int 3` trap in one live repro
+// (call stack: on_process_event_pre -> do_game_tick -> TcpClient::recv_all
+// -> dispatch_frame -> ProxyManager::on_movement, mid-lock) and as a genuine
+// hang in others (SetSkinnedAssetAndUpdate never returning) — same root
+// cause, different manifestation depending on timing. This re-entrancy
+// guard is the actual fix; single bool is safe since both callers are
+// always on the game thread (never cross-thread re-entrancy here).
 static void do_game_tick()
 {
+    static bool s_in_game_tick = false;
+    if (s_in_game_tick) return;
+    struct ReentryGuard {
+        bool& flag;
+        ReentryGuard(bool& f) : flag(f) { flag = true; }
+        ~ReentryGuard() { flag = false; }
+    } reentry_guard(s_in_game_tick);
+
     const uint64_t now = sdb::now_micros();
     if (now - g_last_tick_us.load(std::memory_order_relaxed) < 5'000ULL) return;
     g_last_tick_us.store(now, std::memory_order_relaxed);
@@ -1286,7 +2139,12 @@ static void do_game_tick()
     check_bytecode_dump_trigger();
     check_resolve_fname_trigger();
     check_resolve_ptr_trigger();
+    check_resolve_fprop_trigger();
+    check_watch_aimoffset_trigger();
+    check_watch_rotation_trigger();
     check_widget_scan_trigger();
+    check_scan_pickup_class_trigger();
+    check_dump_clothing_table_trigger();
     check_call_trigger();
     check_mem_dump_trigger();
 
@@ -1294,7 +2152,7 @@ static void do_game_tick()
     if (!g_tcp.is_open()) {
         if (!g_tcp_started.load(std::memory_order_relaxed)
             && !cfg_join_ticket.empty()
-            && find_local_pawn())
+            && cached_find_local_pawn())
         {
             if (!g_tcp_started.exchange(true, std::memory_order_relaxed)) {
                 Output::send<LogLevel::Normal>(
@@ -1370,7 +2228,7 @@ static void do_game_tick()
 
     // 2. Find local pawn.
     auto& st    = sdb::g_state();
-    AActor* pawn = find_local_pawn();
+    AActor* pawn = cached_find_local_pawn();
 
     if (pawn) {
         g_local_helper_ptr.store(*reinterpret_cast<uintptr_t*>(
@@ -1425,6 +2283,12 @@ static void do_game_tick()
     // 6. Drive world entities.
     sdb::g_entity_manager().tick(world, pawn);
 
+    // 6b. Resolve any pickup interact caught by handle_pickup_hook a moment
+    // ago, plus the inventory-diff fallback for the drag-and-drop UI path
+    // the hook doesn't cover (see check_inventory_pickup's comment).
+    check_pending_pickup(pawn);
+    check_inventory_pickup(pawn);
+
     // 7. Periodic profile revision: push live vitals/position to server every 30 s.
     const uint64_t last_prof = g_last_profile_us.load(std::memory_order_relaxed);
     if (last_prof == 0 || now - last_prof >= 30'000'000ULL) {
@@ -1440,12 +2304,257 @@ static void do_game_tick()
     if (last_equip == 0 || now - last_equip >= 2'000'000ULL) {
         g_last_equip_us.store(now, std::memory_order_relaxed);
         send_equipment(pawn);
+        send_weapon_attachments(pawn);
+        send_pawn_appearance(pawn);
     }
 }
 
-// Fires on the game thread for every UObject::ProcessEvent call.
-static void on_process_event_pre(UObject* obj, UFunction* func, void* /*params*/)
+// Item-drop hook: BP_JigMultiplayer_C::ItemDropRequest_Event_0(UJSI_Slot_C*
+// ItemRef, int32 Count, UJSIContainer_C* Container) — confirmed live via a
+// full ProcessEvent trace during a real in-game drop (research/
+// 04_ida_investigation_log.md), NOT a name guess like the first attempt
+// (BP_JigHelperComp_C::RequestDropAsPickup, which resolves fine but never
+// actually fires on a real drop — wrong component entirely). Ubergraph
+// bytecode at this function's entry point (dumped + disassembled) confirmed
+// the real server call is JigMultiplayer's own SERVER_RequestDropItem(FGuid
+// ItemUID, int32 Count, ...) — but ItemUID there is just the slot widget's
+// own UObject::GetUniqueID(), an ephemeral per-session id, not a stable item
+// identity — so ItemRef (the widget, still valid here) is the right thing to
+// read, via its own GetItemID(FName& ItemId) UFUNCTION (research/
+// CXXHeaderDump/JSI_Slot.hpp) rather than any raw memory offset.
+// Resolved once via GetFunctionByNameInChain off pawn+0x818's
+// BP_JigMultiplayer component (research/CXXHeaderDump/BP_PlayerCharacter.hpp)
+// and compared by pointer on every call — cheap enough to check
+// unconditionally, same reasoning as the equip-trace diagnostic.
+static UFunction* s_drop_fn = nullptr;
+
+static void handle_drop_hook(void* params)
 {
+    if (!params) return;
+    auto* itemRef = *reinterpret_cast<UObject**>(static_cast<uint8_t*>(params) + 0x00);
+    const int32_t count = *reinterpret_cast<const int32_t*>(static_cast<uint8_t*>(params) + 0x08);
+    if (!itemRef || count <= 0) return;
+
+    // A single drop action was observed calling ItemDropRequest_Event_0
+    // twice for the same ItemRef (2026-08-12 live test: two identical
+    // ItemDropRequests, two duplicate world entities on the other client) —
+    // debounce by (ItemRef pointer, time) rather than trusting one
+    // ProcessEvent call per real drop.
+    static void*   s_last_item_ref = nullptr;
+    static uint64_t s_last_drop_us = 0;
+    const uint64_t nowUs = sdb::now_micros();
+    if (itemRef == s_last_item_ref && nowUs - s_last_drop_us < 500'000ULL) {
+        debug_log("handle_drop_hook: debounced duplicate call for same ItemRef");
+        return;
+    }
+    s_last_item_ref = itemRef;
+    s_last_drop_us  = nowUs;
+
+    UFunction* getIdFn = itemRef->GetFunctionByNameInChain(L"GetItemID");
+    if (!getIdFn) {
+        debug_log("handle_drop_hook: GetItemID not found on ItemRef");
+        return;
+    }
+    struct { int32_t ComparisonIndex = 0, Number = 0; } idParams;
+    itemRef->ProcessEvent(getIdFn, &idParams);
+    std::string itemId = native::fname_to_string(reinterpret_cast<uintptr_t>(&idParams));
+    if (itemId.empty()) {
+        debug_log("handle_drop_hook: GetItemID returned empty FName");
+        return;
+    }
+
+    AActor* pawn = find_local_pawn();
+    if (!pawn) return;
+
+    const FVector loc = pawn->K2_GetActorLocation();
+    send_item_drop_request(itemId, static_cast<uint16_t>(count),
+        static_cast<float>(loc.X), static_cast<float>(loc.Y), static_cast<float>(loc.Z));
+    debug_log("handle_drop_hook: sent ItemDropRequest itemId=" + itemId +
+              " qty=" + std::to_string(count));
+}
+
+// Item-pickup detection — six hook attempts ruled out live (2026-08-12 and
+// earlier), landing on inventory-diff polling as the fallback (see git
+// history / research/04_ida_investigation_log.md for the five ruled-out
+// attempts: TryPickup, the interact-opens-UI dead end, SetEquippedInfoBySlot,
+// CombineItemRequest, HandleContainerOnContainer). The real event, confirmed
+// 2026-08-12 by cross-referencing the original SD-Online client's own UE4SS
+// Lua hooks (extracted from a legitimate install, see research notes), is
+// BP_PlayerCharacter_C::OnPickupInteractExecuted(AActor* PickupRef,
+// UJSIContainer_C* TargetContainer, bool& Result) — confirmed present on
+// this exact class (research/CXXHeaderDump/BP_PlayerCharacter.hpp:275), just
+// never tried before because nobody had this exact name/signature to try.
+//
+// Result is an out param only meaningful after the function body actually
+// runs, and this project's ProcessEvent hook is pre-only (no post-callback
+// resolved for this UE4SS build) — so instead of trusting Result directly,
+// take an inventory snapshot at hook time and diff it one tick later. This
+// is the same confirmation check the old poll used, but now triggered by
+// the real interact attempt instead of blindly every 1.5s, and resolved by
+// exact actor identity (PickupRef matched against WorldEntity::actor)
+// instead of nearest-itemId-in-range guessing.
+static UFunction* s_pickup_fn = nullptr;
+static AActor*    s_pending_pickup_ref = nullptr;
+static std::unordered_map<std::string, int32_t> s_pending_pickup_snapshot;
+static uint64_t   s_pending_pickup_us = 0;
+
+static void handle_pickup_hook(AActor* pawn, void* params)
+{
+    if (!params || !pawn) return;
+    auto* pickupRef = *reinterpret_cast<AActor**>(static_cast<uint8_t*>(params) + 0x00);
+    if (!pickupRef) return;
+
+    s_pending_pickup_ref = pickupRef;
+    s_pending_pickup_us  = sdb::now_micros();
+    s_pending_pickup_snapshot.clear();
+    for (const auto& container : read_local_inventory(pawn))
+        for (const auto& slot : container.items)
+            s_pending_pickup_snapshot[slot.itemId] += slot.quantity;
+}
+
+// Called every tick; resolves a pending pickup ~100ms after the interact
+// fired, once OnPickupInteractExecuted's body has actually had a chance to
+// run and (if successful) update the local inventory.
+static void check_pending_pickup(AActor* pawn)
+{
+    if (!s_pending_pickup_ref || !pawn) return;
+    if (sdb::now_micros() - s_pending_pickup_us < 100'000ULL) return;
+
+    AActor* pickupRef = s_pending_pickup_ref;
+    s_pending_pickup_ref = nullptr;
+
+    std::unordered_map<std::string, int32_t> curCounts;
+    for (const auto& container : read_local_inventory(pawn))
+        for (const auto& slot : container.items)
+            curCounts[slot.itemId] += slot.quantity;
+
+    bool anyIncrease = false;
+    for (const auto& [itemId, curQty] : curCounts) {
+        const auto it = s_pending_pickup_snapshot.find(itemId);
+        const int32_t prevQty = (it != s_pending_pickup_snapshot.end()) ? it->second : 0;
+        if (curQty > prevQty) { anyIncrease = true; break; }
+    }
+    if (!anyIncrease) {
+        debug_log("check_pending_pickup: no inventory increase — interact did not succeed");
+        return;
+    }
+
+    std::lock_guard<std::mutex> lk(sdb::g_state().entityMtx);
+    for (const auto& [id, entity] : sdb::g_state().entities) {
+        if (entity.actor != pickupRef) continue;
+        send_item_pickup_request(id);
+        debug_log("check_pending_pickup: sent ItemPickupRequest eid=" + std::to_string(id) +
+                  " (matched by actor identity)");
+        return;
+    }
+    debug_log("check_pending_pickup: no tracked entity matches PickupRef — likely non-synced world loot");
+}
+
+// check_pending_pickup only catches a direct interact-key pickup, which
+// OnPickupInteractExecuted fires for — but live testing 2026-08-12 confirmed
+// the actually-used pickup method is a two-step "open loot window, drag item
+// into own inventory" UI flow (the same drag/drop path five earlier hook
+// attempts already failed to intercept — see the comment above
+// handle_pickup_hook), which never calls OnPickupInteractExecuted at all.
+// Keep this inventory-diff poll running alongside the hook rather than
+// choosing one: the hook is lower-latency and identity-exact when it does
+// apply, this is the proven fallback for the drag-and-drop path players
+// actually use.
+static void check_inventory_pickup(AActor* pawn)
+{
+    static std::unordered_map<std::string, int32_t> s_lastCounts;
+    static uint64_t s_lastCheckUs = 0;
+
+    const uint64_t now = sdb::now_micros();
+    if (s_lastCheckUs != 0 && now - s_lastCheckUs < 1'500'000ULL) return;
+    s_lastCheckUs = now;
+
+    std::unordered_map<std::string, int32_t> curCounts;
+    for (const auto& container : read_local_inventory(pawn))
+        for (const auto& slot : container.items)
+            curCounts[slot.itemId] += slot.quantity;
+
+    if (!s_lastCounts.empty()) {
+        const FVector loc = pawn->K2_GetActorLocation();
+        for (const auto& [itemId, curQty] : curCounts) {
+            const auto it = s_lastCounts.find(itemId);
+            const int32_t prevQty = (it != s_lastCounts.end()) ? it->second : 0;
+            if (curQty <= prevQty) continue; // not an increase — nothing picked up
+
+            std::lock_guard<std::mutex> lk(sdb::g_state().entityMtx);
+            for (const auto& [id, entity] : sdb::g_state().entities) {
+                if (entity.itemId != itemId || !entity.hasPosition) continue;
+                const double dx = entity.x - loc.X, dy = entity.y - loc.Y, dz = entity.z - loc.Z;
+                if (dx*dx + dy*dy + dz*dz > 300.0*300.0) continue;
+
+                send_item_pickup_request(id);
+                debug_log("check_inventory_pickup: sent ItemPickupRequest itemId=" + itemId +
+                          " eid=" + std::to_string(id));
+                break; // one match is enough for this itemId this poll
+            }
+        }
+    }
+
+    s_lastCounts = std::move(curCounts);
+}
+
+// Fires on the game thread for every UObject::ProcessEvent call.
+static void on_process_event_pre(UObject* obj, UFunction* func, void* params)
+{
+    // Resolving s_drop_fn needs find_local_pawn() — a UE4SS reflection scan
+    // over all live UObjects, expensive enough that it must NOT run on every
+    // ProcessEvent call (this fires thousands of times per frame). Retried
+    // at most once per second until it succeeds, same throttling pattern as
+    // g_last_open_try_us/g_last_equip_us elsewhere in this file. Missing
+    // this throttle pegged the game at ~1 FPS even at the main menu (no pawn
+    // yet => the lookup kept retrying on literally every ProcessEvent call).
+    static std::atomic<uint64_t> s_last_drop_fn_try_us{0};
+    if (func && !s_drop_fn) {
+        const uint64_t now = sdb::now_micros();
+        const uint64_t last = s_last_drop_fn_try_us.load(std::memory_order_relaxed);
+        if (last == 0 || now - last >= 1'000'000ULL) {
+            s_last_drop_fn_try_us.store(now, std::memory_order_relaxed);
+            if (AActor* pawn = find_local_pawn()) {
+                const uintptr_t jigMp = *reinterpret_cast<uintptr_t*>(
+                    reinterpret_cast<uintptr_t>(pawn) + 0x818);
+                if (jigMp) {
+                    s_drop_fn = reinterpret_cast<UObject*>(jigMp)
+                        ->GetFunctionByNameInChain(L"ItemDropRequest_Event_0");
+                    debug_log(s_drop_fn ? "on_process_event_pre: ItemDropRequest_Event_0 resolved"
+                                        : "on_process_event_pre: ItemDropRequest_Event_0 NOT FOUND on BP_JigMultiplayer");
+                } else {
+                    debug_log("on_process_event_pre: pawn+0x818 BP_JigMultiplayer is null");
+                }
+            } else {
+                debug_log("on_process_event_pre: find_local_pawn() returned null (drop-fn resolve)");
+            }
+        }
+    }
+    if (func && func == s_drop_fn) {
+        handle_drop_hook(params);
+    }
+
+    // Same throttled-retry shape as s_drop_fn above, but OnPickupInteractExecuted
+    // is declared directly on BP_PlayerCharacter_C (research/CXXHeaderDump/
+    // BP_PlayerCharacter.hpp:275), not a pawn+0x818 component — resolved
+    // straight off the pawn itself.
+    static std::atomic<uint64_t> s_last_pickup_fn_try_us{0};
+    if (func && !s_pickup_fn) {
+        const uint64_t now = sdb::now_micros();
+        const uint64_t last = s_last_pickup_fn_try_us.load(std::memory_order_relaxed);
+        if (last == 0 || now - last >= 1'000'000ULL) {
+            s_last_pickup_fn_try_us.store(now, std::memory_order_relaxed);
+            if (AActor* pawn = find_local_pawn()) {
+                s_pickup_fn = pawn->GetFunctionByNameInChain(L"OnPickupInteractExecuted");
+                debug_log(s_pickup_fn ? "on_process_event_pre: OnPickupInteractExecuted resolved"
+                                      : "on_process_event_pre: OnPickupInteractExecuted NOT FOUND on pawn");
+            }
+        }
+    }
+    if (func && func == s_pickup_fn) {
+        handle_pickup_hook(find_local_pawn(), params);
+    }
+
     // Equip-trace diagnostic (temporary, see research/04_ida_investigation_log.md):
     // our own synthetic SetEquippedInfoBySlot call reports success but never
     // persists, and a helper-only trace caught nothing during a real equip —
@@ -1487,6 +2596,79 @@ static void on_process_event_pre(UObject* obj, UFunction* func, void* /*params*/
     // Full game tick — runs here because on_actor_tick is not reliable after
     // level transitions in this version of UE4SS.
     do_game_tick();
+}
+
+// Look-direction sync, take 2 (2026-08-13): GetAimOffset unconditionally
+// hard-resets the AnimBP's own Pitch to 0 every single frame for a
+// non-locally-controlled proxy (confirmed live via bytecode tracing +
+// direct value sampling — see proxy_manager.cpp's apply_proxy_aim_pitch_safe
+// comment for the full chain of evidence). A same-tick property write can
+// never win that race. Fixed here instead: UE4SS.dll in this build DOES
+// export RegisterProcessEventPostCallback (verified live via GetProcAddress
+// against the actual on-disk DLL, same mangled-name pattern as the existing
+// Pre registration below with Pre->Post substituted) — an earlier comment
+// elsewhere in this file claiming "no post-callback resolved for this UE4SS
+// build" was simply never actually tested for this specific symbol. Once
+// registered, this runs immediately AFTER the real GetAimOffset call
+// completes (including its own Pitch=0 write), so writing here always wins
+// cleanly — no fight, no flicker, unlike a same-tick pre-write.
+static UFunction* s_getAimOffsetFn = nullptr;
+
+static void on_process_event_post(UObject* obj, UFunction* func, void* /*params*/)
+{
+    if (!obj || !func) return;
+
+    // Lazily resolve once, off the LOCAL player's own AnimInstance — the
+    // UFunction object is shared across every Player_AnimBP_C instance
+    // (proxies included), so a single resolution covers all of them for the
+    // rest of the session. Throttled the same way s_drop_fn's lookup is
+    // above: find_local_pawn() is an expensive reflection scan and this
+    // fires on every ProcessEvent call otherwise.
+    if (!s_getAimOffsetFn) {
+        static std::atomic<uint64_t> s_lastTryUs{0};
+        const uint64_t now = sdb::now_micros();
+        const uint64_t last = s_lastTryUs.load(std::memory_order_relaxed);
+        if (last == 0 || now - last >= 1'000'000ULL) {
+            s_lastTryUs.store(now, std::memory_order_relaxed);
+            if (AActor* pawn = find_local_pawn()) {
+                auto** meshSlot = static_cast<UObject**>(pawn->GetValuePtrByPropertyNameInChain(L"Mesh"));
+                UObject* mesh = (meshSlot && *meshSlot) ? *meshSlot : nullptr;
+                if (mesh) {
+                    UFunction* getAnimFn = mesh->GetFunctionByNameInChain(L"GetAnimInstance");
+                    if (getAnimFn) {
+                        struct Params { UObject* ReturnValue = nullptr; } aparams;
+                        mesh->ProcessEvent(getAnimFn, &aparams);
+                        if (aparams.ReturnValue)
+                            s_getAimOffsetFn = aparams.ReturnValue->GetFunctionByNameInChain(L"GetAimOffset");
+                    }
+                }
+            }
+        }
+    }
+
+    // Cheap pointer-compare fast path — skips essentially every ProcessEvent
+    // call in the game (this fires thousands of times per frame); only
+    // GetAimOffset calls (one per Player_AnimBP_C instance per frame, a
+    // small handful total) do any real work below.
+    if (func != s_getAimOffsetFn) return;
+
+    UFunction* getOwnerFn = obj->GetFunctionByNameInChain(L"GetOwningActor");
+    if (!getOwnerFn) return;
+    struct OwnerParams { AActor* ReturnValue = nullptr; } oparams;
+    obj->ProcessEvent(getOwnerFn, &oparams);
+    AActor* owner = oparams.ReturnValue;
+    if (!owner) return;
+
+    std::lock_guard<std::mutex> lk(sdb::g_state().playersMtx);
+    for (auto& [id, player] : sdb::g_state().players) {
+        if (static_cast<AActor*>(player.proxyActor) != owner) continue;
+
+        double degrees = player.aimPitchByte * (360.0 / 256.0);
+        if (degrees > 180.0) degrees -= 360.0;
+        if (auto* pitchSlot = static_cast<double*>(obj->GetValuePtrByPropertyNameInChain(L"Pitch")))
+            *pitchSlot = degrees;
+        break;
+    }
 }
 
 // Fires per actor per frame; drives do_game_tick when on_actor_tick is available.
@@ -1547,6 +2729,17 @@ public:
             "@$$A6AXPEAVUObject@Unreal@RC@@PEAVUFunction@23@PEAX@Z@std@@@Z")) : nullptr;
         if (fn_pe) fn_pe(on_process_event_pre);
         else Output::send<LogLevel::Error>(STR("SDB: RegisterProcessEventPreCallback not found\n"));
+
+        // Verified live via GetProcAddress against the actual on-disk
+        // UE4SS.dll (2026-08-13) — exists in this build despite an earlier,
+        // never-actually-tested assumption elsewhere in this file that it
+        // didn't. Used by on_process_event_post to win the per-frame
+        // GetAimOffset race for proxy aim-pitch (see that function's comment).
+        auto* fn_pe_post = ue4ss ? reinterpret_cast<RegPE>(GetProcAddress(ue4ss,
+            "?RegisterProcessEventPostCallback@Hook@Unreal@RC@@YAXV?$function"
+            "@$$A6AXPEAVUObject@Unreal@RC@@PEAVUFunction@23@PEAX@Z@std@@@Z")) : nullptr;
+        if (fn_pe_post) fn_pe_post(on_process_event_post);
+        else Output::send<LogLevel::Error>(STR("SDB: RegisterProcessEventPostCallback not found\n"));
 
         Output::send<LogLevel::Normal>(STR("SDB: ready\n"));
         g_init_time_us.store(sdb::now_micros());

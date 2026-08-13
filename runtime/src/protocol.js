@@ -59,6 +59,8 @@ const MsgType = Object.freeze({
     ItemDropResult:        39,
     PlayerDamage:          40,
     PlayerProgressRestore: 42,
+    WeaponAttachments:     43,
+    PawnAppearance:        44,
 });
 
 // Returns a parsed frame object, or null if buf is too short.
