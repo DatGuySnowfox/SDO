@@ -1812,10 +1812,85 @@ static void check_watch_aimoffset_trigger()
     {
         std::lock_guard<std::mutex> lk(sdb::g_state().playersMtx);
         for (auto& [id, player] : sdb::g_state().players) {
-            if (player.proxyActor) {
+            // Same 2s post-spawn grace period used everywhere else a proxy's
+            // components get touched — see on_process_event_post's own
+            // comment for why (live-tested crash without it).
+            if (player.proxyActor && sdb::now_micros() - player.proxySpawnedAtUs >= 2'000'000ULL) {
                 log_aimoffset_values("proxy", static_cast<AActor*>(player.proxyActor));
                 break;
             }
+        }
+    }
+}
+
+// Read-only diagnostic (2026-08-13): GetLeftHandLoc's entire body is
+// "LeftHandWeaponLocation = K2Node_PropertyAccess_13" (confirmed via fresh
+// bytecode dump + resolve_fprop — a 30-byte function, just one property
+// copy). K2Node_PropertyAccess_13 is a native getter-chain cache (same
+// mechanism as GetAimOffset's own K2Node_PropertyAccess_8/9/10/11), likely
+// reading the equipped weapon actor's own grip socket — invisible to
+// Kismet bytecode. Reads the live Vector value off both the local player
+// and a proxy to see whether the proxy's version is just empty/default
+// (the working theory for the one-handed shotgun-grip symptom) before
+// guessing at a fix.
+static void log_lefthand_values(const char* label, AActor* pawn)
+{
+    if (!pawn) { debug_log(std::string("watch_lefthand: ") + label + " no pawn"); return; }
+    auto** meshSlot = static_cast<UObject**>(pawn->GetValuePtrByPropertyNameInChain(L"Mesh"));
+    UObject* mesh = (meshSlot && *meshSlot) ? *meshSlot : nullptr;
+    if (!mesh) { debug_log(std::string("watch_lefthand: ") + label + " Mesh not found"); return; }
+    UFunction* getAnimFn = mesh->GetFunctionByNameInChain(L"GetAnimInstance");
+    if (!getAnimFn) { debug_log(std::string("watch_lefthand: ") + label + " GetAnimInstance NOT FOUND"); return; }
+    struct Params { UObject* ReturnValue = nullptr; } aparams;
+    mesh->ProcessEvent(getAnimFn, &aparams);
+    if (!aparams.ReturnValue) { debug_log(std::string("watch_lefthand: ") + label + " AnimInstance is null"); return; }
+
+    auto* anim = aparams.ReturnValue;
+    auto* propAccess13 = static_cast<double*>(anim->GetValuePtrByPropertyNameInChain(L"K2Node_PropertyAccess_13"));
+    auto* leftHandLoc   = static_cast<double*>(anim->GetValuePtrByPropertyNameInChain(L"LeftHandWeaponLocation"));
+    auto* leftHandRot   = static_cast<double*>(anim->GetValuePtrByPropertyNameInChain(L"LeftHandWeaponRotator"));
+    auto* isAds = static_cast<uint8_t*>(anim->GetValuePtrByPropertyNameInChain(L"IsADS"));
+    // "IsADS?" (with a trailing '?') showed up as a distinct name elsewhere
+    // in the FModel export at least once — check both spellings live in
+    // case the plain "IsADS" instance isn't actually the one GetAnimationInfo
+    // FromCharacter's Ads output feeds.
+    auto* isAdsQ = static_cast<uint8_t*>(anim->GetValuePtrByPropertyNameInChain(L"IsADS?"));
+
+    char line[460];
+    snprintf(line, sizeof(line),
+        "watch_lefthand: %s PA13(x/y/z)=%.2f/%.2f/%.2f LeftHandLoc(x/y/z)=%.2f/%.2f/%.2f "
+        "LeftHandRot(P/Y/R)=%.2f/%.2f/%.2f IsADS=%d IsADS?=%d",
+        label,
+        propAccess13 ? propAccess13[0] : 0.0, propAccess13 ? propAccess13[1] : 0.0, propAccess13 ? propAccess13[2] : 0.0,
+        leftHandLoc ? leftHandLoc[0] : 0.0, leftHandLoc ? leftHandLoc[1] : 0.0, leftHandLoc ? leftHandLoc[2] : 0.0,
+        leftHandRot ? leftHandRot[0] : 0.0, leftHandRot ? leftHandRot[1] : 0.0, leftHandRot ? leftHandRot[2] : 0.0,
+        isAds ? (int)*isAds : -1, isAdsQ ? (int)*isAdsQ : -1);
+    debug_log(line);
+}
+
+static void check_watch_lefthand_trigger()
+{
+    wchar_t path[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return;
+    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\watch_lefthand.flag";
+    if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+
+    static uint64_t s_lastLogUs = 0;
+    const uint64_t now = sdb::now_micros();
+    if (now - s_lastLogUs < 1'000'000ULL) return;
+    s_lastLogUs = now;
+
+    log_lefthand_values("local", find_local_pawn());
+
+    std::lock_guard<std::mutex> lk(sdb::g_state().playersMtx);
+    for (auto& [id, player] : sdb::g_state().players) {
+        // Same 2s post-spawn grace period used everywhere else a proxy's
+        // components get touched — see on_process_event_post's own comment
+        // for why (live-tested crash without it).
+        if (player.proxyActor && sdb::now_micros() - player.proxySpawnedAtUs >= 2'000'000ULL) {
+            log_lefthand_values("proxy", static_cast<AActor*>(player.proxyActor));
+            break;
         }
     }
 }
@@ -1843,6 +1918,9 @@ static void check_watch_rotation_trigger()
     std::lock_guard<std::mutex> lk(sdb::g_state().playersMtx);
     for (auto& [id, player] : sdb::g_state().players) {
         if (!player.proxyActor) continue;
+        // Same 2s post-spawn grace period used everywhere else a proxy gets
+        // touched — see on_process_event_post's own comment for why.
+        if (sdb::now_micros() - player.proxySpawnedAtUs < 2'000'000ULL) continue;
         auto* actor = static_cast<AActor*>(player.proxyActor);
         const FRotator rot = actor->K2_GetActorRotation();
         char line[200];
@@ -2182,6 +2260,7 @@ static void do_game_tick()
     check_resolve_fprop_trigger();
     check_watch_aimoffset_trigger();
     check_watch_rotation_trigger();
+    check_watch_lefthand_trigger();
     check_widget_scan_trigger();
     check_scan_pickup_class_trigger();
     check_dump_clothing_table_trigger();
@@ -2722,6 +2801,15 @@ static void on_process_event_post(UObject* obj, UFunction* func, void* /*params*
     std::lock_guard<std::mutex> lk(sdb::g_state().playersMtx);
     for (auto& [id, player] : sdb::g_state().players) {
         if (static_cast<AActor*>(player.proxyActor) != owner) continue;
+
+        // Same 2s post-spawn grace period ProxyManager::tick() already uses
+        // before its own heavy sync calls (RemotePlayer::proxySpawnedAtUs) —
+        // a freshly-spawned proxy's components aren't fully ready yet, and
+        // this hook fires unconditionally on every BlueprintThreadSafe
+        // UpdateAnimation call, including ones on a just-spawned proxy this
+        // gate was missing here originally. Live-tested 2026-08-13: PC1
+        // crashed the instant PC2's proxy spawned in without this check.
+        if (sdb::now_micros() - player.proxySpawnedAtUs < 2'000'000ULL) break;
 
         double degrees = player.aimPitchByte * (360.0 / 256.0);
         if (degrees > 180.0) degrees -= 360.0;
