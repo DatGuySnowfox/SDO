@@ -6765,6 +6765,21 @@ resolution block just keeps failing silently, no crash risk) — worth a fresh l
 checking whether `find_local_pawn()`'s own implementation has some fragility (a class-name/component check
 that could intermittently miss) rather than assuming the calling pattern itself is at fault.
 
+**Push/shove — scoped via FModel exports (per direct instruction to check them), not yet attempted live.**
+`Exports/SurrounDead/Content/Animations/Player/Anims/Actions/Push/` has four plain `Anim_*` assets
+(`Anim_LargeMeleePush`, `Anim_SmallMeleePush`, `Anim_PistolPush`, `Anim_RiflePush`) — bare `AnimSequence`
+assets, **not** `_Montage`-suffixed like every confirmed melee-attack asset (`1HMeleeAttack1-4_Montage`,
+`Crouch_MeleeAttack_Montage`). This is a real, structural difference, not just a naming quirk: a plain
+`AnimSequence` can't be played via `Montage_Play` (which expects a pre-built `UAnimMontage`) — push almost
+certainly goes through the engine's `PlaySlotAnimationAsDynamicMontage` instead, a function with several more
+parameters (`SlotNodeName`, blend in/out times, loop count, etc.) than `Montage_Play`'s two, meaning more
+alignment/offset guessing risk to safely hook. Also confirmed via export: CUE4Parse's default
+`BlueprintGeneratedClass`/`Function` export only lists function metadata (params, flags) — no decoded Kismet
+bytecode/script content — so exports can narrow *which* engine API a system likely uses (as they did here)
+but can't reveal the actual call site/trigger the way a live `bytecode_dump.flag` capture of the *right*
+function can. Not attempted live this session — a genuinely separate, not-yet-started investigation from
+melee's, given the different underlying mechanism.
+
 **New bug spotted live, not yet investigated: weapon base mesh invisible while its attachments still
 render.** Screenshot evidence: a proxy's AK15 — its own base rifle mesh is missing/invisible entirely,
 while its attached items (scope, and at least one other attachment) render correctly and stay positioned
