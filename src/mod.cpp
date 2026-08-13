@@ -3035,7 +3035,7 @@ static void on_process_event_pre(UObject* obj, UFunction* func, void* params)
         const uint64_t last = s_last_montageplay_fn_try_us.load(std::memory_order_relaxed);
         if (last == 0 || now - last >= 1'000'000ULL) {
             s_last_montageplay_fn_try_us.store(now, std::memory_order_relaxed);
-            if (AActor* pawn = find_local_pawn()) {
+            if (AActor* pawn = cached_find_local_pawn()) {
                 auto** meshSlot = static_cast<UObject**>(pawn->GetValuePtrByPropertyNameInChain(L"Mesh"));
                 UObject* mesh = (meshSlot && *meshSlot) ? *meshSlot : nullptr;
                 if (!mesh) {

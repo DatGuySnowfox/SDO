@@ -6780,6 +6780,42 @@ but can't reveal the actual call site/trigger the way a live `bytecode_dump.flag
 function can. Not attempted live this session — a genuinely separate, not-yet-started investigation from
 melee's, given the different underlying mechanism.
 
+## Session 56 continued — Montage_Play resolution fixed; MeleeTrace decoded, ruled out; still unresolved
+
+**Fixed the `find_local_pawn()` resolution mystery**: swapping `find_local_pawn()` for
+`cached_find_local_pawn()` (a 100ms-cache wrapper around the exact same underlying call, defined in
+`mod.cpp`) in the `Montage_Play` resolution block made it resolve successfully, after 10 straight failed
+attempts with the direct call. Root cause not understood (both calls are the same function underneath), but
+the fix is real and cheap — worth defaulting to `cached_find_local_pawn()` over a bare `find_local_pawn()`
+call in any *new* hook added to `on_process_event_pre` from now on, given this is the second time a bare
+call has behaved unreliably in this exact function.
+
+**`Montage_Play` still doesn't fire during a real swing even once correctly resolved and hooked** — six
+candidate functions now ruled out with real evidence (`PlayMontage`, `MC_Montage`, `Svr_Montage`,
+`Montage_Play`, and now `BP_MeleePickup_C::MeleeTrace` itself, decoded via `bytecode_dump.flag` +
+`kismet_disasm.py`, confirmed to call only `SphereTraceMulti`/`GetPlayerCharacter`/`Array_Length`/
+`Array_Get`/`Add_IntInt`/`Less_IntInt` — resolved via `resolve_ptr.flag`, **not** `resolve_fprop.flag`
+(a real mixup this session: `resolve_fprop` is for `FProperty*`/`FField` pointers via the `NamePrivate`
+offset, `resolve_ptr` is for `UObject*`/`UFunction*` via `GetFullName()` — using the wrong one on a
+`func=0x...` operand silently produces `<access violation>` for every single entry, which looks identical
+to a real crash-on-resolve until you notice it's *always* every single one). `MeleeTrace` is confirmed pure
+hit-detection (a sphere trace + iterating the hit array) — genuinely not where the animation gets triggered
+from, ruling out this specific function rather than just failing to find something in it.
+
+**Also hit a real flag-file race worth remembering**: a `resolve_ptr.flag` write was consumed (file deleted)
+but produced zero log output at all — not even a parse-failure message — most likely the mod's poll read the
+file mid-write and saw it empty. Retrying the identical write a few seconds later worked cleanly. If a flag
+file disappears without any corresponding debug.log output at all (not even an error), don't assume the
+content was invalid — just retry.
+
+**Where this leaves melee swing sync**: the actual trigger is neither `MeleeTrace` nor any of the five
+character/engine-level montage-playing functions tried. Likely candidates not yet checked: whatever function
+is bound to the actual attack *input action* (`InpActEvt_IA_...`-style, per `BP_PlayerCharacter.hpp`) which
+probably calls `MeleeTrace` *and* separately triggers the animation — dump and decode that input handler
+next, rather than continuing to guess at montage-playing functions directly. This sub-investigation has now
+consumed a large amount of session time across many rebuild/redeploy/live-test cycles for six ruled-out
+candidates; worth treating as its own dedicated session rather than a quick continuation next time.
+
 **New bug spotted live, not yet investigated: weapon base mesh invisible while its attachments still
 render.** Screenshot evidence: a proxy's AK15 — its own base rifle mesh is missing/invisible entirely,
 while its attached items (scope, and at least one other attachment) render correctly and stay positioned
