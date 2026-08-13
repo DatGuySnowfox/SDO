@@ -2695,6 +2695,46 @@ static UFunction* s_playMontage_fn = nullptr;
 static UFunction* s_mcMontage_fn  = nullptr;
 static UFunction* s_svrMontage_fn = nullptr;
 
+// Neither PlayMontage nor MC_Montage/Svr_Montage fire during a real melee
+// swing (all three confirmed resolved+hooked live, none triggered) — the
+// real trigger is almost certainly the standard engine
+// UAnimInstance::Montage_Play(UAnimMontage* MontageToPlay, float
+// InPlayRate = 1, EMontagePlayReturnType, float InTimeToStartMontageAt = 0,
+// bool bStopAllMontages = true), called directly from the weapon
+// component's own graph. Public, well-documented UE5 API — params layout
+// below (Montage*@0x00, float PlayRate@0x08) only relies on the first two
+// fields, deliberately not touching anything past that until live-verified.
+// Resolved off the local player's own AnimInstance (not the character —
+// this is a UAnimInstance member), same lazy-resolve pattern as
+// s_lastUpdateFn in on_process_event_post.
+static UFunction* s_montagePlayEngine_fn = nullptr;
+
+static void handle_montage_play_engine_hook(void* params)
+{
+    if (!params) return;
+    auto* montage = *reinterpret_cast<UObject**>(static_cast<uint8_t*>(params) + 0x00);
+    const float playRate = *reinterpret_cast<const float*>(static_cast<uint8_t*>(params) + 0x08);
+    if (!montage) return;
+
+    const std::string montageName = short_object_name(montage);
+    if (montageName.empty()) return;
+
+    sdb::PlayMontageData m;
+    m.montageName = montageName;
+    m.playRate    = playRate;
+
+    sdb::Frame f;
+    f.type    = sdb::MsgType::PlayMontage;
+    f.payload = sdb::encode_play_montage(m);
+    build_session_frame(f);
+    send_frame(f);
+
+    char buf[128];
+    snprintf(buf, sizeof(buf), "send_play_montage(engine): montage=%s playRate=%.2f",
+             montageName.c_str(), playRate);
+    debug_log(buf);
+}
+
 static void handle_play_montage_hook(void* params)
 {
     if (!params) return;
@@ -2985,6 +3025,45 @@ static void on_process_event_pre(UObject* obj, UFunction* func, void* params)
     }
     if (func && func == s_mcMontage_fn)  debug_log("montage_diag: MC_Montage fired");
     if (func && func == s_svrMontage_fn) debug_log("montage_diag: Svr_Montage fired");
+
+    // Montage_Play resolution — off the AnimInstance (Mesh->GetAnimInstance()),
+    // not the character, unlike every other hook above. Same throttled-retry
+    // shape.
+    static std::atomic<uint64_t> s_last_montageplay_fn_try_us{0};
+    if (func && !s_montagePlayEngine_fn) {
+        const uint64_t now = sdb::now_micros();
+        const uint64_t last = s_last_montageplay_fn_try_us.load(std::memory_order_relaxed);
+        if (last == 0 || now - last >= 1'000'000ULL) {
+            s_last_montageplay_fn_try_us.store(now, std::memory_order_relaxed);
+            if (AActor* pawn = find_local_pawn()) {
+                auto** meshSlot = static_cast<UObject**>(pawn->GetValuePtrByPropertyNameInChain(L"Mesh"));
+                UObject* mesh = (meshSlot && *meshSlot) ? *meshSlot : nullptr;
+                if (!mesh) {
+                    debug_log("on_process_event_pre: Montage_Play resolve — Mesh not found");
+                } else {
+                    UFunction* getAnimFn = mesh->GetFunctionByNameInChain(L"GetAnimInstance");
+                    if (!getAnimFn) {
+                        debug_log("on_process_event_pre: Montage_Play resolve — GetAnimInstance NOT FOUND");
+                    } else {
+                        struct AnimParams { UObject* ReturnValue = nullptr; } aparams;
+                        mesh->ProcessEvent(getAnimFn, &aparams);
+                        if (!aparams.ReturnValue) {
+                            debug_log("on_process_event_pre: Montage_Play resolve — AnimInstance is null");
+                        } else {
+                            s_montagePlayEngine_fn = aparams.ReturnValue->GetFunctionByNameInChain(L"Montage_Play");
+                            debug_log(s_montagePlayEngine_fn ? "on_process_event_pre: Montage_Play (engine) resolved"
+                                                              : "on_process_event_pre: Montage_Play (engine) NOT FOUND");
+                        }
+                    }
+                }
+            } else {
+                debug_log("on_process_event_pre: Montage_Play resolve — find_local_pawn() null");
+            }
+        }
+    }
+    if (func && func == s_montagePlayEngine_fn) {
+        handle_montage_play_engine_hook(params);
+    }
 
     // Equip-trace diagnostic (temporary, see research/04_ida_investigation_log.md):
     // our own synthetic SetEquippedInfoBySlot call reports success but never
