@@ -598,6 +598,57 @@ static bool equip_actor_to_socket(AActor* actor, AActor* itemActor, bool isSecon
     return true;
 }
 
+// Player_AnimBP_C::CombatState(int32 BlendSpace) — root cause of the
+// weapon-grip pose bug, found Session 55 via bytecode_dump.flag +
+// kismet_disasm.py: its entire decoded body is "BlendSpaceInt = BlendSpace;
+// return;", nothing else. Live A/B comparison (same technique, watch_
+// activeslot.flag) confirmed BlendSpaceInt genuinely differs by weapon
+// category on a real, correctly-rendering local player — 0 (default/
+// unarmed), 1 (BenelliM4/shotgun, Secondary slot, two-handed), 2
+// (BattleReadyGlock/pistol, Sidearm slot, one-handed) — while a proxy
+// holding the exact same shotgun stayed pinned at 0 throughout. Root cause:
+// nothing ever calls CombatState() for a proxy at all, because proxy
+// equipping goes through this mod's own manual spawn/attach path
+// (spawn_and_equip_item_visual/equip_actor_to_socket), not the real game
+// equip flow that apparently calls CombatState as a side effect for a real,
+// input-driven local player. Mapping beyond these two confirmed slots is a
+// reasonable heuristic (Primary/Secondary = two-handed like the confirmed
+// Secondary/shotgun case, Sidearm = one-handed like the confirmed pistol
+// case), not independently verified per-slot — Melee (14) in particular is
+// unconfirmed either way.
+static bool call_combat_state(AActor* actor, int32_t blendSpace)
+{
+    if (!actor) return false;
+    auto** meshSlot = static_cast<UObject**>(actor->GetValuePtrByPropertyNameInChain(L"Mesh"));
+    UObject* mesh = (meshSlot && *meshSlot) ? *meshSlot : nullptr;
+    if (!mesh) return false;
+    UFunction* getAnimFn = mesh->GetFunctionByNameInChain(L"GetAnimInstance");
+    if (!getAnimFn) return false;
+    struct AnimParams { UObject* ReturnValue = nullptr; } aparams;
+    mesh->ProcessEvent(getAnimFn, &aparams);
+    if (!aparams.ReturnValue) return false;
+
+    UFunction* combatStateFn = aparams.ReturnValue->GetFunctionByNameInChain(L"CombatState");
+    if (!combatStateFn) return false;
+    struct Params { int32_t BlendSpace = 0; } params;
+    params.BlendSpace = blendSpace;
+    aparams.ReturnValue->ProcessEvent(combatStateFn, &params);
+    return true;
+}
+
+// Heuristic slot -> CombatState BlendSpace index mapping — see
+// call_combat_state's own comment for exactly what's confirmed vs. guessed.
+static int32_t combat_state_blendspace_for_slot(uint8_t slotIndex)
+{
+    switch (slotIndex) {
+        case 11: return 1; // Primary — two-handed, same family as confirmed Secondary/shotgun
+        case 12: return 1; // Secondary — confirmed (BenelliM4/shotgun -> 1)
+        case 13: return 2; // Sidearm — confirmed (BattleReadyGlock/pistol -> 2)
+        case 14: return 1; // Melee — unconfirmed, guessing two-handed pending live test
+        default:  return 0; // no weapon active
+    }
+}
+
 // BP_JigHelperComp_C.OnRep_ActiveWeapon() — no parameters. Real networked
 // players never call SetActiveWeaponSlot's visual effects directly; UE5's
 // replication system calls this automatically on remote clients when the
@@ -1851,6 +1902,7 @@ void ProxyManager::sync_active_weapon_hand(AActor* actor, RemotePlayer& player)
     }
 
     player.handAttachedSlot = newActive;
+    call_combat_state(actor, combat_state_blendspace_for_slot(newActive));
     if (newActive == 0xFF) return;
 
     void** newSlot = weaponVisualActorFor(newActive);

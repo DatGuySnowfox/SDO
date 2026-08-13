@@ -6635,6 +6635,114 @@ complete the lookup and dereference the result, not attempted this session for l
 property — real progress needs either the `ControlRig`'s own RigVM bytecode or the state-machine transition
 rules, both bigger, dedicated-session-sized tasks.
 
+## Session 55: 2026-08-13 continued — mod-side bytecode-dump tooling reused; `CActiveSlot` ruled out; ubergraph handed to background workers
+
+**Rediscovered and reused this project's own mod-side diagnostic API instead of live IDA debugging** —
+much safer, no debugger/crash risk at all: `bytecode_dump.flag` (`%APPDATA%\SurrounDeadBridge\`, two lines
+class+function name, dumps `UFunction::Script` to a `.bin`), `resolve_fprop.flag`/`resolve_fname.flag` (batch
+pointer/CI→name resolution), all processed by the already-running mod on its own tick, zero debugger attach
+needed. Also recovered `kismet_disasm.py` (a complete, empirically-validated Kismet bytecode disassembler from
+an earlier session, copied into this session's scratchpad) — every opcode's shape cross-checked against real
+anchors from past decodes, not guessed.
+
+Dumped and decoded three small, descriptively-named functions on `Player_AnimBP_C` (found via a full manual
+read of its function list, not just hash-suffixed ones): `CombatState(int32 BlendSpace)` turned out to be a
+thin stub that stores its param then jumps into the shared `ExecuteUbergraph_Player_AnimBP` at entry point
+2085 — the real logic isn't in this small function at all. `GetThreadSafeBooleans()` copies ~8 booleans from
+non-thread-safe character properties into thread-safe AnimBP-local copies (resolved names confirm this:
+`Falling`, `IsCrouching`, `IsADS`, `InMeleeStance`, `LadderClimb`, `Swimming`, `Swimming_UnderWater`,
+`InVehicle?` — matches the Parallel Anim Update theory from earlier, and cross-confirms the crouch/ADS/falling
+sync properties already wired in Session 53). `GetAnimationInfoFromCharacter()` interface-casts the owning
+pawn and calls an interface function (`GetAnimationInfo`, FName ci=1941812) returning 6 values, the first
+(an FName) stored into an instance variable resolved to **`CActiveSlot`** — a promising-sounding new candidate
+not covered by any prior hypothesis.
+
+**`CActiveSlot` checked live and ruled out.** Added a small new mod diagnostic
+(`check_watch_activeslot_trigger`/`log_activeslot_values` in `mod.cpp`, `watch_activeslot.flag`) reading it by
+name (not a raw pointer, so immune to the cross-process staleness issue below) on local and the first proxy
+once a second. Result: **`"None"` on both, consistently, including after confirming the local player's weapon
+was genuinely drawn and active** (a real user-caught snag mid-session: the shotgun didn't actually draw the
+first equip attempt — holstering and re-drawing was needed to get it genuinely active, worth remembering as a
+general gotcha for any future live weapon-state test). Since the read is live and by-name, this is a real
+negative result, not stale data — `CActiveSlot` doesn't track weapon-hold type at all, most likely an unrelated
+UI/hotbar-selection concept that happens to share the `GetAnimationInfo` interface call.
+
+**Cross-process bytecode pointer staleness reconfirmed** — attempted to resolve the interface class pointer
+(`0x12ac9ac00`) found in the pre-relaunch `GetAnimationInfoFromCharacter.bin` dump against the *post-relaunch*
+process (rebuilt+redeployed for the `CActiveSlot` watcher in between) and got `<access violation, not a live
+UObject here>`, exactly the documented [[feedback-sdo-gameplaytag-ci-unstable]] class of gotcha extended to
+raw bytecode operand pointers, not just `FName` CIs. Any bytecode `.bin` dump's embedded pointers are only
+valid for resolution within the *same* process instance that produced them — re-dump fresh after any
+relaunch before resolving pointers from it, don't reuse an old dump's addresses.
+
+**Handed the large remaining work to background workers per direct instruction**, since the live-game/flag-
+file interaction (a single shared resource) doesn't parallelize safely but static decode/interpretation of
+already-dumped bytecode does: dumped `ExecuteUbergraph_Player_AnimBP` fresh from the current process
+(entry point 2085 — `CombatState`'s target — is somewhere in here) and handed it, along with `kismet_disasm.py`
+and this session's full context, to parallel agents for offline decode/interpretation.
+
+**Worker 1 result — `CombatState`'s real logic decoded, entry point confirmed.** The ubergraph's dispatch
+(offset 0) is a single `EX_ComputedJump` off the function's own `EntryPoint` int32 parameter — no jump table,
+the entry-point value *is* the literal byte offset to jump to. `2085` decimal = `0x825`; the entire payload
+there is two statements: `EX_Let` (`BlendSpaceInt = BlendSpace`) then `EX_PopExecutionFlow` straight to the
+function's shared `Return`. That's the complete body — no branch, no weapon-type/grip check at all. Confirmed
+`BlendSpaceInt` (resolved via `resolve_fprop.flag`) is a plain, directly-readable instance property, same
+class as `Pitch`/`IsCrouching`/`CActiveSlot`. Whole 6609-byte ubergraph decoded cleanly, zero unhandled
+opcodes. Full decode saved to the worker's scratchpad (`ubergraph_full.txt`) if ever needed again.
+
+**Worker 2 result — RigVM roadmap, and real evidence against `ControlRig` being the mechanism.** Found the
+real `ERigVMOpCode` enum and `URigVM`/`FRigVMByteCode` struct shapes already sitting in this repo's own
+`research/CXXHeaderDump/RigVM.hpp`/`RigVM_enums.hpp` (nobody had looked before) — real offsets:
+`URigVMHost::VM` at `+0x58`, `URigVM::ByteCodeStorage` at `+0x60`, pre-decoded `Instructions` at `+0x108`,
+`FunctionNamesStorage` at `+0x120` — flagged as needing live verification before trusting, same discipline as
+everything else this project does, not yet live-checked. More importantly: the game's *only* Control Rig
+asset (`ControlRig_Player`, already exported to `Exports/SurrounDead/Content/Animations/
+ControlRig_Player.json` from earlier FModel work) decodes to just 8 nodes implementing a **head/spine
+look-offset** (`OffsetTransformForItem` targeting `spine_01`/`head`) — no IK, no constraint, nothing
+weapon-related at all. Real evidence, not just absence of a hit, that `ControlRig` was never the mechanism —
+deprioritize it if this ever needs revisiting.
+
+**Root cause found and FIX CONFIRMED LIVE.** With the real `CombatState` logic known, added a live watcher
+(`watch_activeslot.flag` extended to also read `BlendSpaceInt` by name — same safe pattern as everything else)
+and did a real A/B comparison on the actual local (always-correct) player switching weapons: **`BlendSpaceInt`
+genuinely tracks weapon grip category** — `0` = default/unarmed, `1` = confirmed for `BenelliM4`/shotgun
+(Secondary slot, two-handed), `2` = confirmed for `BattleReadyGlock`/pistol (Sidearm slot, one-handed). The
+proxy, holding the identical shotgun, stayed pinned at `0` throughout — because nothing ever calls
+`CombatState()` for a proxy at all; its equip path is this mod's own manual `spawn_and_equip_item_visual`/
+`equip_actor_to_socket` route, never the real game equip flow that apparently triggers `CombatState` as a
+side effect for actual local input.
+
+**Fix**: `call_combat_state()` + `combat_state_blendspace_for_slot()` (`proxy_manager.cpp`), called from
+`sync_active_weapon_hand()` whenever the proxy's active weapon slot changes — mirrors what real equipping
+apparently does automatically. Slot→BlendSpace mapping: Primary/Secondary (11/12) → `1` (two-handed, Secondary
+confirmed), Sidearm (13) → `2` (one-handed, confirmed), Melee (14) → `1` (**unconfirmed guess**, not
+live-tested). Built, deployed to both machines, **live-verified working** — the proxy now visibly holds the
+shotgun two-handed, correctly. This is the real fix for the entire weapon-grip-pose investigation that ran
+across Sessions 53-55.
+
+**Not yet confirmed**: Melee's mapping (guessed, no live weapon of that class tested), and whether every
+Primary/Secondary weapon is actually two-handed by this game's own convention (true for every case tested so
+far, not exhaustively verified against every weapon type in the game). Both cheap to verify next session —
+equip a melee weapon and any other untested weapon class, check the render.
+
+**New bug spotted live, not yet investigated: weapon base mesh invisible while its attachments still
+render.** Screenshot evidence: a proxy's AK15 — its own base rifle mesh is missing/invisible entirely,
+while its attached items (scope, and at least one other attachment) render correctly and stay positioned
+as if still attached to the (invisible) weapon. Distinct from both the now-fixed grip-pose bug and the
+open mesh-detachment bug above — this isn't about pose or about an item falling away, the base mesh itself
+just isn't drawing while its children still are. Worth checking `spawn_and_equip_item_visual`'s
+`SetActorHiddenInGame(false)` call and whatever governs the base weapon actor's own mesh visibility
+specifically (as opposed to the attachment sub-actors', which appear to have their own separate visibility
+state that's unaffected) next time reproduced.
+
+**New data point on the mesh-detachment bug (still open, separate from the grip-pose fix above)**: this
+session's live testing also caught a character's **head** detaching/floating separately from the body — same
+bug class as the shirt/knife/shotgun detachment already logged, now confirmed to also affect head/headwear,
+not just weapon and clothing slots. Doesn't change the existing hypothesis (`JigSetCanInteract` fix already
+deployed) since heads aren't a `JigPickup`-style spawned actor at all — worth a fresh look at whether headwear
+specifically (a real spawned/attached item, unlike the base head mesh) is the actual thing detaching, next
+time it's reproduced.
+
 **New bug reported live, not yet investigated: proxy meshes intermittently detach entirely (not a pose issue —
 the mesh visibly separates from the character).** Screenshot evidence from this session: PC2's proxy (rendered
 on PC1) had its equipped shirt, knife, and shotgun all lying/standing separately in the world, no longer
