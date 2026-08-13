@@ -6608,6 +6608,33 @@ detachment bug's own report gave no reliable trigger to test against on demand, 
 hypothesis fix, not a confirmed one — next session should watch for whether it recurs over a longer play
 session with this build active, same as any other "did the fix work" check in this log.
 
+**Note distinguishing this from an existing, already-fixed glove/hand issue.** `proxy_manager.cpp`'s clothing
+sync (`sync_equipment`, slot 5/Gloves) already documents a *different*, already-fixed "hands" bug: a
+Gloves-vs-bare-hands **z-fight/flicker** (two overlapping meshes rendering against each other, fixed by hiding
+the bare-hands body-part mesh once gloves are genuinely equipped). That's a visibility/render-order bug, not
+physical detachment, and was already resolved before this session. Tonight's report (shirt/knife/shotgun lying
+separately in the world, "occasionally the hands too") describes actual spatial separation, not a flicker — a
+different symptom, most likely the same one-shot-`JigSetCanInteract` mechanism addressed above if "hands"
+there means the Gloves *item actor* specifically (plausible, since Gloves go through the exact same
+`spawn_and_equip_item_visual`/one-shot-physics-fix path as every other clothing slot) rather than the base
+body-part hand mesh itself (which isn't a spawned/attached actor at all and couldn't "fall away" the same way).
+Worth confirming which one the player meant next time it's reproduced live.
+
+**Full manual scan of `BP_PlayerCharacter_C`'s reflected property list (`research/CXXHeaderDump/
+BP_PlayerCharacter.hpp`), not just keyword search — no new candidate found.** Read every declared property
+looking for anything explicitly encoding weapon handedness/grip type. Nothing found beyond what's already
+ruled out: `WeaponType` (`Enum_Firearms`, dead end #5 above), `LeftHandLoc`/`FVector LeftHandLoc` @ `0x1D98`
+(almost certainly the same underlying data as the already-checked `GetLeftHandLoc()` function, dead end #2).
+Nearby candidates considered and dismissed as unlikely on their names alone (`HipFire?`, `InMeleeStance?`,
+`CurrentFiringWeapon` @ `0x0930` — a direct `ABP_FirearmPickup_C*`, worth a live null-check next session since
+it's a raw property rather than the already-ruled-out `GetCurrentActiveWeapon()` function, but not confirmed
+either way this session — needs the *character* actor pointer, not the AnimInstance this session was reading
+from; get there via the `find_local_pawn()` breakpoint hit, arg `AcknowledgedPawn`, same
+`GetValuePtrByPropertyNameInChain` breakpoint already used all session — one more hijacked call on that hit to
+complete the lookup and dereference the result, not attempted this session for lack of time). Confirms the earlier conclusion: this is genuinely not exposed as a simple reflected
+property — real progress needs either the `ControlRig`'s own RigVM bytecode or the state-machine transition
+rules, both bigger, dedicated-session-sized tasks.
+
 **New bug reported live, not yet investigated: proxy meshes intermittently detach entirely (not a pose issue —
 the mesh visibly separates from the character).** Screenshot evidence from this session: PC2's proxy (rendered
 on PC1) had its equipped shirt, knife, and shotgun all lying/standing separately in the world, no longer
