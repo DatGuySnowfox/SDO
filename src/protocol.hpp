@@ -318,6 +318,12 @@ std::optional<std::string> decode_world_action(const uint8_t* p, size_t n);
 std::vector<uint8_t> encode_item_drop_request(const std::string& itemId, uint16_t quantity,
                                                float x, float y, float z);
 
+// InteractionRequest/BUILD payload — itemId-based (see protocol.cpp for
+// full rationale). f.entityId is left 0 on this frame (there's no entity
+// yet — the server assigns one and replies via EntitySpawn/InteractionResult).
+std::vector<uint8_t> encode_interaction_request_build(const std::string& itemId,
+                                                        float x, float y, float z, float yaw);
+
 // Flat JSON field extraction for result payloads
 std::string json_str(const std::string& json, const std::string& key);
 bool        json_bool(const std::string& json, const std::string& key);

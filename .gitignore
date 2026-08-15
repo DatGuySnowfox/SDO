@@ -52,3 +52,11 @@ Exports/
 *.exe
 *.dll
 *.pdb
+
+# Crash/hang diagnostics (multi-GB, regenerable via ProcDump)
+tools/dumps/
+*.dmp
+
+# Third-party tool bundles / large binary assets
+.data/
+research/Mappings.usmap

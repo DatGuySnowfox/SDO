@@ -18,11 +18,14 @@ const crypto = require('node:crypto');
 const cfg = require('./config');
 const db  = require('./db');
 const { FrameDecoder }                               = require('./lib/frame-decoder');
-const { MsgType, encodeFrame, encodeString, decodeString } = require('./lib/protocol');
+const {
+    MsgType, encodeFrame, encodeString, decodeString,
+    decodeEntityDescriptor, decodeEntityState,
+    encodeEntityDescriptor, encodeEntityState,
+} = require('./lib/protocol');
 const { verifyTicket, signTicket }                   = require('./lib/ticket');
 const { stableNumericId }                            = require('./lib/id');
 
-const CLIENT_RATE_LIMIT = 120;  // max frames/s per client
 const HOST_RATE_LIMIT   = 4096;
 const MAX_MALFORMED     = 3;
 
@@ -44,6 +47,9 @@ class Connection {
         this.malformed    = 0;
         this._rateStart   = Date.now();
         this._rateCount   = 0;
+
+        this.connectedAtMs = Date.now();
+        this.remoteAddr    = `${socket.remoteAddress}:${socket.remotePort}`;
     }
 
     write(buf) {
@@ -96,9 +102,10 @@ class Gateway {
 
     _onSocket(sock) {
         const conn = new Connection(this._nextId++, sock);
+        console.log(`[gw] ${conn.id} connection opened  from=${conn.remoteAddr}`);
         sock.on('data',  (c) => this._onData(conn, c));
-        sock.on('error', (e) => console.error(`[gw] ${conn.id}: ${e.message}`));
-        sock.on('close', ()  => this._onClose(conn));
+        sock.on('error', (e) => console.error(`[gw] ${conn.id} socket error  from=${conn.remoteAddr}  code=${e.code || '?'}  msg=${e.message}`));
+        sock.on('close', (hadError) => this._onClose(conn, hadError));
     }
 
     _onData(conn, chunk) {
@@ -106,18 +113,18 @@ class Gateway {
         try { frames = conn.decoder.push(chunk); }
         catch (e) { console.error(`[gw] ${conn.id} decode: ${e.message}`); conn.socket.destroy(); return; }
 
-        const rateLimit = conn.role === 'host' ? HOST_RATE_LIMIT : CLIENT_RATE_LIMIT;
+        const rateLimit = conn.role === 'host' ? HOST_RATE_LIMIT : cfg.clientRateLimit;
 
         for (const f of frames) {
             if (!conn.underRateLimit(rateLimit)) {
-                console.warn(`[gw] ${conn.id} rate limited`);
+                console.warn(`[gw] ${conn.id} rate limited  from=${conn.remoteAddr}  role=${conn.role || '(none)'}  pid=${conn.playerId}`);
                 conn.socket.destroy();
                 return;
             }
             try { this._dispatch(conn, f); }
             catch (e) {
                 if (++conn.malformed >= MAX_MALFORMED) {
-                    console.error(`[gw] ${conn.id} too many malformed frames: ${e.message}`);
+                    console.error(`[gw] ${conn.id} too many malformed frames  from=${conn.remoteAddr}  role=${conn.role || '(none)'}  pid=${conn.playerId}  msg=${e.message}`);
                     conn.socket.destroy();
                     return;
                 }
@@ -246,27 +253,58 @@ class Gateway {
             break;
         }
 
-        // Broadcast to all joined clients — entity spawns/despawns also persisted to DB
+        // Broadcast to all joined clients — entity spawns/despawns also persisted
+        // to the unified `entities` table (db.js) instead of replaying opaque
+        // stored bytes, so the row stays queryable/mutable (by kind, by
+        // position) for every entity kind, not just replay-able verbatim.
         case MsgType.EntitySpawn: {
             const buf = encodeFrame(f);
-            db.spawnEntity(f.entityId, buf);
+            try {
+                const d = decodeEntityDescriptor(f.payload);
+                db.upsertEntity({
+                    entityId: f.entityId,
+                    kind: d.kind,
+                    x: 0, y: 0, z: 0, yaw: 0, // position arrives via the follow-up EntityState
+                    attributes: { itemId: d.itemId, quantity: d.quantity, classPath: d.classPath },
+                    revision: d.revision,
+                    ownerPlayerId: d.ownerPlayerId,
+                });
+            } catch (e) {
+                console.error(`[gw] EntitySpawn decode/persist failed eid=${f.entityId}: ${e.message}`);
+            }
             for (const [, c] of this._joined) c.write(buf);
             break;
         }
 
         case MsgType.EntityDespawn: {
             const buf = encodeFrame(f);
-            db.despawnEntity(f.entityId);
+            db.deleteEntity(f.entityId);
             for (const [, c] of this._joined) c.write(buf);
             break;
         }
 
         case MsgType.EntityState: {
             const buf = encodeFrame(f);
-            // Append onto the stored descriptor frame so a late joiner's
-            // replay (below) gets both frames — no-op for entityId 0 / not
-            // a tracked world entity.
-            if (f.entityId) db.appendEntityState(f.entityId, buf);
+            // Merge into the existing row rather than overwrite — EntityState
+            // only carries kind/position/health/state, not itemId/quantity/
+            // ownerPlayerId (those came from the EntitySpawn descriptor and
+            // must survive this update).
+            if (f.entityId) {
+                try {
+                    const s = decodeEntityState(f.payload);
+                    const existing = db.getEntity(f.entityId);
+                    db.upsertEntity({
+                        entityId: f.entityId,
+                        kind: s.kind,
+                        x: s.x, y: s.y, z: s.z, yaw: s.yaw,
+                        attributes: { ...(existing ? existing.attributes : {}), health: s.health, state: s.state },
+                        revision: s.revision,
+                        ownerPlayerId: existing ? existing.ownerPlayerId : null,
+                    });
+                } catch (e) {
+                    console.error(`[gw] EntityState decode/persist failed eid=${f.entityId}: ${e.message}`);
+                }
+            }
             for (const [, c] of this._joined) c.write(buf);
             break;
         }
@@ -298,16 +336,24 @@ class Gateway {
         try { body = verifyTicket(ticketStr, cfg.ticketSecret, cfg.worldIdStr); }
         catch (e) { this._authReject(conn, e.message); return; }
 
-        if (this._usedTickets.has(body.ticketId)) { this._authReject(conn, 'ticket_replay'); return; }
+        if (cfg.ticketReplayProtection && this._usedTickets.has(body.ticketId)) {
+            this._authReject(conn, 'ticket_replay'); return;
+        }
         if (this._joined.size >= cfg.maxPlayers)  { this._authReject(conn, 'server_full');   return; }
 
         this._usedTickets.set(body.ticketId, body.expiresAtMs);
 
         const playerId = stableNumericId(`player-entity:${body.playerId}`);
 
-        // Evict stale duplicate connection for the same player.
+        // Evict stale duplicate connection for the same player — same pid
+        // authenticating twice while the old connection object is still
+        // considered joined. Logged because this is otherwise invisible:
+        // the evicted side just sees an ordinary AuthenticationRejected
+        // with no indication it was a second-connection collision rather
+        // than a rejected ticket (2026-08-13).
         const stale = this._joined.get(playerId);
         if (stale) {
+            console.warn(`[gw] ${conn.id} evicting stale connection ${stale.id} for same pid=${playerId}  staleFrom=${stale.remoteAddr}  newFrom=${conn.remoteAddr}`);
             stale.write(encodeFrame({
                 type:    MsgType.AuthenticationRejected,
                 payload: encodeString('replaced_by_new_connection', 128),
@@ -440,7 +486,18 @@ class Gateway {
         // client-side (found 2026-08-12 after five ruled-out hook attempts
         // and a working polling-based sender that still didn't work end to
         // end — the bug was here all along).
+        // ZombieAttackRequest is the same shape of exception as
+        // ItemPickupRequest just above: entityId means "the zombie being
+        // attacked" (set by the client from what it's targeting), not "my
+        // own entity" — normalizing it to conn.entityId reproduces the exact
+        // same class of bug the 2026-08-12 ItemPickupRequest fix already
+        // describes (silently clobbers the target with the sender's own id,
+        // so damage can never resolve server-side no matter what triggers
+        // the send client-side). Caught by tests/integration.js's zombie
+        // simulation section going straight to a timeout with zero server-
+        // side error log at all — same signature as the original bug.
         case MsgType.ItemPickupRequest:
+        case MsgType.ZombieAttackRequest:
             if (this._host) this._host.write(encodeFrame({
                 ...f,
                 connectionId: conn.id,
@@ -452,7 +509,6 @@ class Gateway {
         case MsgType.RespawnRequest:
         case MsgType.InteractionRequest:
         case MsgType.ItemDropRequest:
-        case MsgType.ZombieAttackRequest:
             if (this._host) this._host.write(encodeFrame({
                 ...f,
                 connectionId: conn.id,
@@ -466,15 +522,26 @@ class Gateway {
 
     // ── Disconnect ────────────────────────────────────────────────────────────
 
-    _onClose(conn) {
+    _onClose(conn, hadError) {
+        const ageMs = Date.now() - conn.connectedAtMs;
+
         if (conn.role === 'host' && this._host === conn) {
             this._host = null;
-            console.log('[gw] host disconnected');
+            console.log(`[gw] host disconnected  from=${conn.remoteAddr}  ageMs=${ageMs}  hadError=${!!hadError}`);
             return;
         }
 
         this._clients.delete(conn.id);
-        if (conn.state !== 'joined') return;
+        if (conn.state !== 'joined') {
+            // Never made it past auth/join — this is exactly the case that
+            // used to close with zero trace, making a rejected/spent
+            // ticket or a mid-handshake drop indistinguishable from the
+            // client just giving up on its own (2026-08-13, see
+            // tcp_client.cpp's thread_func comment for the client-side
+            // half of this gap).
+            console.log(`[gw] ${conn.id} connection closed before joining  from=${conn.remoteAddr}  role=${conn.role || '(none)'}  state=${conn.state}  ageMs=${ageMs}  hadError=${!!hadError}`);
+            return;
+        }
         this._joined.delete(conn.playerId);
 
         const disconnFrame = encodeFrame({
@@ -495,7 +562,7 @@ class Gateway {
             this._broadcast(conn.playerId, disconnFrame);
         }
 
-        console.log(`[gw] client ${conn.id} disconnected  pid=${conn.playerId}`);
+        console.log(`[gw] client ${conn.id} disconnected  pid=${conn.playerId}  from=${conn.remoteAddr}  ageMs=${ageMs}  hadError=${!!hadError}`);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -542,12 +609,44 @@ class Gateway {
             if (c.lastMovement) newClient.write(c.lastMovement);
         }
 
-        // Replay every world entity so the newcomer sees the current world state.
-        for (const frameBytes of db.getAllEntities())
-            newClient.write(frameBytes);
+        // Replay every world entity so the newcomer sees the current world
+        // state — reconstructed fresh from the structured `entities` table
+        // (EntitySpawn descriptor + EntityState position/health), not
+        // replayed from stored raw bytes.
+        for (const e of db.getAllEntitiesFull()) {
+            newClient.write(encodeFrame({
+                type: MsgType.EntitySpawn, sessionId: newClient.sessionId, worldId: newClient.worldId,
+                entityId: BigInt(e.entityId),
+                payload: encodeEntityDescriptor({
+                    kind: e.kind,
+                    revision: e.revision,
+                    quantity: e.attributes.quantity ?? 0,
+                    ownerPlayerId: e.ownerPlayerId ? BigInt(e.ownerPlayerId) : 0n,
+                    classPath: e.attributes.classPath ?? '',
+                    itemId: e.attributes.itemId ?? '',
+                }),
+            }));
+            newClient.write(encodeFrame({
+                type: MsgType.EntityState, sessionId: newClient.sessionId, worldId: newClient.worldId,
+                entityId: BigInt(e.entityId),
+                payload: encodeEntityState({
+                    kind: e.kind,
+                    revision: e.revision,
+                    x: e.x, y: e.y, z: e.z, yaw: e.yaw,
+                    health: e.attributes.health ?? 0,
+                    state: e.attributes.state ?? 0,
+                }),
+            }));
+        }
     }
 
     _authReject(conn, reason) {
+        // This used to be silent server-side — the client-side "[tcp]
+        // authentication rejected" log had no matching line here to
+        // explain *why*, which made a stale replayed ticket, an expired
+        // one, and a genuinely wrong signature all look identical from
+        // this end (2026-08-13).
+        console.warn(`[gw] ${conn.id} auth rejected  from=${conn.remoteAddr}  role=${conn.role || '(none)'}  reason=${reason}`);
         conn.write(encodeFrame({ type: MsgType.AuthenticationRejected, payload: encodeString(reason, 128) }));
         conn.socket.end();
     }

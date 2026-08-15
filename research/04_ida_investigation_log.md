@@ -6608,6 +6608,18 @@ detachment bug's own report gave no reliable trigger to test against on demand, 
 hypothesis fix, not a confirmed one — next session should watch for whether it recurs over a longer play
 session with this build active, same as any other "did the fix work" check in this log.
 
+**2026-08-14: disproven.** Confirmed `reassert_no_interact()` is still present and wired into every
+`sync_equipment()` pass in the current build (verified via grep before this session's ADS-fix redeploys, which
+rebuilt this same file) — it has been continuously running on both machines all night, including through
+tonight's live 2-client testing. User reports the detachment still happened. This rules out "physics/
+interactability gets silently re-asserted by the game later" as the mechanism, or at minimum shows
+`JigSetCanInteract(false,false)` reasserted every tick isn't sufficient to prevent it. **Root cause is still
+open** — falls back to the two real candidates already identified and explicitly sized as their own session:
+the `ControlRig`'s internal RigVM bytecode, or the state-machine transition-rule functions gating
+`BlendListByBool`/`StateMachine`. Next occurrence should be logged with: which item, roughly how far into the
+session, and what the player was doing right before (moving/reconnecting/swapping gear) — no repro trigger has
+ever been captured.
+
 **Note distinguishing this from an existing, already-fixed glove/hand issue.** `proxy_manager.cpp`'s clothing
 sync (`sync_equipment`, slot 5/Gloves) already documents a *different*, already-fixed "hands" bug: a
 Gloves-vs-bare-hands **z-fight/flicker** (two overlapping meshes rendering against each other, fixed by hiding
@@ -6869,3 +6881,2692 @@ dedicated investigation next session: reproduce deliberately, and check (a) whet
 hands detaching correlates with any specific trigger (backpack swap, clothing re-equip, proxy re-sync tick) or
 looks purely time-based/random, (c) whether it's specific to the proxy path at all or can be reproduced on a
 real local player's own hands too (would rule out anything proxy-specific).
+
+## Session 57: 2026-08-13 continued — melee/push/vault montage sync solved via generic polling; four stacked live-connectivity bugs found and fixed
+
+**The melee swing trigger hunt (six prior ruled-out hooks: `PlayMontage`, `MC_Montage`, `Svr_Montage`,
+`Montage_Play`, `BP_MeleePickup_C::MeleeTrace`) ends here, but not by finding the trigger — by making the
+trigger irrelevant.** Picked back up by dumping `BP_PlayerCharacter_C`'s `InpActEvt_IA_PrimaryAction_*`
+variants (Enhanced Input generates one stub per trigger phase — Started/Triggered/Completed — per binding;
+found 8 total: `_4, _6, _13, _23, _24, _42, _64, _65`). Each is a 90-byte stub that just calls
+`ExecuteUbergraph_BP_PlayerCharacter(EntryPoint)` with a different `EntryPoint` int constant — the actual
+per-phase logic lives at that offset inside one enormous (205,862-byte) flat ubergraph function, not in the
+stub. Disassembled from `_65`'s entry point (59833) forward with `kismet_disasm.py`
+(`C:\Users\mccau\AppData\Local\Temp\claude\...\scratchpad\kismet_disasm.py` this session, same tool as prior
+sessions) — decoded 146KB linearly with zero unhandled-opcode failures, confirming it's genuinely one
+connected control-flow region (only one top-level `EX_Return` in the whole slice, at the very end).
+
+Found 29 calls to `PlayMontageCallbackProxy::CreateProxyObjectForPlayMontage` (the *async* "Play Montage" K2
+node — resolved via `resolve_ptr.flag`) in that region, but **every single one** reads its montage argument
+from only two `BP_WeaponsPickupComponent_C` fields (`EquipMontage`/`UnequipMontage`, confirmed via
+`resolve_fprop.flag`) or two hardcoded `EX_ObjectConst` literals — `A_Equip_Item_Montage` /
+`A_Unequip_Item_Montage` (resolved via `resolve_ptr.flag`, confirmed `AnimMontage` assets). All 29 are the
+generic weapon-draw/holster flow, not melee. Traced *why* this is architecturally correct: `BP_MeleePickup_C`'s
+own header (`research/CXXHeaderDump/BP_MeleePickup.hpp`) has `MeleeTrace`/`MeleeTracePower`/damage helpers but
+*no* montage-playing function or montage property at all — melee hit detection lives there, but swing
+animation doesn't. `BP_WeaponsPickupComponent_C`'s header, by contrast, owns
+`NormalMeleeAttackMontages`/`PowerMeleeAttackMontages` (both `TArray<UAnimMontage*>`),
+`CrouchedMeleeAttackMontage`, `ShoveMontage`, `ReloadMontage`, `ChamberFirearmMontage` — i.e. **every**
+current and future montage-driven action's asset lives on this one component, picked essentially at
+random from an array per-swing (hence four different swing montages —
+`1HMeleeAttack1_Montage`...`1HMeleeAttack4_Montage`, confirmed live) — but its own `ExecuteUbergraph` turned
+out to be a tiny 325-byte BeginPlay-style init block with no montage logic in it either. The actual
+selection+play call is somewhere else entirely (never pinned down exactly where — possibly a native/opaque
+path, given `UBP_WeaponsPickupComponent_C` exposes no other Blueprint function that could hold it).
+
+**Rather than keep chasing the exact call site, made the whole hunt moot.** `ACharacter::GetCurrentMontage()`
+(confirmed live via `resolve_ptr.flag`: `Function /Script/Engine.Character:GetCurrentMontage`) is a plain,
+zero-arg, always-resolvable native UFUNCTION — a pure getter reading whatever the local player's AnimInstance
+currently has active, regardless of *how* it got there (sync `Montage_Play`, the async
+`CreateProxyObjectForPlayMontage` proxy — which plays the montage via a raw C++ call inside its own
+`Activate()`, invisible to any ProcessEvent hook no matter which UFUNCTION is targeted — or any future
+mechanism). Added `check_local_montage_change(AActor* pawn)` to `mod.cpp`, called once per movement-tick
+(same cadence as `send_movement`): calls `GetFunctionByNameInChain(L"GetCurrentMontage")` +
+`ProcessEvent`, and broadcasts a new `PlayMontage` frame whenever the returned pointer changes to a new,
+non-null value. One mechanism, confirmed live to catch: all four melee swing variants, `Roll_Montage`,
+`Crouch_MeleeAttack_Montage`, `Anim_SmallMeleePush_Montage` (the push/shove action — a separate
+`InpActEvt_IA_Shove_K2Node_EnhancedInputActionEvent_5` binding, not investigated further since polling already
+covers it), `MQ_Vault_RM1_Montage` (vault — likewise not separately investigated, same reason),
+`MQ_GettingUp_RM1_Montage`, `Montage_RifleEquip`/`Montage_RifleUnequip`, and the pre-existing
+`A_Equip_Item_Montage`/`A_Unequip_Item_Montage`. PlayRate is defaulted to 1.0 (the getter doesn't expose it;
+none of these are precision-timed enough for that to visibly matter). This approach is a strict superset of
+every one of the six previously-hooked functions and needs zero future per-action bytecode archaeology for
+whatever montage-driven action gets added next.
+
+**Live 2-client testing of the above then surfaced four independent, stacked connectivity/stability bugs —
+each looked like "the game/network is just broken" until root-caused individually:**
+
+1. **Reconnect had no backoff on auth/join rejection, only on raw TCP connect() failure**
+   (`tcp_client.cpp::thread_func`). `reconnectMs` reset to the 250ms floor on every *successful* TCP-level
+   connect, before authentication was even attempted — so a rejected (single-use, already-spent) ticket
+   caused an unbounded tight reconnect loop with **zero delay** between attempts (connect+auth+reject+close
+   on a LAN completes in single-digit milliseconds). One stuck client produced **~24,000 leaked `TIME_WAIT`
+   sockets** on port 42200 in one session and fully exhausted the machine's local ephemeral port range,
+   breaking *all* outbound connections until they drained — this is what made PC1 "disappear" the first two
+   times tonight, not a crash. Fixed: backoff now applies uniformly to every disconnect reason; only a
+   session that actually reaches `ConnState::Active` resets the floor back to 250ms.
+
+2. **`config.js`'s `str()` settings-file reader silently treated a literal JSON `false` as "unset."**
+   `if (f && ...)` is falsy for boolean `false`, so `ticketReplayProtection: false` in `settings.json` (added
+   as the intended fix for #1's underlying "tickets are single-use, client can't get a new one" gap — a
+   dev/LAN-only escape hatch until the launcher owns fetching a fresh ticket per reconnect) was never actually
+   applied — replay protection stayed on all night regardless. This is why the bug in #1 kept recurring even
+   *after* the settings change looked correct and the server was restarted with it. Fixed the helper
+   (`f !== undefined && f !== null` instead of bare truthiness) — a general footgun for any future
+   boolean-via-settings.json config, not just this one field.
+
+3. **Gateway's per-client rate limit (120 frames/s) was tuned before montage sync existed.** Movement alone
+   is ~20/s at the default `SDB_MOVE_INTERVAL_MS`; a real melee combo now fires several `PlayMontage` sends
+   within well under a second on top of that, plus whatever periodic equipment/appearance/attachment resyncs
+   land in the same window — easily exceeding 120/s in a burst during actual combat. Both clients got
+   server-side `rate limited` and dropped mid-fight — the improved logging added this session (see below) is
+   what finally made this *visible* instead of looking like an unexplained crash. Made `CLIENT_RATE_LIMIT` a
+   real config value (`cfg.clientRateLimit`, was a hardcoded constant) and raised it for this dev server; a
+   production deployment should retune deliberately rather than inherit either number blindly.
+
+4. **The actual "pawns jittering" cause: a live network echo loop, not a sync-quality problem.**
+   Two *pre-existing* `ProcessEvent` hooks — `s_playMontage_fn` (watching `PlayMontage`) and
+   `s_montagePlayEngine_fn` (watching `UAnimInstance::Montage_Play`) — each resolved their target as a bare
+   `UFunction*` off the local pawn once and compared every future `ProcessEvent` call's `func` against it.
+   `UFunction*` is shared per-*class* in UE, not per-instance — proxies are the same `BP_PlayerCharacter_C`
+   class, so the moment `on_play_montage` (`proxy_manager.cpp`, this session's new receiver) legitimately
+   called `PlayMontage` on a *proxy* to apply a montage it had just received over the network, these two
+   hooks fired again, had no way to tell it wasn't a fresh local action, and re-broadcast it — bouncing
+   between both machines' proxies and amplifying with whatever each side had recently played. Live symptom:
+   `debug.log` showed the exact same ~9-montage sequence repeating verbatim every ~30ms. Removed both hooks
+   entirely (`mod.cpp` — `handle_play_montage_hook`/`handle_montage_play_engine_hook` are now dead code,
+   confirmed via compiler warnings) since `check_local_montage_change` already supersedes them and is
+   correctly scoped — it's called on a *known* local-pawn pointer, never matched against every `ProcessEvent`
+   call in the process by bare function pointer.
+
+**Also added this session, prompted directly by how much of the above took line-number-proximity guesswork
+across three separate log files to diagnose:** real `HH:MM:SS.mmm` timestamps on both `debug.log`
+(`src/debug_log.hpp`) and every server console line (`server/src/index.js`, wraps `console.log/warn/error`
+globally at startup) so future cross-log correlation doesn't require re-deriving a shared timeline by hand.
+`SDB.log` (UE4SS's own `Output::send` channel) deliberately left untimestamped — too many existing call sites
+across `mod.cpp`/`tcp_client.cpp` to retrofit for the marginal value tonight. Also substantially expanded
+server-side connection-lifecycle logging (`gateway.js`): remote address + connection age + role/state on every
+close (previously silent for anything that never reached `'joined'`), and an explicit log line for the
+stale-connection-eviction path (same-pid double-auth) that was invisible before — the exact case that would
+otherwise look identical to an ordinary rejected ticket from the evicted side.
+
+Confirmed live after all four fixes: both clients hold a stable connection through active combat, and the
+montage-spam is gone (`debug.log` timestamps show the last old-pattern `send_play_montage:` line landing
+*before* the fixed build's relaunch, zero since). User confirmed "everything seems to be working" after
+retesting melee swings against the fixed build.
+
+**Not yet separately confirmed live, though the generic poll should cover both for free:** push/shove
+(`Anim_SmallMeleePush_Montage`, already observed being sent correctly) and vault (`MQ_Vault_RM1_Montage`,
+likewise) — worth a deliberate visual check next session that the *receiving* side actually plays them
+correctly on a proxy, not just that the sending side detects and broadcasts them (which is confirmed).
+
+## Session 57 continued, same night — aim-yaw polish: turn-in-place attempted and reverted; real ADS
+## body-rotation mechanism found via live bytecode trace, not yet wired up
+
+**Aim-yaw shipped this session (see above) is body-relative and correctly signed, but clamps hard at
+the AnimBP blendspace's own ±90-degree range** (confirmed via the FModel export,
+`Exports/SurrounDead/Content/Animations/Anims/AimOffsets/RifleIronsightsAimOffset.json`'s `AxisX`/`AxisY`
+`Min`/`Max`). Two live bugs found and fixed in the sign/smoothing itself before landing on the
+turn-in-place question at all:
+
+1. **Sign was inverted.** Live-confirmed: turning the camera left visibly swung the whole upper-body/arm
+   pose right. This game's AnimBP `Yaw` blendspace convention is the opposite of the standard UE
+   `ControlYaw − BodyYaw` sign. Fixed by negating `player.renderAimYaw` at the write site
+   (`mod.cpp::on_process_event_post`), not earlier in the pipeline — negating the sender's raw absolute
+   control yaw instead would NOT be equivalent, since the body-yaw term in the subtraction isn't negated
+   too (`-(a) - b != -(a - b)`).
+
+**Turn-in-place — attempted, then fully reverted; do not re-attempt without a real fix for the underlying
+mesh-transform-refresh problem found below.** The goal: once the aim-offset exceeds the blendspace's ±90
+range, physically rotate the proxy's body to "catch up," matching how survival/third-person games usually
+handle this, instead of the pose just clamping at the hard edge.
+
+- **First attempt** nudged `RemotePlayer::renderYaw` directly as a second force alongside the existing
+  body-yaw smoothing (which pulls `renderYaw` toward the raw synced `yaw` every tick regardless). The two
+  fought to a stable equilibrium instead of the offset ever actually closing — live-confirmed via a densified
+  (~20/sec, was 1/sec) diagnostic added specifically to catch this: `targetYaw` plateaued at ~112 degrees for
+  a full 5-second window instead of decaying toward the 70-degree trigger threshold, despite the per-tick
+  math suggesting it should close in well under a second.
+- **Second attempt** fixed that: added a persistent `RemotePlayer::turnInPlaceYawOffset` (NOT reset by
+  incoming packets, unlike every other raw field) and folded it into the body-yaw smoothing's *target*
+  (`yaw + turnInPlaceYawOffset`) instead of being a second competing force. This actually worked in the sense
+  that the accumulator grew/shrank correctly — but then:
+- **Grow/decay used the wrong reference and became self-defeating.** The decay condition checked the
+  *post-correction* offset (`aimYaw − renderYaw`), which shrinks toward zero *by design* the moment the
+  correction starts working — but that same smallness was also the decay trigger, so success immediately
+  started undoing itself. Live-reported: hold a steady ADS look-left angle, stop moving the mouse, and the
+  body visibly snapped back toward center even though the player was still actively aiming left. Fixed by
+  basing grow/decay on the *raw* gap (`aimYaw − yaw`, ignoring the accumulated offset entirely) instead —
+  this only actually shrinks once the camera itself moves back toward the real synced body facing, not
+  whenever the correction happens to be working.
+- **Even after both fixes, the body visibly never rotated at all — a completely different, deeper problem.**
+  Densified diagnostic showed `renderYaw` correctly reaching and holding the exact target value
+  (`renderYaw == rawAimYaw` to 2 decimal places, sustained for 5+ seconds) — the *data* was completely
+  correct — but the live player-facing report was unambiguous: **"the full model never rotates... when you
+  stop moving [the mouse] it snaps back to the original position."** Root cause: `renderYaw` is applied to
+  the proxy's *mesh* via a raw memory write to `RelativeRotation` (`proxy_manager.cpp`'s
+  `apply_proxy_body_yaw_safe`/`do_apply_proxy_body_yaw`, offset `USceneComponent+0x140` — the same
+  established workaround for `bOrientRotationToMovement` silently overriding any actor-root rotation call).
+  That raw write appears to only get visually picked up when something *else* recomputes the mesh's cached
+  world transform, which normally happens during movement — while genuinely stationary (exactly the case
+  turn-in-place matters most for: holding ADS and looking around without moving your feet), nothing ever
+  triggers that recompute, so the write never becomes visible even though the underlying value is exactly
+  right. Confirmed this isn't just a mesh-vs-actor distinction, either: `ProxyManager::teleport_proxy`
+  *already* calls the actor-level `K2_SetActorLocationAndRotation` with this same `renderYaw` value every
+  single tick, unconditionally, and the model *still* didn't visibly turn in that same test — so both
+  available direct-write mechanisms (mesh-relative, actor-level-with-bTeleport) were effectively exercised
+  together and both came back negative.
+- **Decision: reverted entirely.** Removed the whole `turnInPlaceYawOffset` growth/decay block and the
+  now-unused `RemotePlayer::turnInPlaceYawOffset` field's write path (field itself left in `state.hpp`,
+  currently dead — harmless to remove later, not urgent). Replaced with a simple hard clamp of the final
+  `renderAimYaw` to ±90 (`proxy_manager.cpp`, right before the `on_process_event_post` write) — the exact
+  same AnimBP-property-only mechanism Pitch already uses reliably, no mesh/actor transform involved at all.
+  User explicitly agreed to defer real body-rotation to a later, more-finished-state session rather than
+  keep fighting the transform-refresh problem live.
+
+**Found via live bytecode trace what the real game actually does for ADS body rotation — a genuinely new,
+promising lead for that later session, not yet attempted against a proxy.** Traced from
+`BP_PlayerCharacter_C::MC_ADS` (an 18-byte stub, same "jump into the flat ubergraph at an `EntryPoint` int
+constant" pattern as every other event on this class — jumps to absolute ubergraph offset 173204). Extracted
+and resolved (via `resolve_ptr.flag`) all 77 unique function addresses reachable from that entry point;
+`Function /Script/Engine.Actor:K2_SetActorRotation` was among them (two call sites, offsets `0x6c14`/checked
+the first in detail). The exact sequence at the first call site:
+
+```
+LerpResult      = KismetMathLibrary::Lerp(A, B, Alpha)          ; func=0x3f1419e0, 3 local-var params
+YawOnlyRotator  = KismetMathLibrary::MakeRotator(0.0, 0.0, LerpResult)  ; func=0x3f1420e0 — Roll=0, Pitch=0, Yaw=LerpResult
+                  Actor->K2_SetActorRotation(YawOnlyRotator, bSweep=false)  ; func=0x232f6ec0
+```
+
+I.e. the real game **does not use a mesh-relative-rotation trick at all** — it lerps toward a target yaw
+every tick and calls the plain `K2_SetActorRotation(rotator, bSweep)` directly on the actor, with Pitch/Roll
+explicitly zeroed (Yaw-only). `A`/`B`/`Alpha` (the Lerp's three inputs) weren't traced further this session —
+worth doing next time, almost certainly "current body yaw", "target/aim yaw", and a time-based or
+speed-based alpha constant respectively, given the Lerp-toward-target-every-tick shape.
+
+**Why this is a promising lead despite the actor-level approach already having failed once in this
+session's proxy testing:** the proxy's failed test used `K2_SetActorLocationAndRotation` (a *different*,
+more complex function — takes a location AND rotation together, plus an explicit `bTeleport` flag, which was
+passed `true`) via `ProxyManager::teleport_proxy`, not the plain `K2_SetActorRotation(rotator, bSweep)` the
+real game actually uses. `bTeleport=true` specifically may interact with `bOrientRotationToMovement` or the
+movement component's rotation-blending very differently than a bare rotation-only call with no teleport
+semantics at all — this was never isolated as its own variable. **No native binding for
+`K2_SetActorRotation` exists in the vendored UE4SS SDK** (`vendor/ue4ss-stub/include/RC/Unreal/AActor.hpp`
+only has `K2_SetActorLocationAndRotation`) — trying this would need a raw `ProcessEvent` reflection call
+(param struct: `FRotator NewRotation` + `bool bSweep`, no output params — simpler than `SetRelativeRotation`'s
+4-param signature, which was the other alternative considered and rejected as too risky to attempt blind).
+**Next step, when picking this back up:** call `K2_SetActorRotation` directly (via reflection) on the proxy
+actor instead of/alongside `teleport_proxy`'s combined call, with `bSweep=false` matching the real game
+exactly, and see whether *that* specific call — isolated from `bTeleport`/location-setting — actually
+sticks while the proxy is stationary. This needs live 2-client testing to verify either way.
+
+**Pistol/melee aim-yaw gap — narrowed down, not solved: confirmed `GetAimOffset` itself is weapon-type
+agnostic, so the gap is in the AnimGraph's node wiring, not Kismet bytecode.** `Player_AnimBP.hpp` has
+**six** separate `FAnimNode_RotationOffsetBlendSpace` instances (`AnimGraphNode_RotationOffsetBlendSpace`
+through `_5`) but only **one** shared `Pitch`/`Yaw` property pair (0x5AF0/0x5AF8) — strongly suggesting each
+of the six feeds from a different `AimOffset` blendspace asset (matching the multiple exported assets,
+`RifleIronsightsAimOffset`/`PistolCrouchIronsightsAimOffset`/etc.) but all nominally reading the same
+`Pitch`/`Yaw` scratch properties, gated by whichever one the `BlendSpaceInt`-driven state machine currently
+has selected. Dumped and fully decoded `GetAimOffset`'s bytecode (747 bytes, clean disassembly, no unhandled
+opcodes) expecting to find weapon-type branching — there is none. It's a straight-line computation, structurally
+identical to the already-known Pitch-tracking logic (`SelectRotator` → `NormalizedDeltaRotator` → `RInterpTo`
+→ `BreakRotator`, matching the RInterpTo finding from earlier sessions), run twice into two instance-variable
+outputs, with zero `EX_Jump`/conditional instructions gating any of it by weapon type or `BlendSpaceInt`. This
+rules out `GetAimOffset` itself as the place a pistol/melee-specific fix would go — **the real gap is almost
+certainly in which of the six `RotationOffsetBlendSpace` AnimGraph nodes is actually wired into the active
+pose for a given `BlendSpaceInt`, and whether all six genuinely read the shared `Pitch`/`Yaw` pair or only
+some of them do.** That's AnimGraph node-linkage information, not Kismet function bytecode — not reachable
+with the tools used this session (`kismet_disasm.py` decodes `UFunction::Script` byte arrays; compiled
+AnimGraph node wiring is a separate, baked data structure on the `AnimBlueprintGeneratedClass` that this
+tool has no visibility into). **Solved — this is a content/asset limitation, not a sync bug, no fix needed on the mod side.** Read each of
+the six `RotationOffsetBlendSpace` nodes' `BlendSpace` member directly off the live `Player_AnimBP_C`
+instance via `mem_dump.flag`'s `abs <addr> <count>` form (struct base offsets from `Player_AnimBP.hpp`, `+0x68`
+for `FAnimNode_BlendSpacePlayer::BlendSpace` per `AnimGraphRuntime.hpp`'s struct layout — that field lives on
+the base class, not on `FAnimNode_RotationOffsetBlendSpace` itself), then resolved each resulting pointer via
+`resolve_ptr.flag`:
+
+| Node | `BlendSpace` asset | Type |
+|---|---|---|
+| `AnimGraphNode_RotationOffsetBlendSpace` (no suffix) | `RifleIronsightsAimOffset` | `AimOffsetBlendSpace` (2D) |
+| `_1` | `HG_Aim` | `AimOffsetBlendSpace1D` |
+| `_2` | `RifleIronsightsAimOffset` (same as no-suffix) | `AimOffsetBlendSpace` (2D) |
+| `_3` | `PistolCrouchIronsightsAimOffset` | `AimOffsetBlendSpace1D` |
+| `_4` | `RifleIronsightsAimOffset` (same again) | `AimOffsetBlendSpace` (2D) |
+| `_5` | `PistolCrouchIronsightsAimOffset` (same as `_3`) | `AimOffsetBlendSpace1D` |
+
+Three unique assets across six nodes (rifle's asset reused 3×, presumably one per standing/crouched/other
+substate that all still reference the same blendspace; pistol's two assets — standing vs crouched — each
+reused once more). **No dedicated melee blendspace exists anywhere in this set at all** — melee simply has
+no `RotationOffsetBlendSpace` node in the graph, full stop, matching the live "yaw doesn't work for melee"
+report exactly and explaining it completely: there's nothing there to feed. **Both pistol-family assets are
+`AimOffsetBlendSpace1D`, not the 2D `AimOffsetBlendSpace` rifle uses** — a `1D` blendspace has a single blend
+axis by construction, so it can only ever be driven by one of Pitch/Yaw, not both, regardless of what the
+sync code writes to the other. This matches the live "yaw doesn't work for pistols" report as a real,
+inherent asset limitation rather than a wiring bug — nothing on the sync side can add a second axis to an
+asset authored with only one. (Not confirmed this session which single property, if either, the 1D nodes
+actually read — `Pitch` is the more likely candidate for a handgun since vertical aim-offset while roughly
+facing the target is the more common use case, but this wasn't traced further.) **Conclusion: rifle-class
+weapons (`BlendSpaceInt=1`, i.e. two-handed) are the only case where full Pitch+Yaw aim-offset sync is even
+meaningful given this game's own authored content — pistol is inherently partial by asset design, and melee
+has no aim-offset content at all.** No further mod-side work needed here; this was a content-boundary
+question, not a bug to fix.
+
+## Session 58 (overnight, autonomous research per user directive, 2026-08-13)
+
+User went to bed with instructions to work down the remaining-work backlog as far as possible via
+research/RE, without live 2-client deployment (PC1's splash screen needs a manual keypress the user
+isn't present to give, and PC2 wasn't running). This session is documentation-and-build-checked-only;
+nothing below has been live-verified on a running game yet.
+
+### Phase D item: Hunger/Thirst/Stamina/Radiation sync — found a real, scoped gap and fixed it
+
+Backlog framed this as "needs a native hook to wire it into the sync loop," implying nothing existed
+yet. On inspection, most of it already did, from an earlier undocumented session:
+
+- **Read side** (`read_local_progress()`, `mod.cpp` ~line 323) already reads health, hunger, thirst,
+  stamina, and radiation from the correct live components every tick:
+  `HungerThirstComponent` at `pawn+0x7F8` (hunger `+0xC8`, thirst `+0xD8`), `StaminaComponent` at
+  `pawn+0x800` (`+0xC8`), `RadiationComponent` at `pawn+0x7F0` (`+0xC8`), `MedicalComponent` at
+  `pawn+0x7D0` (health `+0xD0`).
+- **Send side** (`send_profile_revision()`, ~line 1051) already packs all of these into the
+  `PlayerProgress` payload and sends it every 30s as a `ProfileRevision` frame.
+- **Persistence** (`gateway.js`) already saves that payload verbatim
+  (`db.saveProgress(playerId, revision, f.payload)`) — no field-by-field extraction, so nothing was
+  lossy here either.
+- **The actual gap**: on rejoin, `gateway.js` replays the saved payload back as a
+  `PlayerProgressRestore` frame (confirmed by reading `gateway.js` directly — this is the *only*
+  message sent carrying restored state; no separate `PlayerDamage` or vitals frame follows it). The
+  mod's handler for that case (`mod.cpp`, `MsgType::PlayerProgressRestore`) decoded the frame,
+  applied `posX/posY/posZ/yaw` to `pendingTeleport`, and even logged `prog->health`/`prog->level` —
+  but never wrote health, hunger, thirst, stamina, or radiation back into any live component. A
+  player who disconnects and rejoins would have their saved position restored but their vitals reset
+  to whatever the base game assigns a freshly-loaded pawn, silently discarding everything this mod
+  had been dutifully persisting.
+
+This matches (and answers) the user's own question before going to bed — "does it matter if the pawn
+dies? it'll starve or die of thirst" — yes: without this fix, hunger/thirst/stamina/radiation state
+picked up at 30s intervals was being thrown away on every reconnect regardless of what it actually
+was.
+
+**Fix applied** (`mod.cpp`, `PlayerProgressRestore` case): added a direct write-back block using the
+exact same offsets `read_local_progress()` already reads, in the same one-shot raw-pointer-write style
+the adjacent `PlayerDamage` handler already uses for `MedicalComponent.Health` (`pawn+0x7D0+0xD0`).
+Health is now restored the same way (current only — `PlayerProgress` has no max-health field, so
+maximum is left untouched, matching what data is actually available). `xmake build` succeeds cleanly
+(only pre-existing unrelated warnings). **Not live-tested** — needs a real disconnect/reconnect pass
+on the 2-client setup to confirm the writes land and are visible in-game (health/hunger/thirst/
+stamina/radiation bars should reflect the pre-disconnect values immediately after rejoin, not reset).
+Flagging this explicitly since every other native-offset write in this project has needed at least one
+live verification pass before being trusted (see project memory on this).
+
+**On whether this conflicts with EasyMultiSave's own local restore**: SDO isn't real multiplayer —
+each client runs its own local single-player game instance, and the mod only relays/persists state
+across sessions server-side. EMS's `OnPlayerLoaded` fires once, locally, whenever that client's own
+game finishes loading a save (i.e. at game launch / save-slot selection), which happens before the
+bridge's TCP join handshake completes and `PlayerProgressRestore` gets sent — so this write isn't
+racing EMS, it's deliberately overwriting whatever EMS just loaded locally with the mod's own
+last-synced server-side truth, the same way position-restore already does. That's the correct
+behavior for this architecture (keeps the shared/persisted state authoritative even if the local save
+diverged — different local save slot, crash-and-relaunch, etc.), not a bug to reconcile.
+
+### Phase D item: EasyMultiSave hooks — re-confirmed blocked on live testing, not IDA
+
+Revisited backlog item 19 ("EasyMultiSave hooks, pending IDA investigation"). Sessions 22 and 23
+already did the actual IDA work here and reached a firm conclusion, re-verified directly against the
+live IDB in Session 23 rather than just trusted from the writeup: `LoadPlayerActorsCustom` and the
+`EmsLoadPlayerComplete__DelegateSignature` broadcast site both have zero code cross-references — the
+delegate broadcast is resolved generically by the Blueprint VM at runtime, not a fixed call site static
+disassembly can pin down. Session 23's conclusion stands: "hooking via live Lua (binding to the
+delegate, or hooking the BFL node that wraps it) remains the only viable path." There is no further
+static/IDA work available on this item — the backlog description ("pending IDA investigation") is
+stale; it should read "pending live hook experiment" instead. Since this requires a running game to
+attempt (register a Lua delegate binding or hook `BFL_SaveGames_C`'s wrapping node and observe whether
+it fires), it's blocked on the same live-testing constraint as everything else tonight and is being
+left for a live session rather than attempted blind.
+
+Worth noting the original motivating use case (Session 22: hook `OnPlayerLoaded` as the trigger to
+send an early, accurate `ProfileRevision` right when local save data finishes loading, instead of
+waiting for the periodic 30s tick) is a **different** concern from tonight's restore-write-back fix
+above — that one's about the SEND-side timing of the mod's own state being fresh soon after launch,
+not about applying server state to local components. Both remain valid, independent reasons to revisit
+this hook in a live session.
+
+### Phase D item: Building-piece/container entity spawning — re-checked, found a bigger gap than expected
+
+Backlog item 17 framed this as "may be much closer to done than `03`'s stale TODO list suggests" —
+worth re-checking against the native-actor-spawn technique proven for player proxies. Traced the
+current state fully (pure repo code-reading, no IDA needed for this part):
+
+**Server side** (`host-agent.js`, `InteractionRequest`/`BUILD` case, ~line 399): already sends
+`EntitySpawn`/`EntityState` frames with `kind: EntityKind.PlacedStructure` when a build interaction
+comes in, with an explicit comment acknowledging the client can't render it yet. `req.pieceTypeId` (a
+plain number, presumably an index into whatever the local building-menu enumerates) is stashed as a
+numeric string in the wire format's `itemId` field — there's no `classPath` field sent, and no
+resolution table anywhere mapping a `pieceTypeId` to an actual Blueprint class.
+
+**Client side** (`mod.cpp`): grepped for `InteractionRequest`/`pieceTypeId` — **zero matches**.
+`InteractionRequest` exists only as an enum value in `protocol.hpp` (`= 26`); there is no encode call,
+no send site, and therefore **no hook on the local player's own build/place action at all**. This is a
+bigger gap than "spawning doesn't render yet" — nothing captures a local build action or transmits it
+in the first place. Building-piece sync is 100% unimplemented on the sending side, not just the
+rendering side.
+
+**Client-side receive path** (`entity_manager.cpp`): `tick()` calls `spawn_entity_actor()` for every
+entity kind uniformly with no branch on `entity.kind` at all (confirmed by reading the loop directly —
+`entity.actor = spawn_entity_actor(world, entity);` unconditionally). `spawn_entity_actor()` itself
+only implements the `GroundItem` path: it requires `entity.itemId` to resolve via
+`resolve_item_asset()` to a real `UJigsawItem_DataAsset_C*` (see line ~204,
+`if (!world || entity.itemId.empty()) return nullptr;`). A `PlacedStructure` entity's `itemId` field
+holds a bare numeric string (the `pieceTypeId` placeholder above), which isn't a real Jigsaw item ID,
+so `resolve_item_asset()` would fail and the function bails — meaning even if the server-side send
+path existed, nothing would spawn client-side today. Also worth noting as a minor inefficiency (not a
+crash risk): `tick()`'s retry gate (`lastActorAttemptUs`, 2s cooldown) means a `PlacedStructure` entity
+that can never spawn just retries silently forever rather than giving up — harmless but wasteful.
+
+**Good news found**: an earlier, superseded design doc (`research/03_modding_framework_plan.md`,
+predates the current `item-asset-cache`-based `spawn_entity_actor` implementation) already scoped a
+plausible approach and even identified real class paths — `Buildable_MASTER_C`
+(`/Game/Blueprints/BuildingSystem/Actors/Buildable_MASTER.Buildable_MASTER_C`) as a **generic "any
+building piece" master class**, and `BuildableMaster_Container_C`
+(`.../Containers/BuildableMaster_Container.BuildableMaster_Container_C`) as the equivalent for
+containers — the same "spawn one generic class, then configure the specific variant post-spawn" shape
+already proven working for `GroundItem` pickups today (`spawn_entity_actor` spawns a generic pickup
+class, then calls `PickupBuildFromGround`/sets `BP_JigPickupComponent`'s `ItemDataAsset` to configure
+the specific item afterward). If `Buildable_MASTER_C` follows the same shape, the native-actor-spawn
+technique proven for proxies should apply directly to it too — spawning isn't the open question.
+
+**What's actually still unknown and blocks implementation**: what identifies a *specific* piece within
+the generic master class (e.g. wood wall vs. stone foundation vs. which container variant), and what
+Blueprint-callable configure function (if any, mirroring `PickupBuildFromGround`) needs to be called
+post-spawn to apply it. That requires either (a) IDA investigation of `Buildable_MASTER_C`'s
+construction/configuration flow, or (b) capturing whatever piece-identifying data the local player's
+own in-game build action already has at the moment of building (mirroring how item pickups pass a
+resolvable `itemId` today) instead of the currently-meaningless numeric `pieceTypeId` placeholder.
+Both of those need either live IDA work or a live 2-client capture session. IDA's MCP plugin hung
+mid-session on an overly broad `search_text(code_only=false)` call (matches this project's known
+instability pattern for string searches) before this specific class's construction flow could be
+traced — it recovered on its own after ~20-25 minutes rather than needing a manual restart (see
+updated [[sdo-ida-debug-stability]]), so this was picked back up once it did; see below for the
+result. There's still no live game session available to capture the local build action, so only the
+static half of this question could be pursued tonight.
+
+**Net revision to backlog item 17**: this is genuinely bigger than "re-check something that might
+already work" — it's three sequential gaps (no client-side send hook → no receive-side
+kind-branching → no piece-identity resolution), not one.
+
+**Update, same session, after IDA recovered**: the piece-identity gap above is now **fully resolved**
+— turned out to need neither IDA nor a live session, just reading headers already sitting in
+`research/CXXHeaderDump/`. The "generic master class + post-spawn configure" theory (from the
+superseded `03_modding_framework_plan.md`) was wrong: `pak_all_files.txt` shows every individual piece
+(`Buildable_WoodenWall`, `Buildable_Bed`, `Buildable_AmmoCrate`, 100+ others) is its own concrete
+Blueprint class, not a shared master configured after spawn. The real mechanism, traced end to end:
+
+- `BP_PlayerCharacter.hpp`: `BuildingComponent` (`UBuildingComponent_C*`) sits at pawn `+0x7E0`.
+- `BuildingComponent.hpp`: `DARef` (`UJigsawItem_DataAsset_C*`) at `+0x298` — **the same DataAsset
+  class already used for inventory items**, holding whichever piece is currently selected in build
+  mode. `Event_LaunchBuildMode(UJigsawItem_DataAsset_C* DA, ...)` sets it when the player opens the
+  build menu and picks a piece; `SpawnBuild(FTransform)`/`Svr_SpawnBuild(FTransform)` are the actual
+  placement calls.
+- `JigsawItem_DataAsset.hpp`: alongside the already-used `ItemId` (`+0x30`) and `PickupClass`
+  (`+0x128`, used for dropped-item rendering), there's a **`TSubclassOf<AActor> BuildActorClass` at
+  `+0x4E8`** — the exact concrete class to spawn for that piece when built, sitting on the exact same
+  DataAsset object `resolve_item_asset()` already fetches by itemId today.
+
+So the fix is a straight extension of the already-proven `GroundItem` pattern, not a new mechanism:
+capture `BuildingComponent->DARef->ItemId` at the moment of a real build (`SpawnBuild`/
+`Svr_SpawnBuild` firing is the natural hook point, mirroring how montage-change polling works
+elsewhere in this project) and send that real itemId instead of today's meaningless numeric
+`pieceTypeId`; server-side, forward it verbatim instead of re-deriving anything; client receive-side,
+`spawn_entity_actor()` needs only a kind-branch for `PlacedStructure` that reads `BuildActorClass`
+instead of `PickupClass` off the same resolved DataAsset — everything else (itemId resolution,
+`spawn_actor_at`'s `BeginDeferredActorSpawnFromClass`/`FinishSpawning` technique) is already written
+and working. Remaining unknowns are now purely mechanical (confirm `Svr_SpawnBuild` vs `SpawnBuild` is
+the right hook point, confirm containers follow the identical pattern via `BuildableMaster_Container_C`
+subclasses) — no more research needed here, this is ready to implement and live-test next session.
+
+### Phase D items: Zombie AI + Vehicle health/fuel — found complete offsets with zero IDA needed, plus a scope correction
+
+IDA being down turned out not to matter for this one. Backlog items 15/16 assumed native IDA work was
+required because Session 15's live `PropertyDumper` reflection scan against `BP_Zombie_C` and
+`Vehicle_PickupTruck_C` directly found nothing (`UberGraphFrame` only / zero properties). The mistake:
+those are **intermediate/leaf Blueprint classes in the inheritance chain**, and the real runtime actors
+use subclasses further down that were never checked. `research/CXXHeaderDump/` (FModel static exports,
+already sitting in the repo from a past session, not live reflection) has the full chain:
+
+**Zombies**: `ABP_Zombie_C : ABP_MainEnemy_C : ABP_Human_C : ABP_AI_C : ACharacter` — every one of those
+intermediate classes really is empty except `ABP_Human_C` (`IsBaseActorDead?` @ `+0x68A`) and `ABP_AI_C`
+(`Dead` bool @ `+0x688`) — so Session 15's specific finding on `BP_Zombie_C` itself wasn't wrong, it was
+just the wrong class to check. The class actually placed in the world is one level further down:
+**`ABP_MasterZombie_C : ABP_Zombie_C`** (confirmed `BP_ZombieBoss_C` also derives from it, same offset —
+this is the shared base for all zombie variants), which carries a dedicated
+`class UDamageComponent_C* DamageComponent` at `+0x698`, plus `IsDead?` (`+0x718`), `DamageToDo`
+(`+0x710`, the zombie's own attack damage), `AttackSocketName`/`AttackMontage`/`AttackSound`/
+`Start_Attacking` (attack animation/trigger data, `+0x6E0`–`+0x700`), `HealthDeviation` (`+0x808`), and
+Blueprint functions `AttackTrace()`/`Death(AActor*, bool Headshot)`/`AttackPlayer()`/
+`ReceiveAnyDamage(...)`/`Damage_Object(...)` plus a bindable `DeathEvent(bool Headshot)` delegate.
+`UDamageComponent_C` itself (`research/CXXHeaderDump/DamageComponent.hpp`) is fully self-contained and
+game-generic (also used by non-zombie damageable actors per its name): `CurrentHealth` (`+0xB8`),
+`MaxHealth` (`+0xC0`), `StandardHealthValue` (`+0xB0`), plus Blueprint-callable `SetHealth(double,
+bool)`, `GetValues(double&,double&,double&)`, `IsAlive?(bool&)` — i.e. reading (or even writing, via
+the real `SetHealth` UFunction instead of a raw memory write) zombie health needs exactly the same
+`actor+0x698` → `+0xB8`/`+0xC0` two-hop pattern already used for the player's own
+`MedicalComponent` (`pawn+0x7D0` → `+0xD0`), just with different offsets. No IDA required — this was
+sitting in already-exported headers the whole time.
+
+**Vehicles**: same shape. `ABP_VehicleMaster_C : AWheeledVehiclePawn` (the real shared base — matches
+Session 12's "17 vehicle types all inherit from `BP_VehicleMaster_C`") carries
+`class UVehicleHealthComponent_C* VehicleHealthComponent` at `+0x390` and
+`class UVehicleFuelComponent_C* FuelComponent` at `+0x3D0`. `VehicleHealthComponent`
+(`research/CXXHeaderDump/VehicleHealthComponent.hpp`): `CurrentHealth`/`MaxHealth` at `+0xC0`/`+0xC8`.
+`VehicleFuelComponent` (`VehicleFuelComponent.hpp`): `CurrentFuel`/`MaxFuel` at `+0xC8`/`+0xD0`, plus an
+`Empty` bool at `+0xE8`. Also visible directly on `ABP_VehicleMaster_C`: `EngineOn?` (`+0x4D8`),
+`VehicleColor` (`+0x4F0`). No dedicated "occupants" array was found on this class — seating/driver
+state for `AWheeledVehiclePawn` is a native engine concept (seat possession), not a custom Blueprint
+field, so occupant sync would read possession/seat state generically rather than a game-specific
+offset — not investigated further tonight, lower priority than health/fuel.
+
+**Important scope correction to the backlog** (this affects how items 15/16 should be read going
+forward): the backlog says "position sync already works (server-authoritative via
+`EntitySpawn`/`EntityDespawn`)" for both zombies and vehicles, implying only health/fuel/behavior is
+missing. Grepped the entire repo for actual usages of `EntityKind::Zombie` / `EntityKind::Vehicle`
+outside the protocol layer itself: **the only real hits are in `tests/protocol_roundtrip.cpp`** (unit
+test fixtures). Neither `host-agent.js`/`gateway.js` (server) nor `mod.cpp` (client) ever actually
+construct a `Zombie` or `Vehicle` entity descriptor/state anywhere — `mod.cpp` only ever *receives*
+`EntitySpawn`/`EntityState` frames (confirmed by grep — no send call exists), and the server-side only
+does this for `PlacedStructure` (via `InteractionRequest`/BUILD, itself unreachable from the client
+tonight per the building-piece section above) and `GroundItem` (via pickup/drop). **Zombie and vehicle
+sync — position included, not just health — is 100% unimplemented end-to-end today**, not "position
+done, health missing." The wire protocol and `EntityKind` enum values are ready (including a `health`
+field already on `EntityState`), and position sync would reuse the exact same generic
+`K2_GetActorLocation`/`K2_GetActorRotation` no-Blueprint-reflection-needed technique already
+proven for `GroundItem`/proxy actors (Session 15b) — so this isn't a hard problem, just a genuinely
+unstarted one. Tonight's offset findings above remove what would have been the biggest unknown (native
+health/fuel access) for whenever this gets picked up.
+
+## Session 59 (2026-08-14) — Server-authoritative rewrite: real multiplayer game server, zombie simulation live-verified
+
+Following up on the redesign approved this session (unified entity-based world model, server as
+genuine authority for shared world state): built and live-tested the first real slice end to end —
+GroundItem/PlacedStructure migrated onto a new structured `entities` table (replacing the old
+opaque-blob replay model in `db.js`), and a full server-authoritative zombie simulation
+(`server/src/world/zombie-simulation.js`) built from the real 913-zone/7-archetype data extracted
+from `Exports/` (`server/scripts/extract-zombie-data.js` — spot-checked against every number
+manually verified earlier this session: Infected=200hp, Boss=4000hp, Nightmare difficulty
+multipliers, spawn zone counts 831/19/7/56 all matched exactly).
+
+**Found and fixed a real protocol bug via testing, not live debugging**: `gateway.js`'s shared
+request-routing block normalized `entityId` to the sender's own entity for every message type in
+that group — correct for `DeathRequest`/`InteractionRequest`/etc. (entityId = "my own entity"), but
+wrong for `ZombieAttackRequest` (entityId = "the zombie being targeted"), silently clobbering the
+attack target with the attacker's own id. This is the exact same bug class already documented for
+`ItemPickupRequest` on 2026-08-12 — `ZombieAttackRequest` needed the same carve-out. Caught by the
+new integration test going straight to a timeout with zero server-side error log at all, matching
+that original bug's signature exactly. Fixed by moving `ZombieAttackRequest` into the same
+already-existing exception case as `ItemPickupRequest`.
+
+**Live 2-client deploy** (both machines, full pipeline: server restarted with all new code, DLL
+rebuilt and deployed to both, fresh tickets, both joined): `suppress_zombie_spawners()` — the
+riskiest untested piece, a brand-new native call (`SetIsSpawningStopped`/`KillSpawnedActors` on
+every live `ABP_AISpawner_Master_C`-derived instance) across the whole level — worked flawlessly on
+the first live attempt: **857/857 spawner instances found and stopped** (831 zombie + 19 hound + 7
+boss, matching the extracted data exactly), zero crashes. `resolve_class_by_name`'s primary method
+(`FindObject` with the class's full package path, no live instance required) also resolved
+`BP_Zombie_Roamer_C` correctly on the first attempt.
+
+**Real crash, found and fixed live**: after 4 successful zombie proxy spawns, both connected clients
+hard-crashed simultaneously (`EXCEPTION_ACCESS_VIOLATION reading address 0xFFFFFFFFFFFFFFFF` — the
+exact bit pattern of this file's own `ANY_PACKAGE` sentinel, `(UObject*)-1`) inside a defensive
+`GetController`/`UnPossess` check that had been added specifically because auto-possession behavior
+was unconfirmed. The crash *confirmed* the thing it was checking for — `BeginDeferredActorSpawnFromClass`
+really does auto-possess these Character-derived classes with a real AI Controller by default,
+unlike the Pawn-based player proxy — but the raw single-`UObject*`-field params struct used to read
+`GetController()`'s return value has a wrong ABI assumption somewhere, and both clients crashed on
+the 5th spawn (both had received the same broadcast, since zombie EntityState currently goes to
+every connected client rather than being filtered per-recipient by relevance — a known gap, not new
+tonight). Fixed by removing the check entirely rather than guessing again blind — zombie proxies may
+now act semi-independently (their own AI Controller still possesses them) rather than being pure
+puppets, a real but far lesser problem than a hard crash. Redeployed; zombie spawning continued past
+the exact point that crashed before (including the identical `eid=3676812055053758644` that crashed
+it originally) with sustained activity and zero further crashes on either client.
+
+**Confirmed working live, end to end**: spawner suppression (857/857), server-side spawn-zone
+relevance scoping + spawning + roam movement (multiple zombies spawned and persisted across both
+clients), class resolution (`FindObject` full-path method), proxy actor spawning and rendering on
+both clients simultaneously. **Not yet exercised live**: the damage/death path (`ZombieAttackRequest`
+send-side — Phase 4's melee hit-detection hook, `BP_MeleePickup_C::MeleeTrace`, is still unbuilt, so
+nothing in-game currently triggers an attack request).
+
+### Crash root-cause found and fixed (same session, continued debugging)
+
+The `GetController`/`UnPossess` removal (above) didn't actually fix anything — the very next live
+test crashed **again**, both clients simultaneously: PC1 hit the identical
+`0xFFFFFFFFFFFFFFFF` address as the original crash (proving that reflection call was never the real
+cause), PC2 hit a different, genuine heap address (`0x00000001e31a0b88`). Re-examined what actually
+runs on *every* tick for an already-spawned zombie, not just once at spawn time:
+`EntityManager::on_entity_state`'s teleport call (`K2_SetActorLocationAndRotation` on
+`entity.actor`, added this session to apply the server's roam-movement broadcasts to an
+already-spawned proxy). Working theory: with the zombie's real AI Controller left possessing it
+(confirmed auto-possession happens, per the original crash), its native AI/behavior tree is
+genuinely running and can destroy/replace the actor through completely ordinary gameplay logic with
+no involvement from this mod at all — leaving `entity.actor` dangling, and the next roam-movement
+`EntityState` update calls `K2_SetActorLocationAndRotation` on freed memory. A real heap address
+(PC2) and a reused region that still happened to contain the `-1` sentinel pattern from an earlier
+`resolve_class_by_name` call (PC1) are both consistent with one dangling-pointer bug, not two
+unrelated ones.
+
+**Fix**: `actor->SetActorTickEnabled(false)` right after spawn — a real, already-linked C++ export
+(`vendor/ue4ss-stub/include/RC/Unreal/AActor.hpp`), same safety category as
+`SetActorHiddenInGame`/`K2_SetActorLocationAndRotation` (both already proven safe elsewhere in this
+file), not a raw-reflection guess like the `GetController` attempt. Stops the actor's own
+tick-driven logic without touching the controller at all. **Live-verified**: redeployed to both
+clients, multiple zombies spawned continuously and sustained well past every previous crash point
+(the exact same recurring entity IDs from prior crashed sessions — `eid=15612827715167089370`,
+`eid=15153992375002062009`, etc. — all spawned cleanly this time), both game processes remained
+running, zero disconnects, zero further crashes.
+
+**Lesson for future native-hook work in this project**: a Blueprint-native actor that's a puppet in
+name only (still fully possessed and ticking) can affect its own lifetime through completely
+ordinary gameplay systems this mod never touches — any code holding a raw actor pointer across
+multiple ticks needs to either stop that actor's own agency (`SetActorTickEnabled(false)`, proven
+here) or treat the pointer as untrusted between ticks. Two guessed fixes in a row (both plausible,
+both wrong) is a good reminder that "this specific reflection call looks risky" and "this is
+actually the risky part" aren't always the same code — the real cause was three call-sites away
+from the code that first crashed.
+
+### Update: the "fixed" conclusion above was wrong — full crash saga, disabled pending real debugging
+
+The `SetActorTickEnabled` fix above was declared confirmed-stable after one good test window. It
+wasn't. Zombie proxy spawning crashed **five times total** across **three different guessed
+fixes** this session, and the final state is **disabled**, not fixed. Full sequence, so a future
+session doesn't have to re-derive it:
+
+1. `GetController`/`UnPossess` (raw UFUNCTION reflection guess) — crashed both clients,
+   `0xFFFFFFFFFFFFFFFF` (this file's own `ANY_PACKAGE` sentinel bit pattern).
+2. Removed that block entirely — crashed again immediately: PC1 hit the *identical*
+   `0xFFFFFFFFFFFFFFFF` address (proving step 1 was never the real cause), PC2 hit a different, real
+   heap address, `0x00000001e31a0b88`, consistently, across multiple separate crash incidents and
+   fresh process launches.
+3. Added `SetActorTickEnabled(false)` on the pawn + read `Controller` via
+   `GetValuePtrByPropertyNameInChain` and disabled its tick too — attached a live IDA debugger
+   (`ida_dbg.attach_process`, `set_debugger_options` clearing `DOPT_LIB_BPT`/`DOPT_THREAD_BPT` per
+   this project's established precaution) to catch the *next* crash with real diagnostics instead of
+   guessing again. It worked: caught a real fault, repeated identically —
+   **`EXCEPTION_ACCESS_VIOLATION` attempting to *execute* code at `0x900000003`**, not just read bad
+   memory. That's the signature of a virtual call through a pointer that isn't a real object of the
+   assumed type — strong evidence `GetValuePtrByPropertyNameInChain(L"Controller")` doesn't resolve
+   the way `find_local_pawn()`'s `Controller`→`Pawn` read does for this class, and the garbage
+   result's `SetActorTickEnabled()` call is what actually froze the game (the debugger kept re-
+   hitting the same instruction in a loop rather than terminating, matching the observed "froze,
+   not crashed" symptom). **IDA's own MCP plugin then hung** while trying to suspend the frozen
+   process for further inspection — required force-killing both `ida.exe` and the game process
+   directly (`Stop-Process -Force`; killing IDA released the OS debug port, at which point the game
+   terminated normally too).
+4. Removed the `Controller` property code entirely, kept only pawn-level `SetActorTickEnabled(false)`
+   (the smallest version tested) — **changed nothing**: both clients crashed again at their own
+   exact same per-machine addresses as step 2 (PC1 `0xFFFFFFFFFFFFFFFF`, PC2
+   `0x00000001e31a0b88`). This is the single most important finding of the whole saga: it
+   conclusively rules out *every* piece of controller-handling code across all three fix attempts —
+   whatever's actually wrong was present and unchanged in every version tested.
+
+**Current leading theory, not yet tested**: `resolve_class_by_name`'s primary resolution method
+(`UObjectGlobals::FindObject(nullptr, kAnyPackage, fullPath)`) passes `Class=nullptr`, meaning no
+type filtering at all — it matches *any* object anywhere by name, not specifically a `UClass`, and
+the result is cast to `UClass*` unconditionally. If the full path string ever matches a same-named
+object that isn't really the class (e.g. a `UBlueprint` editor asset sharing a name/path fragment
+with its generated class), every subsequent spawn using that cached, wrong-typed pointer would be
+working with garbage class metadata — plausibly explaining crashes that vary in exactly which spawn
+count triggers them (4, 5, 8+, not a fixed N) rather than a clean, deterministic per-spawn fault.
+The `on_entity_state` position-teleport call added this session (`K2_SetActorLocationAndRotation`
+on `entity.actor` for already-spawned zombies) is the other remaining untested suspect. Neither has
+been isolated or tested yet.
+
+**Current state**: `spawn_zombie_actor` returns `nullptr` unconditionally (`src/entity_manager.cpp`)
+— zombies are simulated server-side and spawner-suppressed client-side exactly as designed, but
+never rendered as proxies. This is deliberate and should stay this way until a real, dedicated
+debugging session — not another live guess-and-redeploy cycle — actually isolates the cause.
+Suggested first steps for that session: (a) type-check `resolve_class_by_name`'s `FindObject`
+result before casting (compare its own reported class/type against an expected sentinel, if the
+reflection API exposes one) rather than trusting any non-null hit; (b) SEH-wrap the
+`on_entity_state` teleport call as a cheap, low-effort mitigation regardless of root cause; (c) if
+attaching IDA again, do it *before* relaunching the game and *before* the crash point, with
+`DOPT_LIB_BPT`/`DOPT_THREAD_BPT` cleared from the start, not scrambled together mid-session — the
+plugin hang this session happened while trying to interact with an already-frozen target, which may
+itself be avoidable with a cleaner setup.
+
+**What stayed rock-solid across all five crashes, zero exceptions**: `suppress_zombie_spawners()`
+(857/857 spawner instances found and stopped on every single attempt), the entire server-side
+`ZombieSimulation` (spawning, relevance scoping, roam movement, damage/death — all still fully unit-
+and integration-tested per the earlier section of this session), and the `entities` table/GroundItem/
+PlacedStructure migration work. The bug is narrowly scoped to zombie *proxy rendering* specifically.
+
+**Post-crash hardening prep (build-checked only, not deployed/live-tested)**, done after the user
+stepped away:
+- `resolve_class_by_name` (`proxy_manager.cpp`): swapped the two resolution methods' priority.
+  `FindFirstOf(shortName)`+`get_class_private()` (spawn_proxy's own live-proven technique) is now
+  primary; the untyped `FindObject(nullptr, ANY_PACKAGE, fullPath)` call is now the fallback. On
+  review, that method's original justification — "same call shape as the live-tested
+  `find_object_by_short_name()`" — was only actually validated for *short* names like
+  `"Chr_MaleHair3"`; a full path with an embedded class-name suffix was never actually confirmed to
+  match the same way, and this is the current leading suspect for the whole crash saga (untyped
+  match → wrong object type → corruption on later use).
+- `on_entity_state`'s zombie position-teleport call is now SEH-wrapped (local `seh_invoke` copy,
+  same shape as `mod.cpp`'s) — if `entity.actor` ever goes dangling between spawn and a later
+  position update, this now drops the update instead of crashing.
+- Zombie proxy spawning itself is still fully disabled regardless of the above — these are
+  defense-in-depth improvements for whenever it's re-enabled with real live testing, not a claim
+  that the root cause is fixed.
+
+### Vehicle sync — built same session, deliberately avoiding every risky technique above
+
+Unlike zombies, vehicles don't need spawning, class resolution, or any AI-controller handling at
+all — every client already has its own native instance of all 56 vehicles from level load (fixed
+spawn points, `world-data.json`), so "syncing" a vehicle just means finding the client's own
+already-existing actor and (eventually) applying canonical health/fuel to it, not creating anything.
+
+**Server** (`host-agent.js`): new `_broadcastVehicles()`, called once when the host authenticates
+(not on a repeating timer — nothing about a stationary vehicle changes on its own the way a zombie's
+position does). Assigns each of the 56 known spawn points a stable `entityId`
+(`stableNumericId(\`vehicle-spawn:${zone.name}\`)`, same helper player entityIds already use) and
+sends `EntitySpawn`/`EntityState` (kind=Vehicle, health defaulted to the real confirmed base value,
+100 — not a guess) through the exact same wire messages every other entity kind uses. Since this
+fires before any real client has joined, nobody catches it live — verified via a new integration
+test that a joining client receives it through the existing late-joiner replay path
+(`gateway.js`'s `_replayTo`, reconstructed from the unified `entities` table) instead, the same
+mechanism every other entity kind already relies on. 70 integration tests now (was 65), all passing
+except the pre-existing unrelated ticket-replay failure.
+
+**Client** (`entity_manager.cpp`): new `find_native_vehicle_near()` — checks all 17 confirmed
+vehicle Blueprint classes (`pak_all_files.txt`, cross-referenced against Session 12's "17 vehicle
+types" finding) via `FindAllOf`, nearest-position match against the server's known spawn point,
+exact same technique as the already-proven `find_and_claim_native_pickup` (GroundItem's own-drop
+claiming) — no `BeginDeferredActorSpawnFromClass`, no class resolution, no possession/tick concerns
+whatsoever. `spawn_entity_actor`'s dispatch needed a real fix while wiring this in: the function's
+very first line rejected any entity with an empty `itemId`, which every vehicle has (it isn't a
+JigsawItem, an archetype name, or anything else this mod resolves a class from) — moved the Vehicle
+check ahead of that gate, mirroring how Zombie already needed to bypass it.
+
+**Deliberately NOT done yet, even though it compiles fine**: applying the server's health/fuel
+value to the found native actor's `VehicleHealthComponent`/`VehicleFuelComponent`
+(`actor+0x390`/`+0x3D0` → `CurrentHealth`/`CurrentFuel`, offsets from two nights ago's FModel
+research, never live-verified as read *or* write targets). After tonight, writing to a new raw
+memory offset without live verification available isn't a risk worth taking blind — this stays as
+"find and adopt the actor" only until a live session can verify the read/write offsets are correct
+before trusting them.
+
+### Two real bugs found and fixed once live testing resumed
+
+**Bug 1 — unbounded zombie entity tracking.** Deploying the disabled-zombie-rendering build and
+letting it run for a real session (not a quick crash-test cycle) surfaced a genuinely new issue:
+`EntityManager::tick()`'s per-entity retry throttle (2s) bounds *frequency* but not *count* — every
+zombie the server's ongoing simulation ever broadcasts stays in `g_state().entities` forever (a
+disabled spawn attempt never succeeds and nothing ever removes the entry), so the retry set grows
+unboundedly over a session. Found live: ~7900 accumulated retry attempts, plausibly contributing to
+a symptom that looked like a full freeze (needed a force-close) but was actually a render-thread
+hang — `debug.log` kept showing fresh activity throughout, meaning the game/logic thread was still
+ticking; only the render side was stuck, consistent with UE5's separate game/render threads under
+a growing per-tick workload. Fixed at the ingestion point, not just the retry point: both
+`on_entity_descriptor` and `on_entity_state` now skip Zombie-kind entities entirely while rendering
+is disabled, so the map never grows for them in the first place.
+
+**Bug 2 — vehicle `FindAllOf` cost multiplied by entity count, not class count.** The first live
+deploy of the vehicle sync work reproduced a freeze almost immediately after join, on both
+machines — a very different timing signature from bug 1 (which needed a long session to build up).
+Root cause: `find_native_vehicle_near()` called `FindAllOf` (already documented elsewhere in this
+codebase as expensive enough alone to cause 1-2 FPS) once per vehicle class (17) **for every
+individual vehicle entity**, every 2s, until each of the ~56 vehicles resolved — up to ~950 full
+world scans every 2 seconds, all 56 running concurrently right after the replay-delivered batch of
+vehicle entities arrived at once. Same cost class as the already-documented 1-2 FPS case, just
+~56x larger, and it lines up exactly with an immediate-post-join freeze instead of a slow one.
+Fixed by scanning each class exactly once per client session (module-level cache, same pattern as
+`resolve_zombie_archetype_class`'s own caching) instead of once per entity — vehicles are static
+from level load, so the candidate list never needs to change during a session. **Live-confirmed
+fixed**: redeployed to both machines, the one-time scan logged exactly once
+(`find_native_vehicle_near: one-time scan found 0 native vehicle instances` — 0 because neither
+player was near a loaded vehicle at the time, not an error), both clients joined and stayed stable
+with ongoing activity, no freeze.
+
+Both fixes are live-verified working as of this session's end. Zombie proxy rendering itself
+remains disabled (unrelated to either bug above — a third, still-unsolved issue, see the crash
+saga earlier in this section).
+
+## Same session, later — ADS turn-in-place actually landed; new strong evidence on the still-open mesh-fragmentation bug
+
+**ADS turn-in-place, finally working.** Picked back up the lead from Session 57 (real game's
+`BP_PlayerCharacter_C::MC_ADS` calls the plain `K2_SetActorRotation(FRotator, bSweep=false)`
+directly on the actor, Pitch/Roll zeroed — never tried against a proxy before). Added it via the
+same `GetFunctionByNameInChain`/`ProcessEvent` reflection pattern already proven throughout this
+file (e.g. `read_local_aim_pitch`'s `GetControlRotation` call — same `FRotator`-typed param
+struct), reinstated `RemotePlayer::turnInPlaceYawOffset` with the corrected grow/decay logic
+Session 57 had already worked out (based on the *raw* aim/body gap, not the post-correction gap,
+which was self-defeating), and gated the whole thing on `movState & 0x02` (`IsADS`) so it doesn't
+run during ordinary hip-fire look-around — the real game's equivalent lives specifically in
+`MC_ADS`, not general movement.
+
+First deploy had it running *alongside* the old mesh-relative `apply_proxy_body_yaw_safe` write
+instead of replacing it — both fired every tick, and since actor rotation was previously always
+silently overridden by `bOrientRotationToMovement` (which is *why* the mesh workaround existed in
+the first place), the mesh's own baked ~-90 degree art-alignment baseline was now being added on
+top of an actor that was *also* genuinely rotating for the first time. Live-reported: ADS body
+turned ~90 degrees further clockwise than it should, and ordinary movement made the character
+appear to run backward (the actor's facing no longer tracked its own velocity the way
+`CharacterMovementComponent`'s directional blend expects). Removed the now-redundant mesh-relative
+write entirely — `apply_proxy_actor_rotation_safe` alone is sufficient once actor rotation actually
+works. Redeployed; user confirmed **working correctly** on both symptoms afterward.
+
+**Mesh-fragmentation bug — strong new evidence, still not fixed.** Live-reported and screenshotted
+mid-session: not a single item detaching, but **two separate proxies simultaneously showing their
+entire mesh broken into disconnected floating pieces** — head, torso, hands, and legs all
+separated from each other rather than posed as one skeleton, on both proxies at once, on both
+machines. This is a stronger, clearer version of Session 54's "proxy meshes intermittently detach
+entirely (not a pose issue)" report. Two data points worth carrying into the next dedicated
+session on this:
+
+- The `reassert_no_interact()` fix from earlier tonight (continuously re-asserting
+  `JigSetCanInteract(false,false)` every `sync_equipment()` pass, confirmed still present and
+  active in the build running when this was observed) did **not** prevent it — disproves "physics
+  gets silently re-enabled later" as a sufficient explanation on its own, or at least shows this
+  specific countermeasure doesn't stop it.
+- **Both proxies broke at the same time**, on both viewers — not an isolated one-off render glitch
+  on a single client. Whatever's happening is either synchronized to some shared trigger (both
+  players' game state doing the same thing at once — reconnect, entity-replay burst, a
+  world/day-night event) or is a rendering-thread-level issue independent of any specific player's
+  own state. Worth checking client-side logs for what else was happening at that exact timestamp
+  next time this is caught.
+
+No live fix attempted — this matches the already-logged conclusion that the remaining candidates
+(`ControlRig`'s internal RigVM bytecode, or the state-machine transition-rule functions gating
+`BlendListByBool`/`StateMachine`) need real decompilation work, not another live guess-and-redeploy
+cycle.
+
+**Critical reframe, same live report, more detail extracted.** Session 55 already found real
+evidence `ControlRig` isn't the mechanism (the game's only ControlRig asset is an 8-node head/spine
+look-offset only — no weapon/body relevance at all), so that lead should be deprioritized, not
+re-tried. More importantly: **the missing meshes are not the same on both machines, and at least
+one is on the LOCAL, non-proxy character**: PC1 saw their *own* respirator (a local equipped item,
+not a proxy) gone; PC2 saw most of their own meshes gone; PC2 separately saw PC1's night-vision
+goggles floating/detached (that one *is* a proxy-rendered item, PC1's NVG as seen on PC2's screen).
+
+This is a real problem for the entire "proxy-rendering bug" framing this has been investigated
+under since Session 54 — **local equipment rendering is pure native game logic; nothing this mod's
+`sync_equipment`/`reassert_no_interact`/proxy code touches runs against a player's own local
+character at all.** If a local player's own gear genuinely detaches with no mod code anywhere near
+that code path, either (a) this is a base-game bug unrelated to the mod, exposed/coincidental with
+multiplayer sessions, or (b) some other still-unidentified mod code path (network receive handling,
+a hook installed broadly rather than proxy-scoped, e.g. `on_process_event_post`) is reaching further
+than intended. **Next step before any further ControlRig/state-machine work: check whether this
+reproduces in vanilla singleplayer with the mod not loaded at all** — if it does, this is a base-game
+bug outside this project's ability to fix, and investigation should stop; if it doesn't, the search
+needs to shift from "proxy rendering" to "what does this mod's code touch that could affect the
+local player's own character," which is a much shorter list (network receive handlers, any hook
+installed without a proxy-only guard) than anything explored so far.
+
+**2026-08-14: confirmed never happens in vanilla singleplayer — this is mod-caused, and a real
+candidate found.** Ruled out `sync_equipment`/`reassert_no_interact`/every `JigSetCanInteract`/
+`SetSimulatePhysics` call site directly — all live in `proxy_manager.cpp`, all only ever called
+against `player.proxyActor` or its tracked visual-actor children, never the local pawn. Also
+audited every `RemotePlayer::*VisualActor` pointer's lifecycle for the stale-pointer-reuse theory
+(destroy a proxy's item, forget to null the field, UE's allocator reuses that address for something
+unrelated, a later call hits the wrong object) — `destroy_actor_safe()` correctly nulls every
+pointer on every destroy path, including the SEH-caught-crash path, and the one place that was
+provably leaking actors (disconnect, before the already-documented Session-? fix: "destroying the
+proxy itself does not cascade-destroy attached *actors* in UE5, only attached *components*") now
+cleans up every visual actor before erasing player state. Both theories checked out clean —
+neither explains gear disappearing on the *local* player.
+
+Found a real candidate instead: `PlayerProgressRestore`'s handler (`mod.cpp` ~line 2732) calls
+`pawn->K2_SetActorLocationAndRotation(newLoc, newRot, false, hit, /*bTeleport=*/true)` on the local
+player's own pawn, unconditionally, on every single join/reconnect — this is the *same call shape*
+(`K2_SetActorLocationAndRotation` with `bTeleport=true`) Session 57 already flagged as suspect for
+not reliably preserving attached *actors'* relative transforms (as opposed to attached
+*components'*, which do move correctly) — and every equipped item is exactly that: a separately
+attached actor, per the same UE distinction the disconnect-cleanup fix above already had to work
+around. This call had never been examined for local-player side effects before, only ever discussed
+in the context of proxy rendering. Tonight had an unusually high number of reconnects (every
+redeploy cycle triggers one), which lines up with why this was the session this finally got caught.
+
+**Mitigation applied (not a confirmed fix — the underlying UE behavior, if this really is the
+cause, isn't something this project can change): gated the teleport on actual distance.** It was
+firing unconditionally even when the saved position was already right where the local game's own
+save had the player, which is pure risk for zero benefit. Added a 500-unit distance-squared
+threshold (same value already used for the proxy teleport-vs-smooth cutover elsewhere) — skips the
+call entirely when it wouldn't move the player meaningfully, keeps it for a genuine cross-session
+rejoin. Builds clean. **Not yet live-verified** — same problem as the mesh-fragmentation bug itself,
+no on-demand repro exists, so this needs to be watched over further sessions rather than confirmed
+immediately. If items keep detaching even with teleports mostly skipped now, this theory is wrong
+and the search should move to auditing every other hook this mod installs without a proxy-only
+guard (starting with `on_process_event_post`, which fires for every character's `AnimInstance`, not
+just proxies') for anything that could reach a local player's own equipped-item actors.
+
+**Split-call fix deployed and both machines joined clean.** Redeployed with
+`K2_SetActorLocation`+`K2_SetActorRotation` split (see above) — both PC1 and PC2 joined without the
+arms/mesh-detachment bug recurring on this join, and no reported position/rotation issues from the
+split call itself. Given this bug has no reliable on-demand repro, this is "held up on this one
+join," not a confirmed fix — worth continued watching over further play rather than closing this
+out. If it recurs despite this, the next candidate is auditing every hook this mod installs without
+a proxy-only guard (`on_process_event_post` first) for anything that could reach a local player's
+own equipped-item actors.
+
+**Same session, right after the clean-join check above: proxy-side detachment recurred.** PC1's
+eyewear (slot 2, `Glasses`) fell off as rendered on PC2's screen — this is specifically the
+`sync_equipment`/proxy-rendering path, not the local-player teleport path just fixed above (that fix
+doesn't apply here at all: PC2 is rendering PC1's proxy, nothing to do with PC2's own pawn's
+position). Confirms **two separate mechanisms are both live**, not one bug with one cause:
+
+1. Local player's own gear disappearing on join (candidate fix: split
+   `K2_SetActorLocation`/`K2_SetActorRotation` call, held up on the one join tested so far).
+2. Proxy-rendered gear detaching independent of joins (this occurrence) — already disproven earlier
+   tonight that `reassert_no_interact()` (continuously re-asserting `JigSetCanInteract`) is
+   sufficient to prevent it, despite being active and correctly proxy-scoped.
+
+No further live fix attempted for (2) this session — same reasoning as before: the remaining real
+candidates (`ControlRig`'s RigVM bytecode — though already weakly deprioritized by Session 55's
+finding that the game's only ControlRig asset has no body-part relevance, so may not even apply
+here since that finding was about grip *pose*, not physical detachment; or the state-machine
+transition-rule functions) need actual decompilation work, not another live guess-and-redeploy.
+Next dedicated session on this should start by re-confirming whether ControlRig's dismissal
+(Session 55) truly rules it out for *this* symptom specifically (detachment) or only for the
+grip-pose symptom it was checked against — that distinction was never explicitly re-tested.
+
+**Local detachment recurred again, this time with no join/reconnect involved.** PC2's own hair
+came off, locally, mid-session (no relaunch reported before this). This weakens the
+`PlayerProgressRestore`-teleport theory as the sole cause of local-side detachment — that path only
+ever fires once per join, and no join happened here. Either the split-call fix only ever addressed
+part of the local-detachment cases (join-triggered ones) while a separate, still-unidentified
+mechanism causes it mid-session too, or the teleport theory was never really it and the one clean
+join earlier was coincidence, not confirmation.
+
+**Session conclusion on the whole mesh/item-detachment bug family**: three distinct occurrences
+across one evening (PC1 respirator + "most of PC2's meshes" pre-fix, PC1 eyewear-on-proxy
+post-fix, PC2 hair-locally-mid-session post-fix) across at least two mechanisms (local and proxy),
+neither fully explained nor fixed. Stop attempting further live guesses this session — every
+candidate tried (`reassert_no_interact` continuous reassertion, distance-gated teleport, split
+location/rotation calls) has been disproven or left unconfirmed. This needs a genuine dedicated
+session: systematic reproduction attempts (does frequency correlate with session length? equip
+changes? any specific action?) plus real decompilation (RigVM bytecode or state-machine transition
+rules) rather than more reactive live patching.
+
+**Debugging infrastructure added for next time it happens: `attach_health` monitor
+(`mod.cpp`).** Runs unconditionally (no flag trigger needed) every ~2s against the local pawn's
+Mesh and any connected proxy's Mesh, snapshotting `AttachChildren` (same offsets/SEH-guard pattern
+already proven by `read_local_weapon_attachments`) and diffing against the previous snapshot. Any
+child present last check but gone this check gets logged immediately —
+`attach_health: <local|proxyN> DETACHED ptr=0x... name=<GetFullName()> (prevCount=X curCount=Y)` —
+giving a real timestamp and identity the moment something detaches, instead of only a several-
+seconds-later visual report with no diagnostic trail. Builds clean, deployed to both machines,
+running now. Next occurrence should be immediately followed by a `debug.log` check on both machines
+around the reported time for these lines — this is the first time this bug will have any actual
+data trail to investigate from.
+
+**`attach_health` monitor: zero hits on PC2's hair loss — useful negative result.** Checked PC2's
+full `debug.log` (290,972 lines, confirmed live/current via matching recent timestamps) for
+`attach_health` — no matches at all. The monitor only watches `Mesh->AttachChildren` (the mechanism
+equipped items use), so hair not showing up there means **hair isn't a separately spawned+attached
+actor at all** — consistent with `send_pawn_appearance`'s own log line treating it as a named
+property (`hairMesh=Chr_MaleHair3`), which points at a dedicated body-part component (e.g.
+`HairMeshComponent`) whose mesh asset is getting cleared/swapped rather than physically detaching.
+The current monitor can't see that class of change. **Next concrete step, not attempted yet**:
+extend `attach_health` (or add a sibling check) to read known body-part component properties
+directly (need to find their actual reflected names first — `HairMeshComponent` is a guess based on
+the `hairMesh` wire-field name, not confirmed) and snapshot/diff their `SkeletalMesh` asset pointer
+the same way, rather than only watching the generic attachment list. This also means the equipped-
+item detachment reports (glasses, respirator) and the body-part reports (hair, "most of PC2's
+meshes") may turn out to be two genuinely different bugs sharing only a visual symptom, not one
+mechanism — worth keeping that distinction sharp going forward rather than assuming they're the
+same root cause.
+
+**Debugging infrastructure extended: component-drift monitor + weapon-attachment-level coverage.**
+Two additions to the `attach_health` monitor, same session:
+1. `component_drift` — covers body parts that are named direct properties, not attached actors
+   (`HairMesh`/`BeardMesh`/`head`/`Torso`/`Arms`/`Hands`/`Legs`/`Feet`, real offsets from
+   `BP_PlayerCharacter.hpp`), snapshotting `RelativeLocation` (proven `+0x128` offset, already used
+   throughout `proxy_manager.cpp`) and logging a `component_drift: DRIFTED` line if any moves more
+   than 30 units between 2s checks. Directly targets the negative result above (hair loss produced
+   zero `attach_health` hits since it isn't an attach/detach event at all).
+2. `attach_health` extended one level deeper: since UE attaches component-to-component (not
+   actor-to-actor), a child returned by walking `Mesh`'s `AttachChildren` is itself a full
+   USceneComponent with its own `AttachChildren` — the same scan now also recurses into each
+   equipped item's own attachments (weapon scopes/mags/suppressors), reusing 100% of the existing
+   scan/diff code, just called one level deeper per item. User's own suggestion, prompted by the
+   monitor working for one class of item.
+
+Both build clean, deployed to both machines, running now. Between the two, this covers: equipped
+item detachment (existing), weapon-attachment detachment (new), and body-part-component drift
+(new) — should catch nearly every variant of this bug family reported tonight except any mechanism
+that neither attaches/detaches nor moves the component's own transform (e.g. purely toggling
+visibility or clearing a mesh asset while leaving the transform untouched — not yet covered, would
+need a further extension if a future report doesn't show up in either log).
+
+**Debugging infrastructure, third extension same session: mesh-asset-clear detection.** PC2's own
+hands vanishing locally produced zero hits on both existing monitors — meaning the component
+neither detached (attach_health) nor moved (component_drift), so "gone" apparently means invisible/
+cleared, not displaced. Extended `do_component_drift_scan` to also read each tracked component's
+`SkeletalMesh`/`SkeletalMeshAsset` property (reflection name lookup, not a raw offset — tries both
+since the exact property name for this engine version wasn't independently confirmed, a wrong guess
+just returns null harmlessly) and log `component_drift: MESH ASSET CLEARED` if it transitions from
+set to null between checks. Builds clean, deployed both machines, running now.
+
+Between all three extensions, the monitor now covers every mechanism that's actually been reported
+tonight: physical detachment (attach_health, both top-level items and one level into their own
+attachments), transform drift (component_drift positional), and asset-clear/invisibility
+(component_drift mesh-asset). If the next occurrence still produces zero hits across all of these,
+that would be a strong signal the mechanism is something structurally different again (e.g. render
+state without any of these three signatures) rather than needing a fourth reactive extension.
+
+**Session conclusion, this bug family: likely a rendering glitch, not a state bug.** Four more live
+occurrences checked against the fully-verified-working monitor (heartbeat confirmed alive,
+correctly scoped, `localMeshChildren=5`/`proxiesScanned=1`, and it DID catch real events earlier —
+the Torso/Legs/Feet mesh-asset-clear at 10:02:50): PC1's AK15 suppressor (weapon-attachment level,
+the specific gap the "one level deeper" extension was built for), PC2's forearms (a directly-tracked
+`component_drift` name), plus the backpack and NVG reports from just before. **Zero hits across all
+of them, on top of confirmed-alive instrumentation.** This is a meaningful negative result, not a
+coverage gap: attachment state, RelativeLocation, and mesh-asset pointers all provably did not
+change on the affected components when these were reported.
+
+**Working theory going forward: this is a transient rendering glitch (bad skinning/pose
+interpolation, LOD pop, a briefly-wrong frame), not game-state corruption.** None of tonight's
+reports described an item staying detached — always "fell off," checked moments later, story moves
+on — consistent with something that self-corrects visually without ever actually changing the
+underlying component data reflection can see. If true, this is not fixable via this mod's code at
+all (nothing to instrument further — reflection sees state, never the rendered frame) and is likely
+an inherent engine/performance quirk exposed by having more skeletal meshes actively animating at
+once in multiplayer, not a bug in this project's code. Revisit this conclusion only if a future
+report describes something *staying* broken rather than a momentary visual glitch — that would
+argue for real state corruption after all and justify picking the state-bug investigation back up.
+
+**Debugging infrastructure, fourth extension: item-level mesh-asset-clear (still-attached case).**
+"PC1's AK is gone but attachments are there" — the parent (weapon) mesh going invisible/cleared
+while its still-attached child attachments (scope/mag/suppressor) remain visible, distinct from
+every prior check: not a top-level detach (never left AttachChildren), not a fixed body-part
+component (weapons aren't in component_drift's named list). Extended `do_attach_health_scan` to
+also track each *currently attached* item's own `SkeletalMesh`/`SkeletalMeshAsset`/`StaticMesh`
+asset pointer (tries all three names since items can be either mesh type), keyed by a persistent
+map so it survives across ticks even as the attached-children list itself is unchanged. Logs
+`attach_health: <label> item ptr=... MESH ASSET CLEARED (was set, now null, still attached)`.
+Builds clean, deployed both machines, running now.
+
+This walks back part of the earlier "likely just a rendering glitch" conclusion — "gun gone, scope
+still floating there" is a real, reportable, presumably-persisting state (not obviously a
+single-frame render hiccup) and now has direct instrumentation for the first time. If this new
+check also comes back empty on the next occurrence, that would be much stronger evidence for the
+rendering-glitch theory than anything checked so far; if it fires, that's the first real lead this
+session into an actual root cause.
+
+**False-positive found and fixed in the monitor itself.** The 10:18:21 cascade (local Torso/Legs/
+Feet + two item mesh-clears, all in the same millisecond, right after two `localPawn=NULL`
+heartbeats) was a **monitoring artifact, not a real bug**: PC2 had respawned/reconnected, and the
+brand-new pawn's components hadn't finished initializing yet (legitimately null for a moment) —
+but the snapshot state was keyed by the fixed label `"local"`, which doesn't change across a
+respawn even though the underlying `AActor*` does, so the first check against the new pawn compared
+against the *old* pawn's fully-loaded baseline and false-flagged a "CLEARED." Also worth noting:
+this cascade was entirely on PC2's own local pawn, not PC1's proxy — meaning the actually-reported
+bug this round (PC1's pants/vest, seen on PC2's screen) still produced zero real hits.
+
+Fixed via `reset_label_snapshots_if_actor_changed()`: tracks which `AActor*` each label
+("local"/"proxyN") last referred to, and wipes every snapshot entry under that label the moment the
+underlying actor identity changes (respawn, reconnect, or a proxy despawning/respawning), so the
+first post-change check is treated as a fresh baseline instead of a comparison. Logs
+`attach_health: <label> actor changed (respawn/reconnect), snapshot baseline reset` when this
+happens, so a future respawn is visible in the log as a labeled event rather than silently
+resetting or (as before the fix) producing false detections. Builds clean, deployed both machines,
+running now.
+
+**Updated read on this whole bug family**: three real reports since the monitor went live
+(backpack, NVG, suppressor, forearms, AK, pants/vest — six distinct reports total) have now
+produced exactly one non-false-positive-suspect hit (the original 10:02:50 Torso/Legs/Feet clear,
+which happened mid-session with no adjacent respawn in the log — worth re-examining once more data
+exists, since the same false-positive class could theoretically apply if a respawn happened before
+logging started that session, though the surrounding heartbeats around 10:02:50 don't show a NULL
+gap the way 10:18:21's did). Net effect: still no confirmed real state-level cause found tonight,
+but the diagnostic pipeline itself is now meaningfully more trustworthy, and any future hit is much
+more likely to be a genuine signal rather than snapshot-continuity noise.
+
+**Second false-positive gap found and fixed: `s_itemHadMesh` wasn't reset on actor change.**
+Same session, immediately after the first respawn-reset fix shipped — PC1's own AK15 Acog produced
+the identical cascade shape (heartbeat NULL, then a burst of "MESH ASSET CLEARED (still attached)"
+the instant the pawn came back), proving the per-label reset alone wasn't sufficient.
+`s_itemHadMesh` is keyed by raw item pointer (not by label, since an item's identity isn't tied to
+which character owns it), so it couldn't be scoped/cleared by label the way the other two maps
+were — a freshly-spawned item after a respawn can get the exact same memory address a
+just-destroyed item held, and the stale `true` entry at that address made the new (still-
+initializing) item look like a real clear. Fixed with a full `s_itemHadMesh.clear()` whenever
+either label's actor-change reset fires — simplest correct option, cheap to rebuild over the next
+tick or two, not worth scoping further given how rarely this actually triggers (only on
+respawn/reconnect, at most a couple times per session). Builds clean, deployed both machines,
+running now.
+
+At this point every hit this monitor has ever produced across the whole session has turned out to
+be a respawn-timing false positive once traced back — PC2's "pants gone again" report (same session,
+right after this fix shipped) should be the first real test of whether the diagnostic pipeline is
+now actually trustworthy, or whether a third gap exists.
+
+**BREAKTHROUGH: first confirmed real, persistent occurrence — not a false positive, not a
+transient respawn artifact.** Live screenshot from PC1 (their own local character) shows base
+shirt/pants, bald head, only a knife — jacket, backpack, helmet, gloves all gone. Cross-referenced
+against `debug.log`: the `11:34:05.944` cascade (attach_health item clears + component_drift
+Torso/Arms/Legs/Feet, same shape as every prior "false positive") — but this time, every heartbeat
+since (`11:34:09` through at least `11:38:10`, all `localPawn=found localMeshChildren=14`) shows
+**no recovery at all**. This state has now persisted for 4+ minutes and is still visible live. User
+confirmed explicitly: not an intentional gear-rack strip, the items actually fell off.
+
+**No "actor changed" reset ever fired around this event** — confirmed via grep, zero matches —
+meaning this is the *same* character actor throughout, not a new pawn from a respawn. So the
+mechanism isn't "died and respawned"; it's something that makes `find_local_pawn()`'s reflection
+lookup fail to resolve for ~27 seconds (heartbeats at `11:33:38` and earlier show `NULL`) while the
+underlying actor never actually changed, and the moment resolution succeeds again, its equipment
+reads as cleared and — critically, unlike every prior occurrence — never gets reapplied.
+
+**New working theory: level streaming (entering/exiting a building), not death/respawn.** The
+screenshot shows an interior room. A sub-level load/unload transition is a plausible explanation for
+a *temporary* reflection-lookup failure on the same actor (components briefly unregistered/
+re-registered during streaming) without the character having actually died — and would explain why
+no equipment-reapply logic runs afterward, since the game has no reason to treat a level-streaming
+boundary as an event that needs re-equipping. Not yet confirmed; needs deliberate testing (walk in
+and out of a building repeatedly while watching `debug.log`) in a focused future session — this
+session found the correlation but is far too deep already to safely chase a live fix on the local
+player's own core equipment logic right now.
+
+**This is the most concrete, actionable lead of the entire night** — first real repro trigger
+candidate (building entry/exit) for a bug that had zero reliable trigger all session up to this
+point, on top of a now-verified-trustworthy diagnostic pipeline (both false-positive classes found
+and fixed earlier this same session). Next session should start here: confirm the level-streaming
+correlation with a deliberate building-entry/exit test, then look at what actually differs between
+a normal respawn's equipment-reapply path (which does work, per every earlier false-positive
+"recovery" implied by heartbeats going back to normal counts) and whatever this transition invokes
+instead (likely: nothing invokes it at all, which is the actual bug).
+
+**Root cause of the 11:33:36 UE4SS reinit and the later 11:52:25 crash: likely a KVM switch.**
+UE4SS.log confirmed a full restart (member-offset dump, "Starting mods", "Event loop start") at
+11:33:36 — not explained by the Keybinds mod (only Ctrl+key dev-tool bindings, nothing close to a
+reload) or `EnableHotReloadSystem` (confirmed `0`, disabled), and no crash dump exists at that exact
+timestamp. User identified the likely real cause after the fact: swapping their KVM switch mid-
+session — a plausible trigger for both this reinit and the actual crash logged at 11:52:25
+(`UECC-Windows-CEDC60E0...`). This is an environment/hardware interaction, not a mod or base-game
+bug — closes out tonight's mesh-detachment investigation on the actual root cause rather than an
+unexplained mystery.
+
+**Does this change the mesh/equipment-clearing conclusion?** Only partially. The KVM-triggered
+reinit explains *why* `find_local_pawn()` failed to resolve for ~30s and why equipment read as
+cleared right after (the mod's own state, including whatever normally reapplies equipment,
+got wiped by the reinit — a real, understood mechanism now, not a mystery). It does **not**
+explain every other report from tonight (backpack/NVG/suppressor/forearms/AK/acog/pants — none
+of which coincided with a logged `on_unreal_init` reentry in the same way). Those may be a
+different, still-unexplained mechanism, or could turn out to share a cause once checked the same
+way (grep each future report's timestamp against `on_unreal_init: entered` before assuming a new
+bug). **Next session: when a similar report comes in, check for an `on_unreal_init` reentry first
+before treating it as a fresh state-corruption investigation** — it's now a known, real, checkable
+candidate cause, not console-log noise.
+
+**Retest after KVM-avoidance: mixed result, one real gap found in the diagnostic itself.** User
+restarted both clients deliberately without the KVM switch. PC1's log shows the relaunch clearly
+(`on_unreal_init: entered` at `11:59:18.150`), followed by a `local` cascade at `12:00:01.999` — but
+this one **self-corrected** (heartbeat 20s later already back to normal `localMeshChildren=14`),
+consistent with a normal "hasn't finished spawning in yet" transient, not a bug — first evidence the
+diagnostic can now tell a real problem (the earlier persistent KVM-linked one) apart from benign
+join transients.
+
+The actually-reported bug this round — PC2's hair, rendered on PC1's screen (proxy-level) — produced
+**zero** `component_drift` hits despite `proxiesScanned=1` confirmed active in the heartbeat the
+whole time. Since `component_drift` needs to observe a component as set at least once before it can
+ever detect a later clear, zero hits ever (not even a false one) strongly suggests the `HairMesh`
+property lookup is silently failing specifically on proxy actors — never establishing a baseline at
+all, not "nothing changed." This is a genuine, previously-unknown gap in the diagnostic itself
+(distinct from either false-positive class already fixed), not investigated further this session —
+next step: add explicit logging when `GetValuePtrByPropertyNameInChain` for these named body-part
+components returns null on a *proxy* specifically, to confirm whether resolution fails entirely for
+proxies or only sometimes.
+
+**Correction to the "self-corrected" read above: recovery was only partial.** User later reported
+weapon attachments, eyebrows, and mouth all missing locally on PC1 — traced back to the *same*
+`12:00:01.999` cascade from the `11:59:18` relaunch, not a new event. The heartbeat showing a
+normal count (`localMeshChildren=14`) 20 seconds later only confirms the top-level attachment
+*list* came back, not that each item's own mesh asset was actually reapplied — the three item
+pointers that cleared under `local>1cb3c0100` (the weapon's own attachment sub-tree) apparently
+never recovered even though the list-level structure did. Eyebrows/Mouth aren't in
+`component_drift`'s tracked name list at all (only `HairMesh`/`BeardMesh`/`head`/`Torso`/`Arms`/
+`Hands`/`Legs`/`Feet`), so their loss can't be independently confirmed by this session's
+instrumentation, but fits the same broad-clear-at-join pattern.
+
+**Updated overall read for the night: most reports likely trace back to join/relaunch events, with
+incomplete self-recovery, not random mid-session corruption.** This reframes nearly everything
+reported across the whole session — many, maybe most, of tonight's "X fell off" reports happened
+within a few minutes of some relaunch/redeploy (this session did an unusually large number of them).
+The mechanism is now much better scoped for a future session: **on join, some equipment-reapply
+step runs for body/base components but appears to skip or fail for weapon-attachment sub-items and
+at least two untracked face components (Eyebrows, Mouth)** — a real, targeted lead (find what runs
+on join for equipment restoration and why its coverage is incomplete) rather than a vague
+"something sometimes breaks" investigation. Next session should extend `component_drift`'s tracked
+list to include `Mouth`/`EyebrowsMesh` (real properties, `BP_PlayerCharacter.hpp` @0x0740/@0x0790)
+and specifically trace what equipment-restoration logic runs at join to find the actual gap.
+
+**Diagnostic coverage extended: `Mouth`/`EyebrowsMesh` added to `component_drift`'s tracked list**
+after the weapon-attachments/eyebrows/mouth report. Builds clean, deployed both machines (user
+relaunching manually via desktop shortcuts from here on, not via script). No further live code
+changes attempted this session beyond this — a real fix needs bytecode-level tracing of whatever
+native function handles equipment-restoration at join, which is dedicated-session work, not
+something to guess at after this many hours live.
+
+**Pattern noticed across the whole session: proxy-level reports always produce zero hits, local-
+pawn cascades always get caught.** Every single "X fell off, seen on someone else's screen" report
+tonight (glasses, NVG, hair, AK, helmet, suppressor) — zero matching log lines under any `proxyN`
+label, while `local` cascades tied to `on_unreal_init` reentries kept getting caught reliably. Too
+consistent across this many independent reports to be "proxies just don't have this problem" —
+added `proxy0Children` to the 30s heartbeat (previously only reported local's count) to check
+whether the proxy-side scan is finding a sane `AttachChildren` count at all, or silently finding
+~0 every time, which would mean `Mesh` resolution or the whole scan is quietly failing specifically
+for proxy actors. Builds clean, deployed both machines. Next heartbeat check (or next proxy-level
+report) should make this immediately visible either way.
+
+**Proxy-scan-integrity question resolved: the scan works, hypothesis disproven.** New heartbeat
+field confirmed `proxy0Children=5` — a real, non-zero count — meaning the proxy-side
+`attach_health`/`component_drift` scan genuinely finds real attached items on a proxy's Mesh, not
+silently reading empty every time. This rules out "the scan is broken for proxies" as the
+explanation for the all-session pattern of zero hits on every proxy-level report (glasses, NVG,
+hair, AK, helmet, suppressor).
+
+**Remaining candidates for that pattern, not investigated further this session**: (1) proxy
+connections may cycle (reconnect/redespawn) more often than local, repeatedly resetting the
+snapshot baseline (via `reset_label_snapshots_if_actor_changed`) right before a real change would
+otherwise be caught — plausible given how many redeploys/relaunches happened tonight, each of which
+briefly drops and respawns every proxy; (2) proxy-rendered items may detach via a genuinely
+different, still-uninstrumented mechanism than local items do. Good stopping point for tonight —
+the proxy-scan-integrity question that was the last open thread is now answered either way, and
+further work here needs either a longer, redeploy-free play session (to test candidate 1 cleanly)
+or fresh instrumentation ideas (for candidate 2), both better suited to a fresh session than
+continuing to extend tonight's diagnostic incrementally.
+
+**Real crash: PC2 hit EXCEPTION_ACCESS_VIOLATION writing 0x4ec.** Last log line before the crash
+was `on_process_event_post`'s own `aim_write` diagnostic — this function's Pitch/Yaw/IsCrouching/
+IsADS/Falling write block has run unguarded (no SEH) since Session 53, writing through a
+per-frame-resolved `AnimInstance` pointer that can go stale if the owning proxy is mid-destroy/
+respawn — the exact stale-pointer-during-proxy-lifecycle race this project has SEH-hardened
+everywhere else, just never here. The near-null write address (`0x4ec`) is consistent with that
+theory but not confirmed via live debugger attach (none was active). Split the write logic into a
+trampoline (`do_aim_write`/`AimWriteCtx`) and wrapped it in `seh_invoke`, matching the established
+pattern throughout this codebase — a safe, low-risk hardening regardless of whether this exact
+theory is the confirmed cause. Builds clean, deployed both machines. If it crashes again despite
+this, the SEH catch will at least produce a `caught via SEH` log line, giving a real diagnostic
+signal instead of a silent hard crash — meaningful progress either way.
+
+**FINAL, well-supported conclusion for the night: this is 100% reproducible, tied specifically to
+the join-time teleport in `PlayerProgressRestore`.** Fourth-plus occurrence of the identical cascade
+shape tonight, every single time immediately following an `on_unreal_init` relaunch — no exceptions
+observed once this was actually tracked. This is no longer "no reliable repro"; it now reads as
+"happens on literally every join."
+
+**Real mechanism, most likely candidate**: `PlayerProgressRestore`'s teleport (this session's own
+code, `mod.cpp` ~line 2750) fires on every fresh join, since a genuinely fresh join's saved position
+is always far enough from wherever the engine's default spawn point put the pawn to clear the
+500-unit distance gate added earlier tonight. Splitting the call into `K2_SetActorLocation`+
+`K2_SetActorRotation` (also this session, to fix the ADS/movement-backward symptoms) fixed those
+specific problems, but likely never addressed the deeper issue: teleporting the actor root — by
+*any* method — may not reliably carry attached actors' (weapons, clothing, accessories, and
+possibly body-part components too) relative transforms with it. This matches Session 57's original
+finding almost exactly, just now confirmed to apply to the *local* player's own join-teleport, not
+only proxy rendering.
+
+**This is the single most concrete, actionable lead of the entire session.** Next session should
+test directly: does the equipment cascade still happen on a join where the distance gate skips the
+teleport entirely (i.e., rejoin near the same saved position)? If yes, the teleport theory is wrong.
+If no cascade occurs, that's near-certain confirmation, and the fix becomes "either skip the
+join-teleport when the engine's own default spawn is close enough to not bother, or find a way to
+force attached actors to recompute their transforms immediately after any teleport that must
+happen" — both concrete, testable engineering tasks, not open-ended investigation.
+
+**Likely real root cause found: unprotected raw-memory vitals write-back on the SAME join event as
+the teleport, timed too early.** User asked to re-audit the whole attach chain for native-vs-custom
+usage — that search led to `PlayerProgressRestore`'s vitals write-back (`mod.cpp`, added in an
+earlier session, self-documented as "NOT live-verified") instead: it writes `double`s directly
+through four raw pointer chains (`pawn+0x7D0/0x7F8/0x800/0x7F0` for Medical/HungerThirst/Stamina/
+Radiation components) the *instant* `find_local_pawn()` first succeeds after a join — **zero SEH
+protection, zero validity check beyond non-null, and fires on the exact same event** this session
+already showed leaves the pawn mid-initialization (`preChildrenCount=4` vs. a normal ~14, logged
+just a few lines earlier in the same join sequence via `join_teleport`'s bracketing logs). A raw
+write through a pointer fetched that early — even if non-null — has real potential to hit an
+object that isn't what the offset assumes yet, plausibly explaining collateral damage to unrelated
+components (equipment, body parts) without ever touching them directly. Also a strong candidate for
+the real cause of tonight's earlier confirmed crash (`EXCEPTION_ACCESS_VIOLATION` writing `0x4ec`) —
+`aim_write` was logged as the last line before that crash only because it logs continuously
+(~20/sec) regardless of what's actually happening, while this vitals write only fires once per join,
+a much narrower and more circumstantially-suspicious window.
+
+**Fix**: deferred the write the same way `pendingTeleport` already is (`state.hpp`'s new
+`pendingVitalsRestore` fields) instead of writing inline in the network-receive handler — applied
+~2s later from `do_game_tick`, after the pawn has had time to actually finish initializing, and
+wrapped in `seh_invoke` as defense in depth regardless. Builds clean, deployed both machines. This
+is the most concrete, well-evidenced fix attempt of the entire session — testable directly on the
+next join.
+
+**Even deferred, the vitals write still correlates tightly with the cascade — under 1 second.**
+`vitals_restore: applied deferred vitals write` at `12:32:18.326`, cascade at `12:32:19.252` — much
+tighter than the teleport's own ~3s gap. Points at the write itself (landing on the wrong memory
+even 2s post-join, not just being too early) rather than pure timing.
+
+**Direct test deployed**: `kEnableVitalsWrite = false` — write is now skipped entirely, logging kept
+(`vitals_restore: SKIPPED (kEnableVitalsWrite=false, testing cascade correlation)`) so the
+correlation stays visible either way. If joins stop producing the cascade with the write disabled,
+that's strong confirmation of root cause. Also patched PC2's server-saved vitals (`players.db`,
+`player_progress` table) back to full — first attempt wrongly used a 0.0-1.0 scale (based on an
+unverified protocol.js comment), corrected to 0-100 after noticing a real saved hunger value
+(16.7) that only makes sense on a percentage scale, matching the in-game HUD.
+
+## Same session, IDA reconnected — real root cause found via bytecode tracing
+
+**Both leading theories (join-teleport, vitals write-back) were cleanly disproven by direct live
+tests** (see above): disabling the vitals write entirely still produced the identical cascade
+under a second after the SKIPPED log line. This ruled out everything the mod itself does at join,
+pointing conclusively at the base game's own native load sequence — which IDA/bytecode tracing
+could actually investigate properly, unlike guessing from timing correlation alone.
+
+**Traced the real native equipment-restore chain, entry to root cause:**
+
+1. `BP_PlayerCharacter_C::Event_LoadPlayer`/`ActorPreLoad`/`ActorLoaded` — all tiny (18-byte) stubs,
+   dead ends.
+2. `BP_PlayerCharacter_C::OnLoadSavedDataRequested` (50 bytes) — thin wrapper: calls
+   `BP_JigHelperComp.OnLoadDataRequested()` via `EX_Context`+`EX_LocalVirtualFunction`, then sets
+   its own `Result` bool to true and returns. The real logic lives on a different class entirely.
+3. **`BP_JigHelperComp_C::OnLoadDataRequested`** (1454 bytes) — the real entry point. Two loops:
+   - **Loop 1** (`0x0154`–`0x02e9`-ish): iterates a slot collection, calls `K2_DestroyActor`
+     (resolved via `resolve_fname`, ci=93336) on each entry — destroys existing/placeholder
+     equipped item actors.
+   - **Loop 2** (`0x037d`–`0x055c`): iterates **`RepActorsData`** (resolved via `resolve_fprop` on
+     the instance-variable property at the loop's read site, `0x13d94ce80`) and calls
+     `SetEquippedInfoBySlot` (resolved via `resolve_fname`, ci=1846069) per entry with a large
+     struct (transform + container arrays — real per-item saved equip data) to restore each item.
+
+**Root cause theory, strongly supported but not yet 100% proven**: `RepActorsData`'s `Rep` prefix
+is UE's standard naming convention for a *replicated* property — meaning its real contents arrive
+from the server over the network, not instantaneously on possession. If `OnLoadDataRequested` runs
+before this replication has actually landed (very plausible right at join — a classic UE
+networking race between "possess pawn" and "replicated property delivery"), Loop 2 iterates an
+incomplete or still-default/empty array, restoring fewer items than Loop 1 just destroyed — and
+nothing in this function retries once the real data does arrive moments later. This explains every
+observed symptom simultaneously: always tied to join (this function only runs then), per-slot
+inconsistent (whichever entries of `RepActorsData` happened to have arrived by read time), usually
+self-heals if something else independently re-triggers a restore shortly after (matching most of
+tonight's "recovers within seconds" cases), and sometimes doesn't if nothing re-triggers it
+(matching the confirmed-persistent screenshot case from earlier tonight).
+
+**Not yet confirmed**: whether `RepActorsData` genuinely arrives late relative to this function's
+execution (would need a live breakpoint/watch on both the replication callback and this function's
+entry, comparing timestamps) — that's the next concrete verification step, not attempted yet this
+session (IDA was reconnected but a live debugger attach + breakpoint session wasn't started before
+this session needed to wrap for the night). If confirmed, the real fix is almost certainly either:
+(a) delaying `OnLoadDataRequested`'s call until `RepActorsData` is confirmed non-empty/replicated
+(a native engine-side or Blueprint-side timing fix, likely outside what this mod can easily patch
+from outside), or (b) finding whatever native retry/OnRep mechanism *should* exist for exactly this
+race and confirming why it isn't firing.
+
+Decoded `.bin` files and the resolved names are all in `%APPDATA%\SurrounDeadBridge\` from this
+session — `BP_JigHelperComp_C_OnLoadDataRequested.bin` (full decode saved separately as
+`decoded_OnLoadDataRequested.txt` in the same directory) is the one to start from next time.
+
+**Continued digging, same session: found the missing link, hit the wall a live debugger would clear.**
+`RepActorsData` does have a real `OnRep_RepActorsData()` callback (confirmed: `TArray<FS_RepActorData>
+RepActorsData` at `BP_JigHelperComp` `+0xAE0`, matching header dump) — but its bytecode (22 bytes,
+decoded) does **not** call `SetEquippedInfoBySlot` or re-trigger `OnLoadDataRequested` directly. It
+only does one thing: `EX_CallMulticastDelegate` on an instance variable resolved to
+**`OnEquipmentUpdated`**. So whether replication landing late actually triggers a restore depends
+entirely on who's subscribed to that delegate and what they do — and that's not visible in any
+static header dump (dynamically-bound delegate handlers don't show up as named class functions
+the way `OnActiveWeaponSlotChanged_Event_0`-style auto-bound events did elsewhere in this project).
+Checked both `BP_JigHelperComp.hpp` and `BP_PlayerCharacter.hpp` for a plausible bound-handler name
+— nothing.
+
+**This is the real wall for tonight**: finding out who's actually subscribed to `OnEquipmentUpdated`
+(if anyone) needs either (a) a live debugger reading the multicast delegate's actual bound-function
+array off a running instance (the property itself, `BP_JigHelperComp+0xC30`, is a real
+`FMulticastScriptDelegate` with its own internal invocation list — readable live, not statically),
+or (b) a broader bytecode search across every class for `EX_LocalVirtualFunction`/`EX_FinalFunction`
+calls binding to this specific delegate name. Neither attempted this session — genuinely needs a
+live IDA debug session (breakpoint on `OnRep_RepActorsData`, inspect the delegate's bound list) or
+a systematic multi-class bytecode grep, both real next-session tasks, not something to guess at
+further tonight.
+
+**Summary of the complete, still-open chain for next session**:
+`OnLoadDataRequested` (destroy old items, immediately try to restore from `RepActorsData`) →
+if `RepActorsData` hasn't replicated yet, restore is incomplete → `OnRep_RepActorsData` fires later
+when it does arrive, but only broadcasts `OnEquipmentUpdated` → **unknown whether anything actually
+listens to that broadcast and re-runs the restore**. If nothing does, that's the exact bug: a
+one-shot restore attempt with no verified retry path when replication is late. Confirming that
+missing link is the single most valuable next step.
+
+## ROOT CAUSE CONFIRMED — live read of the delegate's actual bound-function list
+
+Attached IDA's debugger read-only to PC1's already-running game (no new join, no redeploy, no
+2-client testing — safe to do without the user present). Following this project's own established
+stability precautions: set `DOPT_*_MSGS` flags only (no `DOPT_LIB_BPT`/`DOPT_THREAD_BPT`), attached,
+confirmed process suspended (safe for a static read, no race risk), read memory directly, detached
+immediately after — clean, no crash, no hang, no effect on the running game.
+
+Read `OnEquipmentUpdated`'s `FMulticastScriptDelegate` (`BP_JigHelperComp_C` instance `+0xC30`) —
+its `InvocationList` TArray: **`data_ptr=0x0 count=0`. Zero bound listeners.** Sanity-checked the
+object pointer was still genuinely valid (not stale/reused) by reading `RepActorsData` at `+0xAE0`
+in the same call — 11 real entries, a sane count for a fully-equipped character, confirming this is
+the correct live object, not garbage.
+
+**Root cause, confirmed as far as tonight's tools allow**: `BP_JigHelperComp_C::OnLoadDataRequested`
+destroys existing equipped items and attempts to restore them from `RepActorsData` in one shot, at
+join. If that replicated property hasn't fully arrived yet at that exact moment (a real, plausible
+network race — nothing here proves the timing directly, but everything else lines up), the restore
+is incomplete. `OnRep_RepActorsData` fires later when replication does land, but its only action is
+broadcasting `OnEquipmentUpdated` — and **nothing is subscribed to that delegate**, confirmed via a
+live read. There is no retry path. This is a genuine base-game logic gap (a delegate that's declared
+and broadcast but has no listener wired up for the one case that would need it), not something
+introduced by this mod, and not something fixable by changing mod-side timing/deferral — the mod
+doesn't own this code path at all.
+
+**What a real fix would look like** (not attempted — this is native game logic, well outside what
+reflection-based writes should touch): the mod could itself subscribe a callback to
+`OnEquipmentUpdated` (the delegate machinery is already right there, `AddDynamic`-equivalent via
+reflection is a known pattern) and, on that callback, re-invoke whatever `OnLoadDataRequested`-
+equivalent restore step is needed for any slot that's still empty. This is a real, scoped
+implementation task for a future session — bind the delegate, re-run `SetEquippedInfoBySlot` for
+any slot present in `RepActorsData` but not currently reflected in the live equipped-actor list.
+Needs careful design (avoid double-applying already-successful slots, avoid interfering with normal
+gameplay equip/unequip which also presumably fires this same delegate) before attempting live.
+
+**Session over for tonight.** This is a complete, well-evidenced root-cause chain from symptom to
+confirmed mechanism — a strong foundation for a future implementation session, reached via safe,
+non-destructive tooling throughout (bytecode dumps, name/property resolution, one careful read-only
+live debugger attach), with zero live deployment risk taken while unsupervised.
+
+**Fix rebuilt as a surgical, periodic self-healing check instead of a blunt one-shot retry.**
+Original design (re-invoke `OnLoadDataRequested` wholesale, once, 5s after join) would have
+flickered every slot on every single join, not just broken ones. Rebuilt after live IDA
+confirmation of the exact failure signature — walks `RepActorsData` directly every 3s, checks only
+`Actor->RootComponent->AttachParent == null` per entry (the real actors are already correctly
+replicated; only the local attachment is missing), and calls the same native
+`"Equip Actor to Socket"` function this project already uses successfully for proxies, with the
+existing actor reference straight from `RepActorsData` — no spawning, no DataAsset lookup needed.
+Silent when healthy (only logs when it actually finds and fixes something), cheap enough to run
+continuously rather than gate to a one-shot join window — this makes it self-heal any future
+occurrence of the same failure shape, not only the join-time replication race. Builds clean, not
+yet deployed for live testing.
+
+## Same session, continued — traced and fixed the SEPARATE base-body-mesh mechanism
+
+The equipped-item fix (`RepActorsData`/`AttachParent`) doesn't cover base body components at all —
+confirmed live when a fresh report (floating shotgun/headwear, bald-looking character) showed the
+same Torso/Legs/Feet cascade happening despite the equip-restore fix being deployed and working.
+This is a genuinely separate mechanism, traced the same way:
+
+- **`BP_PlayerCharacter_C::OnRep_ClothingLegsEquipped?`** (759 bytes, real logic) — turned out to
+  govern the `Clothing_Legs` overlay component, not the bare `Legs` body mesh `component_drift`
+  actually tracks. A real, working replication callback (branches on a bool, calls
+  `SetSkinnedAssetAndUpdate` with the correct Male/Female mesh) — not the broken link, just the
+  wrong component.
+- **`BP_PlayerCharacter_C::UpdateBodyParts(FName Name)`** (1500 bytes) — the real one. Dispatches by
+  name (resolved via `resolve_fname`: ci=1732710→`"Torso"`, ci=1732718→`"Legs"`,
+  ci=1732721→`"Feet"`) and calls `SetSkinnedAssetAndUpdate` (ci=100173, same call
+  `OnRep_ClothingLegsEquipped` uses) on the matching component — the genuine native mesh-(re)apply
+  function for base body parts.
+
+**Fix**: extended `component_drift`'s existing mesh-asset-clear detection (already tracking
+Torso/Legs/Feet's `SkeletalMesh`/`SkeletalMeshAsset` pointer) to actively repair, not just log —
+when a tracked component reads null, call `UpdateBodyParts` via reflection with the matching FName
+(passed as a raw `{ComparisonIndex, Number}` struct, matching this project's own established
+pattern for FName/GameplayTag params — no FName-from-string constructor exists in the vendored
+SDK). Comparison-index values hardcoded from this session's live `resolve_fname` reads — flagged as
+stable (compile-time string literals baked into the shipped build's Kismet bytecode, not
+runtime-registered like the already-documented-unstable GameplayTag CIs). Self-limiting: a
+successful repair makes the mesh read non-null on the very next check, naturally stopping further
+calls; silent when healthy. Applies to both local pawn and any tracked proxy, since
+`check_component_drift` already runs for both.
+
+Only 3 of the 8 tracked component names (`Torso`/`Legs`/`Feet`) are covered by `UpdateBodyParts` per
+the decoded bytecode — `Hands`/`Arms`/`head`/`HairMesh`/`BeardMesh`/`EyebrowsMesh`/`Mouth` remain
+log-only for now; worth checking whether `UpdateBodyParts` has more branches further in the
+function (only fully traced the first ~90 of 1500 bytes) or whether those use a different
+mechanism entirely, in a future session. Builds clean, deploying for live test now.
+
+**Two live-tested refinements to the body-part repair fix, same session:**
+
+1. **Retry cap (5 attempts)**: `UpdateBodyParts` fired every single 2s check indefinitely on a
+   proxy without ever succeeding — likely client-authority gating this native function has that
+   `EquipActorToSocket` doesn't (that one's already proven working cross-network for proxies
+   elsewhere in this project). Capped retries per component so a structurally-unfixable case (proxy)
+   stops spamming `ProcessEvent` forever instead of retrying eternally; local player repairs
+   (confirmed working) are unaffected since they succeed well within 5 attempts.
+
+2. **Skin-showing-through-pants fix**: `UpdateBodyParts` alone reapplies only the *bare* body mesh —
+   live-reported: after a successful repair, skin visibly showed through gaps in worn pants, since
+   `UpdateBodyParts` has no awareness a clothing overlay should be covering that part. Traced
+   `BodyPartVisibility` (2800 bytes) hoping it was the fix — resolved its repeated call
+   (`func=0x79861900`) to **`SkeletalMeshComponent::SetSkeletalMeshAsset`**, meaning despite the
+   name it's not a visibility toggle at all, it's a bulk per-part mesh-asset setter driven by a
+   caller-supplied `FBodyPartSettings` struct (real Male/Female mesh references per part) — too
+   complex/risky to construct blind this session. Used the already-fully-decoded, parameterless
+   `OnRep_ClothingTorsoEquipped?`/`OnRep_ClothingLegsEquipped?`/`OnRep_ClothingFeetEquipped?`
+   instead (confirmed real properties on `BP_PlayerCharacter_C`) — called immediately after
+   `UpdateBodyParts` on repair, reusing the exact real per-slot logic that already knows whether
+   that slot is actually clothed and re-covers the bare mesh correctly if so.
+
+Both changes build clean, deploying now for live test.
+
+**New, worse failure variant found live: `RepActorsData` can be stuck permanently empty, not just
+late.** PC2's log this session shows `equip_restore_retry: RepActorsData empty or implausible
+count=0` on every single 3s check, indefinitely — never once transitioning to a real
+`checked=N fixed=N` line the way PC1's session did (which recovered once RepActorsData populated).
+Glasses/helmet on PC2 stayed unrepaired for this reason — not a bug in the fix itself (it correctly
+declines to act on empty/implausible data rather than risk operating on garbage), but the
+underlying replicated property genuinely never arrived at all this session, a more severe case than
+the "arrives a few seconds late" scenario the fix was designed around. Also separately observed:
+the local player's own body-part retry cap (5 attempts) triggered and gave up on Torso/Legs/Feet in
+this same session — meaning `UpdateBodyParts` isn't guaranteed to succeed even locally in every
+case, contrary to this session's earlier assumption that it always works locally and only fails on
+proxies.
+
+**Open question for a future session**: why would `RepActorsData` fail to replicate at all for an
+entire session, rather than just arriving late? Worth checking whether this correlates with
+anything specific about that join (network conditions, connection order, a missed initial-bunch
+delivery) — this is a genuinely different, more severe failure mode than anything characterized so
+far tonight, and neither of tonight's two fixes can address a permanently-absent data source, only
+a delayed one.
+
+**Pivoted from static bytecode archaeology to a live hook — user's suggestion, much better fit.**
+Static-decoding `LoadPlayerInventory`/`ActorPreLoad`/`ActorLoaded` hit a real methodological trap:
+resolving their embedded func/property pointers came back as garbage, because those `.bin` dumps
+were captured in an earlier process instance — a relaunch invalidates every raw pointer embedded in
+a dump (ASLR/heap layout differs per process), a caveat this project already knew but tonight
+tripped over live. Rather than keep re-dumping and re-resolving reactively, added a direct,
+always-on hook instead: `check_load_data_requested_hook()` in `on_process_event_pre`, same cached-
+UFunction-pointer fast-path pattern as `on_process_event_post`'s `s_lastUpdateFn`. Resolved once off
+any live `BP_JigHelperComp_C` instance (UFunction* is shared per-class, so this covers every
+instance's calls — local and proxy alike, confirmed live with real replicated data tonight,
+[[feedback_sdo_ufunction_shared_per_class]]). Logs `RepActorsData`'s real count immediately before
+every single `OnLoadDataRequested` call, giving direct empirical proof — is it ever called more than
+once per session, and is it genuinely empty at call time — instead of inferring from bytecode.
+Builds clean, deployed both machines, running now. Next join's log is the real test.
+
+**Live hook result: `OnLoadDataRequested` proven NOT the cause of the body-part cascade.** Zero
+`load_data_requested` log lines during an actual, real, live occurrence of the Torso/Legs/Feet
+clear (confirmed: `component_drift`'s repair loop fired and gave up right next to it, with nothing
+from the hook anywhere nearby). This correction matters: `OnLoadDataRequested`'s whole chain
+(destroy+restore from `RepActorsData`, no retry on late replication) only explains the **equipped-
+item** symptom (weapons/clothing-as-actors going missing) — it has nothing to do with the base
+body-mesh clearing, which is a genuinely separate, still-unidentified mechanism. The cascade did
+still correlate with a join (`on_unreal_init` fired shortly before), just via some other function.
+
+Added a second live hook watching **`SetSexMesh`** (real `BP_PlayerCharacter_C` function, name
+alone strongly suggests it sets the base body mesh set by gender — exactly Torso/Legs/Feet/Arms).
+Same cached-UFunction-pointer pattern. Deployed, next join/occurrence is the test.
+
+**Real diagnostic bug found and fixed: HairMesh/BeardMesh/EyebrowsMesh/Mouth were never actually
+checkable at all.** `SetSexMesh` hook also caught zero calls during a live occurrence — second
+exonerated candidate. While investigating why `HairMesh`'s own "cleared" state never once logged
+despite repeated hair-loss reports all session, found the real bug: `do_component_drift_scan`'s
+mesh-asset lookup only ever tried `"SkeletalMesh"`/`"SkeletalMeshAsset"` — correct for
+Torso/Legs/Feet/Arms/Hands/head, but `HairMesh`/`BeardMesh`/`EyebrowsMesh`/`Mouth` are all
+`UStaticMeshComponent` (confirmed, `BP_PlayerCharacter.hpp`), needing the property name
+`"StaticMesh"` instead. Every hair/beard/eyebrows/mouth report tonight went completely undetected
+by this diagnostic — not because those components were fine, but because the property-name lookup
+silently never matched, so the whole detection block never ran for them. Added `"StaticMesh"` as a
+third candidate. Builds clean, deployed both machines. This should finally make hair loss visible
+in the log — real progress on scoping the investigation correctly, independent of whatever the
+actual root trigger turns out to be.
+
+**Final occurrence logged, end of session.** Screenshot showing both characters simultaneously
+fragmented (floating helmet, disconnected legs/hands with no torso on one; floating head with no
+torso connection on the other) — same ongoing issue, no new mechanism identified beyond what's
+already documented above. `EyebrowsMesh`'s "cleared" transition still not caught despite the
+StaticMesh property fix, most likely the same first-observation blind spot every tracker in this
+session has (no baseline to compare against if the component was already null the first time it's
+checked after a respawn/reset). Session ending here — see the "Next session should" priorities
+throughout this log (RigVM/state-machine work was never reached, still needed for whatever residual
+mechanism isn't explained by RepActorsData/UpdateBodyParts) and the summary at the top of this
+session's entries for the full picture.
+
+**New session, resumed: recent-calls ring buffer built after two named-function guesses both came
+back clean.** Rather than guess a third candidate function name blind, added a 65536-entry ring
+buffer recording every single `ProcessEvent` call's `(func, obj, timestamp)` unconditionally (cheap
+— array write + index increment, no string work on the hot path). When `component_drift` detects a
+mesh-asset-clear transition, it dumps the buffer (consecutive-repeat runs collapsed, since per-frame
+anim/tick calls would otherwise drown out genuinely interesting one-off calls) — giving a real trace
+of what actually happened right before the clear, instead of another named-candidate guess.
+
+Also tightened `component_drift`'s (and `attach_health`'s/`equip_restore_retry`'s, since they share
+the same polling timer) interval from 2s to 300ms, specifically so the gap between the real clear
+event and this check noticing it stays small enough for the ring buffer to still contain the actual
+causal calls rather than several seconds of unrelated activity that happened after. Builds clean,
+deployed both machines, running now with the tighter interval — next real occurrence should finally
+produce a genuine trace instead of another blind guess.
+
+## Root cause found: the fall-off cascade is a join-time race, not a random runtime bug
+
+After deploying the recent-calls ring buffer + tightened 300ms polling, PC1's debug.log captured
+7 full occurrences of the Torso/Arms/Legs/Feet body-part cascade over ~1 hour of play. Every
+single one shows the identical sequence, within ~1.5s:
+
+```
+join_teleport: about to call K2_SetActorLocation/Rotation, preChildrenCount=4
+join_teleport: K2_SetActorLocation/Rotation done, postChildrenCount=4
+equip_restore_retry: RepActorsData empty or implausible count=0
+  ... (~1.5s later)
+attach_health: local item ptr=... MESH ASSET CLEARED (was set, now null, still attached)   x3-4
+component_drift: local:Torso MESH ASSET CLEARED (was set, now null)
+component_drift: local:Arms MESH ASSET CLEARED (was set, now null)
+component_drift: local:Legs MESH ASSET CLEARED (was set, now null)
+component_drift: local:Feet MESH ASSET CLEARED (was set, now null)
+```
+
+**This is not a mid-session drift bug.** It only fires around join/rejoin. `join_teleport` (the
+existing join-position restore logic) runs before `RepActorsData` has replicated back in — at that
+moment the array reads `count=0`. Our own drift monitors, sampling shortly after, see the
+still-loading state (meshes not yet (re)applied post-join) as "was set, now null" and fire repair.
+Existing repair (`UpdateBodyParts` + clothing `OnRep_`, `equip_restore_retry`'s orphaned-slot
+re-attach) genuinely fixes most of it within a few seconds — confirmed by
+`equip_restore_retry: checked=11 fixed=1` and no further clears until the next join event in every
+one of the 7 cases. But repair is capped at 5 attempts per component and only covers what
+`component_drift`/`equip_restore_retry` explicitly track — weapon attachments held in hand
+(the axe) and anything not in the tracked component-name table can still lose out permanently if
+the real data doesn't finish repopulating before the cap or the retry loop gives up.
+
+This reframes the "two exonerated theories" (`OnLoadDataRequested`, `SetSexMesh`) finding from
+before: they were exonerated because they're genuinely not the trigger — the trigger isn't a
+function call at all, it's a **load-order gap at join**: `join_teleport` fires before the
+save-data-driven equip/appearance restore has actually landed.
+
+Also confirmed: reports of PC1 items missing "on PC2's screen" (proxy-observed) can't be diagnosed
+from PC1's own debug.log at all — `attach_health`/`component_drift` only ever watch the locally-
+owned pawn, never proxies. A `PC1's axe fell off` report with no matching local clear in PC1's log
+around that time is exactly this case. Proxy-side monitoring doesn't exist yet.
+
+### Next fix direction
+Don't chase more mystery trigger functions. Instead: gate/delay `join_teleport` (or the whole
+join sequence) until `RepActorsData` has a plausible non-zero count, or explicitly re-run the full
+equip+appearance restore once it does land, instead of relying on the retry-capped drift/attach
+monitors to paper over a load-order gap after the fact.
+
+## Root cause session, continued: repair lands but gets fought; ring-buffer dump on the repair path was itself a bug
+
+After the join-load-order gate (equipDataReady) and retry-pacing fix (2s grace + 1/s throttle)
+shipped, a live occurrence on both PC1 and PC2 showed the retry loop calling `UpdateBodyParts`
+correctly-paced (once/second) but still never converging — "giving up after 20 failed repair
+attempts" on both machines' LOCAL pawn (not just proxies, overturning this project's prior
+assumption that UpdateBodyParts reliably works on the local player).
+
+Added a before/after mesh-pointer read directly in `do_body_part_repair`. Result, live-confirmed
+on PC1: **the repair call always lands** — `meshImmediatelyAfter` is a valid non-null pointer
+(the same hardcoded default-mesh constant each time, e.g. `0x4433081472` for Torso, consistent
+with `decoded_UpdateBodyParts.txt` showing UpdateBodyParts sets a compile-time `EX_ObjectConst`
+default mesh per Torso/Legs/Feet/gender, not the player's actual saved appearance — it's a "reset
+to bare default skin" function, not a real restore). But `meshBefore` on the NEXT repair attempt,
+~1 second later, reads null again every time. Something else is re-clearing the mesh in that
+~1-second window, undoing our fix as fast as we apply it. That something is still unidentified.
+
+Attempted to catch it by calling `dump_recent_calls()` (the 65536-entry ring buffer) from inside
+`do_body_part_repair`, once per repair cycle. **This was itself a real bug, live-confirmed and
+reverted the same session**: writing all 65536 lines via `debug_log` (one call per line) took
+~7 real seconds of wall-clock time on the same thread, confirmed by counting log lines between
+the dump's start and the next unrelated log line (55,809 lines, all dump output). This likely
+stalled the game itself every time repair fired, and directly correlates with the repair call
+starting to read back `meshImmediatelyAfter=0x0` (a genuine failure, unlike every prior clean
+read) immediately after this was added — plausible that the multi-second stall let the hardcoded
+default mesh asset (kept alive only by being newly referenced) get unloaded/GC'd before the next
+repair cycle, or that the stall itself desynced something. Removed immediately.
+
+Since each individual repair call is proven cheap and harmless (no crash, lands correctly), and
+capping at a fixed attempt count only guarantees the character stays permanently broken once
+exhausted, removed the attempt cap entirely for the "local" repair path (proxies were never
+covered by this path in the first place — see check_attach_health_trigger — so no proxy-forever-
+retry risk). Retry now continues indefinitely at 1/s. This doesn't fix the underlying fight, but
+it means the character self-corrects within ~1s of any clear, indefinitely, instead of eventually
+staying broken once the old cap (5, then 20) was exhausted.
+
+### Still open
+What re-clears Torso/Legs/Feet's mesh ~1s after every successful repair. Next attempt at
+answering this should NOT dump the full 65536-entry ring buffer synchronously via debug_log from
+a hot path — either sample only the most recent ~50-100 entries, or build the string in memory and
+flush once, or move the dump off the calling thread entirely.
+
+## 2026-08-14 — batch decode of undumped equip/appearance/inventory-load .bin files
+
+Static-decoded and reviewed 13 previously-undumped `.bin` captures from
+`C:\Users\mccau\AppData\Roaming\SurrounDeadBridge\`, prioritizing appearance/equip/clothing/
+inventory-load candidates per the open investigation. Each now has a matching
+`decoded_<FunctionName>.txt` next to its `.bin`. Cross-referenced every FName `ComparisonIndex`
+found against the known body-part CIs (Torso=1732710, Legs=1732718, Feet=1732721) and searched
+each decode for calls to `SetSkinnedAssetAndUpdate` (ci=100173, the function `UpdateBodyParts`
+and `OnRep_ClothingLegsEquipped` both use to actually (re)apply a body-part mesh).
+
+**One genuinely new, relevant finding: `BP_PlayerCharacter_C::EquipClothingToMesh`**
+(`decoded_EquipClothingToMesh.txt`, 551 bytes) directly calls `SetSkinnedAssetAndUpdate`
+(ci=100173) **twice** — once down a `True`-branch and once down a matching `False`-branch that are
+otherwise structurally identical (almost certainly the Male/Female mesh split, same shape as
+`OnRep_ClothingLegsEquipped`'s confirmed Male/Female branch). Each branch first calls a local
+virtual function (ci=1937166) passing two `StructMemberContext` reads off what's structurally a
+`FBodyPartSettings`-shaped local struct (matches the `Svr_AttachClothing`/`MC_AttachClothing`
+signature's `FBodyPartSettings Parts` parameter from `BP_PlayerCharacter.hpp`), then applies the
+result via `SetSkinnedAssetAndUpdate` on a component reference, then does interface-context calls
+(materials/overlay refresh, ci=93673). **This is very likely the actual mesh-application body of
+`Svr_AttachClothing`/`MC_AttachClothing`, or a shared helper both of those RPCs call into** — it is
+the only one of these 13 functions that touches `SetSkinnedAssetAndUpdate` at all, and its
+parameter shape lines up with `FBodyPartSettings`. No direct call-site/caller info was available
+statically to confirm which RPC calls it, but this narrows the "still-undumped
+`Svr_AttachClothing`/`MC_AttachClothing`" lead considerably — a future live capture of those two
+should be compared against this decode to check whether `EquipClothingToMesh` is literally what
+they call.
+
+**Everything else decoded is NOT related to body-part meshes** — none of the following reference
+ci=100173 (`SetSkinnedAssetAndUpdate`) or any Torso/Legs/Feet-range FName CI:
+- `OnRep_FacewearEquipped` / `OnRep_PrimaryWeaponEquipped` (609/913 bytes) — real, working
+  replication callbacks, but for held/worn *item actors* (interface-based attach/detach + material
+  refresh calls), not the base body skeletal meshes. Their embedded FName CIs (1730464, 1730659)
+  are item-slot names, not body-part names — outside the known Torso/Legs/Feet range.
+- `OnPickupEquipped` (`BP_JigHelperComp_C`, 1121 bytes) — attaches/detaches a picked-up item actor
+  via interface calls (`ObjToInterfaceCast` + `LocalVirtualFunction`), no skeletal-mesh-component
+  writes at all.
+- `OnRep_ActiveWeapon` (`BP_JigHelperComp_C`, 112 bytes) — small, just broadcasts a multicast
+  delegate (`OnEquipmentUpdated`-style) if the actor changed; no mesh writes.
+- `HandleActorEquipped` / `ServerFuncHandleEquipActor` (`BP_JigMultiplayer_C`, 636/805 bytes) —
+  large actor-equip bookkeeping/RPC-relay functions; grepped for both `ci=100173` and any
+  `173271x`-range FName and found neither. Not decoded line-by-line in full given the negative
+  grep result and time budget — flagging as "probably not it" rather than "definitely not it" for
+  a future session that wants full certainty.
+- `LoadPlayerInventory` (26 lines), `OnLoadSavedDataRequested` (16 lines), `HandleItemOverItem`
+  (11 lines) — all trivially short: each is just 1-2 calls into a larger virtual/interface function
+  (name unresolvable further without live pointers) plus a bool return. No inline body-mesh logic;
+  if a load-order gap exists here it's inside whatever they call, not in these stubs themselves.
+- `ActorLoaded`, `ActorPreLoad`, `Event_LoadPlayer` (18 bytes each) — all three are just a single
+  `EX_LocalFinalFunction` call to the *same* `func=0x11f0ec720` with a different int-literal
+  argument (202664 / 202657 / 199722 respectively) — almost certainly a Blueprint instrumentation/
+  trace-event stub (K2Node ID or similar), not meaningful game logic. Confirms these three save/
+  load lifecycle events are otherwise empty Blueprint graphs; if anything happens on
+  load/actor-preload it's native-side, not in these BP event graphs.
+
+**Net assessment**: nothing decoded tonight overturns or extends the existing root-cause chain
+(join-time `RepActorsData`/appearance-restore race, `UpdateBodyParts` applying only a hardcoded
+default mesh, and the still-unexplained ~1s re-clear after every successful repair). The one solid
+new lead is `EquipClothingToMesh` as a plausible match for what `Svr_AttachClothing`/
+`MC_AttachClothing` actually call to touch the mesh — worth comparing directly once those two are
+captured live.
+
+**Still explicitly open**: `Svr_AttachClothing` and `MC_AttachClothing` themselves remain
+undumped — no `.bin` exists for either. A live capture attempt this session stalled (the
+flag-file mechanism the diagnostic system uses to request a dump stopped being consumed by the
+running game, for an unknown reason — not something fixable without the live process attached).
+These two RPCs are still the most likely holders of the real "apply the player's actual saved
+appearance" logic (as opposed to `UpdateBodyParts`'s bare-default fallback), and are the
+single highest-priority next capture target — ideally diffed against `EquipClothingToMesh` above
+once captured.
+
+## Svr_AttachClothing decoded: it's a native stub, not Blueprint logic
+
+Captured live (2026-08-15): `BP_PlayerCharacter_C::Svr_AttachClothing` is 126 bytes, decoded to
+`decoded_Svr_AttachClothing.txt`. Its entire body is: store all 6 parameters (`Clothing`, `Mesh`,
+`Parts`, `IsPlayerMale`, `BodyPart`, `UpdateAllBodyParts`) into persistent-frame slots via
+`EX_LetValueOnPersistentFrame`, then a single `EX_LocalFinalFunction` call to another function
+(`func=0x124f13dc0`, an in-process-only pointer, not yet resolved — `resolve_ptr.flag` attempts
+this session didn't get picked up, same intermittent flag-consumption issue noted below) with one
+`EX_IntConst 195814` argument.
+
+This is a real finding: **the actual clothing/body-mesh-attach logic is native C++, not Blueprint
+bytecode.** `Svr_AttachClothing`'s Blueprint graph is just a parameter-marshaling stub for a native
+thunk. This confirms last session's theory from the filtered `ProcessEvent` ring-buffer trace
+(nothing Blueprint-dispatched touches the mesh between a repair and the next re-clear) — the real
+mechanism genuinely cannot be seen by any `ProcessEvent` hook, Blueprint-side instrumentation has
+hit its ceiling here. Going further requires native disassembly (IDA) of whatever
+`func=0x124f13dc0` resolves to, in a fresh capture (the pointer is only valid within the process
+instance that produced it).
+
+### Static catalog correction: the mesh properties themselves are NOT replicated
+
+`research/bp_catalog_player_core.md` (built from the FModel export, no live game needed) confirms
+`BP_PlayerCharacter_C`'s actual mesh-reference properties (`Clothing_Torso`/`Legs`/`Feet`/`Gloves`/
+`Armor`, `HairMesh`, `BeardMesh`, `EyebrowsMesh`, `SkinColor`) carry **no** `Net` flag at all — only
+`InstancedReference | NonTransactional`/`DisableEditOnInstance`. Only the ~14 paired
+`*Equipped?` booleans (e.g. `ClothingTorsoEquipped?`) are `Net | RepNotify`.
+
+This **corrects** the "property replication silently reasserting a broken saved value" theory from
+earlier — there's no continuously-replicated mesh property to reassert. Appearance sync is driven
+entirely by the explicit `Svr_AttachClothing`/`MC_AttachClothing` RPCs firing at the moment of
+equip, plus the `*Equipped?` bools' `OnRep_` callbacks. Revised leading theory: something is
+re-triggering an `OnRep_*Equipped?` callback (or the underlying bool is flapping) with the wrong
+internal state each time, OR the RPC pair itself is being invoked repeatedly with bad/empty
+`FBodyPartSettings` data. Either of those WOULD be Blueprint-dispatched (OnRep callbacks are real
+UFunctions) — worth re-checking the filtered `ProcessEvent` ring-buffer trace specifically for
+`OnRep_ClothingTorsoEquipped?`/`OnRep_ClothingLegsEquipped?`/`OnRep_ClothingFeetEquipped?` next,
+since the earlier trace wasn't filtered to include those by name explicitly, only the pawn +
+Torso/Legs/Feet component objects as receivers — an OnRep call's receiver IS the pawn, so it
+should have been caught already, meaning either it didn't fire, or it fired and the existing
+decoded logic (`decoded_OnRep_ClothingLegsEquipped.txt`) doesn't behave as understood. Re-read that
+decode with fresh eyes next session.
+
+### Recurring issue: bytecode_dump.flag / resolve_ptr.flag intermittently not consumed
+
+Noticed again this session (also seen last session): sometimes a flag file sits unconsumed for
+10+ seconds despite the game actively ticking (other diagnostics logging normally in the same
+window). Not yet root-caused. Not a per-mechanism bug (both `bytecode_dump.flag` and
+`resolve_ptr.flag` showed it) — possibly something about `GetFileAttributesW` caching, antivirus
+real-time-protection transiently locking newly-created files, or the Bash tool's file write not
+being immediately visible to the native process. Worth a real look next time it blocks something
+important — for now, the workaround is just to retry the write.
+
+## Static BP catalogs built (2026-08-15) — three parallel agents, FModel export, no live game needed
+
+Wrote `research/bp_catalog_player_core.md`, `research/bp_catalog_ai_vehicles.md`,
+`research/bp_catalog_inventory_jigsaw.md` — function/property reference tables for every
+gameplay-relevant Blueprint class, built from the static `Exports/SurrounDead` FModel export
+(structure only, no bytecode — that still needs live capture per-function).
+
+### New top lead for the appearance/equip investigation: RepPrimitiveActorsData
+
+`bp_catalog_inventory_jigsaw.md` found `BP_JigHelperComp_C` holds **two parallel replicated
+arrays**, not one: the already-known `RepActorsData` AND a second one, `RepPrimitiveActorsData`,
+each with its own `OnRep_` handler — plus explicit manual reconciliation functions
+`ForceRepPrimitiveActorSpawns` and `UpdatePrevFromPrim`. A two-array design that needs an explicit
+"force re-replicate" escape hatch is a strong structural match for intermittent detach: if the two
+arrays fall out of sync, slot/actor-reference data (`RepActorsData`, what `equip_restore_retry`
+already reads) can be entirely correct while whatever `RepPrimitiveActorsData` actually drives
+(likely the spawned mesh/primitive component itself) silently isn't. This could be the real
+explanation for repairs that land then revert with no visible `ProcessEvent` call in between —
+if `RepPrimitiveActorsData`'s own OnRep is what's re-asserting a stale/empty primitive state, that
+callback firing is a normal Blueprint call our filtered ring-buffer trace should be able to catch,
+just under a name we weren't watching for yet.
+
+Also found: `BP_JigMultiplayer_C::WaitFullReplicationOfUIDs` (an explicit replication-wait helper)
+and `BP_JigPickupComponent_C::CheckMismatch` (an existing consistency-check function) — both
+suggest the original developers already anticipated and partially handled this exact failure
+class, which is worth reading before building any more custom repair logic on our side.
+
+**Next live-capture priority, in order** (per the catalog's own recommendation): `BP_JigHelperComp_C
+::ForceRepPrimitiveActorSpawns`, `::UpdatePrevFromPrim`, both `OnRep_` handlers (RepActorsData's
+already have one decoded; RepPrimitiveActorsData's does not), `BP_JigMultiplayer_C::
+ServerFuncHandleEquipActor`/`HandleActorEquipped`/`WaitFullReplicationOfUIDs`,
+`BP_JigPickupComponent_C::CheckMismatch`. This supersedes the `Svr_AttachClothing`/
+`MC_AttachClothing`-first plan from earlier tonight — those turned out to be native stubs (dead
+end for Blueprint-level tracing); `RepPrimitiveActorsData`'s OnRep is a real Blueprint function and
+a more promising target.
+
+### Other confirmed findings from the catalogs (not directly the bug, but load-bearing reference)
+
+- AI/vehicle health & damage is component-driven (`DamageComponent_C`, `VehicleFuelComponent_C`,
+  `VehicleHealthComponent_C`), not ad-hoc per-class RPCs — `BP_VehicleMaster_C` has real unreliable
+  server RPCs `Svr_UpdateEngine`/`Svr_UpdateFuel` as the actual authoritative driving-input path.
+  Useful reference for the still-pending vehicle health/fuel sync work.
+- `BP_MasterZombie`/`BP_ZombieBoss` both expose `OnRep_IsDead?` — death state is replicated-bool-
+  driven, confirms the existing zombie-simulation design's assumption.
+- Leaf item/attachment Blueprints (sampled ~30) carry no own logic — everything funnels through the
+  handful of base classes already cataloged; full per-item enumeration (~1,170 files) isn't worth
+  doing.
+
+## Static BP catalogs, second batch (2026-08-15) — BuildingSystem, SmartAI, misc systems
+
+Three more parallel agents covering the rest of the gameplay-relevant Blueprint surface:
+`research/bp_catalog_building.md`, `bp_catalog_smartai.md`, `bp_catalog_misc_systems.md`.
+
+- **`Content/SmartAI/`** turned out to be the base AI plugin framework (likely a purchased "Smart
+  AI System" asset) that `Content/AI/`'s actual zombie/bandit/trader archetypes build on — not a
+  competing or overlapping system. `BP_SmartAIComponent_C` (~180 properties, 100+ functions) is the
+  generic combat/flee/melee/interact "brain" every archetype layers on top of. Also contains a
+  leftover marketplace tutorial character (`BP_ExampleCharacter`) that isn't shipped gameplay.
+- **`Content/Blueprints/BuildingSystem/`**: nearly everything funnels through one base,
+  `Buildable_MASTER_C` (66 functions); most of the ~53 leaf pieces (walls/foundations/etc.) are
+  empty 0-function subclasses. **`Health` is a plain `SaveGame`-only `DoubleProperty` — NOT
+  replicated** (same unreplicated-mesh-property pattern already found on the player character).
+  Only 3 real replicated properties exist in the whole 191-file scope (`PoweredOn?`, generator
+  `CurrentFuel`/`TurnedOn?`, decon-shower `CooldownRunning?`) — no repair/upgrade/ownership/snap
+  networking exists at the Blueprint layer at all. `Buildable_MASTER_C::Svr_Spawn` is the closest
+  existing analog to the mod's own `Svr_SpawnBuild` hook, worth diffing signatures against before
+  extending `PlacedStructure`.
+- **Misc systems** (`HordeSystem`/`Infestation`/`Quests`/`POI`/`Prefabs`/`Laboratory`/`Other`, 403
+  files): `HordeSystem` is nearly empty (2 real classes). `Prefabs` confirmed pure static dressing.
+  `Laboratory`/`Other` hold real reusable RPC patterns: a consistent `Svr_*`→`MC_*` door-open pair
+  across 7 door classes (`Other/Doors/`), and `Svr_PlaySound`/`MC_PlaySound`/`Svr_FallOverEffect`/
+  `MC_FallOverEffect` hit-feedback on harvestable Tree/Rocks/ScrapMetal — both clean, reusable
+  Server-RPC-in/Multicast-out reference patterns for any future mod feature needing the same shape.
+  `OnRep_Locked`/`OnRep_Unlocked`/`OnRep_Warning`/`OnRep_LightOn?`/`OnRep_On?`/`OnRep_Off?` confirm
+  replicated-bool-driven state on Laboratory doors/switches, consistent with the zombie
+  `OnRep_IsDead?` pattern found in the first batch.
+
+**Cross-cutting pattern now confirmed across THREE independent domains** (player clothing meshes,
+building `Health`, and — by the export's own limitation — every other domain): visual/state
+properties are very often plain `SaveGame`-only, NOT replicated, with actual sync handled entirely
+by explicit RPC pairs and `OnRep_` bools. This is the base game's standard architecture, not
+something mod-specific — worth keeping in mind for ANY future entity-sync work, not just the body-
+mesh bug: never assume a visual property is replicated without checking, always look for the
+RPC/RepNotify pair driving it instead.
+
+This completes static cataloging of every gameplay-relevant Blueprint folder in the FModel export.
+Remaining work on the appearance-bug investigation is live-capture (see the `RepPrimitiveActorsData`
+lead from the first batch) — static analysis of the export is exhausted for that specific question.
+
+## MAJOR FIND: FBodyPartSettings located, and a concrete repro lead (2026-08-15)
+
+`research/bp_catalog_playermodel.md` (from cataloging `Content/PlayerModel/`, 489 files, never
+examined before) found the actual `FBodyPartSettings` struct: `Content/PlayerModel/Other/
+BodyPartSettings.json`, a Blueprint `UserDefinedStruct` (not native C++) with 16 optional
+`SkeletalMesh` reference fields, one per sex × body segment (Torso/Arms/Biceps/Hands/Legs/
+LowerThighs/LowerLegs/Feet). It's wrapped by `ClothingSettings` (top-level `MaleMesh`/`FemaleMesh`
+garment + `UpdateAllBodyParts?` bool + nested `BodyPartSettings`), the row type for `DT_Clothing`
+(80 rows, one per clothing item in the game).
+
+**Concrete repro lead**: a full sweep of all 80 `DT_Clothing` rows found only 1 (`Robe`) sets
+`UpdateAllBodyParts?=true`, but **20 of 80 rows** (shorts, plaid/short-sleeve/Hawaiian shirts,
+fingerless gloves, swim trunks, slippers, robe, oil-rig jacket) populate the nested per-segment
+`BodyPartSettings` override fields directly while leaving that bool **false** — a materially more
+complex code path than the other 60 single-mesh items, whose exact gating semantics aren't fully
+clear from static data alone. **Next live test session: specifically try to repro the fall-off bug
+while wearing one of these 20 items** (vs. one of the 60 simple ones) — if the bug correlates with
+this item list, that's the smoking gun tying it directly to this data path rather than a generic
+timing race.
+
+Confirms (third independent domain now) the "visual state is plain data, not replicated" pattern:
+`DT_Clothing`/`ClothingSettings`/`BodyPartSettings` carry zero replication metadata themselves —
+they're static asset data. The actual replication gap is entirely on `BP_PlayerCharacter_C`'s side
+(unreplicated mesh properties, only `*Equipped?` bools are `Net|RepNotify`), with appearance state
+traveling as one-shot RPC payloads (`Svr_AttachClothing`/`MC_AttachClothing`) resolved against this
+table at the moment of equip.
+
+Also cataloged: `BP_CharacterCreator_C` (client-only, non-networked preview mannequin used during
+character creation) and `Enum_Occupation` (13-value cosmetic enum, not gameplay-relevant). The
+remaining ~484 `PlayerModel` files are confirmed pure art assets.
+
+## Full Content/ tree sweep complete (2026-08-15)
+
+Last batch: `research/bp_catalog_playermodel.md` (see MAJOR FIND above),
+`bp_catalog_anim_input_wip.md`, `bp_catalog_sky_terrain_levels.md`.
+
+- **Animations**: 8 real logic classes — 4 Player AnimNotifyStates (`MeleeHitDetect` x2, `Shove`,
+  `Stomp`) and 3 Zombie/ZombieBoss attack AnimNotifyStates, all local-only (no `FUNC_Net*`, no
+  replicated properties). **Directly relevant to this project's still-pending Phase 4 melee
+  hit-detection work** (see [[sdo-remaining-work-backlog]]) — these are the real notify hooks to
+  read/reuse rather than reinventing hit-window timing.
+- **Input**: pure Enhanced Input data, zero `Function` entries anywhere. **WIP**: confirmed entirely
+  dead/unused art content (wandering-trader NPC, ghillie set, MP5/USP meshes, zombie-boss skin
+  materials) — zero Blueprint classes, nothing live.
+- **UltraDynamicSky**: unmodified marketplace plugin. Weather already has real server RPCs
+  (`Change Weather` etc.) — no sync work needed if the mod ever touches weather. **Time-of-day has
+  NO net-flagged function or replicated property anywhere** — `Ultra_Dynamic_Sky_C`'s `Get
+  TimeCode`/`Set Time with Time Code` pair is the clean hook point if a future session wants
+  server-authoritative day/night sync, but it doesn't exist yet.
+- **Terrain**: no real logic beyond two trivial water-collision Blueprints. **Levels** (6 maps):
+  each map's Level Blueprint is nearly empty (~2 functions, no RPCs) — most of each Level JSON is
+  actually a full per-map actor dump, not gameplay logic. **Sequences**: pure cinematic data.
+
+Manually spot-checked the last three folders NOT worth a dedicated agent (only 1 function-bearing
+file each, confirmed via grep): `Meshes/Vehicles/TestChargerVehicle` (leftover test asset, just
+AnimGraph/Ubergraph stubs), `Audio/BP_AmbientSoundController` (weather-reactive ambient audio,
+zero gameplay/network relevance), `EditorOnly/DEBUG_Marker` (trivial debug placement marker). None
+warrant cataloging.
+
+**This completes static cataloging of the entire `Content/` export.** Remaining top-level folders
+(`PolygonFiles`, `ButtonIcons`, `UI`, bulk of `Meshes`/`Audio`) confirmed to have zero or
+near-zero `Function` entries (checked via grep) and were excluded per the original scope decision
+(pure art/UI, not gameplay logic) — see the reference-table files (`research/bp_catalog_*.md`, 9
+files total) for the full per-class breakdown. Nine catalog files now cover every gameplay-relevant
+Blueprint class in the game: player_core, ai_vehicles, inventory_jigsaw, building, smartai,
+misc_systems, playermodel, anim_input_wip, sky_terrain_levels.
+
+**Standing highest-priority next actions for the appearance-bug investigation** (unchanged targets,
+now with a concrete repro path added):
+1. Live-test the fall-off bug specifically while wearing one of the 20 flagged `DT_Clothing` items
+   (shorts/plaid-shirt/short-sleeve-shirt/Hawaiian-shirt/fingerless-gloves/swim-trunks/slippers/
+   robe/oil-rig-jacket) vs. a simple single-mesh item — see the MAJOR FIND entry above.
+2. Live-capture `BP_JigHelperComp_C::ForceRepPrimitiveActorSpawns`, `::UpdatePrevFromPrim`, and
+   `RepPrimitiveActorsData`'s `OnRep_` handler.
+
+## CRITICAL FIND: RepPrimitiveActorsData's real struct shape, from native header dump (2026-08-15)
+
+`research/CXXHeaderDump/BP_JigHelperComp.hpp` (a real native member-offset dump, not the FModel
+structure-only export) gives exact offsets and confirms the function name guessed at earlier:
+
+```
+TArray<FS_RepNonActorData> RepPrimitiveActorsData;   // 0x0AD0 (size: 0x10)
+TArray<FS_RepActorData>    RepActorsData;             // 0x0AE0 (size: 0x10)
+...
+void OnRep_RepPrimitiveActorsData();
+void UpdatePrevFromPrim();
+void ForceRepPrimitiveActorSpawns();
+```
+
+And critically, `research/CXXHeaderDump/S_RepNonActorData.hpp` (element type) vs.
+`S_RepActorData.hpp` (the already-known, already-used-by-`equip_restore_retry` element type):
+
+```
+FS_RepActorData     { FGameplayTag Slot; AActor* Actor; }                       // 0x10, 2 fields
+FS_RepNonActorData  { FGameplayTag Slot; UJigsawItem_DataAsset_C* DA; AActor* Primitive; }  // 0x18, 3 fields
+```
+
+`RepPrimitiveActorsData`'s entries carry a **third field, `Primitive` (AActor*), that `RepActorsData`
+doesn't have at all.** This is very likely the missing link: `RepActorsData`/`equip_restore_retry`
+tracks whether the equipped ITEM actor (weapon, backpack, etc.) is correctly attached — which
+`equip_restore_retry`'s logs show as consistently fine (`checked=11 fixed=1`, stable slot count).
+`RepPrimitiveActorsData`'s separate `Primitive` actor per slot is a plausible candidate for what
+actually drives the VISIBLE body/clothing mesh, independent of whether the logical item is
+equipped — exactly matching the observed symptom (equip state correct, visible mesh wrong).
+
+**This is now the single highest-priority next live-capture target**, and — unlike last night —
+we now have the exact function name (`OnRep_RepPrimitiveActorsData`, not a guess) and the exact
+offset (`0x0AD0`) needed to read it directly via raw pointer arithmetic (same pattern
+`equip_restore_retry` already uses on `RepActorsData` at `0x0AE0`), without even needing a fresh
+bytecode dump first. A future session could:
+1. Add a raw diagnostic read of `RepPrimitiveActorsData` (offset `0x0AD0`, `FS_RepNonActorData`
+   entries: Slot@0x00, DA@0x08, Primitive@0x10, 0x18 bytes/entry) alongside the existing
+   `RepActorsData` read in `equip_restore_retry`, logging both side-by-side during a live cascade —
+   if `Primitive` reads null/stale while the matching `RepActorsData` entry's `Actor` is fine, that
+   confirms this exact struct is the root cause.
+2. Live-hook `OnRep_RepPrimitiveActorsData` (same cheap `GetFunctionByNameInChain`/pointer-equality
+   pattern as the existing `OnLoadDataRequested`/`SetSexMesh` hooks) to see exactly when it fires
+   relative to a visible clear.
+3. Bytecode-dump `UpdatePrevFromPrim`/`ForceRepPrimitiveActorSpawns`/`OnRep_RepPrimitiveActorsData`
+   itself for the actual repair logic, now that exact names are known.
+
+## Catalog enrichment pass: real native offsets added (2026-08-15, continued overnight)
+
+Two agents cross-referenced `research/bp_catalog_*.md` against `research/CXXHeaderDump/` (2407 real
+native member-offset dumps) and added real byte offsets in place. Two directly actionable results:
+
+**Vehicle health/fuel sync — offsets now known, unblocks the pending feature** (see session59
+memory: "adopt-only for now... next piece to verify live"):
+- `VehicleFuelComponent_C::CurrentFuel` @ `0x00C8` (double), `MaxFuel` @ `0x00D0`.
+- `VehicleHealthComponent_C::CurrentHealth` @ `0x00C0` (double), `MaxHealth` @ `0x00C8`.
+- `BP_VehicleMaster_C`: `FuelComponent` pointer @ `0x03D0`, `VehicleHealthComponent` pointer @
+  `0x0390`. Same read/write pattern already proven elsewhere in this project (dereference actor →
+  follow component pointer → raw double read/write at offset) — no new technique needed, just
+  these specific numbers.
+- `Buildable_MASTER_C::Health` confirmed @ `0x0380` (double) — matches the earlier "unreplicated"
+  finding, now with a real offset if a future local-write approach is wanted.
+- `DamageComponent_C::CurrentHealth`/`MaxHealth` @ `0x00B8`/`0x00C0` (used by most AI classes).
+
+**Further confirms the RepPrimitiveActorsData theory**: `FS_RepNonActorData` (element type) is
+0x18 bytes vs `FS_RepActorData`'s 0x10 — the extra 8 bytes is `AActor* Primitive` @ offset `0x10`,
+a field `RepActorsData`'s struct simply doesn't have. This is real, offset-confirmed evidence (not
+inference) that `RepPrimitiveActorsData` owns a live spawned-actor pointer per slot that
+`RepActorsData` has no equivalent for.
+
+**Also found and ruled out as a red herring**: `FRepItemInfo` (the `ServerEquippedItems` element
+type, `BP_PlayerCharacter_C`) is pure inventory bookkeeping (ItemID/Count/Weight/Price/Durability/
+Stats) — no actor/primitive/mesh reference. Rich structure, useful reference, but not relevant to
+the visual-mesh-clearing bug specifically.
+
+`bp_catalog_inventory_jigsaw.md`, `bp_catalog_player_core.md`, `bp_catalog_ai_vehicles.md`,
+`bp_catalog_building.md` now carry real offsets for their highest-value classes (full list of what
+was/wasn't covered is in each file). `bp_catalog_smartai.md`, `bp_catalog_misc_systems.md`,
+`bp_catalog_playermodel.md`, `bp_catalog_anim_input_wip.md`, `bp_catalog_sky_terrain_levels.md`
+still only have structure (no offsets) — lower priority, not yet done.
+
+## Offset-enrichment pass complete — all 9 catalogs now have real offsets where headers exist
+
+Final agent covered the remaining five catalogs. Notable results: `BP_SmartAIComponent_C` (the
+~180-property AI "brain") got offsets for its ~40 highest-value fields (Health, Dead, AttackTarget,
+combat/ammo/ragdoll/follow/climb state). `BP_LaboratorySlidingDoor_C`'s `Locked`/`Unlocked`/
+`Warning` bools are now offset-confirmed as the clearest verified-replicated-door example in the
+whole catalog set. `FBodyPartSettings`/`FClothingSettings` (the appearance structs from the earlier
+MAJOR FIND) now have every field's real offset. `BP_BuildableTurretAIComponent` confirmed
+byte-identical in layout to `BP_TurretAIComponent` — safe to template one off the other.
+
+`bp_catalog_misc_systems.md`/`bp_catalog_sky_terrain_levels.md` had little to annotate (those
+catalogs describe functions more than named properties) despite large matching headers existing
+(`Ultra_Dynamic_Sky.hpp` 762 fields, `Ultra_Dynamic_Weather.hpp` 548 fields) — flagged as available
+for a future pass if that plugin's internals are ever needed in depth. `bp_catalog_anim_input_wip.md`
+confirmed to have nothing offset-worthy (AnimNotifyStates declare no member properties).
+
+## Session summary: full night's static RE work, 2026-08-15
+
+For a future session picking this up cold: tonight (after the live debugging session) produced
+**9 Blueprint catalog files covering the entire gameplay-relevant Blueprint surface of the game**,
+now enriched with real native memory offsets wherever a matching header dump exists. This is a
+durable reference — check these files before doing fresh IDA/bytecode work on ANY class. Combined
+with the live-debugging findings earlier in the session (join-time race, retry-pacing fix,
+`Svr_AttachClothing` proven to be a native stub, `RepPrimitiveActorsData`'s `Primitive` field
+found and offset-confirmed as the leading root-cause theory), the appearance-bug investigation now
+has concrete, numbered next actions (see the MAJOR FIND and CRITICAL FIND entries above) rather
+than open-ended guessing. Nothing live was touched during the overnight cataloging portion — all
+of it is static file analysis, safe to have run unsupervised.
+
+## Performance bug found and fixed: uncapped retry + per-cycle ring-buffer dump = live freezing (2026-08-15)
+
+After removing the repair attempt cap (yesterday) and confirming a character can get stuck fighting
+indefinitely (repair lands, reverts every ~1.2s, for MULTIPLE MINUTES straight in a live test
+today), **PC1 started freezing**. Root cause: `do_body_part_repair` still called
+`dump_recent_calls()` on every single repair attempt (a leftover from earlier live-tracing work,
+believed "safe" after being rewritten to a single string-flush instead of one debug_log call per
+line). With repair now uncapped and firing every ~1-2s indefinitely during a stuck fight, this meant
+walking the full 65536-entry ring buffer and formatting up to 1000 function names via `GetFullName()`
++ `WideCharToMultiByte`, continuously, for as long as the fight lasted — a real per-tick cost, not
+a one-time diagnostic. Removed the call from this hot path entirely (`do_body_part_repair` no
+longer dumps at all). `dump_recent_calls()` itself is unchanged and still safe for ad-hoc/rare use.
+
+**Lesson for future diagnostic additions**: anything added to a retry/repair loop needs to be
+re-evaluated for cost every time that loop's cap or frequency changes — a diagnostic that was cheap
+"once per stuck detection" became expensive once the loop became "forever, every second."
+
+## Live findings from today's join-race test, before the freeze was traced
+
+- Confirmed via the new initial-post-join-state logging: `local:Torso/Arms/Legs/Feet` were ALL
+  already MISSING at the very first sample after join (not a later transition) — hard confirmation
+  of the join-time race theory. `Hands`/`HairMesh`/`BeardMesh`/`head`/`EyebrowsMesh`/`Mouth` were
+  all fine from the start the same join.
+- Repair kicked in after the 2s grace and DID set valid meshes (Torso/Legs/Feet — Arms has no
+  repair path, `bodyPartCi=0`), but reverted and re-fought every ~1.2s continuously for several
+  minutes straight in this occurrence — the uuncapped retry worked as designed (never permanently
+  stuck) but never "won" either.
+- **`RepPrimitiveActorsData` cross-check came back clean every single pass (`no mismatches`)
+  throughout this entire multi-minute fight** — a real negative result. The leading theory from last
+  night (Primitive actor pointer going stale while RepActorsData looks fine) did NOT hold up for
+  this occurrence. Either the mismatch window is narrower than our 3s sampling can catch, or
+  `RepPrimitiveActorsData` isn't the actual mechanism after all — don't keep leaning on this theory
+  without more evidence.
+- Also caught, same join: two attached items on PC2's PROXY (as rendered on PC1's screen) missing
+  from frame one (`proxy0>2056d20e0` children at `0x5750689904`/`0x4937343008`), while proxy0's own
+  Torso/Legs/Feet/etc. were all fine. Confirms the join-race affects proxy-rendered equipment too,
+  a code path we've never directly repaired (proxy `UpdateBodyParts` calls are already known to
+  fail — see earlier "on a PROXY this call fired every check indefinitely without succeeding").
+
+## Decision: next step is a live IDA session, not another guess-and-patch
+
+User's explicit call after the RepPrimitiveActorsData negative result: stop guessing at Blueprint-
+level theories and attach IDA live to watch the actual native clear happen in real time. Not yet
+started as of this log entry — see next entry for the session itself once it happens.
+
+## Live IDA attach attempt today: caused a real hang, aborted (2026-08-15)
+
+Attempted the live IDA session per user's explicit direction (after the RepPrimitiveActorsData
+negative result). `ida_dbg.attach_process`/`suspend_process`/`wait_for_next_event(WFNE_SUSP)`
+worked as expected (process genuinely suspended, confirmed via `get_process_state()`), but the
+pawn pointer derived from a `recent_calls` log line (`obj=0x<N>`, which is DECIMAL digits despite
+the misleading `0x` prefix — a known quirk of this project's `debug_log("...0x" +
+std::to_string(ptr))` pattern) was read incorrectly as hex, producing a wrong address and garbage
+memory reads (`ida_bytes.get_qword` at the wrong address, high-entropy non-pointer-looking values).
+
+Detached cleanly (`detach_process()` returned `True`, `is_debugger_on()` eventually went `False`
+after polling) — but **the game process was left permanently hung** (`Get-Process ...
+Responding=False`, CPU time still climbing but zero new log lines, no recovery after two detach
+attempts and ~15s of waiting). Had to force-kill the process. This matches a documented prior-
+session risk exactly (see `[[sdo-ida-debug-stability]]` memory: "IDA's own MCP plugin then hung
+trying to inspect it — had to force-kill both ida.exe and the game process").
+
+**Root cause of the hang itself not diagnosed** — could be the brief suspend triggering an anti-
+cheat/protection watchdog, a deadlock from resuming mid-critical-section, or something else
+entirely. Not confirmed whether the WRONG pawn address read (garbage memory access) contributed,
+or whether ANY suspend at this game's current protection/build would hang regardless of what's
+read. **Do not attempt another live IDA attach on this game without addressing the pointer-format
+gotcha first** (project's own decimal-labeled-as-hex logging convention) and treating the hang risk
+as a near-certainty, not an edge case — this is now 2-for-2 documented hangs from IDA attach on
+this specific game.
+
+**No progress made on the actual root-cause question** (what natively re-clears the mesh) — this
+attempt ended in cleanup, not data. Next attempt, if tried again, needs: (1) get the pawn pointer
+from a reliable source with correct hex/decimal handling (e.g. add a temporary raw hex-formatted
+log line to mod.cpp rather than reusing the existing decimal one), (2) treat the hang as expected
+and have a plan to recover before starting, not react to it after, (3) consider whether the risk
+is acceptable at all given it's now 2-for-2 — the user may prefer to stay on Blueprint/native-static
+analysis and accept the mitigated-but-unsolved flicker rather than risk further hangs.
+
+## Live IDA attach, attempt 2: got real data this time, but hung again (3-for-3) — likely anti-debug
+
+Second attempt, this time with a correctly-verified pawn pointer (added a proper %llx-formatted
+`pawn_ptr_hex:` log line to mod.cpp specifically to avoid the decimal/hex mixup from attempt 1).
+Sanity-checked the pointer (vtable read resolved to a plausible module address) before trusting it.
+
+**Got real, decisive live data before the hang**: while the local pawn was actively mid-cascade
+(repair landing, reverting every ~1.2s, confirmed via log timestamps matching the read window),
+read `RepActorsData` (11 entries) and `RepPrimitiveActorsData` (12 entries) directly via
+`ida_bytes.get_qword` while the process was suspended. **Every single `RepPrimitiveActorsData`
+entry had a live, non-null `Primitive` pointer — fully healthy.** Then read
+`Torso.SkeletalMeshAsset` directly (`USkeletalMeshComponent+0x8F0`, confirmed real offset from
+`research/CXXHeaderDump/Engine.hpp`) and got `0x0` — genuinely null, at the exact same instant
+`RepPrimitiveActorsData` looked completely fine.
+
+**This is a real, live-confirmed result, not a 3-second-sampling inference**: `RepPrimitiveActorsData`
+is NOT the mechanism. The mesh is null while every piece of replicated slot/primitive-actor data
+looks correct. Whatever's clearing `Torso.SkeletalMeshAsset` is doing so without leaving any trace
+in either replicated array — points toward a genuinely independent native code path (streaming
+state, an async load that never resolves, or an unrelated system entirely), not a replication-sync
+issue at all. **Drop the RepPrimitiveActorsData theory. Do not chase it further without new
+evidence.**
+
+**The process hung again after a clean `detach_process()` — same as attempt 1.** This is now
+**3-for-3** documented hangs from attaching IDA to this specific running game (this session's two
+attempts + the prior session's crash-cycle hang noted in `[[sdo-ida-debug-stability]]`). Given the
+consistency (happens whether or not a breakpoint is ever set, happens on a clean read-only
+suspend+read+detach with no memory writes), the leading explanation is **this game has some form
+of anti-debug/anti-cheat protection that reacts to a debugger attaching**, not a bug in our own
+attach sequence. If true, live IDA debugging of the running game process is not a reliably usable
+technique for this project going forward — every attempt costs a full game relaunch and risks
+losing whatever live state was being investigated.
+
+**Recommendation for future sessions**: treat live IDA attach as high-cost/unreliable. Prefer
+static analysis (bytecode dumps via `bytecode_dump.flag`, the FModel export, `CXXHeaderDump`) and
+the mod's own live logging (which doesn't trigger this problem — it's not a debugger) over live
+IDA attach. If live IDA is attempted again, expect a hang and plan the relaunch cost in up front;
+don't treat a hang as a surprise requiring re-diagnosis each time.
+
+### Where this leaves the appearance-bug investigation
+
+Both `RepActorsData` (item-equip tracking) and `RepPrimitiveActorsData` (this session's leading
+theory) are now confirmed clean during live cascades. The actual mechanism remains unidentified.
+Given the confirmed-native, ProcessEvent-invisible nature of the real cause (from `Svr_AttachClothing`
+being a stub) and now this negative replication-data result, the most likely remaining explanation
+is a native streaming/async-load issue specific to how this character's mesh assets get
+(re)requested after a fresh join — not a networking/replication bug at all. This would explain why
+gating on `RepActorsData`'s readiness (this project's `equipDataReady` fix) didn't fully solve it:
+that gate watches the wrong data. A future session investigating this should look for whatever
+governs asset streaming/loading state on the character or its mesh components, not equip-related
+replicated arrays.
+
+## PC1 freeze traced to the uncapped repair loop, cap reintroduced (2026-08-15)
+
+User reported PC1 "hanging whenever the pawn stops moving," reproduced via a deliberate test — this
+happened WITHOUT any IDA attach involved (separate from the 3-for-3 IDA hangs above). Checked
+`debug.log`: the last line before the freeze was a `component_drift` repair attempt at
+`09:44:29.925`; the freeze landed ~1.2s later, almost exactly matching the repair loop's 1/s
+cadence — `debug.log` itself stopped growing entirely (a real engine-thread freeze, not the
+render-only hangs seen elsewhere in this project's history where the log kept advancing).
+
+Strong correlation, not proven root cause: the uncapped retry (introduced earlier the same day)
+means once a character gets stuck, up to 3 components × 2 `ProcessEvent` calls each
+(`UpdateBodyParts` + clothing `OnRep_`) fire once/second **forever** — never exercised for more
+than a few minutes continuous before today. Reverted to a bounded cap (60 attempts, ~60s — well
+past every genuine convergence time seen live, but not infinite) rather than keep running unbounded
+on an unconfirmed theory. Deployed to both machines.
+
+**Open question for next session**: was the freeze actually caused by resource accumulation from
+the repeated reflection calls, or something else entirely (worth testing: does the freeze recur
+with the 60-cap in place — if it still happens even within a bounded ~60s window, the repair loop
+isn't the real cause and something else needs investigating, e.g. `aim_write`'s own continuous
+per-tick writes, which run unconditionally regardless of repair state).
+
+## New, distinct bug found and fixed: clothing overlay can fail independent of base mesh (2026-08-15)
+
+Live report: PC2 spawned in with skin visible through her clothes. Checked the new initial-post-
+join-state logging — `local:Torso/Legs/Feet` were ALL `SET` from the very first sample (no base-
+mesh clear at all this occurrence). This is a genuinely different failure than everything
+investigated so far tonight: the CLOTHING OVERLAY components (`Clothing_Torso`/`Clothing_Legs`/
+`Clothing_Feet`, `BP_PlayerCharacter.hpp` @ `0x0770`/`0x0768`/`0x0760`) failed on their own, and
+`component_drift`'s `kNames` table never tracked them directly — the clothing `OnRep_` callbacks
+only ever got called as a side effect of a base-mesh repair, so a clothing-only failure with a
+healthy base mesh had **no detection and no repair path at all** until now.
+
+Fixed: added `Clothing_Torso`/`Clothing_Legs`/`Clothing_Feet` as their own tracked entries
+(`ci=0`, since `UpdateBodyParts` only dispatches on `"Torso"`/`"Legs"`/`"Feet"` by name and doesn't
+know these component names at all — confirmed via its decoded bytecode). Relaxed
+`check_component_drift`'s repair-trigger gate (previously required `bodyPartCi != 0`) to also allow
+`ci==0` entries that have a `clothingOnRepName` set, and `do_body_part_repair` now skips the
+`UpdateBodyParts` call entirely for these (straight to the clothing `OnRep_`, since there'd be
+nothing to call it with). Same 2s grace / 1/s throttle / 60-attempt cap applies.
+
+Not yet live-verified — deployed to both machines, next occurrence of this specific symptom should
+now self-heal within a few seconds instead of having no repair path at all.
+
+## Mod-disable gotcha: mods.txt alone doesn't disable a C++ DLL mod (2026-08-15)
+
+User set `SurrounDeadBridge : 0` in `mods.txt` to fully disable the mod on PC1 (after repeated
+freezes, wanting a clean baseline), but the mod kept loading anyway. Root cause: UE4SS has TWO
+independent mod-loading mechanisms, confirmed via `UE4SS.log`:
+```
+Starting mods (from mods.txt load order)...
+Mod 'ActorDumperMod' disabled in mods.txt.
+...
+Starting mods (from enabled.txt, no defined load order)...
+```
+`mods.txt`'s `Name : 0/1` only governs the first list. C++ DLL mods (including ours) load via the
+SECOND mechanism — the mere presence of an `enabled.txt` marker file inside the mod's own folder
+(`Mods/SurrounDeadBridge/enabled.txt`), completely independent of what `mods.txt` says.
+`scripts/deploy.ps1` always creates this file (`New-Item -ItemType File -Force -Path $enabledTxt`)
+and nothing ever removed it — so `mods.txt`'s toggle was silently a no-op for this mod the whole
+project.
+
+**To actually disable**: delete `Mods/SurrounDeadBridge/enabled.txt`, not (only) edit `mods.txt`.
+Takes effect on next launch (UE4SS only reads mod-enable state at startup). Deleted on PC1 this
+session. If `deploy.ps1` or any future redeploy script runs again on PC1 while the mod is meant to
+stay off, it will silently re-create `enabled.txt` and re-enable it — worth fixing the deploy
+script to not stomp an intentional disable, or at least remembering this gotcha next time
+something needs to be temporarily off.
+
+## LIKELY ROOT CAUSE OF THE FREEZES FOUND: wrong bReinitPose parameter (2026-08-15)
+
+User's push to dig into "how equipping actually works, maybe we're calling the wrong method" paid
+off immediately. Isolation test first confirmed the local `component_drift` repair loop was NOT
+the cause (froze even with all repair `ProcessEvent` calls disabled). Log at the moment of that
+freeze showed the last line mid-way through `proxy_manager.cpp::sync_pawn_appearance`, stuck at
+the `ProcessEvent` call to `SetSkinnedAssetAndUpdate` for `bodyPart[0]=SK_Chr_Female_Torso` — two
+earlier runs of the exact same sequence (same function, same call shape) had completed cleanly
+seconds apart, so this wasn't a deterministic per-call failure, just an intermittent one.
+
+Already had `decoded_EquipClothingToMesh.txt` (`BP_PlayerCharacter_C::EquipClothingToMesh`,
+captured/decoded in an earlier session but never closely read) — this is the REAL game's own
+native equip logic. Both its male and female branches call `SetSkinnedAssetAndUpdate` (ci=100173)
+with **`param[1] = EX_False`** (`bReinitPose=false`). Checked our own code:
+`proxy_manager.cpp`'s `equip_clothing_to_mesh` (line ~1381) and `sync_pawn_appearance` (line
+~2338) both had **`bReinitPose = true`** — the wrong value, at both call sites, matching neither
+the real game's own proven-safe usage.
+
+`bReinitPose=true` triggers a full skeleton pose reinitialization (rebuilds the bone tree) — a much
+heavier native operation than a normal mesh swap. This is a textbook UE threading hazard: mutating
+a `SkeletalMeshComponent`'s mesh with a full pose reinit while that same component's own
+`AnimInstance` is concurrently ticking (a proxy's `AnimBP` runs completely independent of our mod's
+own tick) can contend on render/anim-thread state — plausible root cause for an intermittent,
+timing-dependent full engine-thread freeze exactly matching everything observed today (froze
+regardless of which call site fired it — local repair path, proxy appearance sync — because ALL of
+them share this same wrong parameter; "freezes whenever something falls off" was really "freezes
+whenever ANY of these code paths happens to fire at a bad moment," which naturally correlates with
+fall-off symptoms since that's when repair/sync logic runs most).
+
+**Fixed both call sites to `bReinitPose = false`, matching the real game's own call shape exactly.**
+Re-enabled the local repair loop (temporarily kill-switched during the isolation test) since it was
+proven not to be the direct cause either way. Deployed to both machines — not yet live-verified.
+
+If this doesn't stop the freezing, the next thing to check is whether `SetSkinnedAssetAndUpdate`
+itself is simply unsafe to call from our tick context at all regardless of parameters (i.e. it
+needs to run through the proper `Svr_AttachClothing`/`EquipClothingToMesh` RPC chain, not a direct
+call) — but this specific parameter mismatch is a strong, concrete, previously-unnoticed bug worth
+ruling out first before escalating to a bigger architectural change.
+
+## New gap found and partially fixed: equipped-item POSITIONAL drift (not just detach/mesh-clear)
+
+Live report: PC1's helmet visibly floating away from his head, but `read_local_weapon_attachments`
+showed it correctly attached (`slot=1 itemId=MilitaryTacticalHelmet arrayCount=2`, unchanged) the
+whole time, and no `DETACHED`/`MESH ASSET CLEARED` fired. Root cause: none of tonight's (or any
+prior session's) diagnostics ever checked an equipped ITEM ACTOR's relative-transform drift — only
+the character's own named body components (`component_drift`'s `DRIFTED` check) had that logic.
+An item can be perfectly attached (valid `AttachParent`) and have a valid mesh, and still visually
+sit in the wrong place.
+
+Extended `do_equip_restore_retry` (which already walks every equipped actor via `RepActorsData`
+every 3s) to also track each actor's `RootComponent` `RelativeLocation` (offset `0x128`, the same
+proven offset `component_drift` uses) tick-to-tick, and re-call `Equip Actor to Socket` (the same
+repair already used for the orphaned-`AttachParent` case) if it jumps more than 30 units between
+checks. **Untested whether this native call actually corrects position, not just attachment** —
+it's the only native re-snap entry point this project has found; logged clearly
+(`re-snapped DRIFTED slot entry[N]`) so a future check can confirm live whether it worked.
+
+**Important scope limit, confirmed same session via a PC2 screenshot of PC1's proxy (full-body
+fragmentation — head/beanie/pants/shirt/hands all separated)**: `equip_restore_retry` (and this new
+drift check) only ever runs for the LOCAL pawn (`EquipRestoreRetryCtx ctx{ pawn }` in
+`check_equip_restore_retry_trigger`, local-only) — **proxies are not covered at all**. What one
+player sees on another's screen goes through `proxy_manager.cpp` entirely, a separate code path
+this fix does nothing for. This remains a real, unaddressed gap — the single biggest fragmentation
+symptom (full proxy body scattering) is still unmonitored and unrepaired.
+
+## Attachment-system audit: found and fixed a real ScaleRule mismatch (2026-08-15)
+
+Per user's request to audit whether the mod is using the right native calls for the whole
+attachment system (not just the bReinitPose bug already found). First: decoded `Equip Actor to
+Socket` itself for the first time (`BP_JigHelperComp_C`, the exact function `equip_restore_retry`
+calls everywhere) — confirmed our usage (`ActorRef` + `IsSecondary`, nothing else) matches its own
+signature exactly, and its internal native attach uses `K2_AttachToComponent` with
+`LocationRule=SnapToTarget(2), RotationRule=SnapToTarget(2), ScaleRule=KeepWorld(1),
+WeldSimulatedBodies=true` — this is the reference shape.
+
+Audited all three of this project's own direct `K2_AttachToComponent` call sites in
+`proxy_manager.cpp` against that reference:
+- `spawn_and_equip_item_visual`'s backpack re-attach (line ~1141): `(2,2,1,true)` — matches.
+- `reattach_weapon_visual_to_socket` (line ~1963): `(2,2,1,true)` — matches.
+- `spawn_and_attach_weapon_attachment` (line ~1300, attaches scopes/mags/suppressors/etc. onto a
+  weapon): **`ScaleRule` was `2` (SnapToTarget), not `1` (KeepWorld) — a real mismatch, the only
+  one of the three.** Fixed to match.
+
+Also confirmed both `SetSkinnedAssetAndUpdate` call sites (already fixed for `bReinitPose` earlier
+today) are the only two in the codebase — nothing else calls it. Deployed to both machines, not
+yet live-verified. This specific call site (`spawn_and_attach_weapon_attachment`) is exercised
+every time ANY player's weapon attachments get rendered on another client's screen — plausible
+contributor to attachment-specific visual glitches (wrong scale on a scope/suppressor/etc.), though
+not yet tied to a specific live-reported symptom the way bReinitPose was.
+
+## Systematic bytecode audit (mod.cpp done): found and fixed a 3rd real bug — missing ReturnValue field
+
+Per user's request, spawned agents to systematically audit EVERY `ProcessEvent` call site against
+real native signatures (not just attach/equip calls). `mod.cpp` audit (20 call sites) found:
+**`K2_SetActorRotation`'s params struct (`join_teleport`, ~line 3717) was missing the trailing
+`bool ReturnValue` field** that `bool K2_SetActorRotation(FRotator, bool)` requires
+(`Engine.hpp:8550`) — its sibling call three lines above (`K2_SetActorLocation`) has this field
+correctly, making the omission clearly accidental, not a deliberate choice. Missing this field
+means the Kismet-packed return slot doesn't exist in the struct, causing a 1-byte stack overwrite
+adjacent to the params struct on **every single join-time teleport of the local player's own
+pawn** — this exact call was already flagged in its own code comment as "HIGHER RISK than any
+other change tonight" and "not yet live-verified" from when it was first written. Fixed by adding
+the missing field, matching the sibling call's shape. Deployed to both machines.
+
+15 other call sites in `mod.cpp` verified correct against `CXXHeaderDump`/decoded bytecode
+references; 3 unverifiable (a runtime-target debug command, a raw bytecode-dump utility, and
+incoming-hook parameter readers — different category, not outgoing calls, flagged for a possible
+follow-up pass). `proxy_manager.cpp`'s audit still running as of this entry.
+
+## proxy_manager.cpp audit complete: 2nd instance of the same ReturnValue bug found and fixed
+
+`do_apply_proxy_actor_rotation`'s `ActorRotationParams` had the identical missing-`ReturnValue`
+bug as `mod.cpp`'s `K2_SetActorRotation` call (same function, different call site) — this one
+happened not to corrupt anything live (`FRotator`'s own struct padding left enough room), but
+relying on that is fragile, not a real fix. Also fixed a misleading field name (`bSweep` → the
+real param is `bTeleportPhysics`, no sweep param exists on this function). Fixed and deployed.
+
+32 call sites audited total in this file; only these + the two already-fixed bugs (bReinitPose,
+ScaleRule) found anything wrong — 30 verified correct. One unverifiable: `GetSkeletalMeshComponent`
+isn't a real UFUNCTION name on this build (not found anywhere in the 2407-file header dump), but
+it's always used with a verified `K2_GetRootComponent` fallback already, so it's a harmless
+always-no-op lookup, not a functional risk.
+
+**Systematic ProcessEvent audit now complete for both `mod.cpp` and `proxy_manager.cpp`** — 3 real
+bugs found total today (bReinitPose ×2 call sites, ScaleRule ×1, missing ReturnValue ×2 call
+sites), all fixed. See `research/bytecode_audit_modcpp.md`/`bytecode_audit_proxymanager.md` for
+full per-call-site detail.
+
+## Full content mapping complete: gameplay + non-gameplay, everything accounted for (2026-08-15)
+
+Final two catalogs close out full coverage of the entire `Exports/SurrounDead/Content/` tree
+(gameplay-relevant catalogs from earlier today + these two):
+
+- **`bp_catalog_ui.md`**: 392 UI files surveyed, 98 with real logic (294 are pure widget-tree
+  assets). Confirmed via full-text scan: **zero UI widgets contain any RPC or Net/Replicated
+  property** — UI is entirely a passive client-side display layer, consistent with the
+  actor/component-driven replication pattern already found everywhere else in the game.
+  Gameplay-adjacent notes worth remembering: `UpdateHealth`/`UpdateFuel` push functions on
+  health/fuel bar widgets mirror the vehicle component pattern already documented;
+  `LockpickUI_C`'s actual consume logic lives server-side in the Jigsaw inventory component, not
+  the widget itself; `DebugMenu.json` is a real developer/cheat panel (damage player, reduce
+  hunger/thirst, reset skills, spawn items, change weather) worth knowing exists for testing.
+- **`bp_catalog_nongameplay_assets.md`**: confirmed Audio/Meshes/ButtonIcons/PolygonFiles/
+  EditorOnly (3,743 files total) are genuinely asset-only — only 3 files have any Blueprint logic
+  at all (an ambient-sound weather state machine, one AnimGraph stub, one debug marker), none
+  networked.
+
+**This completes full-content bytecode/structure mapping** — every Blueprint-bearing folder in the
+game, gameplay-relevant or not, now has a corresponding `research/bp_catalog_*.md` reference
+(11 files total: the original 9 + ui + nongameplay_assets). Combined with
+`research/bytecode_decode_status.md` (which class/function actually has real decoded bytecode vs.
+just structural cataloging) and the two `bytecode_audit_*.md` parameter-correctness audits, this is
+now a complete, current picture of the codebase's relationship to the real game's native/Blueprint
+surface.
+
+## Live-captured and decoded the 6 remaining priority functions (2026-08-15)
+
+Game was up and cooperative — captured and decoded all 6 functions flagged as priorities across
+tonight's sessions: `MC_AttachClothing`, `WaitFullReplicationOfUIDs`, `CheckMismatch`,
+`OnRep_RepPrimitiveActorsData`, `ForceRepPrimitiveActorSpawns`, `UpdatePrevFromPrim`.
+
+- **`MC_AttachClothing`**: confirmed to be a native stub, identical shape to the already-decoded
+  `Svr_AttachClothing` — marshals 6 params, calls one native function. Both halves of the RPC pair
+  are now confirmed native/opaque to Blueprint-level tracing, as expected.
+- **`OnRep_RepPrimitiveActorsData`**: trivially short (17 bytes) — just calls one other function
+  (`ci=1859803`, name not yet resolved) with no parameters. A thin dispatcher, not itself
+  interesting.
+- **`ForceRepPrimitiveActorSpawns`**: sets a ONE-SHOT timer (`SetTimerByFunctionName`-shaped call:
+  `Self`, `"UpdatePrevFromPrim"`, `0.05s`, `bLooping=False`) then broadcasts a multicast delegate.
+  So calling this function doesn't reconcile anything itself — it just schedules
+  `UpdatePrevFromPrim` to run 0.05s later.
+- **`UpdatePrevFromPrim`** (1572 bytes, real logic): **a two-array diff/reconciliation loop.**
+  Structurally, it walks a "Prev" primitive-actor snapshot array against what's presumably the
+  current `RepPrimitiveActorsData`, and for each index where they differ, calls an interface
+  function (`ci=1860625`) with either the full entry (Slot/Actor/DataAsset fields) to add/update a
+  visible primitive, or a "cleared" call shape (`NoObject`, empty `FName`, `False`) for entries
+  present in the old snapshot but missing from the new one — an add/update/remove reconciliation
+  against a previous-state cache, not a direct read-and-apply.
+
+**New, concrete leading theory this creates**: the actual application of `RepPrimitiveActorsData`
+changes to visible primitives does NOT happen automatically when the property replicates — it only
+happens when `UpdatePrevFromPrim` actually RUNS, which only happens if something calls
+`ForceRepPrimitiveActorSpawns` (or otherwise sets that timer) to schedule it. If `OnRep_
+RepPrimitiveActorsData`'s target function (`ci=1859803`, still unresolved) does NOT itself trigger
+this reconciliation path, then a pure network replication update landing outside the normal
+in-session equip/unequip flow (i.e. exactly the join-time catch-up case this whole investigation
+has been chasing) could update the underlying data with NO corresponding call to reconcile it into
+a visible primitive — matching every symptom seen tonight: `RepPrimitiveActorsData` reads
+healthy/correct, yet the visible mesh never updates.
+
+**Next concrete step**: resolve `ci=1859803` (`OnRep_RepPrimitiveActorsData`'s single call target)
+by name — if it's NOT `ForceRepPrimitiveActorSpawns` or `UpdatePrevFromPrim` itself, that's very
+strong evidence this is the actual gap: replication landing without ever triggering reconciliation.
+If it turns out this resolves to exactly that call, the fix becomes concrete: have the mod itself
+call `ForceRepPrimitiveActorSpawns` (or `UpdatePrevFromPrim` directly) after confirming
+`RepActorsData`/`RepPrimitiveActorsData` are populated post-join, the same pattern
+`equip_restore_retry` already uses for the orphaned-`AttachParent` case.
+
+## Resolved: the reconciliation chain IS correctly wired (theory above disproven)
+
+Resolved the two remaining unknown names via `resolve_fname.flag`: `ci=1859803` =
+`ForceRepPrimitiveActorSpawns`, `ci=1860625` = `Preview Set Equipped Primitive By Slot`.
+
+**This means `OnRep_RepPrimitiveActorsData` directly calls `ForceRepPrimitiveActorSpawns`** — the
+full chain is: property replicates → `OnRep_RepPrimitiveActorsData` fires automatically (standard
+UE RepNotify behavior) → calls `ForceRepPrimitiveActorSpawns` → schedules `UpdatePrevFromPrim` via
+a 0.05s one-shot timer → `UpdatePrevFromPrim` diffs old-vs-new and calls `Preview Set Equipped
+Primitive By Slot` per changed entry to actually apply/clear the visible primitive. **This
+disproves the "replication lands without triggering reconciliation" theory from the previous log
+entry** — the wiring is self-contained and automatic, not something that needs an external trigger.
+
+Given this, if the visible mesh still doesn't update despite this whole chain being correctly
+wired, the remaining candidates narrow to: (1) `OnRep_RepPrimitiveActorsData` simply not firing at
+all in the failure case (a RepNotify only fires on an actual detected value change from the
+client's perspective — if the array's initial replicated state at actor-spawn time already
+"matches" some default, a later logical change might not register as a wire-level delta the client
+notices), or (2) `Preview Set Equipped Primitive By Slot` itself (not yet decoded — it's called
+through an interface, so its concrete implementing class isn't yet identified from this trace
+alone) failing or no-op'ing under some condition, e.g. an asset reference that hasn't finished
+streaming in yet at the moment it runs, 0.05s after replication — back to an asset-streaming-timing
+explanation, consistent with the leading theory from earlier tonight's live IDA session.
+
+**Next step, if continued**: identify which concrete class implements `Preview Set Equipped
+Primitive By Slot` (search `research/CXXHeaderDump/` and the FModel export for that exact function
+name across classes) and decode it — that's the actual terminal function that would explain a
+timing-dependent failure to apply.
+
+## FINAL CORRECTION: RepPrimitiveActorsData is for the character-CREATOR PREVIEW, not live gameplay
+
+`Preview Set Equipped Primitive By Slot` (the terminal function `UpdatePrevFromPrim` calls) lives
+on `research/CXXHeaderDump/BPI_PreviewChar.hpp` — `IBPI_PreviewChar_C`, an interface whose entire
+function set is unambiguously the character-creator preview mannequin: `SetPreviewRenderTarget`,
+`SetPreviewZoomInOut`, `SetPreviewMeshRotation`, `SetCaptureActivate`, `PreviewOnWeaponEquipped`,
+etc. — a render-target-captured preview camera for the character customization screen, not the
+live in-game character.
+
+**This closes out the entire `RepPrimitiveActorsData`/`ForceRepPrimitiveActorSpawns`/
+`UpdatePrevFromPrim` investigation thread as a dead end for tonight's actual bug.** It's not just
+"ruled out by one live data point" as recorded earlier — it's structurally a completely different
+subsystem (character creation preview), never involved in live in-game appearance sync at all. The
+live IDA read earlier tonight that found it "healthy" while the real mesh was null makes total
+sense now: it's healthy because it's tracking the preview mannequin's own state, unrelated to
+whatever's wrong with the live character.
+
+**Do not investigate `RepPrimitiveActorsData` further for this bug family.** The real live-gameplay
+appearance-application path is still `Svr_AttachClothing`/`MC_AttachClothing` (confirmed native
+stubs, dead end for Blueprint tracing) and whatever native code they call — genuinely still
+unresolved, and likely requires native disassembly (IDA) to go further, with the caveat that IDA
+attach has hung this game 3-for-3 today and should be treated as high-cost if attempted again.
+
+## Remaining captured-but-undecoded bytecode cleared out (2026-08-15)
+
+Two agents decoded all 27 remaining `.bin` files that were already captured but never
+disassembled — `research/bytecode_decoded_batch1.md` (BP_PlayerCharacter_C core functions +
+Jigsaw/item-drop path, 11 files) and `bytecode_decoded_batch2_animbp.md` (the full Player_AnimBP_C
+animation system + a minor UI widget, 16 files). Notable, not directly tied to tonight's main
+investigation:
+
+- `MeleeTrace` is a clean, standard sphere/multi-trace — nothing suspicious, good reference for
+  the still-pending Phase 4 melee hit-detection work.
+- `JSIContainer_C_PerfromDrop` (real item-drop logic) ends in a `CallMulticastDelegate` broadcast —
+  worth checking if any future equip/sync investigation reopens, since a missed delegate broadcast
+  is exactly the kind of gap already found elsewhere tonight (`OnEquipmentUpdated`'s zero listeners).
+- `BlueprintThreadSafeUpdateAnimation` is a thin dispatcher into ~6 `Get*` functions (all now
+  decoded); `GetThreadSafeBooleans` is a flat gameplay→anim-thread bool-mirror copy, explaining the
+  "thread safe" naming; `GetHeadRot`/`GetAimOffset` do clamped+interpolated look-at IK math with
+  explicit degree constants.
+- `MC_ADS`/`OnActiveWeaponSlotChanged_Event_0`/`ItemDropRequest_Event_0` are trampoline stubs
+  calling a native function with a single `EX_IntConst` literal — same shape as the already-
+  confirmed-native `Svr_AttachClothing`/`MC_AttachClothing` stubs (very likely a Blueprint node-ID
+  passed to an engine dispatch mechanism, not a hand-constructed parameter this project could get
+  wrong — these are the game's own compiled trampolines, not our own `ProcessEvent` calls, so NOT
+  in scope for the earlier parameter-mismatch audit).
+
+**Every `.bin` file ever captured by this project is now decoded.** Combined with the earlier
+9+2 structural catalogs and the 2 parameter-correctness audits, this is the fullest picture of the
+codebase-vs-real-game relationship this project has had. Remaining unresolved `FName ci=` values
+across all these functions are listed in their respective batch docs for a future
+`resolve_fname.flag` pass if any of them become relevant to a specific question later.
+
+## Extended equip_restore_retry (orphan-attach + drift repair) to cover proxies (2026-08-15)
+
+Live-confirmed the actual gap behind today's remaining gun/glasses/knife reports: `DETACHED` had
+fired ZERO times all session, `re-snapped DRIFTED` zero times, despite repeated visual reports —
+because `equip_restore_retry` (both the original orphaned-`AttachParent` repair and today's new
+drift-repair) only ever ran against the LOCAL pawn. A screenshot showing PC1's AK15+pistol AND
+PC2's knife floating simultaneously confirmed this is proxy-side fragmentation, a code path with
+zero monitoring or repair this entire session.
+
+Extended `do_equip_restore_retry` to take a `label` (for clear per-actor logging) and run once per
+proxy actor too, every 3s, alongside local — same `Equip Actor to Socket` call this project has
+already proven safe for proxies elsewhere (`proxy_manager.cpp`'s own item-spawn/attach code), just
+never previously applied to this specific repair loop. `equipDataReady` (the join-race gate) stays
+local-only, since that's specifically what it's for. Deployed to both machines — not yet
+live-verified against a real proxy fall-off.
+
+Still NOT covered: `attach_health`'s "mesh asset cleared while still attached" detection (item
+stays in `AttachChildren`, mesh goes null) has no repair for local OR proxy — still log-only. If
+proxy gear loss persists after this fix, check whether it's landing in that category instead
+(`attach_health: proxyN ... MESH ASSET CLEARED ... still attached` in the log) rather than the
+orphan/drift categories this fix addresses.
+
+## Major addition: weapon-attachment drift repair + hair/beard/eyebrows/mouth/hands repair (2026-08-15)
+
+Per user's request to close out every remaining known repair gap. Two substantial additions:
+
+**1. Weapon-attachment (scope/mag/suppressor/etc.) positional drift detection + repair.** Extended
+`attach_health`'s existing scan (which already walks both top-level equipped items AND one-level-
+deep weapon attachments, for both local and proxy) to also track each visited child's
+`RelativeLocation` tick-to-tick, and re-snap via `K2_AttachToComponent` on a >30-unit jump — same
+threshold as every other drift check in this project. Repair uses the child's OWN currently-
+recorded socket (native `GetAttachSocketName()`, confirmed present in `Engine.hpp`) rather than
+looking up which item-data field applies, so it works uniformly for any attached child regardless
+of type. This covers what `equip_restore_retry` (RepActorsData-only) never could: attachments
+aren't tracked in that array at all, only in each item's own `RepAttachments`. Also fully explains
+the "guns fall off" reports that had ZERO log hits all session — nothing was watching this layer.
+
+**2. Hair/Beard/EyebrowsMesh/Mouth/Hands repair** (previously log-only — `component_drift` could
+see them go missing but had no fix, since `UpdateBodyParts` only knows `"Torso"/"Legs"/"Feet"` by
+name). Two different mechanisms depending on local vs proxy:
+- **Proxy**: new `ProxyManager::force_resync_appearance(AActor*)` — finds the matching
+  `RemotePlayer`, clears `appliedAppearanceKey` and sets `appearanceDirty=true`, so the existing
+  (and now `bReinitPose`-fixed) `sync_pawn_appearance` fully re-runs on the next tick, reapplying
+  hair/beard/eyebrows/mouth/all body parts together in one shot — no new apply logic needed, just
+  forcing the existing correct logic to fire again.
+- **Local**: no equivalent "resync" exists for the local pawn, so this needed new pieces: a
+  per-field "last known good" appearance cache (`state.hpp`'s `lastGoodLocalAppearance`, merged
+  in `send_pawn_appearance` — only overwrites a field when a read comes back non-empty, so a
+  partial clear doesn't erase still-good cached fields) feeding a new exported function,
+  `sdb::reapply_named_mesh(component, meshShortName, isSkeletal)` (factored out of
+  `sync_pawn_appearance`'s own per-part logic in `proxy_manager.cpp`, reusing its
+  `find_object_by_short_name` resolver and the correct `SetStaticMesh`/`SetSkinnedAssetAndUpdate
+  (bReinitPose=false)` call shape). `component_drift`'s repair dispatch now branches on a new
+  `appearanceField` tag per tracked component ("hair"/"beard"/"eyebrows"/"mouth"/"hands") to call
+  this with the right cached name.
+
+Both go through the same existing grace/throttle/cap machinery (2s grace, 1/s throttle, 60-attempt
++ 5-minute hard ceiling) — no new timing risk introduced.
+
+Deployed to both machines, not yet live-verified. Given today's freeze history, watch closely on
+first relaunch — this is the largest single change of the night in terms of new code paths
+touched, even though each individual piece reuses already-proven call shapes.
+
+## Freeze recurred yet again after the drift/appearance repair deploy — isolated it off too
+
+PC1 froze again shortly after the weapon-attachment-drift + appearance-repair deploy. Log showed
+NO evidence either new code path had fired yet before the freeze (last activity was pre-existing
+`component_drift` Torso/Legs/Feet repair, `read_local_weapon_attachments` — nothing new). Combined
+with the earlier isolation test (ALL repair disabled, froze anyway), this freeze's actual cause is
+still unconfirmed and increasingly doesn't look like it's any specific repair-loop content.
+
+Kill-switched both of tonight's newest additions anyway (`kEnableItemDriftCheck=false`,
+`kEnableAppearanceRepair=false`) as a further isolation step, specifically targeting the new
+DETECTION read added tonight (RelativeLocation read for every attached child, every 300ms — new
+load even when no repair ever fires) separately from repair itself. Deployed to both machines.
+
+**Status: freeze cause still not confirmed after multiple isolation attempts spanning most of
+tonight's changes.** If it recurs even with these newest additions fully inert too, that would
+point toward something pre-existing (present before tonight's session even started) or genuinely
+unrelated to this mod's own logic — worth considering seriously if the next occurrence also shows
+no correlation.
+
+## Re-enabling isolated features one at a time (2026-08-15)
+
+Game stable for a stretch with both new features off. User chose to re-enable
+hair/beard/eyebrows/mouth/hands repair (`kEnableAppearanceRepair=true`) first;
+weapon-attachment drift check/repair (`kEnableItemDriftCheck`) stays off for now. If stable,
+that isolates appearance-repair as safe and narrows any future freeze toward the drift-check
+code specifically; if it freezes again, appearance-repair becomes the next suspect.
+
+## Both new features now fully re-enabled (2026-08-15)
+
+Appearance repair confirmed stable on its own. Re-enabled weapon-attachment drift check/repair
+(`kEnableItemDriftCheck=true`) as well — both of tonight's newest additions are now active
+together. If stable from here, the freeze is confirmed unrelated to either; if it recurs, drift-
+check is the remaining suspect (appearance-repair already cleared on its own).
+
+## Root cause of severe full-body proxy fragmentation found: pure positional, not mesh-clearing
+
+Two screenshots: PC1's own gear (gun/axe) floating nearby but attached, and much more severe —
+PC2's ENTIRE body scattered (head/hands/boots/torso/shirt all flung apart) as seen on PC1's
+screen. Checked the log: **every one of `component_drift`'s mesh-asset checks for proxy0's body
+components read `SET` continuously — Torso/Legs/Feet/Hands/HairMesh never cleared.** The meshes
+were never missing; they were positionally wrong from the very first sample. `component_drift`'s
+existing `DRIFTED` check (tick-to-tick `RelativeLocation` delta) never fired either — same
+blind spot as every other transition-only detector tonight: if a component is ALREADY scattered
+the moment tracking starts (right after proxy spawn), there's no "before" to diff against.
+
+**Fixed with an absolute check instead of a relative one.** These are permanent, non-socketed body
+components skinned onto the character's main skeleton — a healthy one always sits at `(0,0,0)`
+relative to its parent `Mesh`, never anywhere else. Added: if a tracked component's
+`RelativeLocation` is ever more than 50 units from origin, snap it back via
+`K2_SetRelativeLocation(0,0,0)` directly — no history needed, no baseline-comparison gap possible,
+since it's a standing invariant check ("is this where it should always be"), not a change-detection
+one. Runs on the SAME throttle as the existing mesh-asset repair (2s grace, 1/s), for both local
+and every proxy (this check already ran for both labels, only the repair action is new).
+
+This is a different, more fundamental fix than the RepPrimitiveActorsData/replication-timing
+theories chased earlier — those explain why a mesh reference might go null; this explains why a
+component might sit somewhere visually wrong (0.0.0.0 vs the character in your screenshot's case,
+however whatever pushed it there stays theoretically unresolved) with its mesh intact the whole
+time. **`Clothing_Torso/Legs/Feet` were ALSO stuck `MISSING` (mesh-asset, not position) in the same
+proxy at the same time** — that's a separate, already-covered issue (appearance-repair, force-
+resync), so both mechanisms were needed together for this one proxy.
+
+Deployed to both machines, not yet live-verified. This is the third of tonight's biggest structural
+additions (after bReinitPose/ScaleRule/ReturnValue and the drift/appearance repair pair) — watch
+closely given the freeze history, though this repair (unlike drift/appearance) hadn't been isolated
+as a freeze suspect since it didn't exist until just now.
+
+## Confirmed absolute-position repair is live-working; added missing Clothing_Gloves/Armor tracking
+
+New off-origin repair confirmed firing live: `component_drift: proxy0:Mouth re-centered
+OFF-ORIGIN component from (0.0,157.0,0.6) to (0,0,0)` and the same for `local:Mouth` moments
+later — the fix works exactly as designed, catching and correcting a real off-origin component
+with no prior baseline needed.
+
+But a follow-up screenshot (PC1's own hands/boots floating) showed no matching `Hands`
+DRIFTED/re-centered hit despite `Hands` mesh reading `SET` throughout. Root cause: `Clothing_Gloves`
+(`BP_PlayerCharacter.hpp` @`0x0780`) was never added to the tracked list at all — every OTHER
+clothing slot (Torso/Legs/Feet) got added over the course of tonight except gloves (and armor,
+@`0x07B8`, also missing). The floating "hands" were very likely the bare-hand mesh showing through
+because the glove overlay fell off, same "skin visible through gaps" class of bug already fixed
+for Torso/Legs/Feet, just never extended to these two. Added both with a best-guess
+`OnRep_ClothingGlovesEquipped?`/`OnRep_ClothingArmorEquipped?` name (following the exact
+established convention, safe no-op fallback if the guess is wrong — same as every other
+speculative function-name lookup in this file). Deployed to both machines.
+
+## LIKELY REAL FREEZE ROOT CAUSE FOUND: a known-load-bearing grace period was disabled and forgotten
+
+User's most specific freeze report yet — "PC1 froze when PC2 loaded in" — led directly to it.
+`ProxyManager::tick()` had a 2-second grace period before hitting a freshly-spawned proxy with its
+full sync burst (`sync_equipment`/`sync_active_weapon_hand`/`sync_weapon_attachments`/
+`sync_pawn_appearance`), with an EXISTING comment from a much earlier session (Session 52)
+documenting exactly why: **this same sync burst, run immediately after a fresh proxy spawn, had
+already caused two separate live crashes/deadlocks** at different call sites each time, because
+the proxy's own components aren't fully ready the instant it's spawned. The grace period was
+**disabled "temporarily, for testing" on 2026-08-13 and never re-enabled** — sat forgotten for two
+days, including this entire session's worth of freeze-chasing. Its own comment even said: "the one
+most likely to actually be load-bearing — re-enable first if anything crashes right as a new proxy
+spawns in." Nobody had, until now.
+
+This is a much stronger candidate than anything investigated tonight (bReinitPose, ScaleRule,
+ReturnValue, the repair-loop isolation tests, the new drift/appearance code) — it's a PRE-EXISTING,
+already-diagnosed, already-fixed-once issue that got silently regressed, not a new bug. Every
+freeze tonight happened during active two-player testing, which necessarily means proxy spawns
+were happening throughout (redeploys/relaunches constantly re-trigger this exact path) — fully
+consistent with every occurrence, including the ones that showed no correlation to any of tonight's
+actual new code (this explains those: the real cause was never in the new code being tested, it
+was in a much older path that regressed silently).
+
+Re-enabled the grace period exactly as it originally existed. Deployed to both machines. This
+should be tested in isolation from any further new changes — if freezing stops, tonight's entire
+freeze-chasing thread resolves to "a real fix existed, was accidentally turned off, forgot to turn
+back on" rather than any of the theories entertained along the way.

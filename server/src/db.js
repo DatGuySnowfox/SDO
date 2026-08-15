@@ -2,7 +2,9 @@
 const Database = require('better-sqlite3');
 const path     = require('node:path');
 
-const db = new Database(path.join(__dirname, '..', 'players.db'));
+// SDB_DB_PATH lets tests/integration.js (and any future isolated run) point
+// this at a throwaway file instead of the real players.db.
+const db = new Database(process.env.SDB_DB_PATH || path.join(__dirname, '..', 'players.db'));
 
 db.exec(`
     CREATE TABLE IF NOT EXISTS players (
@@ -24,11 +26,36 @@ db.exec(`
     -- Live world entities: dropped items, placed building pieces, containers.
     -- Keyed by entityId (string of BigInt) so we can delete by entityId on despawn.
     -- spawnFrame is the complete encoded wire frame — replayed verbatim to late joiners.
+    -- DEPRECATED — superseded by the entities table below (structured, queryable
+    -- by kind/position, field-mutable). Kept only until every entity kind still
+    -- reading/writing it (see host-agent.js) is migrated over; do not add new
+    -- callers of world_entities.
     CREATE TABLE IF NOT EXISTS world_entities (
         entityId  TEXT PRIMARY KEY,
         spawnFrame BLOB    NOT NULL,
         spawnedAt  INTEGER NOT NULL
     );
+
+    -- Unified world-entity store — every shared entity kind (GroundItem, Zombie,
+    -- Vehicle, PlacedStructure, Container) lives here as one row, not a bespoke
+    -- table/Map per kind. attributes is kind-specific JSON (health, inventory
+    -- contents, archetype, owner, ...); x/y/z are plain columns (not buried in
+    -- the JSON) specifically so getEntitiesNear() can filter in SQL instead of
+    -- deserializing every row to check distance.
+    CREATE TABLE IF NOT EXISTS entities (
+        entityId      TEXT PRIMARY KEY,
+        kind          INTEGER NOT NULL,
+        x             REAL    NOT NULL DEFAULT 0,
+        y             REAL    NOT NULL DEFAULT 0,
+        z             REAL    NOT NULL DEFAULT 0,
+        yaw           REAL    NOT NULL DEFAULT 0,
+        attributes    TEXT    NOT NULL DEFAULT '{}',
+        revision      INTEGER NOT NULL DEFAULT 0,
+        ownerPlayerId TEXT,
+        updatedAt     INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_entities_kind ON entities(kind);
+    CREATE INDEX IF NOT EXISTS idx_entities_pos  ON entities(x, y);
 
     -- Misc persistent key/value for the host-agent (timeOfDay, revision, etc.)
     CREATE TABLE IF NOT EXISTS world_state (
@@ -82,6 +109,51 @@ const _despawnEntity = db.prepare('DELETE FROM world_entities WHERE entityId = ?
 const _allEntities   = db.prepare(
     'SELECT spawnFrame FROM world_entities ORDER BY spawnedAt ASC');
 
+// ── Unified entities ─────────────────────────────────────────────────────────
+// Generic store for every shared world-entity kind. `attributes` is passed/
+// returned as a plain JS object — JSON (de)serialization happens at this
+// boundary so callers never touch a raw JSON string.
+
+const _upsertEntity = db.prepare(`
+    INSERT INTO entities (entityId, kind, x, y, z, yaw, attributes, revision, ownerPlayerId, updatedAt)
+    VALUES (@entityId, @kind, @x, @y, @z, @yaw, @attributes, @revision, @ownerPlayerId, @updatedAt)
+    ON CONFLICT(entityId) DO UPDATE SET
+        kind          = excluded.kind,
+        x             = excluded.x,
+        y             = excluded.y,
+        z             = excluded.z,
+        yaw           = excluded.yaw,
+        attributes    = excluded.attributes,
+        revision      = excluded.revision,
+        ownerPlayerId = excluded.ownerPlayerId,
+        updatedAt     = excluded.updatedAt
+`);
+const _getEntity        = db.prepare('SELECT * FROM entities WHERE entityId = ?');
+const _deleteEntity     = db.prepare('DELETE FROM entities WHERE entityId = ?');
+const _entitiesByKind   = db.prepare('SELECT * FROM entities WHERE kind = ?');
+const _allEntitiesFull  = db.prepare('SELECT * FROM entities');
+// Square-bounding-box prefilter in SQL (cheap, index-friendly); callers that
+// need an exact circular radius should re-filter the returned rows.
+const _entitiesNear = db.prepare(`
+    SELECT * FROM entities
+    WHERE x BETWEEN @minX AND @maxX AND y BETWEEN @minY AND @maxY
+`);
+
+function rowToEntity(row) {
+    if (!row) return null;
+    let attributes = {};
+    try { attributes = JSON.parse(row.attributes); } catch { /* leave {} */ }
+    return {
+        entityId: row.entityId,
+        kind: row.kind,
+        x: row.x, y: row.y, z: row.z, yaw: row.yaw,
+        attributes,
+        revision: row.revision,
+        ownerPlayerId: row.ownerPlayerId,
+        updatedAt: row.updatedAt,
+    };
+}
+
 // ── World state key/value ─────────────────────────────────────────────────────
 
 const _setWS = db.prepare('INSERT OR REPLACE INTO world_state (key, value) VALUES (?, ?)');
@@ -127,5 +199,41 @@ module.exports = {
     getWorldState(key, def = null) {
         const r = _getWS.get(key);
         return r ? r.value : def;
+    },
+
+    // ── Unified entities ─────────────────────────────────────────────────────
+    upsertEntity(entity) {
+        _upsertEntity.run({
+            entityId: String(entity.entityId),
+            kind: entity.kind,
+            x: entity.x ?? 0, y: entity.y ?? 0, z: entity.z ?? 0, yaw: entity.yaw ?? 0,
+            attributes: JSON.stringify(entity.attributes ?? {}),
+            revision: entity.revision ?? 0,
+            ownerPlayerId: entity.ownerPlayerId != null ? String(entity.ownerPlayerId) : null,
+            updatedAt: Date.now(),
+        });
+    },
+    getEntity(entityId) {
+        return rowToEntity(_getEntity.get(String(entityId)));
+    },
+    deleteEntity(entityId) {
+        _deleteEntity.run(String(entityId));
+    },
+    getEntitiesByKind(kind) {
+        return _entitiesByKind.all(kind).map(rowToEntity);
+    },
+    getAllEntitiesFull() {
+        return _allEntitiesFull.all().map(rowToEntity);
+    },
+    // Exact circular radius, using a cheap SQL bounding-box prefilter first.
+    getEntitiesNear(x, y, radius) {
+        const rows = _entitiesNear.all({
+            minX: x - radius, maxX: x + radius,
+            minY: y - radius, maxY: y + radius,
+        });
+        const r2 = radius * radius;
+        return rows
+            .map(rowToEntity)
+            .filter(e => (e.x - x) ** 2 + (e.y - y) ** 2 <= r2);
     },
 };
