@@ -296,6 +296,29 @@ std::vector<uint8_t> encode_item_drop_request(const std::string& itemId, uint16_
     return out;
 }
 
+// InteractionRequest/BUILD: itemId-based, matching encode_item_drop_request's
+// shape (see server/src/lib/protocol.js's decodeInteractionRequest for the
+// full rationale — a numeric pieceTypeId had no DataAsset/class equivalent
+// and was a dead end for client-side rendering; itemId resolves through the
+// same UJigsawItem_DataAsset_C machinery GroundItem already uses, just
+// reading BuildActorClass instead of PickupClass off the result).
+// Format: [version=1][interactionType=BUILD][posX/Y/Z/yaw:f32BE][itemIdLen:u16BE][itemId utf8]
+std::vector<uint8_t> encode_interaction_request_build(const std::string& itemId,
+                                                        float x, float y, float z, float yaw)
+{
+    const auto idLen = static_cast<uint16_t>(itemId.size());
+    std::vector<uint8_t> out(20 + idLen);
+    out[0] = 1; // version
+    out[1] = static_cast<uint8_t>(InteractionType::BUILD);
+    w32(out.data() + 2,  f2u(x));
+    w32(out.data() + 6,  f2u(y));
+    w32(out.data() + 10, f2u(z));
+    w32(out.data() + 14, f2u(yaw));
+    w16(out.data() + 18, idLen);
+    std::memcpy(out.data() + 20, itemId.data(), itemId.size());
+    return out;
+}
+
 std::optional<std::string> decode_world_action(const uint8_t* p, size_t n)
 {
     if (n < 2) return std::nullopt;

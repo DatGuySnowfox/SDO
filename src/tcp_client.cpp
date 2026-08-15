@@ -102,33 +102,59 @@ void TcpClient::thread_func()
 {
     uint32_t reconnectMs = 250;
 
+    // Backoff applies to EVERY disconnect reason alike — a raw connect()
+    // failure, an auth/join rejection, or a session that ran fine and then
+    // dropped. Earlier this only guarded the connect()-failure branch and
+    // reset to the 250ms floor on every successful TCP-level connect
+    // regardless of what happened next; since the gateway can now be
+    // configured to allow ticket replay (cfg.ticketReplayProtection=false,
+    // a dev/LAN-only escape hatch — see gateway.js — until the launcher
+    // owns fetching a fresh ticket per reconnect), a rejected/expired
+    // ticket against a *protected* server would otherwise tight-loop
+    // reconnecting with zero delay between attempts. 2026-08-13: exactly
+    // that spun for long enough to leak ~24,000 TIME_WAIT sockets on port
+    // 42200 and exhaust the machine's whole ephemeral port range. Only a
+    // real, fully-joined (Active) session resets the backoff floor now.
     while (!stopped_.load(std::memory_order_relaxed)) {
         state_.store(ConnState::Disconnected, std::memory_order_relaxed);
 
         if (!try_connect()) {
             Output::send<LogLevel::Warning>(
                 STR("[tcp] connect failed, retry in {:d}ms\n"), reconnectMs);
-            for (uint32_t e = 0;
-                 e < reconnectMs && !stopped_.load(std::memory_order_relaxed);
-                 e += 10) {
-                sleep_ms(10);
+        } else {
+            reset_state();
+            const uint64_t connectedAtUs = now_micros();
+            Output::send<LogLevel::Normal>(STR("[tcp] connected to gateway\n"));
+
+            send_authenticate();
+            state_.store(ConnState::Auth, std::memory_order_relaxed);
+
+            run_connected();
+
+            const bool wasActive = state_.load(std::memory_order_relaxed) == ConnState::Active;
+            const uint64_t aliveMs = (now_micros() - connectedAtUs) / 1000;
+            close_socket();
+
+            if (stopped_.load(std::memory_order_relaxed)) break;
+
+            if (wasActive) {
+                reconnectMs = 250;
+                Output::send<LogLevel::Warning>(
+                    STR("[tcp] disconnected after {:d}ms active, reconnecting in {:d}ms …\n"),
+                    aliveMs, reconnectMs);
+            } else {
+                Output::send<LogLevel::Error>(
+                    STR("[tcp] session rejected after {:d}ms (ticket spent/invalid), retry in {:d}ms\n"),
+                    aliveMs, reconnectMs);
             }
-            reconnectMs = std::min(reconnectMs * 2u, 5'000u);
-            continue;
         }
 
-        reconnectMs = 250;
-        reset_state();
-        Output::send<LogLevel::Normal>(STR("[tcp] connected to gateway\n"));
-
-        send_authenticate();
-        state_.store(ConnState::Auth, std::memory_order_relaxed);
-
-        run_connected();
-
-        close_socket();
-        if (!stopped_.load(std::memory_order_relaxed))
-            Output::send<LogLevel::Warning>(STR("[tcp] disconnected, reconnecting …\n"));
+        for (uint32_t e = 0;
+             e < reconnectMs && !stopped_.load(std::memory_order_relaxed);
+             e += 10) {
+            sleep_ms(10);
+        }
+        reconnectMs = std::min(reconnectMs * 2u, 5'000u);
     }
 
     alive_.store(false, std::memory_order_relaxed);
@@ -215,7 +241,14 @@ void TcpClient::run_connected()
         tv.tv_usec = static_cast<long>(SELECT_TIMEOUT_US);
         int r = select(static_cast<int>(sock_) + 1, &rfds, &wfds, nullptr, &tv);
 
-        if (r < 0) break;
+        if (r < 0) {
+#ifdef _WIN32
+            Output::send<LogLevel::Error>(STR("[tcp] select() failed, code={:d}\n"), WSAGetLastError());
+#else
+            Output::send<LogLevel::Error>(STR("[tcp] select() failed, errno={:d}\n"), errno);
+#endif
+            break;
+        }
 
         if (r > 0) {
             if (FD_ISSET(sock_, &rfds) && !recv_chunk()) break;
@@ -240,13 +273,23 @@ bool TcpClient::recv_chunk()
 #ifdef _WIN32
     int n = recv(sock_, reinterpret_cast<char*>(tmp), sizeof(tmp), 0);
     if (n == SOCKET_ERROR) {
-        return WSAGetLastError() == WSAEWOULDBLOCK;
+        const int err = WSAGetLastError();
+        if (err == WSAEWOULDBLOCK) return true;
+        Output::send<LogLevel::Error>(STR("[tcp] recv() failed, code={:d}\n"), err);
+        return false;
     }
 #else
     ssize_t n = recv(sock_, tmp, sizeof(tmp), 0);
-    if (n < 0) return (errno == EAGAIN || errno == EWOULDBLOCK);
+    if (n < 0) {
+        if (errno == EAGAIN || errno == EWOULDBLOCK) return true;
+        Output::send<LogLevel::Error>(STR("[tcp] recv() failed, errno={:d}\n"), errno);
+        return false;
+    }
 #endif
-    if (n == 0) return false; // remote closed
+    if (n == 0) {
+        Output::send<LogLevel::Warning>(STR("[tcp] remote closed the connection\n"));
+        return false;
+    }
 
     recvBuf_.insert(recvBuf_.end(), tmp, tmp + n);
 
@@ -259,7 +302,12 @@ bool TcpClient::recv_chunk()
             (static_cast<uint32_t>(recvBuf_[14]) <<  8) |
             (static_cast<uint32_t>(recvBuf_[15]));
 
-        if (payLen > FRAME_MAX_PAYLOAD) return false; // protocol error
+        if (payLen > FRAME_MAX_PAYLOAD) {
+            Output::send<LogLevel::Error>(
+                STR("[tcp] protocol error: payload length {:d} exceeds max {:d}\n"),
+                payLen, static_cast<uint32_t>(FRAME_MAX_PAYLOAD));
+            return false;
+        }
 
         const size_t total = FRAME_HEADER_SIZE + payLen;
         if (recvBuf_.size() < total) break; // partial frame, wait

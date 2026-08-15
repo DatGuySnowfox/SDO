@@ -9,6 +9,7 @@
 #include <RC/DynamicOutput/Output.hpp>
 
 #include <windows.h>
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <string>
@@ -95,6 +96,67 @@ static UClass* get_class_private(UObject* obj)
     if (!fn || !obj) return nullptr;
     UClass** ref = fn(obj);
     return ref ? *ref : nullptr;
+}
+
+// Resolves a live UClass* by name — used for kinds (Zombie, later Vehicle)
+// that have no DataAsset/itemId to resolve through the way GroundItem/
+// PlacedStructure do (see entity_manager.cpp's spawn_entity_actor).
+//
+// REVISED 2026-08-14 after a live crash saga (full account in
+// research/04_ida_investigation_log.md, "Session 59" — five crashes across
+// three fix attempts, all ruled out as being in the controller-handling code
+// that got blamed initially; this function was never touched during any of
+// those attempts and is the leading remaining suspect). Two methods, order
+// swapped from the original version:
+//
+// 1. FindFirstOf(shortClassName) + get_class_private() on whatever instance
+//    that finds — now PRIMARY. This is the exact technique spawn_proxy()
+//    already uses live for BP_PlayerCharacter_C, and the same shape
+//    find_object_by_short_name() above uses live for short asset names like
+//    "Chr_MaleHair3" — genuinely proven for *this* kind of lookup (a plain,
+//    unqualified name). Requires a live instance of the exact class to
+//    already exist somewhere in the world to resolve from — not guaranteed
+//    the way it is for the always-present local player, but in practice a
+//    zombie of some archetype is very likely already present in the world
+//    before this mod's spawner-suppression fully takes effect.
+// 2. Fallback: FindObject with the class's own full package path (e.g.
+//    "/Game/AI/Zombies/Roamer/BP_Zombie_Roamer.BP_Zombie_Roamer_C") and
+//    ANY_PACKAGE — demoted from primary. On review, the "same call shape as
+//    find_object_by_short_name" claim this was originally justified with
+//    was only true for the *short, unqualified* name case that function was
+//    actually live-tested against (e.g. "Chr_MaleHair3") — a full path with
+//    an embedded class-name suffix was never actually validated to match
+//    the same way, and FindObject's real matching semantics for that shape
+//    of string are unconfirmed. If it resolves the wrong kind of object
+//    (matches some other asset sharing a name/path fragment) and gets
+//    blindly cast to UClass*, subsequent spawns using it would produce
+//    exactly the kind of delayed, varying-spawn-count corruption observed —
+//    this is the current leading theory, not yet proven. Kept only as a
+//    fallback now, still genuinely useful when no live instance exists yet.
+UClass* resolve_class_by_name(const std::wstring& fullPathOrShortName)
+{
+    if (fullPathOrShortName.empty()) return nullptr;
+
+    const auto dot = fullPathOrShortName.find_last_of(L'.');
+    const std::wstring shortName = (dot == std::wstring::npos)
+        ? fullPathOrShortName : fullPathOrShortName.substr(dot + 1);
+
+    std::vector<UObject*> instances;
+    UObjectGlobals::FindAllOf(shortName.c_str(), instances);
+    if (!instances.empty()) {
+        if (UClass* cls = get_class_private(instances.front()))
+            return cls;
+    }
+
+    UObject* const kAnyPackage = reinterpret_cast<UObject*>(static_cast<intptr_t>(-1));
+    if (UObject* direct = UObjectGlobals::FindObject(nullptr, kAnyPackage, fullPathOrShortName.c_str()))
+        return static_cast<UClass*>(direct);
+
+    std::string narrow(shortName.size(), '\0');
+    for (size_t i = 0; i < shortName.size(); ++i)
+        narrow[i] = static_cast<char>(shortName[i] < 128 ? shortName[i] : '?');
+    debug_log("resolve_class_by_name: both methods failed for " + narrow);
+    return nullptr;
 }
 
 // Shared spawn helper — same begin/finish pattern as spawn_proxy() below,
@@ -1230,12 +1292,22 @@ static AActor* spawn_and_attach_weapon_attachment(AActor* weaponActor, void* att
 
     UFunction* attachFn = attachmentRoot->GetFunctionByNameInChain(L"K2_AttachToComponent");
     if (attachFn) {
+        // 2026-08-15: ScaleRule was 2 (SnapToTarget) here — the only one of
+        // this project's three K2_AttachToComponent call sites that didn't
+        // match. `Equip Actor to Socket`'s own decoded bytecode (research/
+        // 04_ida_investigation_log.md) and both other call sites
+        // (spawn_and_equip_item_visual's backpack re-attach,
+        // reattach_weapon_visual_to_socket) all use ScaleRule=1 (KeepWorld) —
+        // fixed to match. Found during a deliberate audit of every native
+        // attach call after the bReinitPose mismatch turned out to be a real
+        // freeze cause; this one hadn't been checked against the reference
+        // shape before.
         struct Params {
             UObject*        Parent = nullptr;
             RawFGameplayTag SocketName;
             uint8_t         LocationRule = 2;   // SnapToTarget
             uint8_t         RotationRule = 2;   // SnapToTarget
-            uint8_t         ScaleRule = 2;        // SnapToTarget
+            uint8_t         ScaleRule = 1;        // KeepWorld
             bool            WeldSimulatedBodies = true;
             bool            ReturnValue = false;
         } params;
@@ -1314,9 +1386,24 @@ static bool equip_clothing_to_mesh(AActor* actor, void* itemAsset, uintptr_t clo
         return false;
     }
 
+    // 2026-08-15: bReinitPose was TRUE here — WRONG. The real game's own
+    // EquipClothingToMesh (BP_PlayerCharacter_C, decoded via bytecode_dump.flag)
+    // calls this exact function with bReinitPose=FALSE in both its male and
+    // female branches (research/CXXHeaderDump-adjacent decoded_EquipClothingToMesh.txt,
+    // ci=100173 VirtualFunction calls both pass EX_False as param[1]). A full
+    // pose reinit is a much heavier native operation (rebuilds the skeleton's
+    // bone tree) than a normal mesh swap — live-reported the same session:
+    // PC1 froze completely (engine-thread hang, not just UI) with the log's
+    // last line landing mid-call to this exact function via sync_pawn_appearance
+    // (a different call site, same underlying bug). Matches a classic UE
+    // threading hazard: mutating a SkeletalMeshComponent's mesh with a full
+    // pose reinit while that component's own animation instance is
+    // concurrently ticking (a proxy's AnimBP runs independent of our mod's
+    // tick) can contend on render/anim-thread state. Changed to match the
+    // real game's own proven-safe call shape.
     struct Params {
         UObject* NewMesh = nullptr;
-        bool     bReinitPose = true;
+        bool     bReinitPose = false;
     } params;
     static_assert(offsetof(Params, NewMesh) == 0x00, "Kismet param layout");
     static_assert(offsetof(Params, bReinitPose) == 0x08, "Kismet param layout");
@@ -2062,6 +2149,31 @@ static UObject* find_object_by_short_name(const std::wstring& name)
     return UObjectGlobals::FindObject(nullptr, kAnyPackage, name.c_str());
 }
 
+bool reapply_named_mesh(UObject* component, const std::string& meshShortName, bool isSkeletal)
+{
+    if (!component || meshShortName.empty()) return false;
+    auto* mesh = find_object_by_short_name(widen(meshShortName));
+    if (!mesh) return false;
+
+    if (isSkeletal) {
+        UFunction* fn = component->GetFunctionByNameInChain(L"SetSkinnedAssetAndUpdate");
+        if (!fn) return false;
+        // bReinitPose=false — matches the real game's own EquipClothingToMesh
+        // call shape (see the earlier bReinitPose freeze-cause fix, same
+        // rationale applies to any call to this function).
+        struct Params { UObject* NewMesh = nullptr; bool bReinitPose = false; } params;
+        params.NewMesh = mesh;
+        component->ProcessEvent(fn, &params);
+        return true;
+    }
+    UFunction* fn = component->GetFunctionByNameInChain(L"SetStaticMesh");
+    if (!fn) return false;
+    struct Params { UObject* NewMesh = nullptr; } params;
+    params.NewMesh = mesh;
+    component->ProcessEvent(fn, &params);
+    return true;
+}
+
 void ProxyManager::sync_pawn_appearance(AActor* actor, RemotePlayer& player)
 {
     if (!actor || !player.appearanceDirty) return;
@@ -2258,7 +2370,12 @@ void ProxyManager::sync_pawn_appearance(AActor* actor, RemotePlayer& player)
         debug_log("sync_pawn_appearance: bodyPart[" + std::to_string(i) + "]=" + meshName +
                   " found=" + std::to_string(mesh != nullptr) + " SetSkinnedAssetAndUpdate_found=" + std::to_string(fn != nullptr));
         if (mesh && fn) {
-            struct Params { UObject* NewMesh = nullptr; bool bReinitPose = true; } params;
+            // 2026-08-15: bReinitPose fixed to FALSE — see equip_clothing_to_mesh's
+            // comment above (same bug, same fix, matching the real game's own
+            // EquipClothingToMesh call shape). This exact call site is where
+            // PC1's engine-thread freeze was traced to (log's last line
+            // landing mid-ProcessEvent for bodyPart[0]=Torso).
+            struct Params { UObject* NewMesh = nullptr; bool bReinitPose = false; } params;
             params.NewMesh = mesh;
             comp->ProcessEvent(fn, &params);
         }
@@ -2428,7 +2545,9 @@ void ProxyManager::on_play_montage(uint64_t playerId, const std::string& montage
 
     // Same 2s post-spawn grace period every other proxy component touch
     // uses — a freshly-spawned proxy's AnimInstance isn't ready yet.
-    if (now_micros() - it->second.proxySpawnedAtUs < 2'000'000ULL) return;
+    // TEMPORARILY DISABLED 2026-08-13 for testing, see mod.cpp's
+    // grace-period comment for why it exists.
+    // if (now_micros() - it->second.proxySpawnedAtUs < 2'000'000ULL) return;
 
     auto* actor = static_cast<AActor*>(it->second.proxyActor);
     UFunction* playFn = actor->GetFunctionByNameInChain(L"PlayMontage");
@@ -2630,6 +2749,50 @@ static void apply_proxy_body_yaw_safe(AActor* actor, RemotePlayer& player, float
         debug_log("apply_proxy_body_yaw_safe: crashed applying body yaw, caught via SEH");
 }
 
+// Turn-in-place, take 2 (2026-08-14) — the mesh-RelativeRotation write above
+// (and teleport_proxy's actor-level K2_SetActorLocationAndRotation, already
+// called unconditionally every tick) both live-tested as invisible while the
+// proxy is stationary, per Session 57's investigation. Live bytecode trace of
+// the real game's own BP_PlayerCharacter_C::MC_ADS found it never uses either
+// of those — it calls the plain `K2_SetActorRotation(FRotator, bool bSweep)`
+// directly on the actor, Pitch/Roll zeroed, Yaw-only. No native binding for
+// this exists in the vendored UE4SS SDK (only K2_SetActorLocationAndRotation
+// is bound), so it's called via the same GetFunctionByNameInChain/
+// ProcessEvent reflection pattern already proven throughout this file (e.g.
+// read_local_aim_pitch's GetControlRotation call, identical FRotator-typed
+// param struct) rather than a raw offset guess.
+// 2026-08-15: two fixes from a systematic ProcessEvent audit against real
+// native signatures. (1) field was misnamed `bSweep` — the real signature is
+// `bool K2_SetActorRotation(FRotator, bool bTeleportPhysics)`, no sweep
+// param exists; harmless byte-layout-wise (still just one bool at the same
+// offset) but misleading. (2) missing the trailing `ReturnValue` bool the
+// real function's `bool` return type requires in the Kismet-packed struct —
+// this project's sibling call in mod.cpp had the identical omission and was
+// confirmed to cause a stack overwrite; this one happened not to corrupt
+// anything live (FRotator's own padding left enough room), but relying on
+// that is fragile, not a real fix — added properly.
+struct ActorRotationParams { FRotator NewRotation; bool bTeleportPhysics; bool ReturnValue; };
+
+static void do_apply_proxy_actor_rotation(void* ctxRaw)
+{
+    auto* ctx = static_cast<ProxyBodyYawCtx*>(ctxRaw);
+    UFunction* fn = ctx->actor->GetFunctionByNameInChain(L"K2_SetActorRotation");
+    if (!fn) return;
+    ActorRotationParams params{};
+    params.NewRotation.Pitch = 0.0;
+    params.NewRotation.Yaw   = ctx->desiredYaw;
+    params.NewRotation.Roll  = 0.0;
+    params.bTeleportPhysics = false;
+    ctx->actor->ProcessEvent(fn, &params);
+}
+
+static void apply_proxy_actor_rotation_safe(AActor* actor, RemotePlayer& player, float desiredYawDegrees)
+{
+    ProxyBodyYawCtx ctx{actor, &player, static_cast<double>(desiredYawDegrees)};
+    if (!seh_invoke(do_apply_proxy_actor_rotation, &ctx))
+        debug_log("apply_proxy_actor_rotation_safe: crashed applying actor rotation, caught via SEH");
+}
+
 // Smooths RemotePlayer::render{X,Y,Z,Yaw} toward the raw, packet-driven
 // x/y/z/yaw each tick — see RemotePlayer::renderInitialized's own comment
 // for why (raw fields only change once per network packet, ~50ms apart,
@@ -2637,9 +2800,38 @@ static void apply_proxy_body_yaw_safe(AActor* actor, RemotePlayer& player, float
 // smoothing (not a fixed-duration lerp) so it self-corrects regardless of
 // actual packet jitter, with a distance-based snap for genuine teleports
 // (respawn, etc.) so those don't visibly slide across the map.
+static double raw_aim_pitch_degrees(const RemotePlayer& player)
+{
+    double degrees = player.aimPitchByte * (360.0 / 256.0);
+    if (degrees > 180.0) degrees -= 360.0;
+    return degrees;
+}
+
+// Wraps an angle accumulator back to [-180,180]. 2026-08-13: every
+// exponential-smoothing accumulator below only ever wrapped the per-tick
+// *delta* into range, never the accumulator itself after adding it — fine
+// as long as the accumulator never crosses the ±180 boundary, but nothing
+// stopped it from doing exactly that over many small steps. Live symptom:
+// renderAimYaw walked out to -464.70 degrees over a play session (caught via
+// on_process_event_post's aim_write diagnostic log), and once a value that
+// far outside the AnimBP's expected range got written to its Yaw property,
+// the proxy's pose visibly froze — "once it jumps it stops working". Applied
+// to every angle accumulator here, not just renderAimYaw, since renderYaw/
+// renderAimPitch have the identical structural bug even though it hadn't
+// been observed biting them yet.
+static double wrap_angle_deg(double degrees)
+{
+    degrees = std::fmod(degrees, 360.0);
+    if (degrees > 180.0)  degrees -= 360.0;
+    if (degrees < -180.0) degrees += 360.0;
+    return degrees;
+}
+
 static void update_proxy_render_smoothing(RemotePlayer& player)
 {
     const uint64_t now = now_micros();
+    const double rawAimPitch = raw_aim_pitch_degrees(player);
+    bool justInitialized = false;
 
     if (!player.renderInitialized) {
         player.renderX = player.x;
@@ -2647,6 +2839,24 @@ static void update_proxy_render_smoothing(RemotePlayer& player)
         player.renderZ = player.z;
         player.renderYaw = player.yaw;
         player.renderInitialized = true;
+        justInitialized = true;
+    }
+    if (!player.aimRenderInitialized) {
+        player.renderAimPitch = static_cast<float>(rawAimPitch);
+        // player.aimYaw is the sender's raw ABSOLUTE control yaw (2026-08-13
+        // rewrite — see mod.cpp's read_local_aim_pitch comment for why it's
+        // no longer pre-converted to relative on the sender side). Relative
+        // to player.renderYaw, the proxy's own body yaw, computed fresh here
+        // every tick — never a separately-lagging approximation of it.
+        double initYaw = static_cast<double>(player.aimYaw) - player.renderYaw;
+        initYaw = std::fmod(initYaw, 360.0);
+        if (initYaw > 180.0)  initYaw -= 360.0;
+        if (initYaw < -180.0) initYaw += 360.0;
+        player.renderAimYaw = static_cast<float>(initYaw);
+        player.aimRenderInitialized = true;
+        justInitialized = true;
+    }
+    if (justInitialized) {
         player.lastRenderTickUs = now;
         return;
     }
@@ -2664,6 +2874,7 @@ static void update_proxy_render_smoothing(RemotePlayer& player)
         player.renderY = player.y;
         player.renderZ = player.z;
         player.renderYaw = player.yaw;
+        player.turnInPlaceYawOffset = 0; // stale after a real teleport/respawn
         return;
     }
 
@@ -2673,10 +2884,85 @@ static void update_proxy_render_smoothing(RemotePlayer& player)
     player.renderY += static_cast<float>(dy * factor);
     player.renderZ += static_cast<float>(dz * factor);
 
-    double yawDelta = static_cast<double>(player.yaw) - player.renderYaw;
+    // Turn-in-place, take 2 (2026-08-14) — see apply_proxy_actor_rotation_safe's
+    // comment for why take 1 (mesh RelativeRotation write) never visibly took
+    // effect while stationary. turnInPlaceYawOffset grows/decays based on the
+    // *raw* gap between aim and synced body yaw (aimYaw - yaw), NOT the
+    // post-correction gap (aimYaw - renderYaw) — Session 57 found the latter
+    // is self-defeating, since it shrinks toward zero the moment the
+    // correction starts working, which was also the decay trigger, so success
+    // immediately undid itself (live symptom: body snapped back to center the
+    // instant the mouse stopped moving, even while still aiming off-center).
+    // Gated on IsADS (movState & 0x02): the real game's own equivalent lives
+    // in BP_PlayerCharacter_C::MC_ADS specifically (Session 57's bytecode
+    // trace), not a general hip-fire behavior — without this gate every proxy
+    // would constantly twist its whole body to face wherever the camera is
+    // looking, hip-fire included, which isn't what the real game does.
+    constexpr double kTurnInPlaceTrigger = 70.0; // degrees — stays within blendspace's ±90 range untouched below this
+    constexpr double kTurnInPlaceRateDegPerSec = 180.0;
+    const bool isAds = (player.movState & 0x02) != 0;
+    double targetOffset = 0.0;
+    if (isAds) {
+        double rawGap = static_cast<double>(player.aimYaw) - static_cast<double>(player.yaw);
+        while (rawGap > 180.0)  rawGap -= 360.0;
+        while (rawGap < -180.0) rawGap += 360.0;
+        if (rawGap > kTurnInPlaceTrigger)       targetOffset = rawGap - kTurnInPlaceTrigger;
+        else if (rawGap < -kTurnInPlaceTrigger) targetOffset = rawGap + kTurnInPlaceTrigger;
+    }
+    const double maxStep = kTurnInPlaceRateDegPerSec * dt;
+    double offsetDelta = targetOffset - player.turnInPlaceYawOffset;
+    if (offsetDelta > maxStep)       offsetDelta = maxStep;
+    else if (offsetDelta < -maxStep) offsetDelta = -maxStep;
+    player.turnInPlaceYawOffset = static_cast<float>(player.turnInPlaceYawOffset + offsetDelta);
+
+    const double yawTarget = wrap_angle_deg(static_cast<double>(player.yaw) + player.turnInPlaceYawOffset);
+    double yawDelta = yawTarget - player.renderYaw;
     while (yawDelta > 180.0)  yawDelta -= 360.0;
     while (yawDelta < -180.0) yawDelta += 360.0;
-    player.renderYaw += static_cast<float>(yawDelta * factor);
+    player.renderYaw = static_cast<float>(wrap_angle_deg(player.renderYaw + yawDelta * factor));
+
+    // Same exponential smoothing for aim pitch/yaw, same shorter-tau-would-
+    // feel-laggy tradeoff already tuned for body yaw above — kept identical
+    // since aim updates arrive on the exact same movement-tick cadence.
+    double pitchDelta = rawAimPitch - player.renderAimPitch;
+    while (pitchDelta > 180.0)  pitchDelta -= 360.0;
+    while (pitchDelta < -180.0) pitchDelta += 360.0;
+    player.renderAimPitch = static_cast<float>(wrap_angle_deg(player.renderAimPitch + pitchDelta * factor));
+
+    // Relative to renderYaw (just updated above) rather than player.aimYaw
+    // directly — see the aimRenderInitialized init block's comment.
+    // Computed fresh every tick against whatever body yaw the proxy's mesh
+    // is *actually* currently showing, so this can never drift out of sync
+    // with it the way two independently-smoothed values could.
+    const double rawRelativeAimYaw = wrap_angle_deg(static_cast<double>(player.aimYaw) - player.renderYaw);
+
+    double aimYawDelta = rawRelativeAimYaw - player.renderAimYaw;
+    while (aimYawDelta > 180.0)  aimYawDelta -= 360.0;
+    while (aimYawDelta < -180.0) aimYawDelta += 360.0;
+    player.renderAimYaw = static_cast<float>(wrap_angle_deg(player.renderAimYaw + aimYawDelta * factor));
+
+    // Clamp to the AnimBP blendspace's own configured range (confirmed via
+    // FModel export, Exports/.../AimOffsets/RifleIronsightsAimOffset.json's
+    // AxisX/AxisY Min/Max: ±90) — 2026-08-13, replaces the removed
+    // turn-in-place attempt above. Beyond this the pose just holds at its
+    // max turned pose rather than attempting to physically rotate the body.
+    constexpr float kAimYawClamp = 90.0f;
+    if (player.renderAimYaw > kAimYawClamp)       player.renderAimYaw = kAimYawClamp;
+    else if (player.renderAimYaw < -kAimYawClamp) player.renderAimYaw = -kAimYawClamp;
+}
+
+bool ProxyManager::force_resync_appearance(AActor* proxyActor)
+{
+    if (!proxyActor) return false;
+    std::lock_guard<std::mutex> lock(g_state().playersMtx);
+    for (auto& [id, player] : g_state().players) {
+        if (player.proxyActor != proxyActor) continue;
+        player.appearanceDirty = true;
+        player.appliedAppearanceKey.clear();
+        debug_log("force_resync_appearance: matched player, marked dirty for next tick");
+        return true;
+    }
+    return false;
 }
 
 void ProxyManager::tick(UWorld* world, AActor* /*local_pawn*/)
@@ -2707,8 +2993,18 @@ void ProxyManager::tick(UWorld* world, AActor* /*local_pawn*/)
             update_proxy_render_smoothing(player);
             teleport_proxy(static_cast<AActor*>(player.proxyActor),
                            player.renderX, player.renderY, player.renderZ, player.renderYaw);
-            apply_proxy_body_yaw_safe(static_cast<AActor*>(player.proxyActor),
-                                       player, player.renderYaw);
+            // apply_proxy_body_yaw_safe (mesh-relative RelativeRotation write)
+            // REMOVED 2026-08-14 — now that apply_proxy_actor_rotation_safe's
+            // real K2_SetActorRotation call actually rotates the actor,
+            // running both compounded: the mesh's baked ~-90 degree baseline
+            // offset was being added on top of an actor that was *also* now
+            // rotating (previously it wasn't, since bOrientRotationToMovement
+            // silently ignored every rotation call, which is exactly why the
+            // mesh workaround existed) — live-reported as an extra ~90 degree
+            // clockwise twist while ADS, plus the movement-facing/velocity
+            // mismatch this caused made the run animation look backward.
+            apply_proxy_actor_rotation_safe(static_cast<AActor*>(player.proxyActor),
+                                             player, player.renderYaw);
         }
 
         // Session 52: two separate live crashes (once a real crash, once a
@@ -2721,6 +3017,18 @@ void ProxyManager::tick(UWorld* world, AActor* /*local_pawn*/)
         // it with the full sync burst, same 2s throttle already used
         // elsewhere in this project for "don't hammer a freshly-changed
         // thing every tick".
+        // RE-ENABLED 2026-08-15 — this was the ORIGINAL grace period, added
+        // after this exact sync burst (equipment/weapon-attachments/pawn-
+        // appearance) crashed/deadlocked PC2 twice live, at two different
+        // call sites each time, then TEMPORARILY DISABLED 2026-08-13 for
+        // testing and never turned back on — sat disabled and forgotten for
+        // two days. Live-reported tonight: "PC1 froze when PC2 loaded in" —
+        // an exact match for the failure mode this grace period exists to
+        // prevent, after several other freeze theories (repair loops, new
+        // drift/appearance code) were isolated and cleared without finding
+        // the real cause. This was flagged in its own comment as "the one
+        // most likely to actually be load-bearing" — re-enabling it first,
+        // before inventing any new theory.
         if (now_micros() - player.proxySpawnedAtUs < 2'000'000ULL) continue;
 
         // Writing real Velocity (not the AnimBP's own Speed scratch var —
@@ -2736,10 +3044,41 @@ void ProxyManager::tick(UWorld* world, AActor* /*local_pawn*/)
         // write here would just lose that race. See on_process_event_post's
         // own comment.
 
-        sync_equipment(static_cast<AActor*>(player.proxyActor), player);
-        sync_active_weapon_hand(static_cast<AActor*>(player.proxyActor), player);
-        sync_weapon_attachments(player);
-        sync_pawn_appearance(static_cast<AActor*>(player.proxyActor), player);
+        // 2026-08-15: spread the sync burst across multiple ticks instead of
+        // running all four back to back in one pass — see do_game_tick's own
+        // comment (mod.cpp) for the mechanism this targets. do_game_tick can
+        // only run from inside UE4SS's ProcessEvent pre-hook (on_actor_tick
+        // isn't reliable after level transitions in this UE4SS version), so
+        // every ProcessEvent call any of these four make is itself nested
+        // inside the engine's own outer ProcessEvent dispatch for whatever
+        // unrelated function triggered this tick. A live-captured freeze
+        // correlated with a fresh proxy join showed exactly this: a worker
+        // thread stuck forever inside engine code, reached through a chain
+        // of our own nested ProcessEvent calls — the "SetSkinnedAssetAndUpdate
+        // never returning" failure mode the existing do_game_tick reentry
+        // guard was already documented as NOT covering (that guard only
+        // stops OUR OWN tick from recursing into itself). Running only ONE
+        // dirty category per tick — instead of all four whenever a fresh
+        // join makes them all dirty simultaneously — doesn't remove the
+        // underlying re-entrancy risk, but it removes the "many ProcessEvent
+        // calls in a tight loop" shape the original 2026-08-13 root-cause
+        // finding specifically blamed. In steady state (nothing dirty) this
+        // is unchanged — every sync_* function already early-returns on its
+        // own dirty/change flag, so checking four flags here costs nothing;
+        // the burst case now spreads across up to 4 consecutive tick calls
+        // (still well under a second, imperceptible to players) instead of
+        // hammering them all in one nested pass. Same priority order the
+        // synchronous version used, just one winner per tick instead of all
+        // four unconditionally.
+        if (player.equipmentDirty) {
+            sync_equipment(static_cast<AActor*>(player.proxyActor), player);
+        } else if (player.activeWeaponSlot != player.handAttachedSlot) {
+            sync_active_weapon_hand(static_cast<AActor*>(player.proxyActor), player);
+        } else if (player.weaponAttachmentsDirty) {
+            sync_weapon_attachments(player);
+        } else if (player.appearanceDirty) {
+            sync_pawn_appearance(static_cast<AActor*>(player.proxyActor), player);
+        }
     }
 }
 

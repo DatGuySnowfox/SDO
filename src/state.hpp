@@ -60,6 +60,30 @@ struct RemotePlayer {
     // after GetAimOffset's own per-frame recompute, since a same-tick write
     // here always loses that race. See on_process_event_post's own comment.
     uint8_t  aimPitchByte = 0;
+    // Smoothed aim pitch/yaw (degrees, [-180,180]) actually written to the
+    // AnimBP each frame — same reasoning as renderX/Y/Z/Yaw above:
+    // aimPitchByte/aimYaw only change once per network packet (~50ms), and
+    // on_process_event_post writing the raw value straight into Pitch/Yaw
+    // every frame in between produced a visible step/stutter rather than
+    // continuous motion (2026-08-13, most noticeable while ADS since the
+    // camera is zoomed in). Smoothed toward the raw values in
+    // update_proxy_render_smoothing using the same exponential/kTau approach
+    // already proven for position.
+    bool     aimRenderInitialized = false;
+    float    renderAimPitch = 0, renderAimYaw = 0;
+    // Turn-in-place accumulator (2026-08-13) — persistent, NOT reset by each
+    // incoming Movement packet (unlike yaw/x/y/z above). First attempt had
+    // turn-in-place nudge renderYaw directly, in the same tick as (and right
+    // before) the ordinary body-yaw smoothing step that pulls renderYaw
+    // toward the raw synced `yaw` — since that smoothing reapplies a
+    // proportional restoring force toward `yaw` every single tick regardless,
+    // it fought the turn-in-place push to a stable equilibrium instead of
+    // ever letting it close the gap (live-confirmed: offset plateaued around
+    // 112 degrees for a full 5-second window instead of decaying toward the
+    // 70-degree threshold). Fixed by adding this offset to the body-yaw
+    // smoothing's *target* (yaw + turnInPlaceYawOffset) instead of nudging
+    // renderYaw as a separate, competing force.
+    float    turnInPlaceYawOffset = 0;
     // Mesh component's own RelativeRotation the first time it's read after
     // spawn (2026-08-13) — captured once and reused as the baseline every
     // subsequent tick's body-yaw write. Needed because BP_PlayerCharacter's
@@ -239,9 +263,72 @@ struct BridgeState {
     // Local player vitals read from game components (not from server).
     LocalVitals localVitals{};
 
+    // 2026-08-15: last-known-GOOD local appearance, cached per-field (only
+    // overwritten when a read comes back non-empty, never blanked out by a
+    // transient/already-broken read) — used to repair HairMesh/BeardMesh/
+    // EyebrowsMesh/Mouth/Hands on the LOCAL pawn, none of which
+    // UpdateBodyParts covers. read_local_pawn_appearance() reads the
+    // CURRENTLY assigned mesh, which is useless as a repair source once
+    // it's already cleared — this cache exists specifically to have
+    // something to restore FROM by the time a repair is needed.
+    PawnAppearance lastGoodLocalAppearance{};
+
     // Pending teleport from PlayerProgressRestore; applied on next game tick.
     std::atomic<bool> pendingTeleport{false};
     float teleportX = 0, teleportY = 0, teleportZ = 0, teleportYaw = 0;
+
+    // Pending vitals restore from PlayerProgressRestore (2026-08-14) —
+    // deferred the same way pendingTeleport already is, instead of writing
+    // raw memory inline in the network-receive handler the instant
+    // find_local_pawn() first succeeds after a join. That inline write used
+    // find_local_pawn()'s very first successful resolution as its only
+    // gate — but this session's own diagnostic logging showed the pawn's
+    // own component/attachment count is still mid-initialization at that
+    // exact moment (`preChildrenCount=4` vs. a normal ~14), not necessarily
+    // fully constructed. Writing raw doubles through component pointers
+    // fetched that early, with zero SEH protection, is a plausible
+    // contributor to (or outright cause of) the equipment-clearing cascade
+    // that reliably follows every join this session — deferred a couple
+    // seconds and SEH-wrapped as a safer replacement.
+    std::atomic<bool> pendingVitalsRestore{false};
+    float vitalsHealth = 0, vitalsHunger = 0, vitalsThirst = 0, vitalsStamina = 0, vitalsRadiation = 0;
+    uint64_t vitalsRestoreReadyAtUs = 0;
+
+    // Equip-restore retry (2026-08-14) — root cause confirmed via live IDA
+    // reads: BP_JigHelperComp_C::OnLoadDataRequested does a one-shot equip
+    // restore from the replicated RepActorsData property at join; if that
+    // hasn't finished replicating yet, restore is incomplete, and the
+    // OnRep_RepActorsData callback that fires when it does land only
+    // broadcasts a delegate (OnEquipmentUpdated) with zero bound listeners
+    // (confirmed live — InvocationList count=0) — no retry path exists
+    // natively. Also confirmed live the exact failure shape: RepActorsData
+    // holds a real Actor* for every slot (replication itself is fine), the
+    // break is specifically that actor's RootComponent->AttachParent being
+    // null instead of matching every other slot's shared parent.
+    //
+    // Runs periodically (not just once at join) — see check_equip_restore_
+    // retry_trigger — so it self-heals ANY future occurrence of this same
+    // failure shape, not only the join-time race. Cheap when healthy (a
+    // handful of pointer reads, no-op if every slot's already attached), so
+    // an ongoing periodic check costs nothing extra over a one-shot timer.
+    uint64_t lastEquipRestoreRetryUs = 0;
+
+    // Join-load-order gate (2026-08-14, root cause session) — confirmed live:
+    // every body-part/attachment fall-off cascade this project has ever
+    // logged is preceded, within ~1.5s, by join_teleport firing while
+    // RepActorsData still reads count=0. component_drift/attach_health
+    // sampling during that window see the character's still-loading state
+    // (meshes legitimately not yet (re)applied) as "was set, now null" and
+    // burn their limited repair attempts fighting a load that was already
+    // in progress. False false-positive, not a false-positive-of-baseline —
+    // the mesh really is transiently null here, but that's expected, not a
+    // bug. Starts false on every fresh pawn sighting (see hasPawn transition
+    // in mod.cpp) and flips true the first time do_equip_restore_retry
+    // observes a plausible non-zero RepActorsData count; component_drift/
+    // attach_health's "local" scan is skipped entirely while false, so their
+    // baselines simply aren't sampled during the risky window instead of
+    // being sampled and misread.
+    std::atomic<bool> equipDataReady{false};
 
     // New-player detection: time when session was latched.
     std::atomic<uint64_t> sessionLatchUs{0};

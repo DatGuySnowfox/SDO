@@ -582,6 +582,63 @@ static void test_item_drop_request() {
 }
 
 // ---------------------------------------------------------------------------
+// 7b. InteractionRequest/BUILD — encode_interaction_request_build only;
+//     mirror decoder per doc: [version=1][interactionType=1][posX/Y/Z/yaw:f32BE]
+//     [itemIdLen:u16BE][itemId utf8]
+// ---------------------------------------------------------------------------
+
+struct MirrorBuildRequest {
+    uint8_t version, interactionType;
+    float x, y, z, yaw;
+    std::string itemId;
+};
+
+static std::optional<MirrorBuildRequest> mirror_decode_build_request(const std::vector<uint8_t>& b) {
+    if (b.size() < 20) return std::nullopt;
+    MirrorBuildRequest r{};
+    r.version         = b[0];
+    r.interactionType = b[1];
+    r.x   = get_f32(&b[2]);
+    r.y   = get_f32(&b[6]);
+    r.z   = get_f32(&b[10]);
+    r.yaw = get_f32(&b[14]);
+    const uint16_t idLen = get_u16(&b[18]);
+    if (b.size() < static_cast<size_t>(20 + idLen)) return std::nullopt;
+    r.itemId = std::string(reinterpret_cast<const char*>(&b[20]), idLen);
+    return r;
+}
+
+static void test_interaction_request_build() {
+    std::printf("\n-- InteractionRequest/BUILD (encode_interaction_request_build, mirror decoder) --\n");
+
+    const std::string itemId = "DA_WoodenWall";
+    const float x = -500.5f, y = 12.25f, z = 0.0f, yaw = 270.0f;
+
+    auto buf = encode_interaction_request_build(itemId, x, y, z, yaw);
+    ok(buf.size() == 20 + itemId.size(), "encode_interaction_request_build produces expected length");
+
+    auto dec = mirror_decode_build_request(buf);
+    ok(dec.has_value(), "mirror decoder parses encode_interaction_request_build output");
+    if (!dec) return;
+
+    ok(dec->version == 1, "BuildRequest.version == 1");
+    ok(dec->interactionType == static_cast<uint8_t>(InteractionType::BUILD), "BuildRequest.interactionType == BUILD");
+    ok(feq(dec->x, x),     "BuildRequest.x round-trips");
+    ok(feq(dec->y, y),     "BuildRequest.y round-trips");
+    ok(feq(dec->z, z),     "BuildRequest.z round-trips");
+    ok(feq(dec->yaw, yaw), "BuildRequest.yaw round-trips");
+    ok(dec->itemId == itemId, "BuildRequest.itemId round-trips");
+
+    // Empty itemId edge case.
+    {
+        auto buf2 = encode_interaction_request_build("", 0, 0, 0, 0);
+        ok(buf2.size() == 20, "encode_interaction_request_build with empty itemId is exactly 20 bytes");
+        auto dec2 = mirror_decode_build_request(buf2);
+        ok(dec2.has_value() && dec2->itemId.empty(), "empty itemId round-trips as empty string");
+    }
+}
+
+// ---------------------------------------------------------------------------
 // 8. PlayerProgress — encode_player_progress / decode_player_progress
 //    (shared wire format for ProfileRevision client->server AND
 //    PlayerProgressRestore server->client)
@@ -929,6 +986,7 @@ int main() {
     test_entity_descriptor();
     test_entity_state();
     test_item_drop_request();
+    test_interaction_request_build();
     test_player_progress();
     test_equipment();
     test_weapon_attachments();

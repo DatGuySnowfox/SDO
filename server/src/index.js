@@ -14,6 +14,22 @@
 //   SDB_ADMIN_TOKEN    if set, POST /v1/tickets requires Authorization: Bearer <token>
 //   SDB_MAX_PLAYERS    maximum concurrent joined players (default 32)
 
+// Timestamp every console line (log/warn/error) with local HH:MM:SS.mmm —
+// applies globally to this process, so gateway.js/host-agent.js need no
+// changes of their own. Added 2026-08-13 after a long session of trying to
+// correlate this log against the client's separately-timestamped-nothing
+// SDB.log/debug.log by line-number proximity alone.
+for (const level of ['log', 'warn', 'error']) {
+    const orig = console[level].bind(console);
+    console[level] = (...args) => {
+        const d = new Date();
+        const ts = [d.getHours(), d.getMinutes(), d.getSeconds()]
+            .map((n) => String(n).padStart(2, '0')).join(':')
+            + '.' + String(d.getMilliseconds()).padStart(3, '0');
+        orig(`[${ts}]`, ...args);
+    };
+}
+
 const cfg       = require('./config');
 const { Gateway }   = require('./gateway');
 const { HostAgent } = require('./host-agent');

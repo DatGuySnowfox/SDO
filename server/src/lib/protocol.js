@@ -173,6 +173,42 @@ function encodeEntityState({ kind, revision = 1, x, y, z, yaw = 0, health = 0, s
     return buf;
 }
 
+// Server-side decode of its own EntitySpawn/EntityState payload shapes —
+// needed now that the gateway persists entities into the structured
+// `entities` table (db.js) instead of replaying opaque stored bytes, so it
+// has to read kind/x/y/z/itemId/etc. back out of what host-agent.js sends
+// it. Exact inverse of the encode functions above / src/protocol.cpp's
+// decode_entity_descriptor / decode_entity_state.
+function decodeEntityDescriptor(buf) {
+    if (buf.length < 18) throw new Error('entity_descriptor_too_short');
+    const kind          = buf.readUInt8(1);
+    const revision      = buf.readUInt32BE(2);
+    const quantity      = buf.readUInt16BE(6);
+    const ownerPlayerId = buf.readBigUInt64BE(8);
+    const classPathLen  = buf.readUInt16BE(16);
+    let off = 18;
+    const classPath = buf.subarray(off, off + classPathLen).toString('utf8');
+    off += classPathLen;
+    const itemIdLen = buf.readUInt16BE(off);
+    off += 2;
+    const itemId = buf.subarray(off, off + itemIdLen).toString('utf8');
+    return { kind, revision, quantity, ownerPlayerId, classPath, itemId };
+}
+
+function decodeEntityState(buf) {
+    if (buf.length < 27) throw new Error('entity_state_too_short');
+    return {
+        kind:     buf.readUInt8(1),
+        revision: buf.readUInt32BE(2),
+        x:        buf.readFloatBE(6),
+        y:        buf.readFloatBE(10),
+        z:        buf.readFloatBE(14),
+        yaw:      buf.readFloatBE(18),
+        health:   buf.readFloatBE(22),
+        state:    buf.readUInt8(26),
+    };
+}
+
 // ── PlayerProgress payload (ProfileRevision / PlayerProgressRestore) ──────────
 // Same format both directions: ProfileRevision is client→server, and the
 // gateway persists that payload verbatim and replays it byte-for-byte as
@@ -406,6 +442,25 @@ function encodeItemDropResult({ success, reason }) {
     return encodeString(JSON.stringify({ success: !!success, reason: reason ?? 0 }), 512);
 }
 
+// ── ZombieAttackRequest / ZombieDamageResult payloads ─────────────────────
+// Same JSON-via-encodeString codec as ItemPickupResult/ItemDropResult —
+// entityId is the frame-header field (f.entityId), not part of either
+// payload, matching every other entity-targeted request/result in this
+// protocol. ZombieAttackRequest carries only the damage amount (V1 — see
+// server/src/world/zombie-simulation.js's header comment on how that
+// amount gets computed client-side; ranged weapons are explicitly deferred).
+
+function decodeZombieAttackRequest(payload) {
+    const json = decodeString(payload, 0); // same [len:u16BE][utf8 JSON] shape as encodeString produces
+    const damage = Number(JSON.parse(json).damage);
+    if (!Number.isFinite(damage)) throw new Error('zombie_attack_bad_damage');
+    return { damage };
+}
+
+function encodeZombieDamageResult({ newHealth, dead }) {
+    return encodeString(JSON.stringify({ newHealth, dead: !!dead }), 256);
+}
+
 // ── InteractionRequest payload ────────────────────────────────────────────────
 // Byte layout:
 //   0      uint8   format version (1)
@@ -413,24 +468,35 @@ function encodeItemDropResult({ success, reason }) {
 //   2…     type-specific data
 //
 // For BUILD (interactionType=1):
-//   2–5    uint32  pieceTypeId
-//   6–9    float32 posX
-//   10–13  float32 posY
-//   14–17  float32 posZ
-//   18–21  float32 yaw
+//   2–5    float32 posX
+//   6–9    float32 posY
+//   10–13  float32 posZ
+//   14–17  float32 yaw
+//   18–19  uint16  itemIdLen
+//   20…    bytes   itemId utf8
+//
+// itemId-based, not a numeric pieceTypeId — matches ItemDropRequest's
+// already-proven shape. The real piece class is resolved client-side off
+// the same UJigsawItem_DataAsset_C the itemId already names (its
+// BuildActorClass field, research/04_ida_investigation_log.md Session 58),
+// the same way GroundItem already resolves PickupClass off itemId — a
+// numeric pieceTypeId had no DataAsset/class equivalent at all and was
+// always a dead end for rendering (see host-agent.js history).
 
 function decodeInteractionRequest(payload) {
     if (payload.length < 2) throw new Error('interaction_too_short');
     const interactionType = payload.readUInt8(1);
     if (interactionType === InteractionType.BUILD) {
-        if (payload.length < 22) throw new Error('build_request_too_short');
+        if (payload.length < 20) throw new Error('build_request_too_short');
+        const itemIdLen = payload.readUInt16BE(18);
+        if (payload.length < 20 + itemIdLen) throw new Error('build_request_truncated');
         return {
             interactionType,
-            pieceTypeId: payload.readUInt32BE(2),
-            posX:        payload.readFloatBE(6),
-            posY:        payload.readFloatBE(10),
-            posZ:        payload.readFloatBE(14),
-            yaw:         payload.readFloatBE(18),
+            posX:   payload.readFloatBE(2),
+            posY:   payload.readFloatBE(6),
+            posZ:   payload.readFloatBE(10),
+            yaw:    payload.readFloatBE(14),
+            itemId: payload.subarray(20, 20 + itemIdLen).toString('utf8'),
         };
     }
     return { interactionType };
@@ -452,8 +518,10 @@ module.exports = {
     InteractionType,
     decodeFrame, encodeFrame, encodeString, decodeString,
     encodeEntityDescriptor, encodeEntityState,
+    decodeEntityDescriptor, decodeEntityState,
     encodePlayerProgress, decodePlayerProgress,
     decodeItemDropRequest, decodeItemPickupRequest,
     encodeItemPickupResult, encodeItemDropResult,
     decodeInteractionRequest, encodeInteractionResult,
+    decodeZombieAttackRequest, encodeZombieDamageResult,
 };

@@ -6,6 +6,7 @@ namespace RC::Unreal {
     class AActor;
     class UWorld;
     class UClass;
+    class UObject;
 }
 
 namespace sdb {
@@ -27,12 +28,30 @@ void* resolve_montage_asset(const std::string& montageName);
 // plain-named table row). Output goes to debug_log only; fixes nothing.
 void dump_clothing_table(const wchar_t* tableName);
 
+// Resolves a live UClass* by name — pass the class's full package path
+// (e.g. "/Game/AI/Zombies/Roamer/BP_Zombie_Roamer.BP_Zombie_Roamer_C") for
+// the primary, no-live-instance-needed lookup; falls back to resolving off
+// a live instance of the class if that fails. See proxy_manager.cpp for the
+// full rationale — NOT YET LIVE-VERIFIED which (if either) path works.
+RC::Unreal::UClass* resolve_class_by_name(const std::wstring& fullPathOrShortName);
+
 // Spawns actorClass at the given world position/yaw via the same
 // BeginDeferredActorSpawnFromClass/FinishSpawning native-call pattern used
 // for proxy actors (UE4SS's own SpawnActor wrapper is broken on this build —
 // see proxy_manager.cpp). Returns nullptr on failure.
 RC::Unreal::AActor* spawn_actor_at(RC::Unreal::UWorld* world, RC::Unreal::UClass* actorClass,
                                     float x, float y, float z, float yaw);
+
+// 2026-08-15: generic single-component mesh-apply, factored out of
+// ProxyManager::sync_pawn_appearance's per-part logic so mod.cpp can reuse
+// the exact same resolve-by-short-name + Set call for LOCAL pawn repair
+// (HairMesh/BeardMesh/EyebrowsMesh/Mouth/Hands — none of which
+// UpdateBodyParts covers). `component` is the target UObject* directly
+// (caller already resolved it, e.g. via GetValuePtrByPropertyNameInChain);
+// `isSkeletal` selects SetSkinnedAssetAndUpdate(bReinitPose=false) vs
+// SetStaticMesh. Returns false if the named mesh can't be resolved or the
+// component has neither setter.
+bool reapply_named_mesh(RC::Unreal::UObject* component, const std::string& meshShortName, bool isSkeletal);
 
 // ProxyManager spawns and drives remote-player proxy actors in the UE5 world.
 //
@@ -59,6 +78,16 @@ public:
 
     // Per-frame update – world and local_pawn may be null (proxies are skipped).
     void tick(RC::Unreal::UWorld* world, RC::Unreal::AActor* local_pawn);
+
+    // 2026-08-15: forces player.appearance to be fully reapplied on the next
+    // tick, regardless of whether player.appliedAppearanceKey already
+    // matches — used when a proxy's hair/beard/eyebrows/mouth/body-part
+    // mesh is detected cleared for a reason unrelated to a real appearance
+    // change (see mod.cpp's component_drift repair path), so the existing,
+    // already-correct sync_pawn_appearance logic re-runs instead of
+    // silently no-op'ing on an unchanged key. No-op if proxyActor doesn't
+    // match any known player.
+    bool force_resync_appearance(RC::Unreal::AActor* proxyActor);
 
 private:
     void teleport_proxy(RC::Unreal::AActor* actor,
