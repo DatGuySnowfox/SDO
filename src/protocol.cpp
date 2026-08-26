@@ -599,7 +599,7 @@ std::vector<uint8_t> encode_weapon_attachments(const WeaponAttachments& a)
 {
     size_t total = 3; // tag + entryCount
     for (const auto& e : a.entries)
-        total += 1 + 1 + 2 + e.itemId.size();
+        total += 1 + 1 + 2 + e.itemId.size() + 1; // + active byte
 
     std::vector<uint8_t> buf(total);
     uint8_t* p = buf.data();
@@ -617,6 +617,7 @@ std::vector<uint8_t> encode_weapon_attachments(const WeaponAttachments& a)
             std::memcpy(buf.data() + off, e.itemId.data(), idLen);
             off += idLen;
         }
+        buf[off++] = e.active ? 1 : 0;
     }
 
     return buf;
@@ -639,6 +640,10 @@ std::optional<WeaponAttachments> decode_weapon_attachments(const uint8_t* p, siz
         if (off + idLen > n) return std::nullopt;
         e.itemId = std::string(reinterpret_cast<const char*>(p + off), idLen);
         off += idLen;
+        // Appended field — defaults to false if a peer sends the old,
+        // shorter encoding (shouldn't happen once both ends are on this
+        // build, but decoding shouldn't hard-fail over one missing byte).
+        e.active = (off < n) ? (p[off++] != 0) : false;
         a.entries.push_back(std::move(e));
     }
 
@@ -742,6 +747,32 @@ std::optional<PlayMontageData> decode_play_montage(const uint8_t* p, size_t n)
     m.montageName = std::string(reinterpret_cast<const char*>(p + 2), len);
     m.playRate    = u2f(r32(p + 2 + len));
     return m;
+}
+
+// ---------------------------------------------------------------------------
+// PlayerLights: [tag=1][flashlightOn:u8][nightVisionOn:u8]
+// ---------------------------------------------------------------------------
+
+std::vector<uint8_t> encode_player_lights(const PlayerLights& l)
+{
+    std::vector<uint8_t> buf(7);
+    buf[0] = 1;
+    buf[1] = l.flashlightOn ? 1 : 0;
+    buf[2] = l.nightVisionOn ? 1 : 0;
+    w32(buf.data() + 3, f2u(l.flashlightIntensity));
+    return buf;
+}
+
+std::optional<PlayerLights> decode_player_lights(const uint8_t* p, size_t n)
+{
+    if (n < 3 || p[0] != 1) return std::nullopt;
+    PlayerLights l;
+    l.flashlightOn  = p[1] != 0;
+    l.nightVisionOn = p[2] != 0;
+    // Appended field — defaults to 0.0 if a peer sends the old, shorter
+    // encoding (shouldn't happen once both ends are on this build).
+    l.flashlightIntensity = (n >= 7) ? u2f(r32(p + 3)) : 0.0f;
+    return l;
 }
 
 // ---------------------------------------------------------------------------

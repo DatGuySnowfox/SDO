@@ -51,6 +51,9 @@ enum class MsgType : uint16_t {
     WeaponAttachments     = 43,
     PawnAppearance        = 44,
     PlayMontage           = 45,
+    PlayerLights          = 46,
+    FirstJoin             = 47,
+    WeaponFired           = 48,
     Error                 = 255,
 };
 
@@ -234,6 +237,13 @@ struct WeaponAttachmentEntry {
     uint8_t     weaponSlotIndex = 0; // 11-14, which equipped weapon this attachment is on
     uint8_t     containerIndex  = 0; // FS_RepAttachmentInfo.AttachmentContainerIndex
     std::string itemId;              // attachment's own DA_ ItemID, e.g. "HolographicSight"
+    // 2026-08-17: only meaningful for toggleable attachments (tactical
+    // lights/lasers — ABP_AMainLocalAttachment_C::ActivateState, +0x2C8,
+    // shared by every attachment subclass); false/ignored for anything else
+    // (mags, scopes, suppressors have no on/off state). Appended after the
+    // original fields so old encodings without it still decode (defaults to
+    // false) — same forward-compat approach as PlayerProgress's trailer.
+    bool        active = false;
 };
 
 struct WeaponAttachments {
@@ -291,6 +301,29 @@ struct PawnAppearance {
 struct PlayMontageData {
     std::string montageName;
     float       playRate = 1.0f;
+};
+
+// ── PlayerLights payload (character-level toggles, not per-item equip
+// state — see Equipment's own slot 16 for whether a flashlight item is
+// equipped at all) — BP_PlayerCharacter.hpp: FlashlightOn? @0x13E5,
+// PlayerUsingNightVision? @0x1401, both plain bools read directly off the
+// pawn. Relayed client-authoritative same as Equipment/WeaponAttachments/
+// PawnAppearance. Wire format: [tag=1][flashlightOn:u8][nightVisionOn:u8]
+// [flashlightIntensity:f32BE]
+//
+// flashlightIntensity (2026-08-17, added after live-testing SetVisibility
+// alone did nothing): ground-truth bytecode decode of FlashlightToggle
+// (research/04_ida_investigation_log.md) found the real toggle mechanism is
+// ULightComponentBase::SetIntensity(float) — not SetVisibility at all, a
+// common UE pattern (visibility stays true, intensity zeroes instead, to
+// avoid recreating the render proxy). The ON-path intensity is a *computed*
+// value (per-equipped-item, not a bytecode constant), so it's read live off
+// the sender's own Flashlight component and carried across rather than
+// guessed/hardcoded — only meaningful when flashlightOn is true.
+struct PlayerLights {
+    bool  flashlightOn        = false;
+    bool  nightVisionOn       = false;
+    float flashlightIntensity = 0.0f;
 };
 
 // ── Encode / decode ───────────────────────────────────────────────────────────
@@ -351,6 +384,9 @@ std::optional<PawnAppearance>     decode_pawn_appearance(const uint8_t* p, size_
 
 std::vector<uint8_t>              encode_play_montage(const PlayMontageData& m);
 std::optional<PlayMontageData>    decode_play_montage(const uint8_t* p, size_t n);
+
+std::vector<uint8_t>              encode_player_lights(const PlayerLights& l);
+std::optional<PlayerLights>       decode_player_lights(const uint8_t* p, size_t n);
 
 uint64_t now_micros();
 

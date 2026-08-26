@@ -14,6 +14,8 @@
 const net    = require('node:net');
 const http   = require('node:http');
 const crypto = require('node:crypto');
+const fs     = require('node:fs');
+const path   = require('node:path');
 
 const cfg = require('./config');
 const db  = require('./db');
@@ -79,6 +81,88 @@ class Gateway {
 
         setInterval(() => this._pruneTickets(), 60_000).unref();
         setInterval(() => this._checkTimeouts(), 5_000).unref();
+
+        // Unconditional (unlike the directory heartbeat below, which is
+        // opt-in) — /v1/tickets' gatewayHost response needs this for ANY
+        // remote client, not just ones going through the directory. See
+        // this._publicHost's own comment for why it used to be wrong.
+        this._resolvePublicHost().catch(e =>
+            console.warn('SDO: public host resolution failed:', e.message));
+
+        if (cfg.directoryUrl) {
+            this._startDirectoryHeartbeat().catch(e =>
+                console.warn('SDO directory: setup failed:', e.message));
+        }
+    }
+
+    // 2026-08-26: previously /v1/tickets hardcoded gatewayHost to '127.0.0.1'
+    // whenever cfg.gatewayBind was '0.0.0.0' (the default) — correct only for
+    // a client on the SAME machine as the gateway. Any real remote player
+    // (the whole point of the directory/launcher work) would get told to
+    // connect to their own localhost. Reuses the same resolution the
+    // directory heartbeat already needed, just made unconditional instead of
+    // gated behind cfg.directoryUrl. Resolved once at startup, not
+    // re-checked — see the original comment on _startDirectoryHeartbeat for
+    // why that's an acceptable tradeoff (a home IP changing mid-session is
+    // rare, and a restart re-resolves).
+    async _resolvePublicHost() {
+        this._publicHost = cfg.publicHost;
+        if (this._publicHost) return;
+        try {
+            const res = await fetch('https://api.ipify.org?format=json');
+            const body = await res.json();
+            this._publicHost = body.ip;
+        } catch (e) {
+            console.warn('SDO: could not auto-detect public IP, set SDB_PUBLIC_HOST manually:', e.message);
+        }
+    }
+
+    // ── Server-directory discovery (directory-worker/) ─────────────────────────
+    // Opt-in (cfg.directoryUrl unset ⇒ this whole block never runs). Persists a
+    // random id once so restarts update the same directory entry instead of
+    // creating a duplicate that lingers until its old TTL expires.
+    _loadOrCreateServerId() {
+        const idPath = path.join(__dirname, '..', 'directory-server-id.txt');
+        try {
+            const existing = fs.readFileSync(idPath, 'utf8').trim();
+            if (existing) return existing;
+        } catch { /* first run — fall through and create one */ }
+        const id = crypto.randomUUID();
+        fs.writeFileSync(idPath, id, 'utf8');
+        return id;
+    }
+
+    async _startDirectoryHeartbeat() {
+        this._directoryServerId = this._loadOrCreateServerId();
+
+        // Wait for _resolvePublicHost (fired in the constructor, may still
+        // be in flight) rather than re-resolving independently.
+        for (let i = 0; i < 50 && this._publicHost === undefined; i++)
+            await new Promise(r => setTimeout(r, 100));
+        if (!this._publicHost) return; // no usable host — don't heartbeat in with garbage
+
+        const send = async () => {
+            try {
+                const res = await fetch(`${cfg.directoryUrl}/v1/heartbeat`, {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json', 'x-directory-key': cfg.directoryKey },
+                    body: JSON.stringify({
+                        serverId:    this._directoryServerId,
+                        name:        cfg.serverName,
+                        host:        this._publicHost,
+                        port:        cfg.gatewayPort,
+                        playerCount: this._joined.size,
+                        maxPlayers:  cfg.maxPlayers,
+                    }),
+                });
+                if (!res.ok) console.warn('SDO directory: heartbeat rejected,', res.status, await res.text());
+            } catch (e) {
+                console.warn('SDO directory: heartbeat failed:', e.message);
+            }
+        };
+
+        send();
+        setInterval(send, cfg.directoryHeartbeatMs).unref();
     }
 
     listen(onReady) {
@@ -198,7 +282,11 @@ class Gateway {
 
             client.write(encodeFrame({ ...f, connectionId: client.id }));
 
-            // Restore saved player progress (inventory, stats, position) if available.
+            // Restore saved player progress (inventory, stats, position) if
+            // available — no row at all means this playerId has never saved
+            // before, i.e. a genuine first join, so tell the client to run
+            // its new-character flow (spawn at the barber for customization,
+            // then a random "usual" spawn point) instead of restoring.
             const savedProgress = db.getProgress(String(client.playerId));
             if (savedProgress) {
                 client.write(encodeFrame({
@@ -209,6 +297,16 @@ class Gateway {
                     playerId:     client.playerId,
                     entityId:     client.entityId,
                     payload:      savedProgress,
+                }));
+            } else {
+                client.write(encodeFrame({
+                    type:         MsgType.FirstJoin,
+                    connectionId: client.id,
+                    sessionId:    client.sessionId,
+                    worldId:      client.worldId,
+                    playerId:     client.playerId,
+                    entityId:     client.entityId,
+                    payload:      Buffer.alloc(0),
                 }));
             }
 
@@ -239,9 +337,8 @@ class Gateway {
             break;
         }
 
-        // Sent to a specific client
-        case MsgType.Death:
-        case MsgType.Respawn:
+        // Sent to a specific client only — the subject's own confirmation,
+        // nobody else needs it.
         case MsgType.PlayerDamage:
         case MsgType.InteractionResult:
         case MsgType.ItemPickupResult:
@@ -250,6 +347,28 @@ class Gateway {
         case MsgType.PlayerProgressRestore: {
             const client = this._clients.get(f.connectionId);
             if (client) client.write(encodeFrame(f));
+            break;
+        }
+
+        // 2026-08-16: Death/Respawn need BOTH — the dying/respawning player's
+        // own confirmation (unchanged, same as the group above) AND a
+        // broadcast to every other client, so their proxy of this player
+        // actually reflects the death/respawn. Previously only did the
+        // former — other clients had no way to ever learn a remote player
+        // died, so RemotePlayer::dead (which ProxyManager::tick() already
+        // gates movement/rotation writes on) never got set for anyone but
+        // yourself. host-agent.js's DeathRequest/RespawnRequest handlers
+        // already stamp f.playerId with the dying/respawning player's own
+        // id, so that's the right exclude-id for the broadcast half — this
+        // player already gets their copy via the direct send just below.
+        case MsgType.Death:
+        case MsgType.Respawn: {
+            const client = this._clients.get(f.connectionId);
+            const buf = encodeFrame(f);
+            if (client) client.write(buf);
+            const others = [...this._joined.keys()].filter(pid => pid !== f.playerId);
+            console.log(`[gw] ${f.type === MsgType.Death ? 'Death' : 'Respawn'} from host  playerId=${f.playerId}  directClient=${client ? client.id : '(none)'}  broadcastTo=[${others.join(',')}]`);
+            this._broadcast(f.playerId, buf);
             break;
         }
 
@@ -476,6 +595,46 @@ class Gateway {
             break;
         }
 
+        // Same client-authoritative relay as Equipment/WeaponAttachments/
+        // PawnAppearance/PlayMontage — flashlight/NVG toggle state, purely
+        // cosmetic, no server-side state to validate. 2026-08-17: added
+        // alongside the new PlayerLights frame — this switch has no default
+        // case, so a MsgType this server doesn't know about is silently
+        // dropped rather than erroring, which is exactly what happened the
+        // first time this frame type was added client-side without also
+        // adding it here.
+        case MsgType.PlayerLights: {
+            const out = encodeFrame({
+                ...f,
+                connectionId: conn.id,
+                playerId:     conn.playerId,
+                entityId:     conn.entityId,
+            });
+            this._broadcast(conn.playerId, out);
+            if (this._host) this._host.write(out);
+            break;
+        }
+
+        // Same client-authoritative relay as PlayMontage/PlayerLights —
+        // header-only, one-shot "I fired my weapon" event, purely cosmetic
+        // (muzzle flash + recoil replay on proxies), no server-side state to
+        // validate. Deliberately not folded into PlayMontage itself: firing
+        // doesn't play a UAnimMontage at all (confirmed via a live trace —
+        // it drives BP_FirearmPickup_C's own MuzzleEffects()/StartRecoil()
+        // directly), so check_local_montage_change's GetCurrentMontage()
+        // poll structurally can't see it.
+        case MsgType.WeaponFired: {
+            const out = encodeFrame({
+                ...f,
+                connectionId: conn.id,
+                playerId:     conn.playerId,
+                entityId:     conn.entityId,
+            });
+            this._broadcast(conn.playerId, out);
+            if (this._host) this._host.write(out);
+            break;
+        }
+
         // Forward to host-agent for authoritative processing.
         // ItemPickupRequest is the odd one out: entityId here means "the
         // world entity being picked up" (set by the client to a value it
@@ -509,6 +668,8 @@ class Gateway {
         case MsgType.RespawnRequest:
         case MsgType.InteractionRequest:
         case MsgType.ItemDropRequest:
+            if (f.type === MsgType.DeathRequest || f.type === MsgType.RespawnRequest)
+                console.log(`[gw] ${f.type === MsgType.DeathRequest ? 'DeathRequest' : 'RespawnRequest'} from client ${conn.id} pid=${conn.playerId}  hasHost=${!!this._host}`);
             if (this._host) this._host.write(encodeFrame({
                 ...f,
                 connectionId: conn.id,
@@ -668,8 +829,19 @@ class Gateway {
     // ── HTTP ticket API ───────────────────────────────────────────────────────
 
     _onHttp(req, res) {
+        // CORS: lets a browser (directory-worker's status page, or any other
+        // web-based launcher) call /v1/tickets directly via fetch() instead
+        // of needing a local script — see gateway.js's directory-heartbeat
+        // comment for the matching client-side half of this feature.
+        const corsHeaders = {
+            'Access-Control-Allow-Origin':  '*',
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'content-type, authorization',
+        };
+        if (req.method === 'OPTIONS') { res.writeHead(204, corsHeaders); res.end(); return; }
+
         const json = (status, body) => {
-            res.writeHead(status, { 'Content-Type': 'application/json' });
+            res.writeHead(status, { 'Content-Type': 'application/json', ...corsHeaders });
             res.end(JSON.stringify(body));
         };
 
@@ -724,7 +896,12 @@ class Gateway {
                         protocolVersion: 3,
                     }, cfg.ticketSecret);
 
-                    const host = cfg.gatewayBind === '0.0.0.0' ? '127.0.0.1' : cfg.gatewayBind;
+                    // See _resolvePublicHost's comment — falls back to the
+                    // configured bind address only in the narrow window
+                    // before startup resolution completes (or if it failed
+                    // entirely), not as the normal-case behavior.
+                    const host = this._publicHost ||
+                        (cfg.gatewayBind === '0.0.0.0' ? '127.0.0.1' : cfg.gatewayBind);
                     json(200, { ticket, gatewayHost: host, gatewayPort: cfg.gatewayPort, worldId: cfg.worldIdStr });
                 } catch (e) {
                     json(400, { error: e.message });

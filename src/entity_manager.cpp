@@ -263,6 +263,24 @@ static AActor* find_and_claim_native_pickup(UClass* pickupClass, const WorldEnti
         }
         if (claimed) continue;
 
+        // 2026-08-16: still-equipped items are live instances of this exact
+        // Pickup class too (confirmed live — an equipped BenelliM4/
+        // BattleReadyGlock resolve_ptr's to the same "BP_*Pickup_C" class as
+        // a genuine ground drop), so an unqualified class+distance match can
+        // land on the local player's own currently-worn item instead of a
+        // real drop — trivially within the 500-unit radius since it's
+        // physically on the player. A real dropped/unowned pickup always has
+        // AttachParent == null (RootComponent @0x1A0, AttachParent @0xB0 on
+        // USceneComponent — both offsets already proven throughout this
+        // codebase, e.g. mod.cpp's equip_restore_retry mismatch check); an
+        // equipped one never does. Cheap, read-only, no behavior change for
+        // the real-drop case this function exists for.
+        const uintptr_t rootComp = *reinterpret_cast<const uintptr_t*>(
+            reinterpret_cast<uintptr_t>(actor) + 0x1A0);
+        const uintptr_t attachParent = rootComp
+            ? *reinterpret_cast<const uintptr_t*>(rootComp + 0xB0) : 0;
+        if (attachParent) continue;
+
         const FVector loc = actor->K2_GetActorLocation();
         const float dx = static_cast<float>(loc.X) - entity.x;
         const float dy = static_cast<float>(loc.Y) - entity.y;
@@ -619,10 +637,21 @@ AActor* EntityManager::spawn_entity_actor(UWorld* world, const WorldEntity& enti
     return actor;
 }
 
+static void do_destroy_entity_actor(void* ctx)
+{
+    static_cast<AActor*>(ctx)->K2_DestroyActor();
+}
+
 void EntityManager::destroy_entity_actor(WorldEntity& entity)
 {
     if (!entity.actor) return;
-    static_cast<AActor*>(entity.actor)->K2_DestroyActor();
+    // 2026-08-16 audit (same stale-pointer risk class as the confirmed
+    // do_game_tick crash — see mod.cpp's check_watch_activeslot_trigger
+    // fix): a server-driven EntityDespawn can arrive in the window between
+    // a world change and reset_stale_actors_on_world_change() clearing
+    // entity.actor, same as any other actor pointer this project tracks.
+    if (!seh_invoke(do_destroy_entity_actor, entity.actor))
+        debug_log("destroy_entity_actor: K2_DestroyActor crashed on a stale pointer, caught via SEH");
     entity.actor = nullptr;
 }
 

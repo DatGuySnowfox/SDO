@@ -1,0 +1,5 @@
+node_modules
+*.db
+*.log
+settings.json
+directory-server-id.txt

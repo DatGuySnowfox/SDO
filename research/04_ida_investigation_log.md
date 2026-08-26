@@ -9570,3 +9570,696 @@ Re-enabled the grace period exactly as it originally existed. Deployed to both m
 should be tested in isolation from any further new changes — if freezing stops, tonight's entire
 freeze-chasing thread resolves to "a real fix existed, was accidentally turned off, forgot to turn
 back on" rather than any of the theories entertained along the way.
+
+---
+
+**⚠️ DATA LOSS NOTICE (2026-08-16, ~15:44)**: this file was accidentally overwritten with a single
+placeholder line (used `Write` instead of `Edit`) and had to be restored via `git restore` to the last
+commit (`3e51ef0`, 2026-08-15 13:11:49) — everything written between that commit and the overwrite was
+uncommitted and is genuinely gone except for what could be reconstructed from this conversation's own
+visible history (things this session itself had just read or written). What follows below this notice
+is that reconstruction: verbatim where this session had the exact text in hand, otherwise a clearly
+labeled gap. Anything from earlier sessions/segments that isn't reproduced here (the full "Session 60"
+death-sync writeup, the original DeathState investigation entries, the CurrentActor-theory correction
+entry, the OnExecuteInteract-real-body discovery entry, and whatever preceded the partial section
+recovered just below) is lost for real and would need to be re-derived from scratch if needed again —
+none of the underlying CODE was affected, only this narrative log.
+
+**Partial recovery** (verbatim, from this session's own earlier `Read` of the pre-overwrite file — the
+paragraph starts mid-list because that's exactly where this session's own read window began; whatever
+came before "re-attach/re-parent validation" in the original is NOT recovered):
+
+> re-attach/re-parent validation, but the specific class/function pointers involved are unresolved
+> (would need a fresh live capture + batch resolve to name them). Doesn't touch offsets 0xE0/0xE8
+> directly as far as the decode shows.
+> - **`SetCanInteract(bool CanInteract, bool EnablePhysics, bool& Result)`** — 576 bytes. Confirmed:
+>   writes both bool params straight into two instance variables (near-certainly `CanBePicked`/
+>   `EnablePhysics`, the two properties with matching `OnRep_` callbacks per the header), then manually
+>   invokes each one's own OnRep callback right after — since this component isn't really being
+>   replicated to anyone, nothing would fire those OnReps on its own, so the Blueprint calls them
+>   itself. This is almost certainly what `JigSetCanInteract` (called on `BP_SkeletalMeshPickup_C`,
+>   which this project already calls via `reassert_no_interact`) ultimately calls down into. Behaves
+>   as expected — not itself a bug source, though it does confirm `EnablePhysics`/`CanBePicked` really
+>   are the two properties this project has been fighting to keep pinned false.
+> - **`CheckMismatch()`** — 1601 bytes, a validation/diagnostic loop over a container array, comparing
+>   configs and logging `"Container config mismatch for ... in pickup: ... Check data asset container
+>   dimensions and Pickup container settings!"` on mismatch. Reads like a data-integrity check, not a
+>   physics/attach trigger. Not the culprit as far as the decode shows.
+> - **`OnRep_CanBePicked?()`** — 310 bytes, **`OnRep_EnablePhysics?()`** — literally 3 bytes (an
+>   effectively-empty stub, likely just `return;`). Neither dump has been traced in detail yet.
+> - **`CanInteract?()`** — 22 bytes, trivially small (a bare getter, presumably `return CanBePicked;`
+>   or similar) — not decoded further, too small to matter.
+>
+> **Honest status**: none of these six confirms the actual trigger for physics/attach reset. The most
+> promising unexplored lead is `OnExecuteInteract`'s real body at Ubergraph entry 2365 — worth pursuing
+> next by dumping the full `ExecuteUbergraph_BP_JigPickupComponent` and disassembling from that offset,
+> the same technique already used successfully for `Svr_RequestRespawnSuicide`/`Client_SUICIDE` earlier
+> tonight. Also untried: `BP_WeaponsPickupComponent_C` (a distinct class from `BP_JigPickupComponent_C`,
+> already dumped once as `ExecuteUbergraph_BP_WeaponsPickupComponent.bin` — weapons may go through a
+> specialized subclass with its own logic not covered by anything decoded above).
+
+### Session continues: live hang, then live crash, from two "proactive unconditional repair" changes — both reverted/kill-switched
+
+Same night, later: chased the "pants/shirt/mag/laser/shotgun freeze" reports (items/clothing visibly
+stuck or detached-with-physics on screen, while every existing DETACHED/DRIFTED/component_drift
+diagnostic showed nothing wrong) to two real, decoded mechanisms:
+1. Body/clothing meshes are leader-pose FOLLOWERS (`bUseBoundsFromLeaderPoseComponent: true` per the
+   FModel export) whose bone-mapping can go stale independent of the mesh asset itself staying valid —
+   confirmed live: `local:Clothing_Legs` got exactly one "initial state" log line and nothing else for
+   20+ minutes, while `local:Legs` (reactive-path-eligible since clothing keeps its own asset check
+   reading null) got refreshed ~63 times in the same window.
+2. Weapons/attachments are rigid socket-attached actors (confirmed no leader-pose property on any
+   pickup class header) where `AttachChildren`'s count never changed (heartbeat steady at 16) and the
+   socket-distance check read clean, yet the item visibly rendered elsewhere — consistent with a
+   render-thread transform-refresh notification not firing for some re-attach path, invisible to any
+   check that (like ours) only reads the game-thread-side transform.
+
+Both fixes shared the same shape: make a previously-reactive-only repair call (`SetLeaderPoseComponent`,
+`K2_AttachToComponent`) fire **unconditionally on a timer** instead of only when a discrepancy was
+detected, since a stale-but-self-consistent cache produces no detectable discrepancy in the first place.
+**Both caused real live failures on the very next test, in different ways**: at 1/s/component (up to
+~20 components per character), both PC1 and PC2 hung simultaneously (debug.log stalled 90-120s+ on
+both machines, matching this project's known GameThread-parked-in-`WaitUntilTasksComplete` deadlock
+signature). Widened the throttle 1s→20s as a first response; the very next test instead **crashed**
+(`0xe06d7363` — unhandled C++ exception, not an access violation — stack running entirely through this
+mod's own module, reached via `user32`→the game's own message dispatch, i.e. through the new
+WndProc-subclass tick path, while the player was idle; no minidump was generated for it). Two different
+failure modes from the same addition across two consecutive live tests is treated as strong enough
+evidence that the *mechanism* — not just its frequency — is unsafe in some circumstance not yet
+identified, most likely still this project's own documented `SetSkinnedAssetAndUpdate`/attach-vs-
+Parallel-Anim-Update-worker-thread lock-contention hazard, just triggered far more often by an
+unconditional timer than by the original occasional reactive path.
+
+**Current state**: both proactive additions are kill-switched back to `false` (reactive-only behavior,
+the same shape that was stable all session before tonight). The `Clothing_Legs`-never-revisited gap and
+the weapon-render-desync gap are both real, known, and currently unfixed again — deliberately, until
+this can be root-caused against an actual symbolized dump rather than live-guessed a third time. Also
+added a defensive `seh_invoke` wrap around the WndProc path's `do_game_tick(true)` call itself (it was
+the only clean-context trigger site calling it unguarded) as cheap belt-and-suspenders, independent of
+whether it would have caught this specific exception.
+
+### `ExecuteUbergraph_BP_JigPickupComponent` — full fresh decode + name resolution
+
+User asked to "start byte decoding EVERYTHING" while away for a few hours. Picked up the exact thread
+left open above. Game was still live on PC1, so did this properly: re-dumped
+`BP_JigPickupComponent_C::ExecuteUbergraph_BP_JigPickupComponent` fresh (`bytecode_dump.flag`) rather
+than reusing the old `.bin` sitting in `%APPDATA%\SurrounDeadBridge\` from earlier tonight — **confirmed
+live why this matters**: disassembling the OLD dump and resolving its `ci=` values against the CURRENT
+process produced a mix of clean names and garbled CJK-looking noise with recognizable English fragments
+bleeding across different CIs' output (e.g. `ci=1841846` and `ci=1841857` returned overlapping tails of
+the same giant run-on string). First suspected a disassembler desync bug; ruled that out by re-dumping
+fresh and diffing against the old decode — the two dumps are byte-identical in length (3406 bytes) but
+the embedded `ci=` values differ throughout (e.g. the very first `EX_LocalVirtualFunction`'s target went
+from `ci=1842750` to `ci=1845901` for what's structurally the same call) — **directly confirms FName
+ComparisonIndex values are assigned dynamically per-process at runtime, not baked into cooked bytecode
+as stable constants**, even in a Shipping build. Resolving the fresh dump's CIs against the same live
+process it was captured from resolved all 22 previously-unresolved names cleanly, no garbage. Lesson
+banked for all future decode work this session: always re-dump immediately before resolving, never trust
+an old `.bin`'s CIs against a differently-aged process.
+
+Full resolved name table for this Ubergraph's `EX_VirtualFunction`/`EX_LocalVirtualFunction`/`EX_NameConst`
+targets (fresh dump, this process instance only — re-resolve after any relaunch):
+`92404`=`SetSimulatePhysics`, `93336`=`K2_DestroyActor`, `1729580`=`Jig.InteractOptions.Option1`,
+`1790698`=`Jig_SetAttachmentActiveState`, `1797933`=`GetCapacity`, `1844012`=`AddJigWidgetToContent`,
+`1844651`=`CanLootPickup?`, `1844671`=`CheckMismatch`, `1844793`=`ExecuteUbergraph_BP_JigPickupComponent`
+(self-reentry), `1844888`=`FindLocalAttachmentByUID`, `1844949`=`GetMainSceneComp`,
+`1845044`=`IsInventoryVisible?`, `1845055`=`IsValidPickup`, `1845494`=`OnInteractActorOverDistance`,
+`1845509`=`OnPickupInteractExecuted`, `1845650`=`ProcessStartingItems`, `1845678`=`RepCapacity`,
+`1845711`=`RequestServerData`, `1845721`=`SERVER_UpdateAttachmentState`, `1845768`=`SetCount`,
+`1845773`=`SetInteractDistance`, `1845796`=`SetupInventoryWidget`, `1845868`=`UpdateAttachments`,
+`1845878`=`UpdateAttachmentStateByUID`, `1845901`=`ValidateAttachedActor`.
+
+**Genuinely new and directly relevant to tonight's open bug**: `OnInteractActorOverDistance`,
+`SERVER_UpdateAttachmentState`, `UpdateAttachments`, `UpdateAttachmentStateByUID`,
+`Jig_SetAttachmentActiveState`, `FindLocalAttachmentByUID` — none of these were previously known to
+exist on this component at all. `OnInteractActorOverDistance` in particular is a strong candidate for
+what actually runs when `CheckDistanceFromActor`'s 300-unit auto-release check trips (previously only
+traced as far as "starts a 0.1s repeating timer calling `CheckDistanceFromActor`" — never found what
+that timer's own over-distance branch actually calls).
+
+`OnInteractActorOverDistance` turned out NOT to be a standalone `UFunction` (`GetFunctionByNameInChain`
+returned "not found" — it's an internal graph-local label only reachable via `EX_LocalVirtualFunction`
+dispatch inside the Ubergraph, not separately reflectable). Deferred; came back to the two names that
+WERE standalone functions and turned out to matter far more.
+
+### `UpdateAttachments()` + `ProcessAttachments()` — the real native attachment pipeline, fully decoded
+
+**`UpdateAttachments()`** (486 bytes, self-contained, not a trampoline) — clean, fully understood:
+validates via `IsValidPickup` + two `BooleanAND`s against two instance-var gates, and if all pass:
+calls `GetListOfAttachments` to populate a local struct/array, assembles it into an instance-var cache
+(`RepAttachments`-backing struct), calls `MarkPropertyDirtyFromRepIndex(Self, 5, "RepAttachments")`
+(`/Script/Engine.NetPushModelHelpers`, confirms `RepAttachments` is push-model replicated at rep index
+5), **manually invokes its own `OnRep_RepAttachments()`** (same "not really replicated to self, so call
+the OnRep by hand" pattern this project has seen elsewhere on this exact component), then calls
+`ProcessAttachments()`.
+
+**`ProcessAttachments()`** (4305 bytes) — the real spawn/attach/cleanup logic. High-confidence structure
+(exact branch wiring around the reverse-scan section not fully pinned down byte-for-byte, but the
+overall shape and every call target is confirmed via live `resolve_ptr`/`resolve_fname`):
+- Loops over the `RepAttachments`-backed array (`InstanceVariable 0x1244b4280`'s array member). For each
+  entry, calls `self.FindLocalAttachmentByUID(entry.UID, &outActor)` to check whether an attachment
+  actor already exists for that entry.
+  - **Not found (new attachment)**: spawns via `GameplayStatics::BeginDeferredActorSpawnFromClass` +
+    `FinishSpawningActor` (the identical two-call pattern this project's own `spawn_proxy` already
+    uses), computes a transform via `GetSocketTransform` (`ci=44895`) + `KismetMathLibrary::
+    MakeTransform`, calls `Actor::K2_AttachToComponent` (`SnapToTarget`/`SnapToTarget`/`KeepWorld`,
+    matching this project's own re-snap parameter choice — confirms that part was never the issue),
+    `SetActorScale3D`, then casts the new actor through an interface and calls
+    `Jig_GetAttachmentInfo`/`Jig_GetPrimitiveComponent`/`Jig_SetAttachmentInfo` on it (component-level
+    bookkeeping, not yet decoded further), and adds it to a tracking array
+    (`InstanceVariable 0x1244b4380`) via `Array_AddUnique`.
+  - **Found (already exists)**: a separate branch (~offset `0x0c46`) that does NOT re-spawn — instead
+    re-resolves the socket/primitive component and calls the same `Jig_SetAttachmentInfo`-family
+    interface calls again, i.e. an "update existing attachment's info without respawning" path.
+  - A second, reverse pass over the tracking array (`InstanceVariable 0x1244b4380`) checks each tracked
+    actor against `Array_Contains` on a current-UID list; entries no longer present get
+    `K2_DestroyActor`'d and `Array_Remove`'d from the tracking array — the stale-attachment cleanup path.
+  - **`CallMulticastDelegate` on `InstanceVariable 0x1244b6200` (`OnAttachmentsUpdated`) fires as an
+    integral part of this same flow** (`func=0x132675fe0` resolved to
+    `BP_JigPickupComponent_C:OnAttachmentsUpdated__DelegateSignature`), not bolted on afterward by some
+    other system.
+
+**Why this matters for tonight's mag/laser/shotgun render-desync bug**: this project's own repair code
+(`do_attach_health_scan`'s OFF-SOCKET check) reacts to a detected problem by calling `K2_AttachToComponent`
+directly on the drifted child — which matches ProcessAttachments' OWN attach call parameters exactly, but
+skips everything around it: no `FindLocalAttachmentByUID` re-check, no `Jig_SetAttachmentInfo`-family
+interface bookkeeping, and critically **no `OnAttachmentsUpdated` broadcast**. If anything else in the
+game (UI, or whatever the render-thread-transform-refresh path actually depends on) is wired to that
+delegate specifically — plausible, since it's a real, named, purpose-built multicast delegate on this
+exact component — rather than reacting generically to any `K2_AttachToComponent` call, a bare direct
+re-attach would never trigger it, fully explaining why our own re-snap reads clean but the screen stays
+wrong. **Not yet tested** (the unconditional-re-snap experiment was kill-switched off after the hang/
+crash before this was found) — the next, better-grounded experiment is calling `UpdateAttachments()`
+itself (or at minimum broadcasting `OnAttachmentsUpdated`) instead of a bare `K2_AttachToComponent`, once
+this can be tested without repeating tonight's live-crash cycle. `UpdateAttachmentStateByUID`,
+`SERVER_UpdateAttachmentState`, and `Jig_SetAttachmentActiveState` (found but not yet dumped) are likely
+the actual RPC/authority-aware entry points a real fix should route through rather than calling
+`UpdateAttachments` directly (component replication/authority not yet confirmed either way).
+
+### `OnAttachmentsUpdated` — the "who's listening" question, answered live
+
+Added a new read-only diagnostic (`check_dump_delegate_trigger` in `mod.cpp`, flag file
+`dump_delegate.flag`, two lines: class name + delegate property name) after establishing this project
+had already answered the exact same question for a DIFFERENT delegate once before
+(`OnEquipmentUpdated`, found `count=0` via a live IDA-debugger read earlier this session) but that
+capability isn't reachable through what's connected right now (checked: the connected `ida` MCP server
+only exposes static IDB resources with no UE types modeled; its HTTP bridge on :13337 only implements a
+`ping` RPC; IDAPython is in-process-only per Hex-Rays' own docs). Reused
+`GetValuePtrByPropertyNameInChain` (already used everywhere in this codebase) instead of a raw offset —
+it returns a pointer straight to the delegate's own storage, which per the `OnEquipmentUpdated`
+precedent IS the `FMulticastScriptDelegate`'s `TArray<FScriptDelegate>` directly (data ptr/count/max,
+standard TArray layout).
+
+**Result, live, on `BP_JigPickupComponent_C`**: `InvocationList data_ptr=0x12a3c1e80 count=1 max=4` —
+**one real subscriber**, unlike `OnEquipmentUpdated`'s zero. Read the actual `FScriptDelegate` entry via
+`mem_dump.flag` (`abs 12a3c1e80 2`): first qword is the bound object's `TWeakObjectPtr`
+(ObjectIndex=175432, SerialNumber=66964 — a `GUObjectArray` index, not directly resolvable to a pointer
+without walking that array, which isn't set up yet), second qword is the bound function's `FName`
+(ComparisonIndex=1823023). Resolved that CI live: **`"OnAttachmentsUpdated"`** — the bound function has
+the SAME NAME as the delegate itself, the standard UE/Blueprint signature of "Bind Event to
+OnAttachmentsUpdated" auto-generating a matching Custom Event node. Strongly suggests a self-contained
+handler (very plausibly on this same component, or its owning actor) reacting to its own broadcast —
+real logic beyond attach bookkeeping, not a dead/unbound delegate.
+
+**Verdict on the render-desync fix candidates**: this makes the `OnAttachmentsUpdated`-broadcast path a
+real, live-confirmed lead, not just a theory — there IS something on the other end that would run if
+this project's repair code broadcast it instead of (or alongside) the bare `K2_AttachToComponent` it
+calls today. Doesn't resolve which of the two candidates (this, or `ValidateAttachedActor`'s
+transform-snap) actually fixes the visual bug — that still needs a live test, deliberately not attempted
+yet given tonight's hang/crash history — but both are now equally well-grounded rather than one being
+speculative. Next research step if pursued further: resolve the `GUObjectArray` index to find out
+exactly what object/class owns that Custom Event (would confirm self-bind vs. some other system
+entirely), though the practical fix experiment doesn't strictly need that answer first.
+
+**Follow-up, same night**: tried finding the bind statically instead of walking `GUObjectArray` — the
+disassembler already recognizes `EX_BindDelegate`/`EX_AddMulticastDelegate`/`EX_InstanceDelegate`
+(opcodes `0x61`/`0x5C`/`0x4B`), so searched for those directly. `BP_JigPickupComponent_C`'s own
+Ubergraph (fully decoded): zero matches — it doesn't bind anything to its own delegate.
+`BP_JigMultiplayer_C`'s Ubergraph (24576 bytes, fully decoded): 6 binds, resolved every one —
+`Drop_ItemOverItem_Event_0`, `EventOnJigItemMouseButtonDown`, `ItemDropRequest_Event_0`,
+`EventOnInventoryAction`, `OnItemSplitRequest_Event`, `OnItemStackRequest_Event` — all real inventory
+UI/drag-drop events, none attachment-related. `BP_PlayerCharacter_C`'s Ubergraph (205862 bytes — by far
+the largest decode tonight, still disassembled in well under a second): hundreds of `EX_BindDelegate`
+calls with suspiciously regular CI spacing (mostly exactly +23 or +24 between consecutive ones) —
+consistent with `bp_catalog_player_core.md`'s own already-documented finding that this class has ~230
+auto-generated per-node stubs (montage/timeline notify callbacks, `OnBlendOut_<hash>`-style), not
+hand-authored bindings. Did not exhaustively resolve all of them — the volume makes that impractical for
+a question that isn't blocking the actual fix experiment. Parked here; if picked back up, the efficient
+next step would be filtering for BindDelegate calls whose nearby `AddMulticastDelegate` context resolves
+to a `BP_JigPickupComponent_C`-typed object reference, rather than resolving CIs one at a time.
+
+### `ValidateAttachedActor` fix implemented — built, not yet live-tested
+
+Replaced the OFF-SOCKET repair action in `do_attach_health_scan` (`mod.cpp`'s absolute-check block) —
+previously a bare `K2_AttachToComponent` re-parent — with the real game's own pattern: `GetOwner()` on
+the drifted child, `GetSocketTransform(SocketName, RTS_World)` on `ctx->mesh` (the confirmed parent —
+skipped `ValidateAttachedActor`'s own `GetAttachParentActor`/`Character`-cast re-derivation, since this
+scan already knows both from its own calling context), then `K2_SetActorTransform(transform, bSweep=
+false, hit, bTeleport=true)` on the item's owning actor. Verified every parameter shape against the
+actual decoded bytecode directly (`decoded_ValidateAttachedActor.txt`) rather than the earlier summary,
+byte for byte — matches exactly.
+
+Kept deliberately **reactive only** — still gated on `offSocket` at the same throttle as before, no
+unconditional/timer-driven variant this time, per the lesson from tonight's hang and crash (both came
+from making a previously-occasional repair fire unconditionally, not from the repair action itself).
+Builds clean, hash `b83ac44e...`. Not yet deployed or live-tested — next real step whenever picked back
+up.
+
+(Full per-function detail for the attachment subsystem now lives in `research/bp_catalog_jigpickup_bytecode.md`
+— a flat lookup table, kept in sync with this log's narrative going forward rather than duplicated here.)
+
+### `Client_SUICIDE` / `Svr_RequestRespawnSuicide` — finally decoded, the deferred Suicide follow-up
+
+Both are 18-byte trampolines into `BP_PlayerController_C::ExecuteUbergraph_BP_PlayerController` (9978
+bytes, fresh-dumped and disassembled — decoder hit an unhandled opcode `0xb0` at byte 8628, past both
+target entry points, so both are fully readable regardless).
+
+**`Client_SUICIDE`** → Ubergraph offset `0x1e64` → `0x1dec`: calls
+`GameFunctionLibrary.GetLevellingComponent(Self)` then `.XPDeath()` on the result (client-side XP
+penalty for suicide), then `WidgetLayoutLibrary.RemoveAllWidgets(Self)` (clears UI), then continues into
+shared tail logic at `0x1b48` (not yet traced — likely the same death-screen/UI path `Client_Died` also
+uses, not decoded this pass).
+
+**`Svr_RequestRespawnSuicide`** → Ubergraph offset `0x18b7` → `0x17b7`: calls
+`GameFunctionLibrary.GetGameInstance(Self).Survival_SuicideRespawn()` — a DEDICATED suicide-specific
+respawn entry point on the GameInstance, distinct from the `Survival_Respawn(bool)` also visible nearby
+in the same Ubergraph region (called with `false`/`true` in neighboring blocks, likely the normal-death
+and some other respawn-reason variants sharing this same tail code region via Kismet's common
+compiled-tail-sharing). **This is exactly where the earlier-documented "0.3-0.4s death→respawn cycle
+with a brand-new pawn instance, causing an equipment-strip race" timing issue lives** — inside
+`Survival_SuicideRespawn()` itself, which is on the GameInstance-derived class (name not yet confirmed;
+`GetGameInstance` resolves through `GameFunctionLibrary`'s CDO, the actual runtime class wasn't
+captured this pass), not on `BP_PlayerController_C` — a different class than dumped so far, needs its
+own `FindFirstOf`/CDO lookup to reach. Not pursued further this pass; logged as the concrete next step
+whenever the Suicide bug gets picked back up (still deferred, not fixed).
+
+### `SD_GameInstance_C::Survival_SuicideRespawn()` — fully decoded, root cause of the equipment-strip race found
+
+Found `SD_GameInstance_C` via `research/CXXHeaderDump/SD_GameInstance.hpp` (declares both
+`Survival_SuicideRespawn()` and `Survival_Respawn(bool Random?)`). Dumped and disassembled cleanly
+(1772 bytes, no unhandled opcodes). Real sequence, in order:
+
+1. `GameFunctionLibrary.GetGameHUD(Self)` → `.Re-Initialise()` — resets the HUD.
+2. `GetAllActorsOfClassWithTag(Self, <class>, "Survival", &array)` → `Array_Random` picks one → reads its
+   `GetTransform()` (spawn transform source — the "Survival"-tagged actor here, not yet identified
+   further; likely a single always-present settings/anchor actor, not a per-spawn-point marker despite
+   the name proximity to `RespawnMarker` used later).
+3. **`BeginDeferredActorSpawnFromClass(Self, <PawnClass>, transform, ...)`** — spawns a genuinely NEW
+   pawn instance (confirms the earlier live-timing finding: this is not a respawn-in-place, it's a fresh
+   actor).
+4. **Before `FinishSpawningActor` is called**: `SetBoolPropertyByName(NewPawn, "ShowStartingQuests?", true)`
+   and **`SetBoolPropertyByName(NewPawn, "SpawnStartingItems?", true)`** — the new pawn is explicitly
+   flagged to spawn its own DEFAULT starting inventory.
+5. `FinishSpawningActor(NewPawn, transform, ...)` — this is where the new pawn's construction/`BeginPlay`
+   actually runs, almost certainly acting on the `SpawnStartingItems?` flag just set and giving the new
+   pawn a fresh default loadout.
+6. `PlayerController = GetPlayerController(0)` → `.Possess(NewPawn)`.
+7. **`CallMulticastDelegate(NewPawn.KeepInventoryOnDeath)`** — broadcasts a delegate ON THE NEW PAWN,
+   named exactly for restoring/keeping the previous inventory, fired AFTER possession, i.e. AFTER step 5
+   already gave the pawn default starting items.
+8. `CallMulticastDelegate(Self.PlayerRespawned)` — a general GameInstance-level respawn notification.
+9. Three follow-up loops over `GetAllActorsOfClass` results calling `RespawnMarker`/`RespawnMarker`/
+   `AddMarker` per-actor (map/UI marker bookkeeping, not inventory-related) — not decoded in full detail,
+   not relevant to this bug.
+10. `CastToController(...)` → `.Death_PlayerStats()` — death/respawn stat tracking.
+
+**This is the equipment-strip race, found**: the new pawn gets a DEFAULT starting-item loadout
+(`SpawnStartingItems?=true`, applied during step 5's `FinishSpawningActor`) and is SEPARATELY told to
+restore/keep the OLD pawn's inventory via a delegate broadcast (`KeepInventoryOnDeath`, step 7) — two
+independent inventory-populating mechanisms running back-to-back within the same ~0.3-0.4s window
+already clocked live earlier tonight, on the same fresh pawn, with no visible ordering guarantee or
+mutual-exclusion between them in this function itself. Whatever's bound to `KeepInventoryOnDeath`
+(unknown — not this project's own code, needs a live scan of the delegate's bound-function array to
+find) determines whether it fully overwrites the default items or races/partially-conflicts with them;
+either way, this function's own logic is sufficient to explain a real, reproducible equipment-strip
+window without needing any further hypothesis. Not yet fixed — this project doesn't own this code path
+(it's the base game's own GameInstance logic, not something this mod calls or controls), so a real fix
+would likely mean either intercepting/hooking around this window client-side, or determining whether
+`KeepInventoryOnDeath`'s listener can be made to run BEFORE `FinishSpawningActor` rather than after
+`Possess` (would need decompiling whatever's bound to that delegate, still unknown).
+
+### `Client_Died` — brief note
+
+Same trampoline pattern, Ubergraph offset `0x1e6e` → `0x18bc`: calls the cached levelling-component
+instance var's `.XPDeath()`, `WidgetLayoutLibrary.RemoveAllWidgets`, then branches on
+`ConsoleUtils.GetBoolCVar("Difficulty.Permadeath")` before continuing into further death-handling logic
+not traced this pass. Not related to the equipment-strip race (that's `Survival_SuicideRespawn`, above).
+
+### `Player_AnimBP_C::DeathState` — finally traced, resolves an old open question: audio-only, no mesh/attach effect
+
+`DeathState`'s own trampoline (36 bytes) dispatches into `ExecuteUbergraph_Player_AnimBP` (6609 bytes,
+fresh-dumped, disassembled cleanly) at entry offset `6092` decimal (`0x17cc`) — the exact marker this
+project already knew about ("dispatches into the shared per-character Ubergraph at entry point 6092,
+whose actual effect was never traced," from an earlier session). Now traced, start to `EX_EndOfScript`:
+
+1. Stores the incoming bool param into an instance variable (the actual "state" write).
+2. `TryGetPawnOwner()` (`ci=102667`), `IsValid` check, `DynamicCast<BP_PlayerCharacter_C>`, caches the
+   typed result into another instance var.
+3. `TryGetPawnOwner()` again → `K2_GetActorLocation()` → `GameplayStatics::PlaySoundAtLocation(Self,
+   SoundCue'Swimming_Cue', location, rotation=(0,0,0), volume=1.0, pitch=1.0, startTime=0.0,
+   AttenuationSettings='FootSteps', ...)`.
+4. `TryGetPawnOwner()` a third time → `K2_GetActorLocation()` → same `PlaySoundAtLocation` call again,
+   this time with `SoundCue'HeavySwimming3_Cue'` (otherwise identical params, same attenuation asset).
+5. `EX_EndOfScript` — that's the entire effect. No mesh, pose, skeletal, or attachment call anywhere in
+   this entry point.
+
+**Resolves the earlier open question directly**: `DeathState` does NOT touch rendering/attachment/pose
+in any way — its only real effect is playing two audio cues (oddly swim-themed — `Swimming_Cue` /
+`HeavySwimming3_Cue` — rather than anything explicitly death-named; not investigated further why, but
+irrelevant to this project's own bugs either way) at the pawn's location. This is exactly consistent
+with the earlier live A/B test that found an identical item-detach pattern whether `DeathState` was
+called or not — now explained structurally rather than just empirically: there was never a mesh/attach
+code path in `DeathState` for that A/B test to have been isolating in the first place. Fully closes this
+thread; `DeathState` can be ruled out from any future mesh/attachment/render-desync investigation.
+
+### `LevellingComponent_C::XPDeath` — straightforward, confirmed harmless
+
+Self-contained (469 bytes, no trampoline). `Greater_IntInt(CurrentLevel_instancevar, 1)` gate — only
+applies if level > 1. If so: resets two XP-progress instance vars to `0.0`, decrements the level
+instance var by 1 (`Subtract_IntInt(level, 1)`), recomputes an XP-threshold value
+(`Round(Conv_IntToDouble(Multiply(Divide(prevThreshold, 2.65), 2.0)))`, stored back to an instance var),
+then `PrintString("XP DEATH", color=(0, 0.66, 1, 1), duration=2.0)` — a debug-only on-screen message.
+Exactly what the name implies: an XP/level penalty on death, gated to not go below level 1. Not related
+to any bug this project is chasing.
+
+### Session status, decode phase — where this leaves things
+
+Summary of tonight's "decode everything" pass, for whoever picks this back up:
+
+- **Attachment/render-desync bug** (mag/laser/shotgun/shirt visibly stuck or floating while game-thread
+  state reads clean): root mechanism now understood in detail (`ProcessAttachments`'s
+  `OnAttachmentsUpdated` delegate broadcast, skipped by this project's own bare `K2_AttachToComponent`
+  repair call). Concrete next step identified (call `UpdateAttachments()` or broadcast the delegate
+  instead) but **not yet implemented or tested** — the unconditional-re-snap experiment that would have
+  tested a related theory caused a live hang then a live crash and was kill-switched off before this
+  finding was made. Full detail: this log's `ProcessAttachments`/`UpdateAttachments` section above, plus
+  `research/bp_catalog_jigpickup_bytecode.md`.
+- **Suicide equipment-strip race**: root cause fully found (`Survival_SuicideRespawn`'s
+  `SpawnStartingItems?=true` + later `KeepInventoryOnDeath` broadcast racing on the same new pawn). Not
+  this project's own code (base game GameInstance logic) — no fix implemented, needs a decision on
+  whether/how to intervene from the mod side.
+- **`DeathState`**: fully resolved, ruled out as a contributor to anything (audio-only effect).
+- Not reached this pass: `Jig_SetAttachmentActiveState`, `FindLocalAttachmentByUID`,
+  `GetListOfAttachments`, `OnInteractActorOverDistance`'s body (Ubergraph-internal, needs a different
+  discovery technique), `SERVER_UpdateAttachmentState`'s full downstream RPC-authority behavior,
+  `Client_Died`'s tail past the permadeath-CVar branch, who (if anyone) is bound to
+  `OnAttachmentsUpdated`, and the `InpActEvt_*`/other lower-priority `.bin` files already sitting in
+  `%APPDATA%\SurrounDeadBridge\` from earlier sessions.
+- **Process note for next time**: always re-dump (`bytecode_dump.flag`) immediately before resolving
+  CIs/pointers against a live process — reusing an old `.bin`'s embedded values against a different
+  process instance silently returns garbage (see the `ExecuteUbergraph_BP_JigPickupComponent` section
+  above for the concrete example and why). Also: this log had a real, first-time-this-session incident —
+  see the "DATA LOSS NOTICE" earlier in this file — `Write` was used instead of `Edit` on this exact file
+  and destroyed most of it, recovered via `git restore` + reconstruction from conversation history. Some
+  narrative from earlier sessions (pre-tonight) is permanently gone. No source code was affected.
+
+### Follow-up round (same night, after a several-hour gap while away)
+
+Game crashed and was closed at some point after the above (debug.log's last line before the gap:
+16:04:34; process relaunched 20:15:31, confirmed via `Get-Process`). No crash dump was generated for
+whatever caused that one either — consistent with this project's own repeated finding that unhandled
+C++ exceptions from this mod don't reliably trigger a WER dump the way access violations do. Not
+investigated further (not asked to).
+
+Picked back up against the fresh process: **`FindLocalAttachmentByUID`** (679 bytes) confirmed as a
+plain linear search — loops `InstanceVariable 0x133482980` (the tracking array) via
+`Array_Length`/`Array_Get`, calls `Jig_GetAttachmentInfo` per entry, compares UID via
+`EqualEqual_GuidGuid`. Nothing unexpected, closes that item.
+
+**`Jig_SetAttachmentActiveState`/`GetListOfAttachments`**: confirmed these are interface-dispatched
+(`EX_InterfaceContext`/`EX_ObjToInterfaceCast` in `ProcessAttachments`, re-resolved fresh this round:
+casts to `BP_MpInteractInterface_C` and `BP_WeaponAttachments_C`), not direct methods on
+`BP_JigPickupComponent_C` — explains why `GetFunctionByNameInChain` always returned not-found for both.
+Tried `FindFirstOf` against `BP_WeaponAttachments_C`, `BP_MpInteractInterface_C`, `BP_762MagPickup_C`,
+and `BP_TacticalLaserLightComboPickup_C` (all currently-equipped-per-`send_weapon_attachments`
+candidates) — none had a live/CDO instance `FindFirstOf` could find, even though a 762 mag and laser
+combo are confirmed equipped right now. Likely means container-held attachment items (as opposed to
+top-level equipped items) aren't spawned as separately-`FindFirstOf`-able actors, or the concrete class
+name doesn't match the `itemId` string directly. Would need a genuine live pointer (e.g. via
+`bytecode_dump.flag`'s `abs <hex>` form, sourced from some other live capture of an actual spawned
+attachment actor) rather than a name-based guess. Deprioritized — the core pipeline
+(`ProcessAttachments`/`UpdateAttachments`/`OnAttachmentsUpdated`) is already understood well enough to
+act on; these two are secondary bookkeeping calls within the "attachment already exists" branch, not
+the mechanism itself.
+
+Also confirmed (cheaply, via `pbfg.bin`) that the various old `armpose_*`/`fabrik_*`/`noisefloor_*`/
+`pbfg`/`ubergraph` `.bin` files sitting in `%APPDATA%\SurrounDeadBridge\` ARE genuine Kismet bytecode
+dumps (not some other format) — but they're from Aug 11-13, days before this session, investigating the
+arm/weapon-grip-pose bug that's already fixed per git history (`1f77fb9 Fix weapon grip pose bug`,
+`0eb0f88 Fix melee grip pose`). Not pursued further — reopening an already-closed, already-fixed
+investigation isn't a good use of time right now.
+
+### `CheckDistanceFromActor` — fully decoded, and it CORRECTS an earlier assumption: this whole mechanism is unrelated to tonight's attachment bug
+
+Re-dumped fresh (492 bytes) and it's a genuine standalone function, not a trampoline — disassembled and
+resolved completely, no unknowns left:
+
+1. `IsValid(CurrentActor)` — if invalid, `KismetSystemLibrary::K2_ClearTimer(Self,
+   "CheckDistanceFromActor")` and return (stops the repeating 0.1s timer once there's nothing to track).
+2. Otherwise: `Delta = Subtract_VectorVector(InteractingActorLoc, CurrentActor.K2_GetActorLocation())`,
+   `Distance = VSize(Delta)`, `IsOverDistance = Greater_DoubleDouble(Distance, 300.0)`.
+3. If NOT over distance: return — nothing happens, timer just keeps ticking.
+4. **If over distance**: `K2_ClearTimer(Self, "CheckDistanceFromActor")`, then
+   `CastToInterface<BP_JigCharacterInterface>(CurrentActor)` — casts `CurrentActor` (the *character*
+   that was interacting, per this component's own established field meaning) to a CHARACTER interface,
+   not an item interface. If the cast succeeds: `Owner = Self.GetOwner()` (`ActorComponent::GetOwner` —
+   this component's own owning actor, i.e. the pickup item itself) → calls
+   **`CastedCharacter.OnInteractActorOverDistance(Owner, bool)`** — confirmed via fresh `resolve_fname`,
+   `ci=1845499` (this process) resolves exactly to `"OnInteractActorOverDistance"`, matching the earlier
+   Ubergraph CI-table entry from before the relaunch. Either way (cast succeeds or not), this component's
+   own `CurrentActor` gets set to `NoObject` at the end.
+
+**This overturns the working assumption this whole `CheckDistanceFromActor`/`CurrentActor`/
+`OnInteractActorOverDistance` thread was built on** (dating from earlier in this session, before the
+attachment-pipeline decode above): `OnInteractActorOverDistance` is called ON THE CHARACTER (via an
+interface the character implements), not on the item, and nothing in this function's own logic touches
+attachment, socket, or render state at all — only its own `CurrentActor` interaction-tracking variable.
+`CurrentActor`/`InteractingActorLoc` (comp+0xE0/+0xE8) track "which character is currently
+looking-at/interacting-with this pickup, and from where" — almost certainly the loot-prompt lifecycle
+(walk away from an item you were about to interact with → the prompt cancels), not anything about an
+already-equipped, already-attached item's ongoing physical state. **This whole mechanism is very likely
+unrelated to tonight's actual attachment/render-desync bug** — the real mechanism for that is
+`ProcessAttachments`/`OnAttachmentsUpdated`, decoded earlier in this session. Worth remembering next
+time this component's `CurrentActor` field comes up in an equipped-item context: it's probably not the
+right lead, despite the name's surface-level plausibility — this is now settled with real decoded
+ground truth, not just a hunch.
+
+### `ValidateAttachedActor` — fully decoded, likely the single most actionable finding tonight
+
+Re-dumped fresh (488 bytes, standalone, not a trampoline). Complete, no unresolved operands:
+
+1. `Owner = Self.GetOwner()` (this component's own owning actor — the item itself), `Parent =
+   Owner.GetAttachParentActor()` (`Actor::GetAttachParentActor`) — whatever the item is CURRENTLY
+   attached to. `IsValid(Parent)` check.
+2. If valid: re-fetches `Owner`/`Parent` (Blueprint-graph redundancy, same calls again), then
+   `DynamicCast<Character>(Parent)` — checks specifically whether the attach parent is a `Character`.
+3. **If the parent is a Character**: `SocketName = Owner.GetAttachParentSocketName()` (the socket this
+   item is CURRENTLY attached to), then reads that socket's live world transform via
+   `ParentCharacter.Mesh.GetSocketTransform(SocketName, Space=0)` (same `GetSocketTransform`, `ci=44895`,
+   already seen in `ProcessAttachments`), and **directly calls
+   `Owner.K2_SetActorTransform(socketTransform, bSweep=false, HitResult, bTeleport=true)`** on the item
+   actor itself.
+
+**This is a real, already-existing, game-authored repair mechanism, and it's structurally different
+from both approaches tried tonight**: not a `K2_AttachToComponent` re-parent (this project's own
+kill-switched attempt), not a `ProcessAttachments()`/`OnAttachmentsUpdated` full re-run (the
+theory from earlier tonight) — it directly reads the current correct socket transform and
+`K2_SetActorTransform`s the item straight onto it, with `bTeleport=true` forcing an immediate,
+non-interpolated snap. `SetActorTransform` is UE's general-purpose "move this actor" API (the same kind
+of call used for teleporting any actor in the game), which internally drives the standard
+`UpdateComponentToWorld`/render-transform-dirty path every actor move goes through — a plausibly more
+reliable way to force a correct render refresh than either alternative already considered, since it
+isn't specific to the attachment-reparenting code path where the missing notification was theorized to
+live.
+
+**Not yet tested live** — found via static decode only, this session's live-testing budget already used
+up on two failed proactive-fix attempts (hang, then crash) earlier tonight. This is the strongest
+concrete next experiment for the render-desync bug: call this exact sequence (get attach parent's
+socket transform, `K2_SetActorTransform` with `bTeleport=true`) on a detected-drifted item instead of
+either previous approach, at a conservative/low frequency given tonight's two live failures. Should be
+tried fresh, in isolation, next time this is picked back up.
+
+### `OnRep_CanBePicked?` — confirms the `CheckDistanceFromActor` correction
+
+Re-dumped fresh (310 bytes), fully resolved. `if (Not_PreBool(CanBePicked) && IsValid(CurrentActor))`:
+runs the EXACT same sequence as `CheckDistanceFromActor`'s over-distance branch — `K2_ClearTimer(Self,
+"CheckDistanceFromActor")`, cast `CurrentActor` to `BP_JigCharacterInterface`,
+`.OnInteractActorOverDistance(Self.GetOwner(), bool)`, then `CurrentActor = null`. Makes sense: if an
+item becomes un-pickable (someone else grabbed it, etc.) while a character is mid-interaction with it,
+the same interaction-prompt-cancel fires immediately instead of waiting for the distance timer. Further
+confirms this whole system is interaction-prompt lifecycle management, unrelated to attachment/render
+state — no new information for the actual bug, but a clean independent confirmation of the correction
+above.
+
+### Finishing the table: the last three blocked functions, unblocked
+
+User asked to finish everything remaining in `bp_catalog_jigpickup_bytecode.md`. Two rows had been stuck
+on "interface-dispatched, no live instance found" — unblocked both, for different reasons than assumed:
+
+**`Jig_SetAttachmentActiveState`**: the earlier assumption (interface-dispatched via
+`BP_MpInteractInterface_C`/`BP_WeaponAttachments_C`, found through `ProcessAttachments`' cast chain) was
+half-right about needing a different class, wrong about needing an interface lookup. Found a live pointer
+directly from the running `attach_health` diagnostic's own log output (`attach_health: local>... child
+ptr=0x...`, already logging one-level-deep attachment children every throttle cycle) and `resolve_ptr`'d
+it to `BP_MilitarySuppressorLocalAttachment_C` — revealing the REAL naming convention for spawned
+attachment actors is `BP_<Item>LocalAttachment_C`, not `BP_<Item>Pickup_C` (which is presumably the
+world-pickup/ground-item class, a different actor entirely from the equipped-attachment actor).
+`GetFunctionByNameInChain` found it immediately once the right class was used. Trampolines into a shared
+base class, `BP_AMainLocalAttachment_C::ExecuteUbergraph_...` (129 bytes, tiny, fully decoded): sets an
+`IsActive`-style instance var to the incoming bool, calls `OnActiveStateChanged()` (an overridable hook —
+e.g. toggling a laser's beam on/off). Purely functional state, not positional — confirmed unrelated to
+the render-desync bug.
+
+**`GetListOfAttachments`**: same wrong assumption (interface-dispatched) — the real answer was simpler:
+re-read `UpdateAttachments`' own bytecode closely and noticed both `IsValidPickup` and
+`GetListOfAttachments` are called through `EX_Context{ object_expr: InstanceVariable 0x1244b4500 }`, a
+direct property READ (not a cast, not a function result) — meaning it's a plain object-reference field on
+`BP_JigPickupComponent_C` itself, almost certainly the already-known `OwnerMPComp` field
+(`BP_JigPickupComponent.hpp`, confirmed present but "never populated by this project's own equip path"
+per much earlier session notes — apparently it IS populated by the game's own native equip flow, just
+never by this mod's). Tried `BP_JigMultiplayer_C` (a class this session already knew has related
+functions like `HandleActorEquipped`) and both `IsValidPickup` and `GetListOfAttachments` were found
+there immediately. `IsValidPickup` (95 bytes): validity-checks a struct member of a cached
+pickup/UID-reference instance var, returns it. `GetListOfAttachments` (1213 bytes): calls
+`GetAllContainerByItemUID(itemUID, &containers)` then loops the result filtering for attachment-type
+entries into the output array — pure data-gathering, confirms/extends `ProcessAttachments`'
+understanding without changing it.
+
+**Catalog status**: every row is now ✅ except two genuinely-minor 🟡s
+(`ExecuteUbergraph_BP_JigPickupComponent` — fully disassembled as raw bytes, just not every one of its
+many entry points individually traced; `ProcessAttachments` — every call target confirmed, just the
+exact reverse-scan branch wiring not pinned to the byte). The real remaining bottleneck for the
+attachment/render-desync bug is no longer decoding — it's actually live-testing the two candidate fixes
+(`ValidateAttachedActor`'s transform-snap pattern, or the `OnAttachmentsUpdated` broadcast) that this
+session's decode work already found and fully understands.
+
+## PC1 live incident: shotgun + pistol rendering on the ground while still equipped — third reproduction of the render-desync bug, plus a real (if unrelated) EntityManager risk found and fixed
+
+**The report**: PC1's `BenelliM4Pickup` (shotgun, slot 12) and `BattleReadyGlockPickup` (pistol, slot 13)
+appeared physically resting on the ground/against a couch in a screenshot, in natural settled poses (not a
+freeze-frame — genuinely different, sensible resting positions relative to nearby furniture). User
+confirmed live: **both items were still pickup-able and the game still treated them as the player's own**
+("I can pick them up, they are still attached technically. but the model isnt") — i.e. game-thread/data
+state was correct, only the rendered position was wrong. This is the third reproduction this session of
+the exact bug class already theorized in `do_attach_health_scan`'s own 2026-08-16 comment (mag/laser/
+shotgun floating on PC1 earlier, then PC2's helmet), now with the clearest evidence yet.
+
+**What the existing diagnostics showed, live**:
+- `attach_health`'s socket-dist check read clean (0.0–3.0 units, `offSocket=0`) for both items both before
+  and after the screenshot — confirms (again) that this check's own `K2_GetComponentLocation` read agrees
+  with the socket's expected transform even while the rendered pixels disagree. The transform-snap fix
+  deployed earlier tonight can never fire for this bug class, because its gate never trips.
+- `resolve_ptr` on the live "local child" pointer list (via `resolve_ptr.flag`) confirmed the attached
+  actors genuinely are `BP_BenelliM4Pickup_C`/`BP_BattleReadyGlockPickup_C` instances — the *same* Pickup
+  Blueprint class used for a real ground-dropped item, just currently `AttachParent`'d to a socket instead
+  of sitting free. This class-sharing turned out to matter (see below).
+- The background monitor caught a genuine, real **DETACHED** hit for the shotgun at 21:42:04.559
+  (`do_attach_health_scan`'s prev/current `AttachChildren` diff, not just the distance check) — it briefly,
+  actually left `AttachChildren` and came back within ~3 seconds (`localMeshChildren` count never dropped
+  below 16 across the whole window). `read_local_weapon_attachments`' slot mapping (`[12]=BenelliM4`,
+  `[13]=BattleReadyGlock`) never lost either item at any point through this — confirms nothing was lost
+  from the mod's own equip bookkeeping, only a rendering artifact plus one brief real detach/reattach
+  cycle. `send_weapon_attachments` (the frame actually sent to the server) likewise never dropped either
+  slot's accessory data throughout.
+- The DETACHED handler's own `dump_recent_calls()` — meant to capture the exact ProcessEvent call that
+  caused it — produced **nothing usable**: `record_recent_call`'s watch-list (`s_watchObjs[8]`, populated
+  by `set_recent_calls_watch`) only ever contained the *clothing* investigation's five objects
+  (pawn/torso/legs/feet/helper), never weapon/item actors. The forensic capture existed but was scoped to
+  a different bug. This is why the causal chain for tonight's specific detach is still not pinned down —
+  fixed for next time, see below.
+
+**Entity-manager "claimed native pickup" theory, investigated and ruled out for this specific incident**:
+`spawn_entity_actor` (`entity_manager.cpp:518`) logged `claimed native pickup itemId=AK15` in the same
+window. `find_and_claim_native_pickup` (`entity_manager.cpp:242`) resolves a self-dropped `WorldEntity` to
+its native pickup actor by **class name + nearest position within 500 units**, with no check that the
+candidate isn't currently attached to something. Since equipped items are live instances of the exact same
+Pickup class as a genuine ground drop, and "within 500 units of the drop" is trivially true for anything
+attached to the player, this function could in principle silently claim the player's own currently-worn
+item as a "dropped" `WorldEntity` — and a later legitimate `EntityDespawn` for that (bogus) entity would
+call `K2_DestroyActor()` directly on the player's real equipped weapon (`destroy_entity_actor`,
+`entity_manager.cpp:627`). Checked both logs for any `EntityState`/`EntityDescriptor`/claim traffic
+mentioning Benelli/Glock specifically: **none** — this mechanism did not cause tonight's incident. It's a
+real, separate latent risk regardless, so fixed anyway (cheap, read-only, no behavior change for the
+real-drop case): `find_and_claim_native_pickup` now skips any candidate whose `RootComponent->AttachParent`
+(`AActor+0x1A0` → `+0xB0`, both offsets already proven elsewhere in this codebase, e.g. `mod.cpp`'s
+`equip_restore_retry` mismatch check) is non-null — a live-attached actor can never legitimately be an
+unowned ground pickup. Built clean, not yet deployed (see below).
+
+**Diagnostics extended (safe, observation-only, no gameplay behavior change)**: widened the recent-calls
+ring buffer's watch-list mechanism (`mod.cpp`, near `dump_recent_calls`) with a second, independently-
+refreshed region — `s_watchObjs[21]`, `[0,5)` still the clothing watch unchanged, `[5,21)` now the local
+player's current top-level item children, refreshed every `check_attach_health("local", ...)` poll via the
+new `set_item_recent_calls_watch()` (mirrors the exact children list that scan already computes for its own
+detach-diffing — no extra scanning cost). Next time a weapon/item DETACHED hit fires, `dump_recent_calls()`
+should actually show the real ProcessEvent call chain around it instead of nothing, closing the gap found
+above. This does not change any gameplay behavior — pure logging capture, same risk class as every other
+diagnostic addition tonight, not the "make a repair fire unconditionally" risk class that crashed/hung
+twice earlier.
+
+**Status**: both changes built clean and deployed to PC1 and PC2 (both game processes had closed on their
+own by the time the deploy was attempted — not force-closed — so no lock issue in the end). Root cause of
+the actual render-stuck-after-reattach mechanism itself is still open; the leading theory remains the
+`MarkRenderTransformDirty`-notification-gap one already recorded in `do_attach_health_scan`'s comment, and
+actually pinning it down needs either (a) the widened forensic capture above catching a real ProcessEvent
+chain on the next natural reproduction, or (b) the WndProc-based clean GameThread trigger — see the next
+entry, which found that mechanism is not just planned but already fully built, deployed, and running.
+
+## The WndProc clean-trigger plan (standing plan, "Reliable GameThread Trigger via WndProc Subclass") is already implemented and empirically holding up — this changes the risk calculus for the proactive-repair kill-switches
+
+While following up on the render-desync investigation above, checked whether the standing plan (background
+thread + `PostMessage`/`WM_APP` + subclassed `WndProc`, meant to give this mod a way to run risky
+ProcessEvent-heavy repair work from a point in the frame that's provably NOT nested inside another
+`ProcessEvent` dispatch) was still just a plan or had been started. **It's fully implemented** —
+`ensure_hwnd_ticker_started()`, `sdb_wnd_proc`, `kCleanTickMessage` (`mod.cpp` ~6675-6762) — and wired all
+the way through: `do_game_tick(bool cleanContext)` takes the flag, `check_attach_health_trigger`'s actual
+scan/repair invocation (`mod.cpp:3838`, `if (cleanContext && !targets.empty() && ...)`) and
+`ProxyManager::tick()`'s own gate are both conditioned on it, and `check_component_drift` (which contains
+`do_body_part_repair`, home of the `kEnableProactiveLeaderPoseRefresh` kill-switch) is called from
+*inside* that same `cleanContext`-gated block (`mod.cpp:3843`, right next to `check_attach_health`) — so
+anything reachable from either of tonight's two kill-switched proactive-refresh attempts already runs
+inside the new clean-trigger path whenever it fires, not the old nested `on_process_event_pre` fallback.
+
+**The code marks this "NOT YET LIVE-VERIFIED," but the log says otherwise.** `t_processEventDepth` (a
+`thread_local` nesting counter, incremented/decremented around every `ProcessEvent` call) is checked every
+single time `cleanContext` is true, logging `"cleanContext=true, t_processEventDepth=0 confirmed"` when the
+assumption holds and a (never-yet-seen) warning line if it doesn't. Checked the full session's
+`debug.log` (`%APPDATA%\SurrounDeadBridge\debug.log`, one continuous file spanning **14:54:37 through
+21:56:26 today — about 7 hours, 45 process relaunches**, covering everything from this whole marathon
+session's death/respawn cycles to the shotgun/pistol incident investigated above):
+- **1852 occurrences of `cleanContext=true, t_processEventDepth=0 confirmed`. Zero occurrences of the
+  violation-warning line.** The core assumption behind the entire plan — that UE5's Windows message pump
+  dispatches from a point outside any `ProcessEvent` chain, so a `WM_APP`-triggered `WndProc` handler is a
+  genuinely clean entry point — has held 100% of the time it's been checked, across a real multi-hour
+  session with heavy, varied gameplay activity, not just a short synthetic test.
+- Zero occurrences of `0xe06d7363`/`EXCEPTION_ACCESS_VIOLATION`/any hang-adjacent signal anywhere in
+  today's log. (The two known failures from *this* mechanism specifically — the leader-pose-refresh hang
+  and the transform-snap crash — both happened earlier in this marathon session, most likely before
+  whatever point today's `debug.log` starts from or before the SEH-wrap noted at `mod.cpp:6683` was added;
+  can't fully reconstruct exact timing against a single day's file, but the practical takeaway is the same
+  either way — no such failure in the entire window this file actually covers.)
+
+**Why this matters for the two currently-OFF kill-switches** (`kEnableProactiveLeaderPoseRefresh`,
+`mod.cpp:3616`, and the transform-snap block's own unconditional variant, both reverted after a hang and a
+crash respectively — see this file's own history above): both failures were originally attributed to firing
+ProcessEvent-heavy repair calls from an unverified, possibly-nested execution context.
+
+**Correction, same night, after re-reading the crash's own comment more carefully**: the 0xe06d7363 crash's
+stack already ran through the WndProc path when it happened — `cleanContext` was already true at the time,
+not the unverified nested path. So the 1852/1852 depth=0 evidence, while real, does NOT by itself prove this
+specific crash can't recur — it confirms the nesting theory is false for whatever *did* cause it, nothing
+more; the actual root cause of that crash is still unidentified. The more specific new protection is that
+`do_game_tick_clean_ctx` (the WndProc handler's own entry point) was given an SEH wrap after that crash —
+`mod.cpp:6683`'s own comment confirms this — matching the catch-and-log pattern this codebase has used
+successfully many times elsewhere tonight. That means a repeat of the same unhandled-C++-exception failure
+mode should now be caught and logged rather than crash the process — a reasonable inference from a proven
+pattern, not a tested guarantee for this exact call site.
+
+**Re-enabled leader-pose refresh only, transform-snap unconditional variant left off.** User explicitly
+authorized proceeding despite being unavailable to watch a live test (asked twice, in fact, including after
+this correction was already in progress), on the grounds that a repeat failure just costs a relaunch — no
+data loss, since progress persists to SQLite independently of the live process. Built clean, deployed to
+PC1 and PC2 while both were closed (`kEnableProactiveLeaderPoseRefresh = true`, `mod.cpp`, still the 20s
+throttle). The transform-snap unconditional variant was never part of this decision and stays off — no
+comparable "here's the new protection" argument was made for it tonight. **First thing next session: check
+`debug.log` for a hang signature or an SEH-caught-exception line before assuming this went fine** — the log
+is the actual verdict, this write-up is just the reasoning that led here.

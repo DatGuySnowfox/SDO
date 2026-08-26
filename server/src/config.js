@@ -82,4 +82,16 @@ module.exports = {
     worldStateIntervalMs: int('SDB_WORLD_STATE_INTERVAL_MS','worldStateIntervalMs', 2000),
     zombieTickIntervalMs: int('SDB_ZOMBIE_TICK_INTERVAL_MS','zombieTickIntervalMs', 2000),
     clientTimeoutMs:      int('SDB_CLIENT_TIMEOUT_MS',      'clientTimeoutMs',      15_000),
+
+    // Server-directory discovery (directory-worker/, a free Cloudflare
+    // Worker) — opt-in: unset directoryUrl entirely disables it, so an
+    // existing LAN-only setup is unaffected. directoryKey must match the
+    // Worker's DIRECTORY_KEY secret. publicHost overrides auto-detection
+    // (via a public IP-echo call, see gateway.js) for a DDNS hostname or a
+    // NAT'd host where the detected IP isn't the one players should use.
+    directoryUrl:          str('SDB_DIRECTORY_URL',           'directoryUrl',          ''),
+    directoryKey:          str('SDB_DIRECTORY_KEY',           'directoryKey',          ''),
+    directoryHeartbeatMs:  int('SDB_DIRECTORY_HEARTBEAT_MS',  'directoryHeartbeatMs',  60_000),
+    serverName:            str('SDB_SERVER_NAME',             'serverName',            'SurrounDead Server'),
+    publicHost:            str('SDB_PUBLIC_HOST',             'publicHost',            ''),
 };

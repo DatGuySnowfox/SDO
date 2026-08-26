@@ -31,6 +31,12 @@ struct RemotePlayer {
     uint64_t lastRenderTickUs = 0;
     float    health     = 100.0f;
     bool     dead       = false;
+    // Tracks whether the AnimBP's own DeathState(bool) has been called with
+    // the CURRENT value of `dead` — edge-triggered the same way handAttachedSlot
+    // tracks activeWeaponSlot, so the ProcessEvent call only fires on an
+    // actual death/respawn transition, not every tick. See proxy_manager.cpp's
+    // call_death_state for what this actually drives.
+    bool     deathStateApplied = false;
     uint8_t  movState   = 0;
     // Repurposed from the wire's unused Movement.animationState byte
     // (2026-08-13) — carries the sender's real active/drawn weapon slot
@@ -184,6 +190,20 @@ struct RemotePlayer {
     PawnAppearance appearance;
     bool appearanceDirty = false;
     std::string appliedAppearanceKey;
+    // 2026-08-15: sync_pawn_appearance used to apply hair/beard/mouth/
+    // eyebrows/accessories/9 body parts/skin color all in one call — up to
+    // ~40 ProcessEvent calls in a single nested pass. Since do_game_tick()
+    // can only run from inside UE4SS's ProcessEvent pre-hook (see
+    // do_game_tick's own comment, mod.cpp), every one of those is itself
+    // nested inside the engine's own outer dispatch — a live-captured hang
+    // dump traced a freeze to exactly this function (see the bodyPart loop's
+    // own comment below). Splits the work into stages (0=hair/beard,
+    // 1=mouth/eyebrows/accessories, 2-10=one body part each, 11=skin color),
+    // one stage applied per ProxyManager::tick() call — reset to 0 whenever
+    // a fresh PawnAppearance frame arrives (on_pawn_appearance), since a
+    // stage cursor mid-sync against stale target data would apply a mix of
+    // old and new values.
+    int appearanceSyncStage = 0;
 
     // Bit i set = slot i was actually written to the proxy on a previous
     // sync_equipment() pass. The wire Equipment frame omits empty slots
@@ -194,6 +214,22 @@ struct RemotePlayer {
     // the new frame's slots each sync to find newly-missing (i.e. just
     // unequipped) slots to explicitly clear, then updated to match.
     uint32_t appliedSlotsMask = 0;
+
+    // Last PlayerLights frame received (flashlight/NVG toggle sync,
+    // 2026-08-17), applied in ProxyManager::sync_player_lights.
+    // appliedFlashlightOn/appliedNightVisionOn track what's currently
+    // applied to the proxy so a resend with the same values is a no-op —
+    // same "don't reprocess unchanged data" pattern as appliedAppearanceKey/
+    // weaponAttachmentsAppliedKey above.
+    bool  flashlightOn         = false;
+    bool  nightVisionOn        = false;
+    // Ground-truth from FlashlightToggle's own bytecode (2026-08-17): the
+    // real per-item "on" brightness, read live off the sender's own
+    // Flashlight component — see mod.cpp's read_local_player_lights.
+    float flashlightIntensity  = 0.0f;
+    bool  lightsDirty          = false;
+    bool  appliedFlashlightOn  = false;
+    bool  appliedNightVisionOn = false;
 };
 
 // Bridge session context.
@@ -247,6 +283,31 @@ struct BridgeState {
     std::atomic<bool>     hasPawn         {false};
     std::atomic<bool>     sentDeath       {false};
     std::atomic<uint64_t> noPlayerSinceUs {0};
+    // 2026-08-16: independent death signal — a live zombie-kill retest
+    // proved cached_find_local_pawn() never actually returns null on a real
+    // death in this game (the pawn persists, frozen in place), so hasPawn/
+    // sentDeath/noPlayerSinceUs above never fire for genuine combat deaths,
+    // only for an actual pawn-instance swap (level reload, new character).
+    // Tracks the last MedicalComponent.Health<=0 state pushed via
+    // DeathRequest/RespawnRequest, kept deliberately separate from the
+    // pawn-nullness state machine above rather than merged into it.
+    std::atomic<bool>     sentDeathByHealth {false};
+    // Timestamp of the moment the local pawn most recently transitioned
+    // from invalid to valid (fresh join, respawn, or a level/save reload
+    // handing back a new pawn instance). Every nested-ProcessEvent freeze
+    // reproduced 2026-08-15/16 happened shortly after exactly this
+    // transition, doing heavy component/mesh repair work on a character
+    // whose skeletal mesh/material assets may still be mid-stream via the
+    // engine's own async loading system — a real hazard already documented
+    // (do_game_tick's own comment: a live-captured hang traced a
+    // SetSkinnedAssetAndUpdate call blocking on a critical section shared
+    // with FAsyncLoadingThread). equipDataReady already gates the local
+    // component-drift/attach-health scan on network-replication readiness,
+    // but that's a different kind of "ready" than asset-streaming
+    // readiness — this timestamp backs an ADDITIONAL grace period for the
+    // latter, mirroring RemotePlayer::proxySpawnedAtUs's existing 2s gate
+    // for the exact same class of risk on proxies.
+    std::atomic<uint64_t> pawnValidSinceUs {0};
 
     // Remote player map (keyed by playerId).
     std::mutex                               playersMtx;
@@ -344,6 +405,22 @@ struct BridgeState {
     std::string ccSex;
     std::string ccAge;
     int         ccOccupation{0};
+
+    // Set (network thread) when the server's MsgType::FirstJoin arrives —
+    // authoritative "this playerId has never saved before" signal
+    // (gateway.js sends it exactly when db.getProgress() comes back empty).
+    // Replaces the old sessionLatchUs/receivedProgressRestore timeout
+    // heuristic above (2026-08-17) — that approach, and the SDOnline Lua
+    // script it was built to interoperate with, are both retired now that
+    // the server can just say so directly. Cleared (game thread) once
+    // do_open_barber_menu() has been kicked off for it.
+    std::atomic<bool> pendingFirstJoin{false};
+    // Game-thread-only (do_game_tick and its callees) — true from the
+    // moment a FirstJoin-triggered barber-menu open starts until
+    // check_barber_widget_removed_poller sees it close, so that closure
+    // triggers a random spawn-point teleport instead of just the normal
+    // camera/input restore a manually-triggered/organic barber visit gets.
+    bool inFirstJoinFlow = false;
 };
 
 inline BridgeState& g_state() {
