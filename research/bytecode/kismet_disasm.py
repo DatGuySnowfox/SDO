@@ -323,6 +323,31 @@ def parse_expr(r: Reader, depth=0, max_depth=40):
                 n += 1
                 if n > 128: emit(depth+1, "<too many elems, abort>"); break
             r.u8(); emit(depth+1, "EX_EndArray")
+        elif name == "EX_SetMap":
+            # Never encountered until BP_Barber_C's Ubergraph (~2900 other
+            # functions decoded this session never hit it) — best-effort
+            # reconstruction from UE5 Class.cpp's SerializeExpr, not yet
+            # empirically anchor-verified the way the rest of this table is
+            # (see this file's own header comment). Distinct from
+            # EX_MapConst/EX_EndMapConst (a map *literal*) — this is
+            # "assign into an existing map property", the map-typed sibling
+            # of EX_SetArray: a destination expr, then a raw int32 pair
+            # count, then that many key+value expr pairs, then EX_EndMap.
+            emit(depth, f"[0x{off:04x}] {name}")
+            emit(depth+1, "map_dest:")
+            parse_expr(r, depth+2, max_depth)
+            count = r.i32()
+            emit(depth+1, f"pair_count={count} <UNVERIFIED, best-effort>")
+            for i in range(min(count, 128)):
+                emit(depth+1, f"pair[{i}] key:")
+                parse_expr(r, depth+2, max_depth)
+                emit(depth+1, f"pair[{i}] value:")
+                parse_expr(r, depth+2, max_depth)
+            if not r.eof() and r.d[r.i] == 0x3C:
+                r.u8(); emit(depth+1, "EX_EndMap")
+            else:
+                got = f"0x{r.d[r.i]:02x}" if not r.eof() else "<eof>"
+                emit(depth+1, f"<expected EX_EndMap (0x3c), got {got} — SetMap operand guess was likely wrong>")
         elif name == "EX_ArrayConst":
             ptr = r.u64(); count = r.i32()
             emit(depth, f"[0x{off:04x}] {name} inner_prop=0x{ptr:x} count={count}")

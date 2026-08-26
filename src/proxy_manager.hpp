@@ -32,7 +32,8 @@ void dump_clothing_table(const wchar_t* tableName);
 // (e.g. "/Game/AI/Zombies/Roamer/BP_Zombie_Roamer.BP_Zombie_Roamer_C") for
 // the primary, no-live-instance-needed lookup; falls back to resolving off
 // a live instance of the class if that fails. See proxy_manager.cpp for the
-// full rationale — NOT YET LIVE-VERIFIED which (if either) path works.
+// full rationale — live-verified, used successfully throughout this project
+// (zombie archetypes, native vehicle/pickup resolution, and more).
 RC::Unreal::UClass* resolve_class_by_name(const std::wstring& fullPathOrShortName);
 
 // Spawns actorClass at the given world position/yaw via the same
@@ -50,8 +51,20 @@ RC::Unreal::AActor* spawn_actor_at(RC::Unreal::UWorld* world, RC::Unreal::UClass
 // (caller already resolved it, e.g. via GetValuePtrByPropertyNameInChain);
 // `isSkeletal` selects SetSkinnedAssetAndUpdate(bReinitPose=false) vs
 // SetStaticMesh. Returns false if the named mesh can't be resolved or the
-// component has neither setter.
-bool reapply_named_mesh(RC::Unreal::UObject* component, const std::string& meshShortName, bool isSkeletal);
+// component has neither setter. `leaderMesh` (only used when isSkeletal) —
+// the character's own Mesh component — re-establishes the leader-pose
+// bone mapping after the swap; see refresh_leader_pose's comment
+// (proxy_manager.cpp) for why this is required, not optional, for any
+// skeletal body-part component. Pass nullptr only for non-skeletal
+// (StaticMesh) calls, where it's unused.
+bool reapply_named_mesh(RC::Unreal::UObject* component, const std::string& meshShortName, bool isSkeletal,
+                         RC::Unreal::UObject* leaderMesh = nullptr);
+
+// Re-establishes a leader-pose follower's bone mapping to the character's
+// main Mesh component — call immediately after any direct
+// SetSkinnedAssetAndUpdate on a body-part/Clothing_X component. See its own
+// comment (proxy_manager.cpp) for the full rationale.
+void refresh_leader_pose(RC::Unreal::UObject* followerComp, RC::Unreal::UObject* leaderMesh);
 
 // ProxyManager spawns and drives remote-player proxy actors in the UE5 world.
 //
@@ -75,9 +88,21 @@ public:
     void on_weapon_attachments(uint64_t playerId, const WeaponAttachments& a);
     void on_pawn_appearance(uint64_t playerId, const PawnAppearance& a);
     void on_play_montage(uint64_t playerId, const std::string& montageName, float playRate);
+    void on_player_lights(uint64_t playerId, const PlayerLights& l);
+    void on_weapon_fired(uint64_t playerId);
 
     // Per-frame update – world and local_pawn may be null (proxies are skipped).
-    void tick(RC::Unreal::UWorld* world, RC::Unreal::AActor* local_pawn);
+    // allowDirtyStateSync gates the equipment/weapon-attachment/appearance
+    // sync block specifically (SetSkinnedAssetAndUpdate/SetLeaderPoseComponent/
+    // clothing OnRep_*-class ProcessEvent calls — the ones confirmed present
+    // in every live-captured GameThread freeze this session, see the
+    // "Reliable GameThread Trigger via WndProc Subclass" plan). Teleport/
+    // velocity/rotation always run regardless — those aren't part of any
+    // captured freeze and don't need gating. False when called from the
+    // existing on_actor_tick/on_process_event_pre cadence (which is
+    // sometimes nested inside another ProcessEvent dispatch); true only from
+    // the WndProc-triggered clean-context tick in mod.cpp.
+    void tick(RC::Unreal::UWorld* world, RC::Unreal::AActor* local_pawn, bool allowDirtyStateSync);
 
     // 2026-08-15: forces player.appearance to be fully reapplied on the next
     // tick, regardless of whether player.appliedAppearanceKey already
@@ -90,6 +115,19 @@ public:
     bool force_resync_appearance(RC::Unreal::AActor* proxyActor);
 
 private:
+    // 2026-08-16 audit: SEH trampoline for tick()'s whole per-proxy sync
+    // body (teleport/rotation/velocity + equipment/weapon/appearance dirty
+    // dispatch below) — all of it dereferences player.proxyActor, which can
+    // go stale (world destroyed, actor pointer not yet reset) in the same
+    // window that produced the confirmed do_game_tick crash. A `static`
+    // member has unrestricted access to private members via the
+    // ProxyManager* it's handed, while still being a plain void(*)(void*)
+    // function pointer — required for MSVC's __try/__except (see
+    // proxy_manager.cpp's seh_invoke comment for why a capturing
+    // lambda/std::function can't be used here). See proxy_manager.cpp for
+    // the context struct and the real per-player body.
+    static void do_proxy_per_player_tick(void* ctxRaw);
+
     void teleport_proxy(RC::Unreal::AActor* actor,
                         float x, float y, float z, float yaw);
 
@@ -110,6 +148,13 @@ private:
     // spawns/attaches the attachment's own Local_ActorClass actor at its
     // Local_AttachSocket on the *weapon's* own mesh (not the character's).
     void sync_weapon_attachments(RemotePlayer& player);
+
+    // Applies player.flashlightOn/nightVisionOn onto the proxy's own
+    // character-level toggles (BP_PlayerCharacter_C::FlashlightToggle/
+    // NightVisionOn) — distinct from sync_weapon_attachments' per-attachment
+    // active state (a weapon-mounted light/laser), this is the character's
+    // own handheld flashlight and NVG goggles.
+    void sync_player_lights(RC::Unreal::AActor* actor, RemotePlayer& player);
 
     // Applies player.appearance (gender/hair/beard) directly onto the proxy
     // actor's own HairMesh/BeardMesh components and color materials.

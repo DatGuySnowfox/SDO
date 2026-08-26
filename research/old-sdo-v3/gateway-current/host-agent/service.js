@@ -1,0 +1,1238 @@
+import { randomUUID } from 'node:crypto';
+import { readFile, stat } from 'node:fs/promises';
+import { createServer as createHttpServer } from 'node:http';
+import { createConnection } from 'node:net';
+import { join } from 'node:path';
+import { decodeJoinRequest, decodeMovement, decodeString, decodeWorldAction, encodeFrame, encodePlayerDamage, encodeString, encodeWorldAction, encodeWorldEntityDescriptor, encodeWorldEntityState, encodeWorldState, FrameDecoder, isNewerSequence, MessageType, stableNumericId, WorldEntityKind } from "../shared-protocol/index.js";
+import { log } from "../shared/log.js";
+import { WorldSnapshotStore } from "./world-store.js";
+export class HostAgentService {
+    sessionId = randomUUID();
+    config;
+    socket;
+    decoder = new FrameDecoder();
+    statusServer;
+    heartbeat;
+    worldSimulationTimer;
+    reconnect;
+    stopped = true;
+    authenticated = false;
+    reconnectDelay;
+    tick = 0;
+    worldRevision = 0;
+    gameReady = true;
+    currentMap = '';
+    players = new Map();
+    worldEntities = new Map();
+    dropRequests = new Map();
+    pickupRequests = new Map();
+    entityDespawnTombstones = new Map();
+    worldStore;
+    worldSaveTimer;
+    worldSaveInFlight;
+    worldDirty = false;
+    worldPersistenceHealthy = true;
+    worldPersistenceBlocked = false;
+    latestWorldState;
+    weatherCycleElapsedMs = 0;
+    lastWorldStatePublishAt = 0;
+    lastWorldSimulationAt = Date.now();
+    nextZombieSpawnAt = 0;
+    zombieSpawnSerial = 0;
+    zombieAttackSequence = 0;
+    nextZombieAttackAt = new Map();
+    zombieAttackStateUntil = new Map();
+    constructor(config) {
+        this.config = config;
+        if (config.hostSecret.length < 16)
+            throw new Error('Host secret must be at least 16 characters');
+        this.reconnectDelay = config.reconnectMinMs ?? 100;
+        this.gameReady = !config.readinessUrl && !config.gameDataDir;
+        if (config.worldStatePath) {
+            this.worldStore = new WorldSnapshotStore(config.worldStatePath, config.worldId);
+        }
+    }
+    async start() {
+        this.stopped = false;
+        await this.restoreWorld();
+        this.statusServer = createHttpServer((request, response) => {
+            if (request.method === 'POST' &&
+                request.url === '/shutdown' &&
+                ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(request.socket.remoteAddress ?? '')) {
+                response.writeHead(202).end();
+                setImmediate(() => void this.stop());
+                return;
+            }
+            if (request.method !== 'GET' || request.url !== '/status') {
+                response.writeHead(404).end();
+                return;
+            }
+            const body = JSON.stringify(this.status());
+            response.writeHead(200, {
+                'content-type': 'application/json',
+                'content-length': Buffer.byteLength(body),
+                'cache-control': 'no-store'
+            });
+            response.end(body);
+        });
+        await new Promise((resolve, reject) => {
+            this.statusServer.once('error', reject);
+            this.statusServer.listen(this.config.statusPort ?? 0, this.config.statusHost ?? '127.0.0.1', resolve);
+        });
+        this.connect();
+        this.heartbeat = setInterval(() => {
+            if (this.config.readinessUrl || this.config.gameDataDir)
+                void this.refreshReadiness();
+            if (this.authenticated)
+                this.send({
+                    type: MessageType.HostHeartbeat,
+                    flags: this.gameReady ? 1 : 0,
+                    tick: ++this.tick,
+                    payload: encodeString(JSON.stringify({
+                        protocolVersion: 3,
+                        buildId: this.config.buildId ?? 'unknown',
+                        map: this.currentMap,
+                        ready: this.gameReady
+                    }), 512)
+                });
+            if (this.authenticated && this.gameReady) {
+                this.publishWorldStateIfDue();
+            }
+        }, this.config.heartbeatMs ?? 500);
+        this.heartbeat.unref();
+        this.worldSimulationTimer = setInterval(() => {
+            if (this.authenticated && this.gameReady)
+                this.simulateWorld();
+        }, Math.max(50, this.config.worldSimulationMs ?? 100));
+        this.worldSimulationTimer.unref();
+        if (this.worldStore) {
+            this.worldSaveTimer = setInterval(() => void this.flushWorld(), Math.max(1_000, this.config.worldSaveIntervalMs ?? 5_000));
+            this.worldSaveTimer.unref();
+        }
+        const statusPort = this.statusServer.address().port;
+        log('info', 'host_agent_started', { sessionId: this.sessionId, worldId: this.config.worldId, statusPort });
+        return { statusPort };
+    }
+    status() {
+        return {
+            ok: true,
+            service: 'sdo-host-agent',
+            protocolVersion: 3,
+            sessionId: this.sessionId,
+            worldId: this.config.worldId,
+            gatewayConnected: Boolean(this.socket && !this.socket.destroyed),
+            authenticated: this.authenticated,
+            gameReady: this.gameReady,
+            map: this.currentMap,
+            buildId: this.config.buildId ?? 'unknown',
+            playerCount: this.players.size,
+            worldEntityCount: this.worldEntities.size,
+            zombieCount: [...this.worldEntities.values()].filter((entity) => entity.kind === WorldEntityKind.Zombie).length,
+            playerHealth: [...this.players.values()].map((player) => ({
+                playerId: player.playerId.toString(),
+                health: player.health,
+                dead: player.dead
+            })),
+            groundItemCount: [...this.worldEntities.values()].filter((entity) => entity.kind === WorldEntityKind.GroundItem).length,
+            worldRevision: this.worldRevision,
+            worldPersistenceEnabled: Boolean(this.worldStore),
+            worldPersistenceHealthy: this.worldPersistenceHealthy,
+            worldPersistenceBlocked: this.worldPersistenceBlocked,
+            dropRequestLedgerSize: this.dropRequests.size,
+            pickupRequestLedgerSize: this.pickupRequests.size,
+            latestWorldState: this.latestWorldState
+                ? {
+                    revision: this.latestWorldState.revision,
+                    timeOfDay: this.latestWorldState.timeOfDay,
+                    rain: this.latestWorldState.rain,
+                    snow: this.latestWorldState.snow,
+                    fog: this.latestWorldState.fog,
+                    cloudCoverage: this.latestWorldState.cloudCoverage,
+                    wind: this.latestWorldState.wind,
+                    thunder: this.latestWorldState.thunder
+                }
+                : undefined,
+            authority: {
+                timeAndWeather: true,
+                groundLoot: true,
+                zombieSimulation: this.config.authoritativeZombie === true
+            },
+            simulationTick: this.tick
+        };
+    }
+    async waitUntilAuthenticated(timeoutMs = 5_000) {
+        const started = Date.now();
+        while (!this.authenticated) {
+            if (Date.now() - started > timeoutMs)
+                throw new Error('Timed out waiting for host authentication');
+            await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+    }
+    disconnectTransportForTest() {
+        this.socket?.destroy();
+    }
+    async stop() {
+        this.stopped = true;
+        this.authenticated = false;
+        if (this.heartbeat)
+            clearInterval(this.heartbeat);
+        if (this.worldSimulationTimer)
+            clearInterval(this.worldSimulationTimer);
+        if (this.worldSaveTimer)
+            clearInterval(this.worldSaveTimer);
+        if (this.reconnect)
+            clearTimeout(this.reconnect);
+        await this.flushWorld(true);
+        this.socket?.destroy();
+        if (this.statusServer)
+            await new Promise((resolve) => this.statusServer.close(() => resolve()));
+        log('info', 'host_agent_stopped', { sessionId: this.sessionId, worldId: this.config.worldId });
+    }
+    connect() {
+        if (this.stopped)
+            return;
+        const socket = createConnection({
+            host: this.config.gatewayHost ?? '127.0.0.1',
+            port: this.config.gatewayPort
+        });
+        this.socket = socket;
+        this.decoder = new FrameDecoder();
+        socket.setNoDelay(true);
+        socket.setKeepAlive(true, 2_000);
+        socket.once('connect', () => {
+            this.reconnectDelay = this.config.reconnectMinMs ?? 100;
+            socket.write(encodeFrame({
+                type: MessageType.HostAuthenticate,
+                sessionId: this.sessionId,
+                worldId: this.config.worldId,
+                payload: encodeString(this.config.hostSecret, 512)
+            }));
+        });
+        socket.on('data', (chunk) => {
+            try {
+                const bytes = typeof chunk === 'string' ? Buffer.from(chunk) : chunk;
+                for (const frame of this.decoder.push(bytes))
+                    this.handle(frame);
+            }
+            catch (error) {
+                log('error', 'host_protocol_error', { error: error instanceof Error ? error.message : 'unknown' });
+                socket.destroy();
+            }
+        });
+        socket.on('error', (error) => log('warning', 'host_gateway_error', { error: error.message }));
+        socket.once('close', () => {
+            if (this.socket !== socket)
+                return;
+            this.authenticated = false;
+            // Gateway connection IDs cannot survive a gateway disconnect. Keeping
+            // these entries would duplicate a player after their next admission.
+            for (const player of this.players.values()) {
+                log('info', 'host_player_removed', {
+                    connectionId: player.connectionId,
+                    playerId: player.playerId,
+                    entityId: player.entityId,
+                    sessionId: this.sessionId,
+                    worldId: this.config.worldId,
+                    disconnectReason: 'gateway_disconnected'
+                });
+            }
+            this.players.clear();
+            log('warning', 'host_gateway_disconnected', { sessionId: this.sessionId, worldId: this.config.worldId });
+            this.scheduleReconnect();
+        });
+    }
+    scheduleReconnect() {
+        if (this.stopped || this.reconnect)
+            return;
+        const delay = this.reconnectDelay;
+        this.reconnectDelay = Math.min(this.reconnectDelay * 2, this.config.reconnectMaxMs ?? 5_000);
+        this.reconnect = setTimeout(() => {
+            this.reconnect = undefined;
+            this.connect();
+        }, delay);
+        this.reconnect.unref();
+    }
+    handle(frame) {
+        if (frame.type === MessageType.AuthenticationAccepted) {
+            this.authenticated = true;
+            log('info', 'host_authenticated', { sessionId: this.sessionId, worldId: this.config.worldId });
+            return;
+        }
+        if (frame.type === MessageType.AuthenticationRejected) {
+            log('critical', 'host_authentication_rejected', { reason: decodeString(frame.payload, 128) });
+            this.stopped = true;
+            this.socket?.destroy();
+            return;
+        }
+        if (!this.authenticated)
+            throw new Error('Gateway message arrived before authentication');
+        if (frame.type === MessageType.JoinRequest) {
+            const request = decodeJoinRequest(frame.payload);
+            const entityId = stableNumericId(`player-entity:${request.playerKey}`);
+            const player = {
+                connectionId: frame.connectionId,
+                playerId: frame.playerId,
+                entityId,
+                playerKey: request.playerKey,
+                displayName: request.displayName,
+                dead: false,
+                health: 100,
+                profileRevision: 0
+            };
+            this.players.set(frame.connectionId, player);
+            this.send({
+                type: MessageType.JoinAccepted,
+                connectionId: frame.connectionId,
+                sessionId: this.sessionId,
+                worldId: this.config.worldId,
+                playerId: frame.playerId,
+                entityId,
+                tick: ++this.tick,
+                payload: encodeString(request.displayName, 64)
+            });
+            log('info', 'host_player_admitted', {
+                connectionId: frame.connectionId, playerId: frame.playerId, entityId,
+                sessionId: this.sessionId, worldId: this.config.worldId
+            });
+            if (this.latestWorldState)
+                this.sendWorldState(this.latestWorldState);
+            for (const entity of this.worldEntities.values()) {
+                this.sendEntitySpawn(entity);
+                this.sendEntityState(entity);
+            }
+            return;
+        }
+        if (frame.type === MessageType.PlayerDisconnected) {
+            const player = this.players.get(frame.connectionId);
+            this.players.delete(frame.connectionId);
+            if (player) {
+                const reason = decodeString(frame.payload, 128);
+                // The host owns the player-to-entity mapping. Echo the authoritative
+                // entity ID so every client can destroy the exact proxy even when an
+                // older gateway emitted a zero-ID disconnect first.
+                this.send({
+                    type: MessageType.PlayerDisconnected,
+                    connectionId: player.connectionId,
+                    sessionId: this.sessionId,
+                    worldId: this.config.worldId,
+                    playerId: player.playerId,
+                    entityId: player.entityId,
+                    tick: ++this.tick,
+                    payload: encodeString(reason, 128)
+                });
+                log('info', 'host_player_removed', {
+                    connectionId: player.connectionId, playerId: player.playerId, entityId: player.entityId,
+                    sessionId: this.sessionId, worldId: this.config.worldId,
+                    disconnectReason: reason
+                });
+            }
+            return;
+        }
+        if (frame.type === MessageType.Movement) {
+            const player = this.players.get(frame.connectionId);
+            if (!player)
+                return;
+            const movement = decodeMovement(frame.payload);
+            if (player.lastSequence !== undefined && !isNewerSequence(frame.sequence, player.lastSequence)) {
+                log('debug', 'stale_movement_rejected', {
+                    connectionId: player.connectionId, playerId: player.playerId,
+                    sequence: frame.sequence, previousSequence: player.lastSequence
+                });
+                return;
+            }
+            player.lastSequence = frame.sequence;
+            player.x = movement.x;
+            player.y = movement.y;
+            player.z = movement.z;
+            this.send({
+                ...frame,
+                sessionId: this.sessionId,
+                worldId: this.config.worldId,
+                playerId: player.playerId,
+                entityId: player.entityId,
+                tick: ++this.tick
+            });
+            return;
+        }
+        if (frame.type === MessageType.ItemDropRequest) {
+            this.handleItemDropRequest(frame);
+            return;
+        }
+        if (frame.type === MessageType.ItemPickupRequest) {
+            this.handleItemPickupRequest(frame);
+            return;
+        }
+        if (frame.type === MessageType.ZombieAttackRequest) {
+            this.handleZombieAttackRequest(frame);
+            return;
+        }
+        if (frame.type === MessageType.DeathRequest) {
+            const player = this.players.get(frame.connectionId);
+            if (!player || player.dead)
+                return;
+            player.dead = true;
+            player.health = 0;
+            player.profileRevision += 1;
+            this.send({
+                type: MessageType.Death,
+                connectionId: player.connectionId,
+                sessionId: this.sessionId,
+                worldId: this.config.worldId,
+                playerId: player.playerId,
+                entityId: player.entityId,
+                tick: ++this.tick,
+                sequence: player.profileRevision,
+                payload: encodeString('host_confirmed_lifecycle_death', 128)
+            });
+            log('info', 'host_death_confirmed', {
+                connectionId: player.connectionId, playerId: player.playerId,
+                entityId: player.entityId, sessionId: this.sessionId,
+                worldId: this.config.worldId, profileRevision: player.profileRevision
+            });
+            return;
+        }
+        if (frame.type === MessageType.RespawnRequest) {
+            const player = this.players.get(frame.connectionId);
+            if (!player || !player.dead)
+                return;
+            player.dead = false;
+            player.health = 100;
+            player.profileRevision += 1;
+            this.send({
+                type: MessageType.Respawn,
+                connectionId: player.connectionId,
+                sessionId: this.sessionId,
+                worldId: this.config.worldId,
+                playerId: player.playerId,
+                entityId: player.entityId,
+                tick: ++this.tick,
+                sequence: player.profileRevision,
+                payload: frame.payload
+            });
+            log('info', 'host_respawn_confirmed', {
+                connectionId: player.connectionId, playerId: player.playerId,
+                entityId: player.entityId, sessionId: this.sessionId,
+                worldId: this.config.worldId, profileRevision: player.profileRevision
+            });
+            return;
+        }
+        if ([
+            MessageType.Equipment, MessageType.InteractionRequest,
+            MessageType.ProfileRevision
+        ].includes(frame.type)) {
+            const player = this.players.get(frame.connectionId);
+            if (!player)
+                return;
+            this.send({
+                ...frame,
+                type: frame.type === MessageType.InteractionRequest
+                    ? MessageType.InteractionResult
+                    : frame.type,
+                entityId: player.entityId,
+                tick: ++this.tick
+            });
+            return;
+        }
+        throw new Error(`Unsupported gateway message ${frame.type}`);
+    }
+    sendWorldState(state) {
+        this.send({
+            type: MessageType.WorldState,
+            sessionId: this.sessionId,
+            worldId: this.config.worldId,
+            tick: ++this.tick,
+            sequence: state.revision,
+            payload: encodeWorldState(state)
+        });
+    }
+    createInitialWorldState(now = Date.now()) {
+        const presets = [
+            { rain: 0, snow: 0, fog: 0.03, cloudCoverage: 0.1, wind: 0.1, thunder: 0 },
+            { rain: 0, snow: 0, fog: 0.2, cloudCoverage: 0.85, wind: 0.35, thunder: 0 },
+            { rain: 0.7, snow: 0, fog: 0.35, cloudCoverage: 1, wind: 0.55, thunder: 0.15 },
+            { rain: 1, snow: 0, fog: 0.45, cloudCoverage: 1, wind: 1, thunder: 1 },
+            { rain: 0, snow: 0.8, fog: 0.4, cloudCoverage: 0.9, wind: 0.45, thunder: 0 }
+        ];
+        const phaseDurationMs = 10 * 60_000;
+        const cycleDurationMs = phaseDurationMs * presets.length;
+        this.weatherCycleElapsedMs = now % cycleDurationMs;
+        const cyclePosition = this.weatherCycleElapsedMs / phaseDurationMs;
+        const phase = Math.floor(cyclePosition) % presets.length;
+        const blend = cyclePosition - Math.floor(cyclePosition);
+        const from = presets[phase];
+        const to = presets[(phase + 1) % presets.length];
+        const interpolate = (start, end) => start + (end - start) * blend;
+        return {
+            revision: this.worldRevision >>> 0,
+            authorityTimeMs: BigInt(now),
+            timeOfDay: (Number(BigInt(now) % 7200000n) / 7_200_000) * 2400,
+            rain: interpolate(from.rain, to.rain),
+            snow: interpolate(from.snow, to.snow),
+            fog: interpolate(from.fog, to.fog),
+            cloudCoverage: interpolate(from.cloudCoverage, to.cloudCoverage),
+            wind: interpolate(from.wind, to.wind),
+            thunder: interpolate(from.thunder, to.thunder)
+        };
+    }
+    advanceWorldState(elapsedMs) {
+        const safeElapsedMs = Math.max(0, Math.min(30_000, elapsedMs));
+        if (!this.latestWorldState) {
+            this.latestWorldState = this.createInitialWorldState();
+            this.markWorldDirty();
+            return;
+        }
+        if (safeElapsedMs === 0)
+            return;
+        this.latestWorldState.authorityTimeMs += BigInt(Math.round(safeElapsedMs));
+        this.latestWorldState.timeOfDay =
+            (this.latestWorldState.timeOfDay + safeElapsedMs * (2400 / 7_200_000)) % 2400;
+        const presets = [
+            { rain: 0, snow: 0, fog: 0.03, cloudCoverage: 0.1, wind: 0.1, thunder: 0 },
+            { rain: 0, snow: 0, fog: 0.2, cloudCoverage: 0.85, wind: 0.35, thunder: 0 },
+            { rain: 0.7, snow: 0, fog: 0.35, cloudCoverage: 1, wind: 0.55, thunder: 0.15 },
+            { rain: 1, snow: 0, fog: 0.45, cloudCoverage: 1, wind: 1, thunder: 1 },
+            { rain: 0, snow: 0.8, fog: 0.4, cloudCoverage: 0.9, wind: 0.45, thunder: 0 }
+        ];
+        const phaseDurationMs = 10 * 60_000;
+        const cycleDurationMs = phaseDurationMs * presets.length;
+        this.weatherCycleElapsedMs = (this.weatherCycleElapsedMs + safeElapsedMs) % cycleDurationMs;
+        const cyclePosition = this.weatherCycleElapsedMs / phaseDurationMs;
+        const phase = Math.floor(cyclePosition) % presets.length;
+        const blend = cyclePosition - Math.floor(cyclePosition);
+        const from = presets[phase];
+        const to = presets[(phase + 1) % presets.length];
+        const interpolate = (start, end) => start + (end - start) * blend;
+        this.latestWorldState.rain = interpolate(from.rain, to.rain);
+        this.latestWorldState.snow = interpolate(from.snow, to.snow);
+        this.latestWorldState.fog = interpolate(from.fog, to.fog);
+        this.latestWorldState.cloudCoverage = interpolate(from.cloudCoverage, to.cloudCoverage);
+        this.latestWorldState.wind = interpolate(from.wind, to.wind);
+        this.latestWorldState.thunder = interpolate(from.thunder, to.thunder);
+        this.markWorldDirty();
+    }
+    publishWorldStateIfDue(force = false) {
+        const now = Date.now();
+        if (!this.latestWorldState) {
+            this.latestWorldState = this.createInitialWorldState(now);
+            this.markWorldDirty();
+        }
+        const intervalMs = Math.max(1_000, this.config.worldStatePublishIntervalMs ?? 2_000);
+        if (!force && now - this.lastWorldStatePublishAt < intervalMs)
+            return;
+        this.lastWorldStatePublishAt = now;
+        this.worldRevision = (this.worldRevision + 1) >>> 0;
+        const state = {
+            ...this.latestWorldState,
+            revision: this.worldRevision
+        };
+        this.latestWorldState = state;
+        this.sendWorldState(state);
+        // Entity descriptors are small and idempotent. Replay them with the
+        // low-rate world snapshot so a late client, or one UDP bridge packet loss,
+        // cannot receive states forever without knowing which actor class to use.
+        for (const entity of this.worldEntities.values()) {
+            this.sendEntitySpawn(entity);
+            this.sendEntityState(entity);
+        }
+        this.replayEntityDespawnTombstones(now);
+        this.markWorldDirty();
+    }
+    sendEntitySpawn(entity) {
+        this.send({
+            type: MessageType.EntitySpawn,
+            sessionId: this.sessionId,
+            worldId: this.config.worldId,
+            entityId: entity.entityId,
+            sequence: entity.revision,
+            tick: ++this.tick,
+            payload: encodeWorldEntityDescriptor({
+                kind: entity.kind,
+                revision: entity.revision,
+                classPath: entity.classPath,
+                itemId: entity.itemId ?? '',
+                quantity: entity.quantity ?? 0,
+                ownerPlayerId: entity.ownerPlayerId ?? 0n
+            })
+        });
+    }
+    sendEntityState(entity) {
+        this.send({
+            type: MessageType.EntityState,
+            sessionId: this.sessionId,
+            worldId: this.config.worldId,
+            entityId: entity.entityId,
+            sequence: entity.revision,
+            tick: ++this.tick,
+            payload: encodeWorldEntityState(entity)
+        });
+    }
+    sendEntityDespawn(tombstone) {
+        this.send({
+            type: MessageType.EntityDespawn,
+            sessionId: this.sessionId,
+            worldId: this.config.worldId,
+            playerId: tombstone.playerId,
+            entityId: tombstone.entityId,
+            sequence: tombstone.revision,
+            tick: ++this.tick,
+            payload: encodeWorldAction({
+                reason: 'picked_up',
+                requestId: tombstone.requestId
+            })
+        });
+    }
+    replayEntityDespawnTombstones(now) {
+        for (const [entityId, tombstone] of this.entityDespawnTombstones) {
+            if (tombstone.expiresAtMs <= now) {
+                this.entityDespawnTombstones.delete(entityId);
+                continue;
+            }
+            this.sendEntityDespawn(tombstone);
+        }
+    }
+    sendZombiePlayerDamage(zombie, player, damage) {
+        const attackSequence = ++this.zombieAttackSequence >>> 0;
+        player.health = Math.max(0, player.health - damage);
+        this.send({
+            type: MessageType.PlayerDamage,
+            connectionId: player.connectionId,
+            sessionId: this.sessionId,
+            worldId: this.config.worldId,
+            playerId: player.playerId,
+            entityId: zombie.entityId,
+            sequence: attackSequence,
+            tick: ++this.tick,
+            payload: encodePlayerDamage({
+                damage,
+                health: player.health,
+                attackSequence
+            })
+        });
+        log('info', 'host_zombie_player_damage', {
+            entityId: zombie.entityId,
+            playerId: player.playerId,
+            damage,
+            health: player.health,
+            attackSequence,
+            sessionId: this.sessionId,
+            worldId: this.config.worldId
+        });
+        if (player.health > 0 || player.dead)
+            return;
+        player.dead = true;
+        player.profileRevision += 1;
+        this.send({
+            type: MessageType.Death,
+            connectionId: player.connectionId,
+            sessionId: this.sessionId,
+            worldId: this.config.worldId,
+            playerId: player.playerId,
+            entityId: player.entityId,
+            tick: ++this.tick,
+            sequence: player.profileRevision,
+            payload: encodeString('host_confirmed_zombie_death', 128)
+        });
+        log('info', 'host_zombie_player_death', {
+            connectionId: player.connectionId,
+            playerId: player.playerId,
+            entityId: player.entityId,
+            zombieEntityId: zombie.entityId,
+            sessionId: this.sessionId,
+            worldId: this.config.worldId,
+            profileRevision: player.profileRevision
+        });
+    }
+    simulateWorld() {
+        const now = Date.now();
+        const elapsedSeconds = Math.min(1, Math.max(0, (now - this.lastWorldSimulationAt) / 1000));
+        const elapsedMs = Math.max(0, now - this.lastWorldSimulationAt);
+        this.lastWorldSimulationAt = now;
+        this.advanceWorldState(elapsedMs);
+        if (!this.config.authoritativeZombie)
+            return;
+        const activePlayers = [...this.players.values()].filter((player) => player.x !== undefined && player.y !== undefined && player.z !== undefined && !player.dead);
+        const liveZombies = [...this.worldEntities.values()].filter((entity) => entity.kind === WorldEntityKind.Zombie && entity.health > 0);
+        if (liveZombies.length === 0 && activePlayers.length > 0 && now >= this.nextZombieSpawnAt) {
+            const anchor = activePlayers[0];
+            const zombie = {
+                entityId: stableNumericId(`zombie:${this.config.worldId}:${this.sessionId}:${++this.zombieSpawnSerial}`),
+                kind: WorldEntityKind.Zombie,
+                revision: 1,
+                x: anchor.x + 700,
+                y: anchor.y,
+                z: anchor.z,
+                yaw: 180,
+                health: 100,
+                state: 0,
+                classPath: this.config.zombieClassPath ??
+                    '/Game/AI/Zombies/Roamer/BP_Zombie_Roamer.BP_Zombie_Roamer_C'
+            };
+            this.worldEntities.set(zombie.entityId, zombie);
+            this.sendEntitySpawn(zombie);
+            this.sendEntityState(zombie);
+            this.markWorldDirty();
+            log('info', 'host_authoritative_zombie_spawned', {
+                entityId: zombie.entityId,
+                sessionId: this.sessionId,
+                worldId: this.config.worldId
+            });
+            return;
+        }
+        for (const zombie of liveZombies) {
+            let target;
+            let targetDistanceSquared = Number.POSITIVE_INFINITY;
+            for (const player of activePlayers) {
+                const dx = player.x - zombie.x;
+                const dy = player.y - zombie.y;
+                const dz = player.z - zombie.z;
+                const distanceSquared = dx * dx + dy * dy + dz * dz;
+                if (distanceSquared < targetDistanceSquared) {
+                    target = player;
+                    targetDistanceSquared = distanceSquared;
+                }
+            }
+            if (!target || targetDistanceSquared > 2500 * 2500) {
+                if (zombie.state !== 0) {
+                    zombie.state = 0;
+                    zombie.revision = (zombie.revision + 1) >>> 0;
+                    this.sendEntityState(zombie);
+                    this.markWorldDirty();
+                }
+                continue;
+            }
+            const dx = target.x - zombie.x;
+            const dy = target.y - zombie.y;
+            const dz = target.z - zombie.z;
+            const planarDistance = Math.hypot(dx, dy);
+            const previousYaw = zombie.yaw;
+            const previousState = zombie.state;
+            let moved = false;
+            const desiredYaw = Math.atan2(dy, dx) * 180 / Math.PI;
+            const yawDelta = ((desiredYaw - previousYaw + 540) % 360) - 180;
+            if (Math.abs(yawDelta) >= 1) {
+                zombie.yaw = previousYaw + yawDelta;
+            }
+            const attackRange = 175;
+            const canAttack = planarDistance <= attackRange && Math.abs(dz) <= 150;
+            if (!canAttack && planarDistance > 0) {
+                zombie.state = 1;
+                const travel = Math.min(Math.max(0, planarDistance - attackRange), 105 * elapsedSeconds);
+                zombie.x += dx / planarDistance * travel;
+                zombie.y += dy / planarDistance * travel;
+                const verticalTravel = Math.min(Math.abs(dz), 60 * elapsedSeconds);
+                zombie.z += Math.sign(dz) * verticalTravel;
+                moved = travel > 0 || verticalTravel > 0;
+            }
+            else {
+                const nextAttackAt = this.nextZombieAttackAt.get(zombie.entityId) ?? 0;
+                if (canAttack && now >= nextAttackAt) {
+                    zombie.state = 4;
+                    this.nextZombieAttackAt.set(zombie.entityId, now + 1_800);
+                    this.zombieAttackStateUntil.set(zombie.entityId, now + 550);
+                    this.sendZombiePlayerDamage(zombie, target, 14);
+                }
+                else {
+                    zombie.state =
+                        now < (this.zombieAttackStateUntil.get(zombie.entityId) ?? 0)
+                            ? 4
+                            : 0;
+                }
+            }
+            const changed = moved ||
+                Math.abs(yawDelta) >= 1 ||
+                zombie.state !== previousState;
+            if (!changed)
+                continue;
+            zombie.revision = (zombie.revision + 1) >>> 0;
+            this.sendEntityState(zombie);
+            this.markWorldDirty();
+        }
+    }
+    playerWithin(player, entity, maximumDistance) {
+        if (player.dead || player.x === undefined || player.y === undefined || player.z === undefined) {
+            return false;
+        }
+        const dx = player.x - entity.x;
+        const dy = player.y - entity.y;
+        const dz = player.z - entity.z;
+        return dx * dx + dy * dy + dz * dz <= maximumDistance * maximumDistance;
+    }
+    decodeAction(payload) {
+        try {
+            return decodeWorldAction(payload);
+        }
+        catch (error) {
+            log('warning', 'host_world_action_rejected', {
+                error: error instanceof Error ? error.message : 'invalid_world_action',
+                worldId: this.config.worldId
+            });
+            return undefined;
+        }
+    }
+    actionKey(playerId, requestId) {
+        return `${playerId.toString()}:${requestId}`;
+    }
+    validRequestId(value) {
+        return /^[a-zA-Z0-9._:-]{1,80}$/.test(value);
+    }
+    allowedGroundItemClassPath(value) {
+        if (!/^[a-zA-Z0-9_./:-]{1,512}$/.test(value))
+            return false;
+        return [
+            '/Game/Inventory/',
+            '/Game/JigSInventory/',
+            '/Game/Items/',
+            '/Game/Blueprints/Items/'
+        ].some((prefix) => value.startsWith(prefix));
+    }
+    sendDropResult(player, entityId, action) {
+        this.send({
+            type: MessageType.ItemDropResult,
+            connectionId: player.connectionId,
+            sessionId: this.sessionId,
+            worldId: this.config.worldId,
+            playerId: player.playerId,
+            entityId,
+            tick: ++this.tick,
+            payload: encodeWorldAction(action)
+        });
+    }
+    sendPickupResult(player, result, requestId) {
+        this.send({
+            type: MessageType.ItemPickupResult,
+            connectionId: player.connectionId,
+            sessionId: this.sessionId,
+            worldId: this.config.worldId,
+            playerId: player.playerId,
+            entityId: result.entityId,
+            tick: ++this.tick,
+            payload: encodeWorldAction({
+                requestId,
+                accepted: result.accepted,
+                reason: result.reason,
+                itemId: result.itemId,
+                quantity: result.quantity
+            })
+        });
+    }
+    handleItemDropRequest(frame) {
+        const player = this.players.get(frame.connectionId);
+        if (!player || player.dead || player.x === undefined || player.y === undefined || player.z === undefined)
+            return;
+        const action = this.decodeAction(frame.payload);
+        if (!action)
+            return;
+        const requestId = typeof action.requestId === 'string' ? action.requestId : '';
+        const itemId = typeof action.itemId === 'string' ? action.itemId : '';
+        const classPath = typeof action.classPath === 'string' ? action.classPath : '';
+        const quantity = typeof action.quantity === 'number' ? action.quantity : 1;
+        const hasRequestedPosition = ['x', 'y', 'z'].some((key) => action[key] !== undefined);
+        const requestedX = typeof action.x === 'number' ? action.x : Number.NaN;
+        const requestedY = typeof action.y === 'number' ? action.y : Number.NaN;
+        const requestedZ = typeof action.z === 'number' ? action.z : Number.NaN;
+        const requestedYaw = typeof action.yaw === 'number' ? action.yaw : 0;
+        const requestedPositionValid = Number.isFinite(requestedX) && Number.isFinite(requestedY) && Number.isFinite(requestedZ) &&
+            Math.abs(requestedX) < 10_000_000 && Math.abs(requestedY) < 10_000_000 &&
+            Math.abs(requestedZ) < 10_000_000 &&
+            (requestedX - player.x) ** 2 + (requestedY - player.y) ** 2 +
+                (requestedZ - player.z) ** 2 <= 250 ** 2;
+        if (!this.validRequestId(requestId) ||
+            itemId.length < 1 || itemId.length > 256 || /[\r\n\0]/.test(itemId) ||
+            !this.allowedGroundItemClassPath(classPath) ||
+            !Number.isSafeInteger(quantity) || quantity < 1 || quantity > 100 ||
+            !Number.isFinite(requestedYaw) || Math.abs(requestedYaw) > 360_000 ||
+            (hasRequestedPosition && !requestedPositionValid)) {
+            this.sendDropResult(player, 0n, {
+                requestId,
+                accepted: false,
+                reason: 'invalid_drop_request'
+            });
+            return;
+        }
+        const key = this.actionKey(player.playerId, requestId);
+        const previous = this.dropRequests.get(key);
+        if (previous) {
+            const entity = this.worldEntities.get(previous.entityId);
+            if (previous.status === 'active' && entity) {
+                this.sendEntitySpawn(entity);
+                this.sendEntityState(entity);
+            }
+            this.sendDropResult(player, previous.entityId, {
+                requestId,
+                accepted: true,
+                duplicate: true,
+                active: previous.status === 'active' && Boolean(entity),
+                consumed: previous.status === 'consumed'
+            });
+            return;
+        }
+        const entityId = stableNumericId(`ground-item:${player.playerId.toString()}:${requestId}`);
+        if (this.worldEntities.has(entityId)) {
+            this.sendDropResult(player, entityId, {
+                requestId,
+                accepted: false,
+                reason: 'entity_id_collision'
+            });
+            return;
+        }
+        const entity = {
+            entityId,
+            kind: WorldEntityKind.GroundItem,
+            revision: 1,
+            x: requestedPositionValid ? requestedX : player.x + 100,
+            y: requestedPositionValid ? requestedY : player.y,
+            z: requestedPositionValid ? requestedZ : player.z + 20,
+            yaw: ((requestedYaw % 360) + 360) % 360,
+            health: 1,
+            state: 0,
+            classPath,
+            itemId,
+            quantity,
+            requestId,
+            ownerPlayerId: player.playerId
+        };
+        this.worldEntities.set(entityId, entity);
+        this.dropRequests.set(key, {
+            key,
+            entityId,
+            status: 'active',
+            updatedAtMs: Date.now()
+        });
+        this.pruneLedger(this.dropRequests);
+        this.sendEntitySpawn(entity);
+        this.sendEntityState(entity);
+        this.sendDropResult(player, entityId, {
+            requestId,
+            accepted: true,
+            active: true,
+            itemId,
+            quantity
+        });
+        this.markWorldDirty();
+        log('info', 'host_ground_item_created', {
+            entityId, playerId: player.playerId, quantity,
+            sessionId: this.sessionId, worldId: this.config.worldId
+        });
+    }
+    handleItemPickupRequest(frame) {
+        const player = this.players.get(frame.connectionId);
+        if (!player)
+            return;
+        const action = this.decodeAction(frame.payload);
+        if (!action)
+            return;
+        const requestId = typeof action.requestId === 'string' ? action.requestId : '';
+        const entityText = typeof action.entityId === 'string' ? action.entityId : '';
+        if (!this.validRequestId(requestId))
+            return;
+        const key = this.actionKey(player.playerId, requestId);
+        const previous = this.pickupRequests.get(key);
+        if (previous) {
+            this.sendPickupResult(player, previous, requestId);
+            const tombstone = this.entityDespawnTombstones.get(previous.entityId);
+            if (previous.accepted && tombstone)
+                this.sendEntityDespawn(tombstone);
+            return;
+        }
+        let entityId = 0n;
+        try {
+            entityId = BigInt(entityText);
+        }
+        catch { /* rejected below */ }
+        const entity = this.worldEntities.get(entityId);
+        const accepted = Boolean(entityId > 0n &&
+            entity &&
+            entity.kind === WorldEntityKind.GroundItem &&
+            this.playerWithin(player, entity, 350));
+        const result = {
+            key,
+            entityId: entityId > 0n ? entityId : 0n,
+            accepted,
+            reason: accepted ? 'accepted' : 'unavailable_or_out_of_range',
+            itemId: accepted ? entity?.itemId : undefined,
+            quantity: accepted ? entity?.quantity : undefined,
+            updatedAtMs: Date.now()
+        };
+        this.pickupRequests.set(key, result);
+        this.pruneLedger(this.pickupRequests);
+        if (accepted && entity) {
+            this.worldEntities.delete(entityId);
+            if (entity.requestId && entity.ownerPlayerId) {
+                const drop = this.dropRequests.get(this.actionKey(entity.ownerPlayerId, entity.requestId));
+                if (drop) {
+                    drop.status = 'consumed';
+                    drop.updatedAtMs = Date.now();
+                }
+            }
+        }
+        this.sendPickupResult(player, result, requestId);
+        this.markWorldDirty();
+        if (!accepted || !entity)
+            return;
+        const tombstone = {
+            entityId,
+            revision: (entity.revision + 1) >>> 0,
+            playerId: player.playerId,
+            requestId,
+            expiresAtMs: Date.now() + 15_000
+        };
+        this.entityDespawnTombstones.set(entityId, tombstone);
+        this.sendEntityDespawn(tombstone);
+        log('info', 'host_ground_item_picked_up', {
+            entityId, playerId: player.playerId,
+            sessionId: this.sessionId, worldId: this.config.worldId
+        });
+    }
+    handleZombieAttackRequest(frame) {
+        const player = this.players.get(frame.connectionId);
+        if (!player)
+            return;
+        const action = this.decodeAction(frame.payload);
+        if (!action)
+            return;
+        const requestId = typeof action.requestId === 'string' ? action.requestId : '';
+        const entityText = typeof action.entityId === 'string' ? action.entityId : '';
+        const requestedDamage = typeof action.damage === 'number' ? action.damage : 0;
+        let entityId = 0n;
+        try {
+            entityId = BigInt(entityText);
+        }
+        catch { /* rejected below */ }
+        const entity = this.worldEntities.get(entityId);
+        if (!this.validRequestId(requestId) ||
+            !entity ||
+            entity.kind !== WorldEntityKind.Zombie ||
+            !Number.isFinite(requestedDamage) ||
+            requestedDamage <= 0 ||
+            !this.playerWithin(player, entity, 500)) {
+            this.send({
+                type: MessageType.ZombieDamageResult,
+                connectionId: player.connectionId,
+                sessionId: this.sessionId,
+                worldId: this.config.worldId,
+                playerId: player.playerId,
+                entityId,
+                tick: ++this.tick,
+                payload: encodeWorldAction({
+                    requestId,
+                    accepted: false,
+                    reason: 'invalid_target_or_out_of_range'
+                })
+            });
+            return;
+        }
+        const damage = Math.min(requestedDamage, 25);
+        entity.health = Math.max(0, entity.health - damage);
+        entity.revision = (entity.revision + 1) >>> 0;
+        entity.state = entity.health === 0 ? 3 : 2;
+        this.sendEntityState(entity);
+        this.send({
+            type: MessageType.ZombieDamageResult,
+            connectionId: player.connectionId,
+            sessionId: this.sessionId,
+            worldId: this.config.worldId,
+            playerId: player.playerId,
+            entityId,
+            sequence: entity.revision,
+            tick: ++this.tick,
+            payload: encodeWorldAction({
+                requestId,
+                accepted: true,
+                damage,
+                health: entity.health,
+                dead: entity.health === 0
+            })
+        });
+        this.markWorldDirty();
+        if (entity.health === 0) {
+            this.worldEntities.delete(entityId);
+            this.nextZombieSpawnAt = Date.now() + Math.max(1_000, this.config.zombieRespawnMs ?? 30_000);
+            this.send({
+                type: MessageType.EntityDespawn,
+                sessionId: this.sessionId,
+                worldId: this.config.worldId,
+                entityId,
+                sequence: (entity.revision + 1) >>> 0,
+                tick: ++this.tick,
+                payload: encodeWorldAction({ reason: 'killed', requestId })
+            });
+        }
+    }
+    pruneLedger(ledger, maximum = 5_000) {
+        if (ledger.size <= maximum)
+            return;
+        const oldest = [...ledger.entries()]
+            .sort((left, right) => left[1].updatedAtMs - right[1].updatedAtMs)
+            .slice(0, ledger.size - maximum);
+        for (const [key] of oldest)
+            ledger.delete(key);
+    }
+    markWorldDirty() {
+        if (this.worldStore)
+            this.worldDirty = true;
+    }
+    worldSnapshot() {
+        return {
+            worldRevision: this.worldRevision,
+            simulationTick: this.tick,
+            latestWorldState: this.latestWorldState
+                ? {
+                    authorityTimeMs: this.latestWorldState.authorityTimeMs,
+                    timeOfDay: this.latestWorldState.timeOfDay,
+                    rain: this.latestWorldState.rain,
+                    snow: this.latestWorldState.snow,
+                    fog: this.latestWorldState.fog,
+                    cloudCoverage: this.latestWorldState.cloudCoverage,
+                    wind: this.latestWorldState.wind,
+                    thunder: this.latestWorldState.thunder
+                }
+                : undefined,
+            weatherCycleElapsedMs: this.weatherCycleElapsedMs,
+            nextZombieSpawnAtMs: this.nextZombieSpawnAt,
+            zombieSpawnSerial: this.zombieSpawnSerial,
+            entities: [...this.worldEntities.values()].map((entity) => ({ ...entity })),
+            dropRequests: [...this.dropRequests.values()].map((item) => ({ ...item })),
+            pickupRequests: [...this.pickupRequests.values()].map((item) => ({ ...item }))
+        };
+    }
+    async restoreWorld() {
+        if (!this.worldStore)
+            return;
+        try {
+            const snapshot = await this.worldStore.load();
+            if (!snapshot)
+                return;
+            this.worldRevision = snapshot.worldRevision;
+            this.tick = snapshot.simulationTick;
+            this.latestWorldState = snapshot.latestWorldState
+                ? {
+                    revision: this.worldRevision,
+                    authorityTimeMs: snapshot.latestWorldState.authorityTimeMs,
+                    timeOfDay: snapshot.latestWorldState.timeOfDay,
+                    rain: snapshot.latestWorldState.rain,
+                    snow: snapshot.latestWorldState.snow,
+                    fog: snapshot.latestWorldState.fog,
+                    cloudCoverage: snapshot.latestWorldState.cloudCoverage,
+                    wind: snapshot.latestWorldState.wind,
+                    thunder: snapshot.latestWorldState.thunder
+                }
+                : this.createInitialWorldState();
+            this.weatherCycleElapsedMs = snapshot.weatherCycleElapsedMs ?? 0;
+            this.nextZombieSpawnAt = snapshot.nextZombieSpawnAtMs ?? 0;
+            this.zombieSpawnSerial = snapshot.zombieSpawnSerial ?? 0;
+            this.worldEntities.clear();
+            this.dropRequests.clear();
+            this.pickupRequests.clear();
+            let quarantinedZombies = 0;
+            for (const entity of snapshot.entities) {
+                if (entity.kind === WorldEntityKind.Zombie &&
+                    this.config.authoritativeZombie !== true) {
+                    quarantinedZombies += 1;
+                    continue;
+                }
+                this.worldEntities.set(entity.entityId, entity);
+            }
+            for (const item of snapshot.dropRequests)
+                this.dropRequests.set(item.key, item);
+            for (const item of snapshot.pickupRequests)
+                this.pickupRequests.set(item.key, item);
+            if (quarantinedZombies > 0) {
+                this.nextZombieSpawnAt = 0;
+                this.worldDirty = true;
+                log('warning', 'host_quarantined_zombies_removed', {
+                    worldId: this.config.worldId,
+                    entityCount: quarantinedZombies
+                });
+            }
+            this.worldPersistenceHealthy = true;
+            log('info', 'host_world_restored', {
+                worldId: this.config.worldId,
+                worldRevision: this.worldRevision,
+                worldTimeOfDay: this.latestWorldState.timeOfDay,
+                entityCount: this.worldEntities.size,
+                dropRequestCount: this.dropRequests.size,
+                pickupRequestCount: this.pickupRequests.size
+            });
+        }
+        catch (error) {
+            this.worldPersistenceHealthy = false;
+            this.worldPersistenceBlocked = true;
+            log('critical', 'host_world_restore_failed', {
+                worldId: this.config.worldId,
+                error: error instanceof Error ? error.message : 'unknown'
+            });
+        }
+    }
+    async flushWorld(force = false) {
+        if (!this.worldStore || this.worldPersistenceBlocked)
+            return;
+        if (this.worldSaveInFlight)
+            await this.worldSaveInFlight;
+        if (!force && !this.worldDirty)
+            return;
+        const snapshot = this.worldSnapshot();
+        this.worldDirty = false;
+        const operation = this.worldStore.save(snapshot)
+            .then(() => {
+            this.worldPersistenceHealthy = true;
+        })
+            .catch((error) => {
+            this.worldDirty = true;
+            this.worldPersistenceHealthy = false;
+            log('error', 'host_world_save_failed', {
+                worldId: this.config.worldId,
+                error: error instanceof Error ? error.message : 'unknown'
+            });
+        });
+        this.worldSaveInFlight = operation;
+        await operation;
+        if (this.worldSaveInFlight === operation)
+            this.worldSaveInFlight = undefined;
+    }
+    send(frame) {
+        if (this.socket && !this.socket.destroyed)
+            this.socket.write(encodeFrame(frame));
+    }
+    async refreshReadiness() {
+        if (this.config.gameDataDir) {
+            try {
+                const heartbeatPath = join(this.config.gameDataDir, 'cpp_heartbeat.txt');
+                const successPath = join(this.config.gameDataDir, 'cpp_native_bootstrap_success.txt');
+                const [heartbeat, success, heartbeatStat] = await Promise.all([
+                    readFile(heartbeatPath, 'utf8'),
+                    readFile(successPath, 'utf8'),
+                    stat(heartbeatPath)
+                ]);
+                const fresh = Date.now() - heartbeatStat.mtimeMs <=
+                    (this.config.readinessMaxAgeMs ?? 5_000);
+                const mapMatch = /^map=(.+)$/m.exec(success);
+                this.currentMap = mapMatch?.[1]?.trim() ?? '';
+                this.gameReady = fresh &&
+                    heartbeat.includes('running=1') &&
+                    heartbeat.includes('unrealReady=1') &&
+                    heartbeat.includes('nativeBootstrapStage=completed') &&
+                    this.currentMap.includes('PersistentLevel');
+            }
+            catch {
+                this.gameReady = false;
+                this.currentMap = '';
+            }
+            return;
+        }
+        try {
+            const response = await fetch(this.config.readinessUrl, {
+                signal: AbortSignal.timeout(750)
+            });
+            const value = await response.json();
+            this.gameReady = response.ok &&
+                value.joined === true &&
+                Number(value.gameBridge?.localFrames ?? 0) > 0;
+            this.currentMap = this.gameReady ? 'PersistentLevel' : '';
+        }
+        catch {
+            this.gameReady = false;
+            this.currentMap = '';
+        }
+    }
+}
+//# sourceMappingURL=service.js.map

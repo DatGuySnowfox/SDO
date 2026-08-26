@@ -23,15 +23,20 @@
 #include <RC/DynamicOutput/Output.hpp>
 
 #include <windows.h>
+#include <shellapi.h>
 #include <algorithm>
 #include <atomic>
 #include <cctype>
+#include <chrono>
 #include <cmath>
 #include <array>
 #include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <mutex>
+#include <random>
 #include <string>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 
@@ -80,6 +85,51 @@ static std::unordered_map<std::string,std::string> load_session_config()
     return m;
 }
 
+// Steam launch-option support (2026-08-26): steam://run/<appid>//-sdb_host=
+// ... -sdb_port=... -sdb_ticket=... lets a browser-based "Join" button
+// (directory-worker's status page) launch straight into a server with zero
+// local script/download — Steam appends everything after the trailing //
+// as literal argv tokens on the launched process. Overwrites (not merged
+// under) session.cfg's values when present, since a launch-arg join means
+// "connect to THIS server right now", superseding whatever stale ticket a
+// previous session might have left in session.cfg. Ticket format is
+// base64url (server/src/lib/ticket.js: "<base64url>.<base64url>") —
+// deliberately URL- and command-line-safe characters only
+// ([A-Za-z0-9_.-]), so no quoting/escaping is needed on either the URI or
+// argv side. Only recognizes our own sdb_* switches — never touches
+// anything else on the command line (UE's own engine switches etc.).
+static void merge_command_line_args(std::unordered_map<std::string,std::string>& m)
+{
+    int argc = 0;
+    LPWSTR* argv = CommandLineToArgvW(GetCommandLineW(), &argc);
+    if (!argv) return;
+
+    static const std::unordered_map<std::wstring, const char*> kKeyMap = {
+        { L"sdb_host",   "SDB_GATEWAY_HOST" },
+        { L"sdb_port",   "SDB_GATEWAY_PORT" },
+        { L"sdb_ticket", "SDB_JOIN_TICKET" },
+    };
+
+    for (int i = 1; i < argc; ++i) {
+        const std::wstring arg(argv[i]);
+        if (arg.size() < 2 || arg[0] != L'-') continue;
+        const size_t eq = arg.find(L'=');
+        if (eq == std::wstring::npos) continue;
+
+        const std::wstring wkey = arg.substr(1, eq - 1);
+        const auto it = kKeyMap.find(wkey);
+        if (it == kKeyMap.end()) continue;
+
+        const std::wstring wval = arg.substr(eq + 1);
+        const int needed = WideCharToMultiByte(CP_UTF8, 0, wval.c_str(), -1, nullptr, 0, nullptr, nullptr);
+        if (needed <= 0) continue;
+        std::string val(static_cast<size_t>(needed - 1), '\0');
+        WideCharToMultiByte(CP_UTF8, 0, wval.c_str(), -1, val.data(), needed, nullptr, nullptr);
+        m[it->second] = std::move(val);
+    }
+    LocalFree(argv);
+}
+
 static std::string cfg_get(const std::unordered_map<std::string,std::string>& m,
                             const char* key)
 {
@@ -112,25 +162,6 @@ static int64_t cfg_ms_to_us(const std::unordered_map<std::string,std::string>& m
 static sdb::TcpClient g_tcp;
 static uint8_t        g_enc_buf[sdb::FRAME_HEADER_SIZE + sdb::FRAME_MAX_PAYLOAD];
 
-// Character creation IPC paths — suffixed with this process's PID so two mod
-// instances on the same machine (e.g. two Sandboxie-sandboxed game clients
-// sharing a filesystem) don't race on the same request/done files. The C++
-// side computes the PID and publishes it via an environment variable so the
-// Lua-side character-creation script (mods/SDOnline/Scripts/main.lua, which
-// runs in this same OS process) can build the matching paths independently —
-// env vars set in a process are visible to everything running inside it.
-static std::wstring CC_REQUEST_FLAG;
-static std::wstring CC_DONE_FILE;
-
-static void init_cc_ipc_paths()
-{
-    const DWORD pid = GetCurrentProcessId();
-    const std::wstring pidStr = std::to_wstring(pid);
-    CC_REQUEST_FLAG = L"C:\\temp\\SDB_cc_request_" + pidStr + L".flag";
-    CC_DONE_FILE    = L"C:\\temp\\SDB_cc_done_" + pidStr + L".json";
-    SetEnvironmentVariableW(L"SDB_CC_PID", pidStr.c_str());
-}
-
 // ── UE4SS helpers ─────────────────────────────────────────────────────────
 
 static AActor* find_local_pawn()
@@ -143,9 +174,40 @@ static AActor* find_local_pawn()
             if (pp && *pp) return static_cast<AActor*>(*pp);
         }
     }
-    // Fallback: grab the character directly (safe when we're the only player).
-    UObject* chr = UObjectGlobals::FindFirstOf(STR("BP_PlayerCharacter_C"));
-    return static_cast<AActor*>(chr);
+    // Fallback (primary path above found no PlayerController or no
+    // possessed Pawn — e.g. a brief window during a respawn/teleport-like
+    // transition). Previously: FindFirstOf(BP_PlayerCharacter_C), which is
+    // ambiguous — it matches ANY live instance of the class, including
+    // locally-spawned proxy actors (proxies are also BP_PlayerCharacter_C,
+    // see spawn_proxy()). Live-confirmed 2026-08-17: this fallback grabbed
+    // a proxy actor instead of the real local pawn during an artificial
+    // same-position "teleport" (a direct server-side saved-position edit
+    // moved this player to another player's exact live coordinates); the
+    // wrong pointer then got locked into cached_find_local_pawn()'s 100ms
+    // cache for the rest of the session, since the primary path above never
+    // got a chance to fail loud enough to notice — every 100ms re-check
+    // silently returned the same wrong actor. Confirmed via
+    // send_pawn_appearance broadcasting the OTHER player's real appearance
+    // (isMale/hair/body all matched them, not this client's own character).
+    // Fix: scan every candidate and skip any pointer already tracked as
+    // someone else's proxyActor, rather than trusting whichever the engine
+    // happens to enumerate first.
+    std::vector<UObject*> candidates;
+    UObjectGlobals::FindAllOf(STR("BP_PlayerCharacter_C"), candidates);
+    if (candidates.empty()) return nullptr;
+    if (candidates.size() == 1) return static_cast<AActor*>(candidates[0]);
+
+    std::lock_guard<std::mutex> lk(sdb::g_state().playersMtx);
+    for (UObject* obj : candidates) {
+        bool isKnownProxy = false;
+        for (auto& [id, player] : sdb::g_state().players) {
+            if (player.proxyActor == obj) { isKnownProxy = true; break; }
+        }
+        if (!isKnownProxy) return static_cast<AActor*>(obj);
+    }
+    // Every candidate is a known proxy — shouldn't happen, but return the
+    // first rather than null so callers still get something to work with.
+    return static_cast<AActor*>(candidates[0]);
 }
 
 // ── Frame send helpers ────────────────────────────────────────────────────
@@ -183,6 +245,7 @@ static void send_header_only(sdb::MsgType type)
 // Defined later in this file, next to read_local_equipment.
 static uint8_t read_local_active_weapon_slot(AActor* pawn);
 static uint8_t read_local_aim_pitch(AActor* pawn, float& outRelativeYaw);
+static void check_head_rot_diagnostic(AActor* pawn);
 static uint8_t read_local_movement_flags(AActor* pawn);
 static void check_local_montage_change(AActor* pawn);
 
@@ -386,6 +449,24 @@ static sdb::LocalVitals read_local_progress(AActor* pawn)
     }
 
     return v;
+}
+
+// 2026-08-16: dedicated health-only read for the per-tick death-detection
+// check below — read_local_progress() above ALSO does a UObjectGlobals::
+// FindFirstOf(L"BP_PlayerController_C") full reflection scan (for level/xp/
+// forename/etc.), fine on its original throttled send_profile_revision()
+// cadence but catastrophic called every do_game_tick (~200Hz): live-
+// reproduced as PC2 dropping to 1 FPS "as soon as it loads into the world"
+// the instant this project's own do_game_tick started calling
+// read_local_progress() unconditionally every tick — the exact same "FindFirstOf
+// every tick" pattern already documented multiple times elsewhere in this
+// codebase (find_local_pawn()/FindAllOf regressions). Health alone needs
+// nothing past the MedicalComponent pointer chase, no controller lookup at all.
+static double read_local_health_only(AActor* pawn)
+{
+    const auto base = reinterpret_cast<uintptr_t>(pawn);
+    const uintptr_t med = *reinterpret_cast<uintptr_t*>(base + 0x7D0);
+    return med ? *reinterpret_cast<double*>(med + 0xD0) : 100.0;
 }
 
 // ── Equipment reader ──────────────────────────────────────────────────────
@@ -637,6 +718,59 @@ static uint8_t read_local_aim_pitch(AActor* pawn, float& outAbsoluteYaw)
     return quantized;
 }
 
+// TEMPORARY diagnostic (2026-08-21): head-look sync live A/B — compare the
+// LOCAL player's real, correctly-computed HeadRotation/HeadQuat (from the
+// real GetHeadRot, which has an actual Controller to read) against the raw
+// ControlRotation/ActorRotation delta, to empirically find the real mapping
+// instead of guessing further. First deploy's proxy write produced "pitch
+// input looks like yaw output, yaw input has no visible effect" — pure
+// bytecode+quaternion-math reasoning couldn't explain that, so falling back
+// to this project's proven live-diagnostic technique (same one that found
+// the NVG roll=0-is-on/roll=-60-is-off inversion). Remove once the real
+// mapping is confirmed and the head-write fix is corrected to match.
+static void check_head_rot_diagnostic(AActor* pawn)
+{
+    if (!pawn) return;
+    static uint64_t s_lastUs = 0;
+    const uint64_t nowUs = sdb::now_micros();
+    if (nowUs - s_lastUs < 100'000ULL) return;
+    s_lastUs = nowUs;
+
+    UFunction* fn = pawn->GetFunctionByNameInChain(L"GetControlRotation");
+    FRotator control{};
+    if (fn) {
+        struct Params { FRotator ReturnValue; } params{};
+        pawn->ProcessEvent(fn, &params);
+        control = params.ReturnValue;
+    }
+    const FRotator actorRot = pawn->K2_GetActorRotation();
+
+    auto** meshSlot = static_cast<UObject**>(pawn->GetValuePtrByPropertyNameInChain(L"Mesh"));
+    UObject* mesh = (meshSlot && *meshSlot) ? *meshSlot : nullptr;
+    if (!mesh) { debug_log("head_rot_diag: Mesh not found"); return; }
+    UFunction* getAnimFn = mesh->GetFunctionByNameInChain(L"GetAnimInstance");
+    if (!getAnimFn) { debug_log("head_rot_diag: GetAnimInstance NOT FOUND"); return; }
+    struct AnimParams { UObject* ReturnValue = nullptr; } aparams;
+    mesh->ProcessEvent(getAnimFn, &aparams);
+    if (!aparams.ReturnValue) { debug_log("head_rot_diag: AnimInstance is null"); return; }
+    auto* anim = aparams.ReturnValue;
+
+    struct FRotatorD { double Pitch, Yaw, Roll; };
+    struct FQuatD    { double X, Y, Z, W; };
+    auto* headRot  = static_cast<FRotatorD*>(anim->GetValuePtrByPropertyNameInChain(L"HeadRotation"));
+    auto* headQuat = static_cast<FQuatD*>(anim->GetValuePtrByPropertyNameInChain(L"HeadQuat"));
+
+    char buf[400];
+    snprintf(buf, sizeof(buf),
+             "head_rot_diag: controlPitch=%.2f controlYaw=%.2f actorYaw=%.2f | "
+             "headRot(P=%.2f Y=%.2f R=%.2f) headQuat(X=%.3f Y=%.3f Z=%.3f W=%.3f)",
+             control.Pitch, control.Yaw, actorRot.Yaw,
+             headRot ? headRot->Pitch : -999.0, headRot ? headRot->Yaw : -999.0, headRot ? headRot->Roll : -999.0,
+             headQuat ? headQuat->X : -9.0, headQuat ? headQuat->Y : -9.0,
+             headQuat ? headQuat->Z : -9.0, headQuat ? headQuat->W : -9.0);
+    debug_log(buf);
+}
+
 // Crouch/ADS/falling sync (2026-08-13): Player_AnimBP_C has three plain,
 // dedicated-byte (bIsNativeBool, FieldMask=255 — not bit-packed with
 // siblings) BoolProperty class members: "IsCrouching", "IsADS", "Falling"
@@ -837,6 +971,53 @@ static void do_weapon_attach_scan(void* ctxRaw)
         }
         const uint8_t slotIndex = slotIt->second;
 
+        // 2026-08-17: live ActivateState per attachment, for toggleable
+        // tactical lights/lasers (flashlight/NVG sync request). RepAttachments
+        // above only carries DataAsset metadata, not a live actor reference —
+        // walk childComp's OWN AttachChildren (same "one level deeper" nested
+        // scan do_attach_health_scan already does for weapon sub-attachments)
+        // to find the actual spawned BP_<Item>LocalAttachment_C actors, match
+        // by itemId. These actors are NOT BP_JigPickupComponent-based (a
+        // completely different class hierarchy from the weapon/pickup actors
+        // above) — their itemId comes from ABP_AMainLocalAttachment_C's own
+        // "Attachment Info" UJigsawItem_DataAsset_C* field (@0x02C0), and
+        // their on/off state from the sibling ActivateState FGameplayTag
+        // (@0x02C8, shared by every attachment subclass including
+        // TacticalLaserLightCombo/SmallTacticalLight/SmallTacticalLaserSight/
+        // TacticalLight — research/CXXHeaderDump/BP_AMainLocalAttachment.hpp).
+        // Heuristic, not yet live-confirmed against the exact tag values
+        // Jig_SetAttachmentActiveState uses: ComparisonIndex==0 (NAME_None,
+        // the tag's default/unset state) treated as inactive, anything else
+        // as active — matches this project's own "resolve GameplayTags by
+        // name not raw CI" caution (CI values aren't stable across restarts)
+        // only in that this doesn't hardcode any specific CI at all, just its
+        // zero-ness.
+        std::unordered_map<std::string, bool> nestedActiveByItemId;
+        {
+            const uintptr_t nestedData  = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(childComp) + 0x00C0);
+            const int32_t   nestedCount = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(childComp) + 0x00C0 + 0x08);
+            if (nestedData && nestedCount > 0 && nestedCount <= 32) {
+                for (int32_t j = 0; j < nestedCount; ++j) {
+                    UObject* nestedComp = *reinterpret_cast<UObject**>(nestedData + static_cast<size_t>(j) * 8);
+                    if (!nestedComp) continue;
+                    UFunction* nestedGetOwnerFn = nestedComp->GetFunctionByNameInChain(L"GetOwner");
+                    AActor* nestedOwner = nullptr;
+                    if (nestedGetOwnerFn) nestedComp->ProcessEvent(nestedGetOwnerFn, &nestedOwner);
+                    if (!nestedOwner) continue;
+
+                    const uintptr_t attInfoDA = *reinterpret_cast<uintptr_t*>(
+                        reinterpret_cast<uintptr_t>(nestedOwner) + 0x02C0);
+                    if (!attInfoDA) continue;
+                    std::string nestedItemId = native::fname_to_string(attInfoDA + 0x30);
+                    if (nestedItemId.empty()) continue;
+
+                    const uint32_t activateCi = *reinterpret_cast<const uint32_t*>(
+                        reinterpret_cast<uintptr_t>(nestedOwner) + 0x02C8);
+                    nestedActiveByItemId[nestedItemId] = (activateCi != 0);
+                }
+            }
+        }
+
         // FS_RepWeaponAttachment RepAttachments @0x0110 on BP_JigPickupComponent_C:
         // FGuid MainUID @+0x00 (unused here), TArray<FS_RepAttachmentInfo> Attachments @+0x10.
         const uintptr_t repAttachments = pickupComp + 0x0110;
@@ -860,6 +1041,8 @@ static void do_weapon_attach_scan(void* ctxRaw)
             sdb::WeaponAttachmentEntry wae;
             wae.weaponSlotIndex = slotIndex;
             wae.containerIndex  = static_cast<uint8_t>(*reinterpret_cast<int32_t*>(entry + 0x18));
+            auto activeIt = nestedActiveByItemId.find(attItemId);
+            wae.active = (activeIt != nestedActiveByItemId.end()) && activeIt->second;
             wae.itemId          = std::move(attItemId);
             out.entries.push_back(std::move(wae));
         }
@@ -1072,6 +1255,27 @@ static void send_profile_revision(AActor* pawn)
 
     {
         std::lock_guard<std::mutex> lk(st.inventoryMtx);
+        if (st.progressRevision == 0) {
+            // Seed from wall-clock instead of starting at 0 — the server
+            // only accepts a save whose revision is >= the last one it has
+            // stored (db.js's upsert CASE), but this counter has no
+            // persistence of its own and resets to 0 every process
+            // relaunch. Without this seed, any session shorter than
+            // roughly (storedRevision * 30s) — the time needed for this
+            // counter, incrementing once per periodic send, to climb back
+            // past the stored value — has EVERY save silently rejected,
+            // including hunger/thirst/position/inventory, not just one
+            // field. Live-confirmed 2026-08-17: repeated short relaunches
+            // during barber-menu testing left this player's last accepted
+            // save an hour stale. Unix seconds comfortably fits uint32_t
+            // (rolls over ~2106) and is always far larger than any
+            // realistic counter-based revision already in the DB, so the
+            // very first save of any new session is guaranteed to be
+            // accepted.
+            st.progressRevision = static_cast<uint32_t>(
+                std::chrono::duration_cast<std::chrono::seconds>(
+                    std::chrono::system_clock::now().time_since_epoch()).count());
+        }
         prog.revision = ++st.progressRevision;
     }
 
@@ -1140,6 +1344,95 @@ static void send_weapon_attachments(AActor* pawn)
     f.payload = sdb::encode_weapon_attachments(wa);
     build_session_frame(f);
     send_frame(f);
+}
+
+// 2026-08-17: character-level light toggles (flashlight/NVG sync request) —
+// distinct from Equipment's slot 16 (whether a flashlight ITEM is equipped
+// at all). BP_PlayerCharacter.hpp: FlashlightOn? is a plain bool @0x13E5,
+// PlayerUsingNightVision? @0x1401 — both read directly, no ProcessEvent
+// needed, same convention as isMale@0x15A0 in read_local_pawn_appearance.
+static sdb::PlayerLights read_local_player_lights(AActor* pawn)
+{
+    sdb::PlayerLights out;
+    if (!pawn) return out;
+    out.flashlightOn  = *reinterpret_cast<const bool*>(reinterpret_cast<uintptr_t>(pawn) + 0x13E5);
+    out.nightVisionOn = *reinterpret_cast<const bool*>(reinterpret_cast<uintptr_t>(pawn) + 0x1401);
+
+    // Ground-truth from FlashlightToggle's own decoded bytecode: the real
+    // on-value is computed per-equipped-item, not a fixed constant. Read it
+    // live off this player's own Flashlight component (BP_PlayerCharacter.hpp
+    // @0x0738, a USpotLightComponent — Intensity sits at ULightComponentBase
+    // +0x02B4, research/CXXHeaderDump/Engine.hpp) rather than guess a value —
+    // only meaningful while flashlightOn is true; left at 0 otherwise so an
+    // off-but-stale intensity never gets misread as "was bright".
+    if (out.flashlightOn) {
+        auto* lightSlot = *reinterpret_cast<UObject**>(reinterpret_cast<uintptr_t>(pawn) + 0x0738);
+        if (lightSlot)
+            out.flashlightIntensity = *reinterpret_cast<const float*>(
+                reinterpret_cast<uintptr_t>(lightSlot) + 0x02B4);
+    }
+    return out;
+}
+
+static void send_player_lights(AActor* pawn)
+{
+    const sdb::PlayerLights pl = read_local_player_lights(pawn);
+
+    static bool  s_lastFlashlight  = false;
+    static bool  s_lastNightVision = false;
+    static float s_lastIntensity   = 0.0f;
+    static bool  s_haveSent        = false;
+    if (s_haveSent && pl.flashlightOn == s_lastFlashlight && pl.nightVisionOn == s_lastNightVision &&
+        pl.flashlightIntensity == s_lastIntensity) return;
+    s_haveSent = true;
+    s_lastFlashlight  = pl.flashlightOn;
+    s_lastNightVision = pl.nightVisionOn;
+    s_lastIntensity   = pl.flashlightIntensity;
+
+    debug_log("send_player_lights: flashlightOn=" + std::to_string(pl.flashlightOn) +
+              " nightVisionOn=" + std::to_string(pl.nightVisionOn) +
+              " flashlightIntensity=" + std::to_string(pl.flashlightIntensity));
+
+    sdb::Frame f;
+    f.type    = sdb::MsgType::PlayerLights;
+    f.payload = sdb::encode_player_lights(pl);
+    build_session_frame(f);
+    send_frame(f);
+}
+
+// 2026-08-21: weapon-fire detection via three separate ProcessEvent hooks
+// (FireBullet alone, Svr_WeaponShot, Local_StartShooting — see
+// s_fireBullet_fn's comment for the full trace) all failed to catch
+// single-fire's only bullet, because every one of those calls happens
+// *inside* an already-executing Kismet function and never re-enters
+// ProcessEvent, however it's wrapped (Local, plain Virtual, even
+// cross-object via Context). Switched to this project's own established,
+// proven pattern instead — same as read_local_player_lights's FlashlightOn?/
+// NightVisionOn? polling: read a persistent instance property directly and
+// edge-detect against a static last-value, no ProcessEvent involved at all.
+// BP_PlayerCharacter.hpp: CurrentFiringWeapon (ABP_FirearmPickup_C*, offset
+// 0x0930) is set to the equipped weapon actor right before
+// Local_StartShooting is called, and cleared to null by Local_StopShooting
+// — confirmed by tracing InpActEvt_IA_PrimaryAction_..._64/_65's real
+// bytecode in BP_PlayerCharacter_C's Ubergraph (entries 60116/59833). A
+// null→non-null edge here fires exactly once per trigger pull, single or
+// auto alike — full-auto's subsequent rounds are still covered by
+// s_fireBullet_fn's Timer-driven hook, so no double-broadcast. Same
+// accepted tradeoff as any of the three hook attempts would have had: ammo
+// isn't checked until inside Local_StartShooting, so a dry-fire on an empty
+// weapon also edges here and broadcasts a phantom WeaponFired.
+static void check_weapon_fire_edge(AActor* pawn)
+{
+    if (!pawn) return;
+    auto* current = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(pawn) + 0x0930);
+
+    static void* s_lastCurrentFiringWeapon = nullptr;
+    const bool edge = current && !s_lastCurrentFiringWeapon;
+    s_lastCurrentFiringWeapon = current;
+    if (!edge) return;
+
+    debug_log("check_weapon_fire_edge: CurrentFiringWeapon null->non-null, sent WeaponFired");
+    send_header_only(sdb::MsgType::WeaponFired);
 }
 
 static void send_pawn_appearance(AActor* pawn)
@@ -1258,13 +1551,82 @@ static void dispatch_frame(const sdb::Frame& f)
         }
         break;
 
+    case sdb::MsgType::PlayerLights:
+        debug_log("dispatch_frame: PlayerLights received playerId=" + std::to_string(f.playerId) +
+                  " ownId=" + std::to_string(st.session.playerId) +
+                  " payloadSize=" + std::to_string(f.payload.size()));
+        if (f.playerId && f.playerId != st.session.playerId
+                       && !f.payload.empty()) {
+            if (auto pl = sdb::decode_player_lights(f.payload.data(), f.payload.size()))
+                sdb::g_proxy_manager().on_player_lights(f.playerId, *pl);
+            else
+                debug_log("dispatch_frame: PlayerLights decode_player_lights FAILED");
+        }
+        break;
+
+    case sdb::MsgType::WeaponFired:
+        // Header-only (no payload) — the receiving player and slot are
+        // enough info; replay just needs to touch whichever weapon actor is
+        // currently tracked as that player's active/in-hand weapon. See
+        // on_process_event_pre's own comment for the full sender-side story.
+        if (f.playerId && f.playerId != st.session.playerId) {
+            sdb::g_proxy_manager().on_weapon_fired(f.playerId);
+        }
+        break;
+
+    case sdb::MsgType::FirstJoin:
+        // Authoritative "this playerId has never saved before" from the
+        // server (gateway.js sends this instead of PlayerProgressRestore
+        // when db.getProgress() is empty) — replaces the old 6s-timeout
+        // heuristic. Actual handling (teleport to barber, open menu) is
+        // deferred to do_game_tick since a pawn may not exist yet at the
+        // moment this arrives.
+        st.pendingFirstJoin.store(true, std::memory_order_release);
+        Output::send<LogLevel::Normal>(STR("SDB: FirstJoin received — new player\n"));
+        break;
+
     case sdb::MsgType::Death:
-        sdb::g_proxy_manager().on_player_disconnected(f.playerId);
-        sdb::g_proxy_manager().on_player_connected(f.playerId);
-        {
+        // This is a per-connection confirmation (gateway.js routes MsgType::Death
+        // only back to the connection that sent DeathRequest — see that file's
+        // "Sent to a specific client" comment), so a player's own death arrives
+        // back at their own client with f.playerId == their own id. Every sibling
+        // case in this cluster (Equipment/WeaponAttachments/PawnAppearance/
+        // PlayMontage, immediately above) guards against exactly this with
+        // f.playerId != st.session.playerId before touching the proxy manager —
+        // this case needs the same guard, otherwise the local player's own
+        // death would default-construct a RemotePlayer entry for their own id
+        // and ProxyManager::tick() would spawn a duplicate self-proxy.
+        //
+        // 2026-08-16: REMOVED the on_player_disconnected()+on_player_connected()
+        // pair this case used to call before setting dead=true. That combo
+        // fully destroys the proxy actor AND every equipped visual actor
+        // (weapons/headwear/facewear/etc. — see on_player_disconnected's own
+        // cleanup list) and erases the player's entire cached state, then
+        // recreates a blank RemotePlayer with x/y/z/yaw defaulted to 0 and no
+        // equipment. Nothing re-populates that data on death (the server
+        // doesn't resend Equipment/PawnAppearance just because someone died),
+        // so the visible result was exactly the live-reported symptom: the
+        // model disappears (proxy destroyed) rather than dying (no replacement
+        // ever gets dressed or positioned correctly — it's sitting undressed
+        // at the world origin, not visibly "respawning" at all). The
+        // destroy+recreate was solving a real but different problem (the
+        // missing self-guard, immediately above) — the guard alone is
+        // sufficient; the proxy itself should simply persist through death.
+        // ProxyManager::tick() already stops teleporting/rotating a proxy
+        // once player.dead is true (see its own `if (!player.dead)` gate),
+        // so the character now freezes in place at its death location,
+        // fully dressed, instead of vanishing — not a real death animation,
+        // but a correct starting point rather than actively wrong.
+        if (f.playerId && f.playerId != st.session.playerId) {
             std::lock_guard<std::mutex> lk(st.playersMtx);
-            auto it = st.players.find(f.playerId);
-            if (it != st.players.end()) it->second.dead = true;
+            auto& p = st.players[f.playerId]; // ensure an entry exists without wiping one that already does
+            p.playerId = f.playerId;
+            p.dead = true;
+            debug_log("dispatch_frame: Death for remote playerId=" + std::to_string(f.playerId) +
+                      " proxyActor=0x" + [&]{ char b[20]; snprintf(b, sizeof(b), "%llx",
+                      (unsigned long long)(uintptr_t)p.proxyActor); return std::string(b); }() +
+                      " renderPos=(" + std::to_string(p.renderX) + "," + std::to_string(p.renderY) +
+                      "," + std::to_string(p.renderZ) + ")");
         }
         break;
 
@@ -1421,6 +1783,51 @@ static std::atomic<uint64_t> g_init_time_us{0};
 static std::atomic<bool>     g_auto_open_fired{false};
 static std::atomic<uint64_t> g_last_open_try_us{0};
 static std::atomic<bool>     g_tcp_started{false};
+// 2026-08-15: live-captured hang dump proved UE4SS's ProcessEvent hooks
+// fire on ANY thread calling ProcessEvent, not just GameThread — a
+// "Background Worker" thread's stack showed UE4SS!ProcessEvent calling
+// straight into our own main.dll code (on_process_event_pre/post), several
+// frames deep, ending in a blocked engine-internal wait. Neither hook ever
+// checked which thread it was running on — do_game_tick()'s own reentry
+// guard (a plain non-atomic bool) and on_process_event_pre's sample counter
+// (a plain non-atomic uint32_t) both explicitly assumed GameThread-only
+// execution ("safe since both callers are always on the game thread"),
+// which this dump disproves. Almost every reflection/ProcessEvent call this
+// mod makes assumes GameThread (UE's own engine APIs mostly aren't
+// thread-safe off it), so if either hook's real work ever ran from a
+// worker thread, that's a plausible root cause for hangs unrelated to any
+// specific function called — not just SetSkinnedAssetAndUpdate. Captured
+// once in on_unreal_init (which UE4SS itself only ever calls from
+// GameThread), then both hooks below bail out immediately if the calling
+// thread doesn't match.
+static DWORD g_game_thread_id = 0;
+// 2026-08-15: on_actor_tick reliability watchdog — see on_actor_tick's own
+// comment for the full rationale. g_last_actor_tick_us is updated every
+// time the clean (non-nested) hook actually fires; g_actor_tick_ever_fired
+// distinguishes "never worked this session" (don't re-register — nothing to
+// recover, and re-registering before the world/hook table even exists
+// could be its own risk) from "was working, now silent" (genuinely worth
+// recovering). g_last_actor_tick_reregister_us throttles recovery attempts
+// so a persistently-broken hook doesn't get re-registered every single
+// on_process_event_pre sample.
+static std::atomic<uint64_t> g_last_actor_tick_us{0};
+static std::atomic<bool>     g_actor_tick_ever_fired{false};
+static std::atomic<uint64_t> g_last_actor_tick_reregister_us{0};
+
+// ProcessEvent nesting depth, THIS thread only (ProcessEvent can fire from a
+// Background Worker thread, not just GameThread — see on_process_event_pre's
+// own comment — so this must be thread_local, not a shared global/atomic; a
+// worker thread's own ProcessEvent activity has no bearing on whether
+// GameThread is currently nested). Incremented as the literal first
+// statement of on_process_event_pre, decremented as the literal first
+// statement of on_process_event_post, so every increment is guaranteed a
+// matching decrement regardless of what either hook's own early-return logic
+// does afterward. 2026-08-16: added as the verification signal for the
+// WndProc-triggered clean tick — see do_risky_game_tick_work's own comment.
+// A value of 0 at the moment that trigger fires proves the "engine's Windows
+// message pump runs outside any ProcessEvent dispatch" assumption in
+// practice, not just in theory.
+static thread_local uint32_t t_processEventDepth = 0;
 
 // Local player's BP_JigHelperComp_C instance, refreshed every do_game_tick()
 // call — used by on_process_event_pre's equip-trace diagnostic (temporary,
@@ -1439,7 +1846,8 @@ static std::atomic<uint64_t> g_trace_until_us{0};
 
 // Polled from do_game_tick() (already 5ms-throttled) for a flag file the
 // user/operator creates right before performing the action to trace — same
-// file-flag IPC pattern already used for character creation (init_cc_ipc_paths).
+// file-flag IPC pattern used by the other check_*_trigger functions
+// throughout this file.
 static void check_trace_trigger()
 {
     wchar_t path[MAX_PATH];
@@ -1466,6 +1874,976 @@ static void check_trace_trigger()
 // in the expected EX_EndOfScript (0x53) marker at exactly that length,
 // confirming the offset. Only 0x14 (EX_LetBool) x2 + 0x04 (EX_Return) — a
 // near-empty stub, meaning the real equip logic is not here.
+// UObject::GetClassPrivate() in the vendored UE4SS stub header is declared
+// on the wrong class for its own mangled name (the header's comment shows
+// the true export as `UObjectBase::GetClassPrivate`, but the C++ declaration
+// puts it on `UObject`, so the import lib entry the linker generates never
+// matches the DLL's actual export and this fails LNK2019). Resolved by
+// address instead — same technique already proven in proxy_manager.cpp's
+// own copy of this exact function (kept as a separate file-local copy there
+// rather than shared, so duplicated here too). MSVC returns a reference
+// (UClass*&) as a pointer to the referenced storage in RAX, so the resolved
+// signature returns UClass** here, not UClass*.
+static UClass* get_class_private(UObject* obj)
+{
+    using Fn = UClass**(__fastcall*)(void*);
+    static Fn fn = [] {
+        auto* ue4ss = GetModuleHandleW(L"UE4SS.dll");
+        return ue4ss ? reinterpret_cast<Fn>(GetProcAddress(ue4ss,
+            "?GetClassPrivate@UObjectBase@Unreal@RC@@QEAAAEAPEAVUClass@23@XZ")) : nullptr;
+    }();
+    if (!fn || !obj) return nullptr;
+    UClass** ref = fn(obj);
+    return ref ? *ref : nullptr;
+}
+
+// Flag-triggered, on-demand test of force-opening CharacterBarberMenu via
+// the STANDARD engine widget-creation API (WidgetBlueprintLibrary::Create +
+// UUserWidget::AddToViewport) rather than trying to reverse-engineer
+// BP_Barber_C's own internal trigger — confirmed live 2026-08-17 via a full
+// ProcessEvent trace that none of BP_Barber_C's 8 interact-related
+// functions fire when the menu opens; CharacterBarberMenu_C::Construct
+// fires instead, meaning the actual open call is a native engine operation,
+// not something specific to this game's Blueprint logic. This is an
+// ISOLATED test — deliberately not wired into any "first join" logic yet,
+// given the recent live data-corruption incident from an unverified
+// ProcessEvent call (see feedback_sdo_live_data_corruption_incident
+// memory). Lower risk than that incident: this only creates a UI widget,
+// it doesn't touch persisted player save data even if the param layout
+// turns out wrong — worst case is a failed/garbage widget or a crash, not
+// silent save corruption.
+// Tracks the single most recent force-created widget so repeated triggers
+// during testing don't pile up overlapping instances — every earlier call
+// left its widget on screen forever (never removed), and by this point in
+// the session there were likely several stacked CharacterBarberMenu_C
+// instances. That fully explains the flaky exit behavior seen live: which
+// widget actually receives the click (and whether IT specifically still
+// has a working camera/delegate state) becomes unpredictable once more
+// than one is alive. Removed via RemoveFromParent() before creating a new
+// one.
+static UObject* s_lastForcedBarberWidget = nullptr;
+
+static void do_restore_camera_and_input(); // defined below, used by the poller here
+static bool teleport_to_random_spawn_point(AActor* pawn); // defined below, used by the poller here
+
+// Shows/hides the corner health/hunger/thirst/stamina HUD while the barber
+// menu is open — user-requested 2026-08-17. UBP_Ingame_C (the persistent
+// main HUD widget) already exposes exactly this via its own
+// StatsVisibilty(bool Hide) UFunction (CXXHeaderDump/BP_Ingame.hpp) — a
+// clean existing toggle, not a raw property write, so no risk of guessing
+// a wrong struct layout for something core-HUD-related.
+static void set_ingame_stats_hidden(bool hide)
+{
+    UObject* ingame = UObjectGlobals::FindFirstOf(STR("BP_Ingame_C"));
+    if (!ingame) { debug_log("set_ingame_stats_hidden: no live BP_Ingame_C instance"); return; }
+    UFunction* statsVisFn = ingame->GetFunctionByNameInChain(L"StatsVisibilty");
+    if (!statsVisFn) { debug_log("set_ingame_stats_hidden: StatsVisibilty UFunction not found"); return; }
+    struct StatsVisParams { bool Hide = false; } params;
+    params.Hide = hide;
+    struct Ctx { UObject* obj; UFunction* fn; StatsVisParams* p; };
+    Ctx ctx{ ingame, statsVisFn, &params };
+    const bool ok = seh_invoke([](void* raw) {
+        auto* c = static_cast<Ctx*>(raw);
+        c->obj->ProcessEvent(c->fn, c->p);
+    }, &ctx);
+    debug_log(ok ? (hide ? "set_ingame_stats_hidden: hidden" : "set_ingame_stats_hidden: shown")
+                  : "set_ingame_stats_hidden: StatsVisibilty crashed, caught via SEH");
+}
+
+// More robust alternative to hooking BP_Barber_C::Event_Exit (see
+// check_barber_exit_hook's own long comment for the two wrong guesses that
+// preceded this) — that event fires reliably on a *normally*-opened
+// widget but was observed live to NOT fire consistently on this trigger's
+// force-created one (unclear exact cause, possibly some other state the
+// real open flow sets up that this replicates only partially). Rather than
+// keep guessing at which specific Blueprint-internal event to catch, this
+// polls the widget's own IsInViewport() state directly — the moment it's
+// no longer in the viewport, the menu is closed, *regardless of how* that
+// happened (Exit button, Escape key, or anything else), so this needs no
+// theory about the exact internal close mechanism to be correct. Runs
+// every do_game_tick call (already throttled to ~5ms), own 200ms throttle
+// on top since a bool check doesn't need to be that frequent.
+static void check_barber_widget_removed_poller()
+{
+    if (!s_lastForcedBarberWidget) return;
+    static uint64_t s_lastPollUs = 0;
+    const uint64_t now = sdb::now_micros();
+    if (now - s_lastPollUs < 200'000ULL) return;
+    s_lastPollUs = now;
+
+    UFunction* isInViewportFn = s_lastForcedBarberWidget->GetFunctionByNameInChain(L"IsInViewport");
+    if (!isInViewportFn) return;
+    struct IsInViewportParams { bool ReturnValue = false; } params;
+    struct PollCtx { UObject* obj; UFunction* fn; IsInViewportParams* p; };
+    PollCtx pctx{ s_lastForcedBarberWidget, isInViewportFn, &params };
+    const bool pollOk = seh_invoke([](void* raw) {
+        auto* c = static_cast<PollCtx*>(raw);
+        c->obj->ProcessEvent(c->fn, c->p);
+    }, &pctx);
+    if (!pollOk) {
+        debug_log("check_barber_widget_removed_poller: IsInViewport crashed, caught via SEH — stopping poll");
+        s_lastForcedBarberWidget = nullptr;
+        return;
+    }
+    if (params.ReturnValue) return; // still open, nothing to do
+
+    debug_log("check_barber_widget_removed_poller: widget no longer in viewport — restoring camera/input");
+    s_lastForcedBarberWidget = nullptr;
+    if (!seh_invoke([](void*) { do_restore_camera_and_input(); }, nullptr))
+        debug_log("check_barber_widget_removed_poller: do_restore_camera_and_input crashed, caught via SEH");
+
+    // First-join flow only: an organic/manually-triggered barber visit
+    // should never randomly relocate the player, so this only fires when
+    // do_open_barber_menu() was itself kicked off by the server's
+    // FirstJoin signal (see do_game_tick's first-join handling).
+    auto& st = sdb::g_state();
+    if (st.inFirstJoinFlow) {
+        st.inFirstJoinFlow = false;
+        if (AActor* pawn = find_local_pawn()) {
+            debug_log("check_barber_widget_removed_poller: first-join flow — teleporting to a random spawn point");
+            teleport_to_random_spawn_point(pawn);
+        } else {
+            debug_log("check_barber_widget_removed_poller: first-join flow but no local pawn, skipping spawn teleport");
+        }
+    }
+}
+
+// Does the actual force-open work — factored out so both the manual
+// on-demand flag trigger below AND the real FirstJoin-driven flow
+// (do_game_tick's first-join handling) can call the exact same,
+// already-proven sequence rather than duplicating it.
+static void do_open_barber_menu()
+{
+    if (s_lastForcedBarberWidget) {
+        if (UFunction* removeFn = s_lastForcedBarberWidget->GetFunctionByNameInChain(L"RemoveFromParent")) {
+            struct RemoveCtx { UObject* obj; UFunction* fn; };
+            RemoveCtx rctx{ s_lastForcedBarberWidget, removeFn };
+            const bool removeOk = seh_invoke([](void* raw) {
+                auto* c = static_cast<RemoveCtx*>(raw);
+                c->obj->ProcessEvent(c->fn, nullptr);
+            }, &rctx);
+            debug_log(removeOk ? "open_barber_menu: removed previous force-created widget"
+                                : "open_barber_menu: RemoveFromParent on previous widget crashed, caught via SEH");
+        }
+        s_lastForcedBarberWidget = nullptr;
+    }
+
+    AActor* pawn = find_local_pawn();
+    if (!pawn) { debug_log("open_barber_menu: no local pawn"); return; }
+
+    UObject* ctrl = UObjectGlobals::FindFirstOf(STR("BP_PlayerController_C"));
+    if (!ctrl) { debug_log("open_barber_menu: no local PlayerController"); return; }
+
+    // Resolved early (not just for the camera switch further down) — also
+    // needed to populate the widget's own "Barber" property right after
+    // creation, see below.
+    UObject* barberActor = UObjectGlobals::FindFirstOf(STR("BP_Barber_C"));
+    if (!barberActor) { debug_log("open_barber_menu: no live BP_Barber_C actor found"); return; }
+
+    UObject* const kAnyPackage = reinterpret_cast<UObject*>(static_cast<intptr_t>(-1));
+    UObject* widgetLib = UObjectGlobals::FindObject(nullptr, kAnyPackage, L"Default__WidgetBlueprintLibrary");
+    if (!widgetLib) widgetLib = UObjectGlobals::FindFirstOf(L"WidgetBlueprintLibrary");
+    if (!widgetLib) { debug_log("open_barber_menu: WidgetBlueprintLibrary CDO not found"); return; }
+
+    UFunction* createFn = widgetLib->GetFunctionByNameInChain(L"Create");
+    if (!createFn) { debug_log("open_barber_menu: Create UFunction not found"); return; }
+
+    // Need CharacterBarberMenu_C's UClass. First choice: its Class Default
+    // Object, via the same "Default__<ClassName>" lookup already proven
+    // for WidgetBlueprintLibrary/KismetSystemLibrary above/elsewhere in
+    // this file — a Blueprint class's CDO is created the moment the class
+    // ASSET loads (BP_Barber_C hard-references CharacterBarberMenu_C, so
+    // it should already be loaded even with zero gameplay instances ever
+    // spawned), so this doesn't need anyone to have opened the menu first.
+    // Falls back to reading the class off a live instance (old technique)
+    // if the CDO lookup ever comes back empty for some reason.
+    UClass* menuClass = nullptr;
+    if (UObject* menuCdo = UObjectGlobals::FindObject(nullptr, kAnyPackage, L"Default__CharacterBarberMenu_C")) {
+        menuClass = get_class_private(menuCdo);
+        if (menuClass) debug_log("open_barber_menu: resolved CharacterBarberMenu_C class via its CDO");
+    }
+    if (!menuClass) {
+        UObject* barberMenuInstance = UObjectGlobals::FindFirstOf(STR("CharacterBarberMenu_C"));
+        if (!barberMenuInstance) {
+            debug_log("open_barber_menu: no CDO and no live CharacterBarberMenu_C instance to read UClass from — "
+                       "open a barber menu manually once first, then retry");
+            return;
+        }
+        menuClass = get_class_private(barberMenuInstance);
+    }
+    if (!menuClass) { debug_log("open_barber_menu: get_class_private failed"); return; }
+
+    // WidgetBlueprintLibrary::Create(UObject* WorldContextObject,
+    // TSubclassOf<UUserWidget> WidgetType, APlayerController* OwningPlayer)
+    // -> UUserWidget* — a standard, stable UE5 Blueprint node ("Create
+    // Widget"), TSubclassOf flattens to a plain UClass* in the params ABI,
+    // return value appended after the declared params (same convention
+    // already relied on throughout this file).
+    struct CreateParams {
+        UObject* WorldContextObject = nullptr;
+        UClass*  WidgetType         = nullptr;
+        UObject* OwningPlayer       = nullptr;
+        UObject* ReturnValue        = nullptr;
+    } cparams;
+    cparams.WorldContextObject = pawn;
+    cparams.WidgetType         = menuClass;
+    cparams.OwningPlayer       = ctrl;
+    widgetLib->ProcessEvent(createFn, &cparams);
+
+    if (!cparams.ReturnValue) { debug_log("open_barber_menu: Create returned null"); return; }
+
+    // Sanity-check the returned object's class actually matches what we
+    // asked for, before trusting it enough to call AddToViewport — catches
+    // a wrong params-struct layout producing a garbage/misinterpreted
+    // pointer instead of silently proceeding on bad data.
+    UClass* returnedClass = get_class_private(cparams.ReturnValue);
+    if (returnedClass != menuClass) {
+        char line[256];
+        snprintf(line, sizeof(line),
+                 "open_barber_menu: Create returned obj=0x%llx but its class (0x%llx) doesn't match "
+                 "CharacterBarberMenu_C (0x%llx) — NOT calling AddToViewport, params struct is likely wrong",
+                 reinterpret_cast<unsigned long long>(cparams.ReturnValue),
+                 reinterpret_cast<unsigned long long>(returnedClass),
+                 reinterpret_cast<unsigned long long>(menuClass));
+        debug_log(line);
+        return;
+    }
+
+    // Widget context — ground truth from the same decode, offsets
+    // 0x0048/0x0071/0x0092: the real flow sets three properties on the
+    // widget right after Create(), before showing it: "Chr" (the character
+    // being edited, an object ref), "SkipAnim?" (bool True), and "Barber"
+    // (the barber actor itself, an object ref). Live-confirmed missing
+    // previously — user reported "live preview doesn't work" with the
+    // widget otherwise fully functional (camera + input + cursor all
+    // working), consistent with the widget having no idea which character
+    // to preview. Property names resolved earlier this session via the
+    // resolve_fname.flag mechanism against a live process (ci=2248233 ->
+    // "Chr", ci=2251247 -> "SkipAnim?", ci=2365656 -> "Barber") — the
+    // ComparisonIndex values themselves don't survive a relaunch (same
+    // per-process instability as raw pointers), but the property name
+    // strings are compile-time-fixed and safe to hardcode. Using
+    // GetValuePtrByPropertyNameInChain + direct write (this codebase's
+    // established safe pattern, see bShowMouseCursor above) rather than
+    // resolving the real SetObjectPropertyByName/SetBoolPropertyByName
+    // UFunctions (func=0x41ed5c60/0x41ed67c0) and guessing their params
+    // struct layout.
+    if (auto** chrSlot = static_cast<UObject**>(cparams.ReturnValue->GetValuePtrByPropertyNameInChain(L"Chr"))) {
+        *chrSlot = pawn;
+        debug_log("open_barber_menu: Chr set");
+    } else {
+        debug_log("open_barber_menu: Chr property not found");
+    }
+    if (auto* skipAnimSlot = static_cast<uint8_t*>(cparams.ReturnValue->GetValuePtrByPropertyNameInChain(L"SkipAnim?"))) {
+        *skipAnimSlot = 1;
+        debug_log("open_barber_menu: SkipAnim? set");
+    } else {
+        debug_log("open_barber_menu: SkipAnim? property not found");
+    }
+    if (auto** barberSlot = static_cast<UObject**>(cparams.ReturnValue->GetValuePtrByPropertyNameInChain(L"Barber"))) {
+        *barberSlot = barberActor;
+        debug_log("open_barber_menu: Barber set");
+    } else {
+        debug_log("open_barber_menu: Barber property not found");
+    }
+
+    UFunction* addToViewportFn = cparams.ReturnValue->GetFunctionByNameInChain(L"AddToViewport");
+    if (!addToViewportFn) { debug_log("open_barber_menu: AddToViewport UFunction not found"); return; }
+
+    struct AddToViewportParams { int32_t ZOrder = 0; } aparams;
+    cparams.ReturnValue->ProcessEvent(addToViewportFn, &aparams);
+    s_lastForcedBarberWidget = cparams.ReturnValue;
+    set_ingame_stats_hidden(true);
+
+    char line[128];
+    snprintf(line, sizeof(line), "open_barber_menu: SUCCESS widget=0x%llx",
+             reinterpret_cast<unsigned long long>(cparams.ReturnValue));
+    debug_log(line);
+
+    // Camera switch — ground truth from the fully-resolved BP_Barber_C
+    // Ubergraph decode (OnExecuteInteract, entry point 1514, offset 0x05ea):
+    // the real game calls PlayerController::SetViewTargetWithBlend(NewView
+    // Target=Self [the BP_Barber_C actor itself, since EX_Self inside that
+    // actor's own bytecode refers to it], BlendTime=0.5,
+    // BlendFunc=0/VTBlend_Linear, BlendExp=0.0, bLockOutgoing=False). Params
+    // struct order/types read directly off that disassembly, not guessed —
+    // see research/bytecode/ubergraph_decoded/
+    // BP_Barber_C_ExecuteUbergraph_BP_Barber.decoded.txt lines ~412-439.
+    // Deliberately NOT adding the two calls that follow it in the real flow
+    // (ChangePlayerPerspective, SetPlayerGearVisibility) yet — those are
+    // additional unverified-signature calls layered on top, and per the
+    // isolate-risky-changes lesson from the recent corruption incident this
+    // is being tested one new call at a time rather than bundled.
+    // (barberActor already resolved above, before Create().)
+    UFunction* viewTargetFn = ctrl->GetFunctionByNameInChain(L"SetViewTargetWithBlend");
+    if (!viewTargetFn) {
+        debug_log("open_barber_menu: SetViewTargetWithBlend UFunction not found, skipping camera switch");
+        return;
+    }
+    struct SetViewTargetWithBlendParams {
+        AActor* NewViewTarget = nullptr;
+        float   BlendTime     = 0.0f;
+        uint8_t BlendFunc     = 0;   // EViewTargetBlendFunction::VTBlend_Linear
+        float   BlendExp      = 0.0f;
+        bool    bLockOutgoing = false;
+    } vparams;
+    vparams.NewViewTarget = reinterpret_cast<AActor*>(barberActor);
+    vparams.BlendTime     = 0.5f;
+    struct ViewCtx { UObject* obj; UFunction* fn; SetViewTargetWithBlendParams* p; };
+    ViewCtx vctx{ ctrl, viewTargetFn, &vparams };
+    const bool viewOk = seh_invoke([](void* raw) {
+        auto* c = static_cast<ViewCtx*>(raw);
+        c->obj->ProcessEvent(c->fn, c->p);
+    }, &vctx);
+    debug_log(viewOk ? "open_barber_menu: SetViewTargetWithBlend called"
+                      : "open_barber_menu: SetViewTargetWithBlend crashed, caught via SEH");
+
+    // Input mode — also ground truth from the same decode (offset 0x00f7):
+    // WidgetBlueprintLibrary::SetInputMode_UIOnlyEx(PlayerController,
+    // InWidgetToFocus=the created widget, InMouseLockMode=0, <bool>=False).
+    // 4-param signature (not the commonly-documented 3-param one) confirmed
+    // directly from the disassembly's param count, not assumed. Needed for
+    // the widget to actually receive mouse/keyboard input rather than just
+    // being visually overlaid — without it the menu is a static picture.
+    UFunction* inputModeFn = widgetLib->GetFunctionByNameInChain(L"SetInputMode_UIOnlyEx");
+    if (!inputModeFn) {
+        debug_log("open_barber_menu: SetInputMode_UIOnlyEx UFunction not found, skipping");
+        return;
+    }
+    struct SetInputModeUIOnlyExParams {
+        UObject* PlayerController = nullptr;
+        UObject* InWidgetToFocus  = nullptr;
+        uint8_t  InMouseLockMode  = 0;
+        bool     Param4           = false;
+    } iparams;
+    iparams.PlayerController = ctrl;
+    iparams.InWidgetToFocus  = cparams.ReturnValue;
+    struct InputCtx { UObject* obj; UFunction* fn; SetInputModeUIOnlyExParams* p; };
+    InputCtx ictx{ widgetLib, inputModeFn, &iparams };
+    const bool inputOk = seh_invoke([](void* raw) {
+        auto* c = static_cast<InputCtx*>(raw);
+        c->obj->ProcessEvent(c->fn, c->p);
+    }, &ictx);
+    debug_log(inputOk ? "open_barber_menu: SetInputMode_UIOnlyEx called"
+                       : "open_barber_menu: SetInputMode_UIOnlyEx crashed, caught via SEH");
+
+    // bShowMouseCursor — same decode (offset 0x0146), a direct property
+    // write (EX_LetBool), not a UFunction call — SetInputMode_UIOnlyEx only
+    // changes input ROUTING, it does not make the cursor visible on its own.
+    // Live-confirmed missing: first test with just the two calls above left
+    // the user "didn't have access to the mouse". Using this codebase's
+    // already-proven GetValuePtrByPropertyNameInChain pattern (used
+    // hundreds of times elsewhere in this file for bool props like
+    // IsCrouching/IsADS) rather than resolving FProperty/UStruct::
+    // FindProperty by address — no need for a new low-level mechanism when
+    // an existing safe one already does this.
+    if (auto* cursorSlot = static_cast<uint8_t*>(ctrl->GetValuePtrByPropertyNameInChain(L"bShowMouseCursor"))) {
+        *cursorSlot = 1;
+        debug_log("open_barber_menu: bShowMouseCursor set");
+    } else {
+        debug_log("open_barber_menu: bShowMouseCursor property not found");
+    }
+
+    // Reposition — same decode, offsets 0x0167-0x021e: the real flow snaps
+    // the interacting player's CapsuleComponent to a fixed "Debug" scene
+    // component's world transform on the barber actor, via
+    // SceneComponent::K2_GetComponentLocation/K2_GetComponentRotation on
+    // "Debug" then SceneComponent::K2_SetWorldLocationAndRotation on the
+    // player's "CapsuleComponent" (bSweep=False, bTeleport=False — 5-param
+    // signature matches the vendored AActor::K2_SetActorLocationAndRotation
+    // already used elsewhere in this file, just called via raw
+    // ProcessEvent here since it's a SceneComponent-level call, not an
+    // AActor-level one). Live-confirmed needed: without this, triggering
+    // the flag from far away leaves the character too far from the barber
+    // to see anything in the preview.
+    auto** debugSlot = static_cast<UObject**>(barberActor->GetValuePtrByPropertyNameInChain(L"Debug"));
+    UObject* debugComp = debugSlot ? *debugSlot : nullptr;
+    auto** capsuleSlot = static_cast<UObject**>(pawn->GetValuePtrByPropertyNameInChain(L"CapsuleComponent"));
+    UObject* capsuleComp = capsuleSlot ? *capsuleSlot : nullptr;
+    if (!debugComp || !capsuleComp) {
+        debug_log("open_barber_menu: Debug or CapsuleComponent not found, skipping reposition");
+        return;
+    }
+    UFunction* getLocFn = debugComp->GetFunctionByNameInChain(L"K2_GetComponentLocation");
+    UFunction* getRotFn = debugComp->GetFunctionByNameInChain(L"K2_GetComponentRotation");
+    UFunction* setLocRotFn = capsuleComp->GetFunctionByNameInChain(L"K2_SetWorldLocationAndRotation");
+    if (!getLocFn || !getRotFn || !setLocRotFn) {
+        debug_log("open_barber_menu: reposition UFunctions not found, skipping");
+        return;
+    }
+    struct GetLocParams { FVector ReturnValue{}; } locParams;
+    struct GetRotParams { FRotator ReturnValue{}; } rotParams;
+    struct RepositionCtx { UObject* debugComp; UObject* capsuleComp; UFunction* getLocFn; UFunction* getRotFn;
+                            UFunction* setLocRotFn; GetLocParams* locParams; GetRotParams* rotParams; };
+    RepositionCtx rctx{ debugComp, capsuleComp, getLocFn, getRotFn, setLocRotFn, &locParams, &rotParams };
+    const bool repositionOk = seh_invoke([](void* raw) {
+        auto* c = static_cast<RepositionCtx*>(raw);
+        c->debugComp->ProcessEvent(c->getLocFn, c->locParams);
+        c->debugComp->ProcessEvent(c->getRotFn, c->rotParams);
+        struct SetLocRotParams {
+            FVector    NewLocation;
+            FRotator   NewRotation;
+            bool       bSweep = false;
+            FHitResult SweepHitResult{};
+            bool       bTeleport = false;
+        } slrParams;
+        slrParams.NewLocation = c->locParams->ReturnValue;
+        slrParams.NewRotation = c->rotParams->ReturnValue;
+        c->capsuleComp->ProcessEvent(c->setLocRotFn, &slrParams);
+    }, &rctx);
+    debug_log(repositionOk ? "open_barber_menu: reposition to Debug transform called"
+                            : "open_barber_menu: reposition crashed, caught via SEH");
+}
+
+// Manual on-demand wrapper around do_open_barber_menu() (flag
+// `open_barber_menu.flag`) — kept for isolated testing. The real trigger
+// is the FirstJoin-driven flow in do_game_tick, which calls
+// do_open_barber_menu() directly.
+static void check_open_barber_menu_trigger()
+{
+    wchar_t path[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return;
+    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\open_barber_menu.flag";
+    if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+    DeleteFileW(flag.c_str());
+    do_open_barber_menu();
+}
+
+// Mirror-image "give control back" for check_open_barber_menu_trigger —
+// needed because that trigger only replicates the game's real *open*
+// sequence, not its close/cleanup path (which lives in the widget's own
+// bound "Exit" delegate handler, a different part of the Blueprint not yet
+// decoded). Live-confirmed necessary 2026-08-17: closing the force-opened
+// widget left the camera stuck on the barber actor with no way back to
+// gameplay. Every call here is the exact inverse of one made in
+// check_open_barber_menu_trigger, same functions/technique, just the
+// opposite direction — SetViewTargetWithBlend back to the player's own
+// pawn, SetInputMode_GameOnly (ptr=0x41f97b00, seen right next to
+// SetInputMode_UIOnlyEx in the same resolved pointer table), and
+// bShowMouseCursor=false.
+static void do_restore_camera_and_input()
+{
+    set_ingame_stats_hidden(false);
+
+    AActor* pawn = find_local_pawn();
+    if (!pawn) { debug_log("restore_camera: no local pawn"); return; }
+
+    UObject* ctrl = UObjectGlobals::FindFirstOf(STR("BP_PlayerController_C"));
+    if (!ctrl) { debug_log("restore_camera: no local PlayerController"); return; }
+
+    UFunction* viewTargetFn = ctrl->GetFunctionByNameInChain(L"SetViewTargetWithBlend");
+    if (viewTargetFn) {
+        struct SetViewTargetWithBlendParams {
+            AActor* NewViewTarget = nullptr;
+            float   BlendTime     = 0.0f;
+            uint8_t BlendFunc     = 0;
+            float   BlendExp      = 0.0f;
+            bool    bLockOutgoing = false;
+        } vparams;
+        vparams.NewViewTarget = pawn;
+        vparams.BlendTime     = 0.5f;
+        struct ViewCtx { UObject* obj; UFunction* fn; SetViewTargetWithBlendParams* p; };
+        ViewCtx vctx{ ctrl, viewTargetFn, &vparams };
+        const bool viewOk = seh_invoke([](void* raw) {
+            auto* c = static_cast<ViewCtx*>(raw);
+            c->obj->ProcessEvent(c->fn, c->p);
+        }, &vctx);
+        debug_log(viewOk ? "restore_camera: SetViewTargetWithBlend(pawn) called"
+                          : "restore_camera: SetViewTargetWithBlend crashed, caught via SEH");
+    } else {
+        debug_log("restore_camera: SetViewTargetWithBlend UFunction not found");
+    }
+
+    UObject* const kAnyPackage = reinterpret_cast<UObject*>(static_cast<intptr_t>(-1));
+    UObject* widgetLib = UObjectGlobals::FindObject(nullptr, kAnyPackage, L"Default__WidgetBlueprintLibrary");
+    if (!widgetLib) widgetLib = UObjectGlobals::FindFirstOf(L"WidgetBlueprintLibrary");
+    if (widgetLib) {
+        UFunction* gameOnlyFn = widgetLib->GetFunctionByNameInChain(L"SetInputMode_GameOnly");
+        if (gameOnlyFn) {
+            // Unlike SetViewTargetWithBlend/SetInputMode_UIOnlyEx above, this
+            // params struct is NOT read off a real call site in the decoded
+            // Ubergraph — SetInputMode_GameOnly's pointer only appeared in
+            // the resolved-pointer table (referenced somewhere else in the
+            // game, never actually called in the traced OnExecuteInteract
+            // path). Using the standard documented 2-param UE5 signature as
+            // a best guess; SEH-wrapped below in case this build adds an
+            // extra param the way UIOnlyEx unexpectedly did.
+            struct SetInputModeGameOnlyParams {
+                UObject* PlayerController  = nullptr;
+                bool     bConsumeCaptureMouseDown = true;
+            } gparams;
+            gparams.PlayerController = ctrl;
+            struct GameCtx { UObject* obj; UFunction* fn; SetInputModeGameOnlyParams* p; };
+            GameCtx gctx{ widgetLib, gameOnlyFn, &gparams };
+            const bool gameOk = seh_invoke([](void* raw) {
+                auto* c = static_cast<GameCtx*>(raw);
+                c->obj->ProcessEvent(c->fn, c->p);
+            }, &gctx);
+            debug_log(gameOk ? "restore_camera: SetInputMode_GameOnly called"
+                              : "restore_camera: SetInputMode_GameOnly crashed, caught via SEH");
+        } else {
+            debug_log("restore_camera: SetInputMode_GameOnly UFunction not found");
+        }
+    } else {
+        debug_log("restore_camera: WidgetBlueprintLibrary CDO not found");
+    }
+
+    if (auto* cursorSlot = static_cast<uint8_t*>(ctrl->GetValuePtrByPropertyNameInChain(L"bShowMouseCursor"))) {
+        *cursorSlot = 0;
+        debug_log("restore_camera: bShowMouseCursor cleared");
+    } else {
+        debug_log("restore_camera: bShowMouseCursor property not found");
+    }
+}
+
+// Isolated, on-demand test of UBFL_SaveGames_C::"Reset Player Stats"
+// (CXXHeaderDump/BFL_SaveGames.hpp — the literal display name has spaces,
+// a real UE-allowed Blueprint function name, not a header-dump artifact;
+// passed verbatim to GetFunctionByNameInChain) — the game's own built-in
+// function for resetting a player's save-backed stats, found 2026-08-17
+// while looking for a way to give first-join players a genuinely fresh
+// local save state (our server-side FirstJoin signal only affects this
+// mod's own synced player_progress row, not the game's own local
+// EasyMultiSave-backed save file). High blast-radius if the params
+// struct guess is wrong (this resets real save-backed player state,
+// same risk class as the corruption incident earlier this session) — the
+// user backed up the live local save slot (test1/) before running this,
+// same discipline as that incident's lesson. Flag `reset_player_stats.flag`.
+static void check_reset_player_stats_trigger()
+{
+    wchar_t path[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return;
+    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\reset_player_stats.flag";
+    if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+    DeleteFileW(flag.c_str());
+
+    AActor* pawn = find_local_pawn();
+    if (!pawn) { debug_log("reset_player_stats: no local pawn"); return; }
+
+    UObject* const kAnyPackage = reinterpret_cast<UObject*>(static_cast<intptr_t>(-1));
+    UObject* saveLib = UObjectGlobals::FindObject(nullptr, kAnyPackage, L"Default__BFL_SaveGames_C");
+    if (!saveLib) saveLib = UObjectGlobals::FindFirstOf(L"BFL_SaveGames_C");
+    if (!saveLib) { debug_log("reset_player_stats: BFL_SaveGames_C CDO not found"); return; }
+
+    UFunction* resetFn = saveLib->GetFunctionByNameInChain(L"Reset Player Stats");
+    if (!resetFn) { debug_log("reset_player_stats: 'Reset Player Stats' UFunction not found"); return; }
+
+    struct ResetParams { AActor* Player = nullptr; UObject* WorldContext = nullptr; } params;
+    params.Player       = pawn;
+    params.WorldContext  = pawn;
+    struct Ctx { UObject* obj; UFunction* fn; ResetParams* p; };
+    Ctx ctx{ saveLib, resetFn, &params };
+    const bool ok = seh_invoke([](void* raw) {
+        auto* c = static_cast<Ctx*>(raw);
+        c->obj->ProcessEvent(c->fn, c->p);
+    }, &ctx);
+    debug_log(ok ? "reset_player_stats: 'Reset Player Stats' called"
+                  : "reset_player_stats: crashed, caught via SEH");
+}
+
+// Isolated on-demand vitals maxing (2026-08-18) — writes health/hunger/
+// thirst to full via the exact same proven raw-offset mechanism as
+// do_vitals_restore below (MedicalComponent@0x7D0+0xD0 health,
+// HungerThirstComponent@0x7F8+0xC8/0xD8 hunger/thirst — offsets confirmed
+// live via read_local_progress()'s own reads of these same fields every
+// profile-revision send). 100.0 matches state.hpp's own health=100.0f
+// default/full-health convention; hunger/thirst use the same 0-100 scale.
+// Flag `max_vitals.flag`.
+static void check_max_vitals_trigger()
+{
+    wchar_t path[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return;
+    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\max_vitals.flag";
+    if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+    DeleteFileW(flag.c_str());
+
+    AActor* pawn = find_local_pawn();
+    if (!pawn) { debug_log("max_vitals: no local pawn"); return; }
+
+    const auto base = reinterpret_cast<uintptr_t>(pawn);
+    if (const auto med = *reinterpret_cast<uintptr_t*>(base + 0x7D0))
+        *reinterpret_cast<double*>(med + 0xD0) = 100.0;
+    if (const auto ht = *reinterpret_cast<uintptr_t*>(base + 0x7F8)) {
+        *reinterpret_cast<double*>(ht + 0xC8) = 100.0;
+        *reinterpret_cast<double*>(ht + 0xD8) = 100.0;
+    }
+    debug_log("max_vitals: health/hunger/thirst set to 100");
+}
+
+// Raw FName(const wchar_t*, EFindName, void*) constructor, resolved by
+// address — same by-address GetProcAddress workaround as get_class_private
+// elsewhere in this file. This codebase's own RC::Unreal::FName wrapper
+// (Core.hpp) only exposes a from-INDEX constructor, useless here since raw
+// ComparisonIndex values are per-process/session-unstable (see
+// project_sdo_save_slot_research memory and feedback_sdo_gameplaytag_ci_
+// unstable). Writes into an 8-byte {ComparisonIndex, Number} buffer — the
+// same hand-rolled layout already used elsewhere in this file (resolve_fname,
+// GameplayTag reads) instead of trusting RC::Unreal::FName's own declared
+// (member-less, so untrustworthy for sizeof purposes) C++ type directly.
+// EFindName's real values: Find=0, Add=1 — passing Add so a not-yet-interned
+// name still resolves instead of silently becoming NAME_None.
+static bool construct_fname_from_string(const wchar_t* str, void* out8ByteBuf)
+{
+    using CtorFn = void(__fastcall*)(void* thisFName, const wchar_t* name, uint32_t findType, void* unused);
+    static CtorFn ctor = nullptr;
+    if (!ctor) {
+        HMODULE ue4ss = GetModuleHandleW(L"UE4SS.dll");
+        if (!ue4ss) return false;
+        ctor = reinterpret_cast<CtorFn>(GetProcAddress(ue4ss,
+            "??0FName@Unreal@RC@@QEAA@PEB_WW4EFindName@12@PEAX@Z"));
+        if (!ctor) return false;
+    }
+    ctor(out8ByteBuf, str, /*EFindName::Add=*/1, nullptr);
+    return true;
+}
+
+// Isolated, on-demand test of SaveMenu_C::LoadGameFromSlot(bool PauseMenu,
+// FName Level) — the real call the game's own "Continue" -> pick slot ->
+// "Load Game" -> "Yes" flow makes, fully decoded 2026-08-17 (see
+// project_sdo_save_slot_research memory for the whole traced sequence).
+// HIGH RISK: this destroys every live BP_PlayerCharacter_C/main-menu actor
+// and triggers a full PersistentLevel_C::Event_LoadLevel reload — ONLY
+// safe to test at the actual main menu (no live SDO session to break),
+// never mid-session. "LongdownValley" is this game's real, confirmed
+// persistent level name (read directly out of the decoded bytecode, not
+// guessed). Flag `load_game_from_slot.flag`.
+static void check_load_game_from_slot_trigger()
+{
+    wchar_t path[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return;
+    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\load_game_from_slot.flag";
+    if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+    DeleteFileW(flag.c_str());
+
+    UObject* const kAnyPackage = reinterpret_cast<UObject*>(static_cast<intptr_t>(-1));
+    UObject* saveMenu = UObjectGlobals::FindFirstOf(STR("SaveMenu_C"));
+    if (!saveMenu) saveMenu = UObjectGlobals::FindObject(nullptr, kAnyPackage, L"Default__SaveMenu_C");
+    if (!saveMenu) { debug_log("load_game_from_slot: SaveMenu_C instance/CDO not found"); return; }
+
+    UFunction* loadFn = saveMenu->GetFunctionByNameInChain(L"LoadGameFromSlot");
+    if (!loadFn) { debug_log("load_game_from_slot: LoadGameFromSlot UFunction not found"); return; }
+
+    uint8_t levelNameBuf[8] = {};
+    if (!construct_fname_from_string(L"LongdownValley", levelNameBuf)) {
+        debug_log("load_game_from_slot: could not resolve raw FName constructor");
+        return;
+    }
+
+    struct LoadParams {
+        bool     PauseMenu = false;
+        uint32_t LevelComparisonIndex = 0;
+        uint32_t LevelNumber = 0;
+    } params;
+    params.PauseMenu = false; // main-menu context, matching where this trigger is meant to run
+    std::memcpy(&params.LevelComparisonIndex, levelNameBuf, 8);
+
+    struct Ctx { UObject* obj; UFunction* fn; LoadParams* p; };
+    Ctx ctx{ saveMenu, loadFn, &params };
+    const bool ok = seh_invoke([](void* raw) {
+        auto* c = static_cast<Ctx*>(raw);
+        c->obj->ProcessEvent(c->fn, c->p);
+    }, &ctx);
+    debug_log(ok ? "load_game_from_slot: LoadGameFromSlot called"
+                  : "load_game_from_slot: crashed, caught via SEH");
+}
+
+// Isolated, on-demand test of SaveMenu_C::SetCurrentSaveSlotByName(FString
+// SaveGameName) — decoded 2026-08-17 as one of the "light, safe" SaveMenu_C
+// functions (no actor destruction, no level reload, unlike LoadGameFromSlot
+// which needs a UI-selected slot object that a direct call like this can't
+// provide — see project_sdo_save_slot_research memory). Uses a deliberately
+// test-only slot name (never "test1" or any real slot) so this can't
+// clobber real save data even in the worst case. Flag
+// `set_current_save_slot.flag`.
+static void check_set_current_save_slot_trigger()
+{
+    wchar_t path[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return;
+    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\set_current_save_slot.flag";
+    if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+    DeleteFileW(flag.c_str());
+
+    UObject* const kAnyPackage = reinterpret_cast<UObject*>(static_cast<intptr_t>(-1));
+    UObject* saveMenu = UObjectGlobals::FindFirstOf(STR("SaveMenu_C"));
+    if (!saveMenu) saveMenu = UObjectGlobals::FindObject(nullptr, kAnyPackage, L"Default__SaveMenu_C");
+    if (!saveMenu) { debug_log("set_current_save_slot: SaveMenu_C instance/CDO not found"); return; }
+    {
+        char line[128];
+        snprintf(line, sizeof(line), "set_current_save_slot: using SaveMenu_C obj=0x%llx",
+                 reinterpret_cast<unsigned long long>(saveMenu));
+        debug_log(line);
+    }
+
+    UFunction* setFn = saveMenu->GetFunctionByNameInChain(L"SetCurrentSaveSlotByName");
+    if (!setFn) { debug_log("set_current_save_slot: SetCurrentSaveSlotByName UFunction not found"); return; }
+
+    static const wchar_t kSlotName[] = L"SDOTestSlot_DoNotUse";
+    struct SetParams { native::UnrealFString SaveGameName{}; } params;
+    params.SaveGameName = native::UnrealFString{ const_cast<wchar_t*>(kSlotName),
+                                                  static_cast<int32_t>(std::size(kSlotName)),
+                                                  static_cast<int32_t>(std::size(kSlotName)) };
+
+    struct Ctx { UObject* obj; UFunction* fn; SetParams* p; };
+    Ctx ctx{ saveMenu, setFn, &params };
+    const bool ok = seh_invoke([](void* raw) {
+        auto* c = static_cast<Ctx*>(raw);
+        c->obj->ProcessEvent(c->fn, c->p);
+    }, &ctx);
+    debug_log(ok ? "set_current_save_slot: SetCurrentSaveSlotByName called"
+                  : "set_current_save_slot: crashed, caught via SEH");
+}
+
+// Isolated, on-demand read of UEMSObject::CurrentSaveGameName — verifies
+// whether check_set_current_save_slot_trigger's call actually took effect
+// (that call has no visible on-screen effect on its own, so this is the
+// only way to confirm it without also risking an actual save/load).
+// UEMSObject is a UGameInstanceSubsystem (EasyMultiSave.hpp), so it should
+// always exist once the game instance exists, main menu or not. Read-only,
+// no side effects. Flag `read_current_save_slot.flag`.
+static void check_read_current_save_slot_trigger()
+{
+    wchar_t path[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return;
+    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\read_current_save_slot.flag";
+    if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+    DeleteFileW(flag.c_str());
+
+    UObject* const kAnyPackage = reinterpret_cast<UObject*>(static_cast<intptr_t>(-1));
+    UObject* ems = UObjectGlobals::FindFirstOf(STR("EMSObject"));
+    bool viaCdo = false;
+    if (!ems) { ems = UObjectGlobals::FindObject(nullptr, kAnyPackage, L"Default__EMSObject"); viaCdo = true; }
+    if (!ems) { debug_log("read_current_save_slot: EMSObject instance/CDO not found"); return; }
+    {
+        char line[160];
+        snprintf(line, sizeof(line), "read_current_save_slot: using EMSObject obj=0x%llx viaCdo=%d",
+                 reinterpret_cast<unsigned long long>(ems), viaCdo ? 1 : 0);
+        debug_log(line);
+    }
+
+    void* slot = ems->GetValuePtrByPropertyNameInChain(L"CurrentSaveGameName");
+    if (!slot) { debug_log("read_current_save_slot: CurrentSaveGameName property not found"); return; }
+
+    const std::string name = native::read_fstring_field(reinterpret_cast<uintptr_t>(slot));
+    debug_log("read_current_save_slot: CurrentSaveGameName=\"" + name + "\"");
+}
+
+// Isolated, on-demand test of EMSFunctionLibrary::SetCurrentSaveGameName
+// (UObject* WorldContextObject, FString SaveGameName) DIRECTLY — bypassing
+// SaveMenu_C::SetCurrentSaveSlotByName entirely, and critically passing the
+// local PAWN (guaranteed to have a fully-initialized World/GameInstance,
+// since it's actively connected and syncing through this whole session) as
+// WorldContextObject instead of a UUserWidget. Tests a specific hypothesis
+// from IDA decompilation of the real native implementation (2026-08-17,
+// see project_sdo_save_slot_research memory): the earlier no-op may be
+// because UEngine::GetWorldFromContextObject()'s World lacked a linked
+// OwningGameInstance at the bare main menu, not because the widget itself
+// was a bad context object. Same deliberately-fake test slot name as
+// check_set_current_save_slot_trigger, for the same reason (can't clobber
+// real save data even if this behaves unexpectedly). Flag
+// `set_save_name_direct.flag`.
+static void check_set_save_name_direct_trigger()
+{
+    wchar_t path[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return;
+    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\set_save_name_direct.flag";
+    if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+
+    // Flag file's single line is the target slot name — defaults to the
+    // test-only name if the file is empty, but lets a real name (e.g.
+    // "test1", to restore after a test) be passed without a rebuild.
+    std::wstring slotName = L"SDOTestSlot_DoNotUse2";
+    {
+        std::ifstream in(flag, std::ios::binary);
+        std::string lineU8;
+        std::getline(in, lineU8);
+        if (!lineU8.empty() && lineU8.back() == '\r') lineU8.pop_back();
+        if (!lineU8.empty()) {
+            int wn = MultiByteToWideChar(CP_UTF8, 0, lineU8.data(), (int)lineU8.size(), nullptr, 0);
+            std::wstring w(wn, L'\0');
+            MultiByteToWideChar(CP_UTF8, 0, lineU8.data(), (int)lineU8.size(), w.data(), wn);
+            slotName = w;
+        }
+    }
+    DeleteFileW(flag.c_str());
+
+    AActor* pawn = find_local_pawn();
+    if (!pawn) { debug_log("set_save_name_direct: no local pawn"); return; }
+
+    UObject* const kAnyPackage = reinterpret_cast<UObject*>(static_cast<intptr_t>(-1));
+    UObject* saveLib = UObjectGlobals::FindObject(nullptr, kAnyPackage, L"Default__EMSFunctionLibrary");
+    if (!saveLib) saveLib = UObjectGlobals::FindFirstOf(L"EMSFunctionLibrary");
+    if (!saveLib) { debug_log("set_save_name_direct: EMSFunctionLibrary CDO not found"); return; }
+
+    UFunction* setFn = saveLib->GetFunctionByNameInChain(L"SetCurrentSaveGameName");
+    if (!setFn) { debug_log("set_save_name_direct: SetCurrentSaveGameName UFunction not found"); return; }
+
+    struct SetParams {
+        UObject* WorldContextObject = nullptr;
+        native::UnrealFString SaveGameName{};
+    } params;
+    params.WorldContextObject = pawn;
+    params.SaveGameName = native::UnrealFString{ const_cast<wchar_t*>(slotName.c_str()),
+                                                  static_cast<int32_t>(slotName.size() + 1),
+                                                  static_cast<int32_t>(slotName.size() + 1) };
+
+    struct Ctx { UObject* obj; UFunction* fn; SetParams* p; };
+    Ctx ctx{ saveLib, setFn, &params };
+    const bool ok = seh_invoke([](void* raw) {
+        auto* c = static_cast<Ctx*>(raw);
+        c->obj->ProcessEvent(c->fn, c->p);
+    }, &ctx);
+    debug_log(ok ? "set_save_name_direct: SetCurrentSaveGameName(pawn, ...) called"
+                  : "set_save_name_direct: crashed, caught via SEH");
+}
+
+// Manual on-demand test wrapper around do_restore_camera_and_input() — kept
+// for testing the restore path in isolation (flag `restore_camera.flag`).
+// The automatic path is check_barber_exit_hook() below, which calls the
+// same shared function when the real Exit button fires.
+static void check_restore_camera_trigger()
+{
+    wchar_t path[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return;
+    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\restore_camera.flag";
+    if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+    DeleteFileW(flag.c_str());
+    do_restore_camera_and_input();
+}
+
+// Flag-triggered, one-shot dump of every live BP_GameModeStart_C (a
+// Blueprint subclass of the native APlayerStart, per CXXHeaderDump/
+// BP_GameModeStart.hpp) instance's exact world location/rotation — for
+// picking real spawn-point coordinates (2026-08-17 "spawn new characters
+// at the barber, then teleport to one of the few usual spawn points"
+// feature) instead of relying on the user's own in-game position readouts
+// (which lack Z height and yaw). Read-only, no side effects.
+static void check_dump_playerstarts_trigger()
+{
+    wchar_t path[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return;
+    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\dump_playerstarts.flag";
+    if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+
+    // Flag file's single line is the target class name — defaults to
+    // BP_GameModeStart_C (the confirmed APlayerStart subclass) if the file
+    // is empty, but lets other candidate names be tried (e.g. native
+    // "PlayerStart") without a rebuild if that one turns out to have no
+    // live instances.
+    std::ifstream in(flag, std::ios::binary);
+    std::string classNameU8;
+    std::getline(in, classNameU8);
+    in.close();
+    DeleteFileW(flag.c_str());
+    if (!classNameU8.empty() && classNameU8.back() == '\r') classNameU8.pop_back();
+    if (classNameU8.empty()) classNameU8 = "BP_GameModeStart_C";
+    std::wstring className(classNameU8.size(), L'\0');
+    int wn = MultiByteToWideChar(CP_UTF8, 0, classNameU8.data(), (int)classNameU8.size(),
+                                  className.data(), (int)className.size());
+    className.resize(wn);
+
+    std::vector<UObject*> starts;
+    UObjectGlobals::FindAllOf(className.c_str(), starts);
+    char line[192];
+    snprintf(line, sizeof(line), "dump_playerstarts: class=%s found %zu instances", classNameU8.c_str(), starts.size());
+    debug_log(line);
+    for (UObject* obj : starts) {
+        auto* actor = static_cast<AActor*>(obj);
+        const FVector loc = actor->K2_GetActorLocation();
+        const FRotator rot = actor->K2_GetActorRotation();
+        snprintf(line, sizeof(line),
+                 "dump_playerstarts: obj=0x%llx x=%.2f y=%.2f z=%.2f yaw=%.2f",
+                 reinterpret_cast<unsigned long long>(obj), loc.X, loc.Y, loc.Z, rot.Yaw);
+        debug_log(line);
+    }
+}
+
+// Every live native PlayerStart actor's world transform, captured 2026-08-17
+// via check_dump_playerstarts_trigger — these are level-placed static
+// actors, so their coordinates are stable across relaunches (unlike the raw
+// obj= pointers they were read through, which are per-process ASLR values
+// and NOT reused here). Feeds the "spawn new characters at the barber for
+// customization, then teleport to one of the usual spawn points" flow —
+// used instead of the user's own manually-read map-UI coordinates, which
+// turned out to be in a different (scaled/normalized) coordinate space and
+// couldn't be reconciled with real world units.
+struct SpawnPoint { double x, y, z, yaw; };
+static constexpr SpawnPoint kUsualSpawnPoints[] = {
+    { 257427.95, 245820.70, 1650.94,   10.00 },
+    { 273903.74, 279206.30, 2078.98, -153.99 },
+    { 184439.63, 267062.48, 1732.44,  125.11 },
+    { 151933.58, 230553.50, 1313.34,  167.74 },
+    {  54902.54, 278716.41, 1444.52, -103.36 },
+    { 234891.91, 138653.78, 1352.76,  116.24 },
+    { 188645.34, 130775.63, 2501.72,   66.56 },
+    { 113230.00, 281024.12, 1252.45, -144.26 },
+    { 219251.42, 266931.36, 2010.98, -160.00 },
+    {  15733.38, 170826.57, 1489.64, -143.55 },
+    { 260101.94,  76268.03, 2131.79,  140.00 },
+    {   3451.35, 200182.76, 1615.82,  -75.00 },
+    { 256846.14,  39483.45, 1962.60,  -20.08 },
+    { -78721.44, 264461.83, 1226.52,  110.00 },
+    {  68420.02, 143617.43, 1755.76, -129.98 },
+    { 196819.94,  43495.80, 1691.26,  110.00 },
+    { 119786.34,  84128.31, 1299.46, -129.98 },
+    { 258124.84, 284405.41, 1598.61, -113.89 },
+    { 153825.05, 124277.10, 1711.31,  -25.00 },
+    { 165450.46,  49718.81, 1514.18,  171.79 },
+    { 109235.30, 255088.40, 2630.89,  -85.00 },
+    { 192482.81,  45902.18, 1602.25, -103.32 },
+};
+
+static bool teleport_to_random_spawn_point(AActor* pawn)
+{
+    static std::mt19937 rng{ static_cast<unsigned>(
+        std::chrono::steady_clock::now().time_since_epoch().count()) };
+    std::uniform_int_distribution<size_t> dist(0, std::size(kUsualSpawnPoints) - 1);
+    const SpawnPoint& sp = kUsualSpawnPoints[dist(rng)];
+
+    struct Ctx { AActor* pawn; const SpawnPoint* sp; bool ok = false; };
+    Ctx ctx{ pawn, &sp };
+    const bool called = seh_invoke([](void* raw) {
+        auto* c = static_cast<Ctx*>(raw);
+        FHitResult hit{};
+        c->ok = c->pawn->K2_SetActorLocationAndRotation(
+            FVector{ c->sp->x, c->sp->y, c->sp->z },
+            FRotator{ 0.0, c->sp->yaw, 0.0 },
+            false, hit, true);
+    }, &ctx);
+
+    char line[192];
+    snprintf(line, sizeof(line),
+             "teleport_to_random_spawn_point: target x=%.2f y=%.2f z=%.2f yaw=%.2f called=%d ok=%d",
+             sp.x, sp.y, sp.z, sp.yaw, called, ctx.ok);
+    debug_log(line);
+    return called && ctx.ok;
+}
+
+// Isolated on-demand test — flag `teleport_random_spawn.flag` — before
+// wiring this into the real first-join flow, per this session's established
+// discipline of proving each new risky operation alone first.
+static void check_teleport_random_spawn_trigger()
+{
+    wchar_t path[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return;
+    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\teleport_random_spawn.flag";
+    if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+    DeleteFileW(flag.c_str());
+
+    AActor* pawn = find_local_pawn();
+    if (!pawn) { debug_log("teleport_random_spawn: no local pawn"); return; }
+    teleport_to_random_spawn_point(pawn);
+}
+
 static void check_bytecode_dump_trigger()
 {
     wchar_t path[MAX_PATH];
@@ -1513,6 +2891,18 @@ static void check_bytecode_dump_trigger()
         widget = reinterpret_cast<UObject*>(static_cast<uintptr_t>(addr));
     } else {
         widget = UObjectGlobals::FindFirstOf(className.c_str());
+        // Fall back to the class's own CDO if no live instance exists —
+        // works for any class whose asset is loaded at all (its CDO is
+        // created the moment the class loads, independent of whether
+        // anything has ever spawned an instance), same technique already
+        // proven for CharacterBarberMenu_C in check_open_barber_menu_
+        // trigger. Bytecode itself lives on the UFunction, shared by CDO
+        // and every instance alike, so which one this resolves to doesn't
+        // matter for dumping purposes.
+        if (!widget) {
+            UObject* const kAnyPackage = reinterpret_cast<UObject*>(static_cast<intptr_t>(-1));
+            widget = UObjectGlobals::FindObject(nullptr, kAnyPackage, (L"Default__" + className).c_str());
+        }
     }
     if (!widget) { debug_log("bytecode_dump: " + classNameU8 + " instance/CDO not found"); return; }
 
@@ -1889,14 +3279,12 @@ static void check_watch_aimoffset_trigger()
     {
         std::lock_guard<std::mutex> lk(sdb::g_state().playersMtx);
         for (auto& [id, player] : sdb::g_state().players) {
-            // Same 2s post-spawn grace period used everywhere else a proxy's
-            // components get touched — see on_process_event_post's own
-            // comment for why (live-tested crash without it).
-            // TEMPORARILY DISABLED 2026-08-13 for testing at the user's
-            // request, to see whether this specific call actually needs it —
-            // re-enable (uncomment the >= check) if proxies start
-            // crashing/deadlocking again right after spawn.
-            if (player.proxyActor /* && sdb::now_micros() - player.proxySpawnedAtUs >= 2'000'000ULL */) {
+            // The 2s post-spawn grace period used elsewhere for proxy writes
+            // (on_process_event_post's own comment) was tested disabled here
+            // starting 2026-08-13, since this is a read-only diagnostic, not
+            // a write — 4 days of live sessions with no incident confirmed it
+            // isn't needed for this specific call. Kept off permanently.
+            if (player.proxyActor) {
                 log_aimoffset_values("proxy", static_cast<AActor*>(player.proxyActor));
                 break;
             }
@@ -2080,6 +3468,9 @@ struct AttachHealthCtx {
     std::unordered_map<uintptr_t, std::array<double, 3>>* itemLastPos;
 };
 
+static void dump_recent_calls(); // real definition further down — see its own comment
+static void set_item_recent_calls_watch(const std::vector<uintptr_t>& children); // real definition further down, next to dump_recent_calls' ring buffer
+
 static void do_attach_health_scan(void* ctxRaw)
 {
     auto* ctx = static_cast<AttachHealthCtx*>(ctxRaw);
@@ -2102,28 +3493,39 @@ static void do_attach_health_scan(void* ctxRaw)
     }
 
     std::vector<uintptr_t>& prev = *ctx->prev;
-    if (!prev.empty()) {
-        for (uintptr_t oldChild : prev) {
-            if (std::find(current.begin(), current.end(), oldChild) != current.end()) continue;
-            // oldChild was attached last check, is gone now — resolve what
-            // it was, if the pointer is still readable.
-            std::string name = "<unresolved>";
-            UObject* childObj = reinterpret_cast<UObject*>(oldChild);
-            std::wstring wname = childObj->GetFullName();
-            if (!wname.empty()) {
-                int need = WideCharToMultiByte(CP_UTF8, 0, wname.c_str(), -1, nullptr, 0, nullptr, nullptr);
-                if (need > 0) {
-                    name.resize(static_cast<size_t>(need - 1));
-                    WideCharToMultiByte(CP_UTF8, 0, wname.c_str(), -1, name.data(), need, nullptr, nullptr);
-                }
-            }
-            char line[384];
-            snprintf(line, sizeof(line),
-                "attach_health: %s DETACHED ptr=0x%llx name=%s (prevCount=%zu curCount=%zu)",
-                ctx->label.c_str(), static_cast<unsigned long long>(oldChild), name.c_str(),
-                prev.size(), current.size());
-            debug_log(line);
+    // 2026-08-16: RE-ENABLED. Turned off earlier tonight because it wasn't
+    // correlating with the "still-attached-but-visually-frozen" reports
+    // being chased at the time — but a fresh, unambiguous live event (real
+    // pickup items — helmet/rifle/backpack/hatchet — resting on the ground
+    // with physics, on both PC1's own gear and proxy0's) is exactly the
+    // genuine-detachment class this scan was built to catch (see this
+    // function's own top comment), and there was zero diagnostic trail for
+    // it with this off. Two changes vs. the original version: (1) name
+    // resolution now runs through seh_invoke — the original bare
+    // GetFullName() call on a pointer that had just left AttachChildren was
+    // flagged as a real stale-pointer risk (SEH catches instead of crashing
+    // if the actor was actually destroyed, not just detached, in the
+    // interim); (2) dump_recent_calls() fires on every hit, same as this
+    // file's "MESH ASSET CLEARED" handling — the point is capturing the
+    // ProcessEvent call that immediately preceded the detach, not just
+    // logging that it happened.
+    struct ResolveNameCtx { UObject* obj; std::string result; };
+    for (uintptr_t p : prev) {
+        if (std::find(current.begin(), current.end(), p) != current.end()) continue;
+        ResolveNameCtx rctx{ reinterpret_cast<UObject*>(p), "<unresolved>" };
+        if (!seh_invoke([](void* raw) {
+                auto* c = static_cast<ResolveNameCtx*>(raw);
+                std::wstring wname = c->obj->GetFullName();
+                const int needed = WideCharToMultiByte(CP_UTF8, 0, wname.c_str(), -1, nullptr, 0, nullptr, nullptr);
+                std::string name(needed > 0 ? static_cast<size_t>(needed - 1) : 0, '\0');
+                if (needed > 0) WideCharToMultiByte(CP_UTF8, 0, wname.c_str(), -1, name.data(), needed, nullptr, nullptr);
+                c->result = std::move(name);
+            }, &rctx)) {
+            rctx.result = "<crashed resolving name, pointer likely freed>";
         }
+        debug_log("attach_health: " + ctx->label + " DETACHED child ptr=0x" +
+                  std::to_string(p) + " name=" + rctx.result);
+        dump_recent_calls();
     }
     prev = current;
 
@@ -2182,7 +3584,15 @@ static void do_attach_health_scan(void* ctxRaw)
         static std::unordered_map<std::string, uint64_t> s_lastAbsoluteCheckUs;
         const uint64_t nowUs = sdb::now_micros();
         uint64_t& lastAbsUs = s_lastAbsoluteCheckUs[ctx->label];
-        const bool runAbsoluteThisPass = (nowUs - lastAbsUs >= 1'000'000ULL);
+        // 2026-08-16: widened 1s -> 20s, and the re-snap below made
+        // unconditional (not just on detected offset) in the same change —
+        // see the unconditional-re-snap block's own comment. All items
+        // under one label share this single gate, so at 1s this could burst
+        // up to ~16 ProcessEvent K2_AttachToComponent calls back-to-back in
+        // a single scan pass once a second; both PC1 and PC2 hung shortly
+        // after this (and the same-shaped leader-pose change) went live.
+        // 20s trades slower self-heal for far less frequent risk exposure.
+        const bool runAbsoluteThisPass = (nowUs - lastAbsUs >= 20'000'000ULL);
         if (runAbsoluteThisPass) lastAbsUs = nowUs;
 
         for (uintptr_t child : current) {
@@ -2267,26 +3677,361 @@ static void do_attach_health_scan(void* ctxRaw)
             const double sdx = clParams.ReturnValue.X - slParams.ReturnValue.X;
             const double sdy = clParams.ReturnValue.Y - slParams.ReturnValue.Y;
             const double sdz = clParams.ReturnValue.Z - slParams.ReturnValue.Z;
+            const double sDist = std::sqrt(sdx * sdx + sdy * sdy + sdz * sdz);
             constexpr double kSocketDistSq = 30.0 * 30.0;
-            if (sdx * sdx + sdy * sdy + sdz * sdz > kSocketDistSq) {
-                struct AttachParams {
-                    UObject* Parent = nullptr;
-                    RawFGameplayTag SocketName{};
-                    uint8_t  LocationRule = 2;
-                    uint8_t  RotationRule = 2;
-                    uint8_t  ScaleRule = 1;
-                    bool     WeldSimulatedBodies = true;
-                    bool     ReturnValue = false;
-                } aparams;
-                aparams.Parent = ctx->mesh;
-                aparams.SocketName = socket;
-                childObj->ProcessEvent(attachFn, &aparams);
-                debug_log("attach_health: " + ctx->label + " re-snapped OFF-SOCKET child ptr=0x" +
-                          std::to_string(child) + " was " +
-                          std::to_string(std::sqrt(sdx * sdx + sdy * sdy + sdz * sdz)) +
-                          " units from its own socket, reattach returned " + std::to_string(aparams.ReturnValue));
+            const bool offSocket = sdx * sdx + sdy * sdy + sdz * sdz > kSocketDistSq;
+            // 2026-08-16: live-reported items (mag/laser/shotgun) visibly
+            // detached/floating in the world on PC1, but AttachChildren's
+            // own count never moved (heartbeat steady at 16 the whole time)
+            // and this exact check produced zero "OFF-SOCKET" hits either —
+            // meaning K2_GetComponentLocation here is reading the SAME
+            // small/correct distance our own reflection call sees, while
+            // whatever's actually rendered on screen disagrees. Both
+            // K2_GetComponentLocation (game-thread ComponentToWorld cache)
+            // and the visible render (render-thread's own copy of that
+            // transform) are SUPPOSED to always agree — UE re-syncs the
+            // render proxy any time the game-thread transform changes via
+            // MarkRenderTransformDirty, normally triggered automatically by
+            // a real attach/move call. If that notification silently
+            // doesn't fire for some re-attach paths, the two would disagree
+            // exactly like this: our own reads (and the engine's own
+            // internal bookkeeping) are fine, only the pixels are stuck.
+            // Logged unconditionally (not just on threshold-exceeded) so
+            // this theory is directly checkable against the next live
+            // report instead of guessed at.
+            char sdbuf[160];
+            snprintf(sdbuf, sizeof(sdbuf), "attach_health: %s child ptr=0x%llx socket-dist=%.1f offSocket=%d",
+                      ctx->label.c_str(), static_cast<unsigned long long>(child), sDist, offSocket ? 1 : 0);
+            debug_log(sdbuf);
+            // 2026-08-16: tried re-snapping UNCONDITIONALLY on this throttled
+            // pass (not just when offSocket) to test the render-thread-
+            // notification-gap theory above — the very next live test
+            // crashed (0xe06d7363, unhandled C++ exception, stack entirely
+            // inside this mod's module via the WndProc path, while idle; no
+            // dump generated). Combined with the sibling leader-pose
+            // proactive-refresh change hanging the session right before
+            // this, that's two different failure modes from "make a
+            // previously-reactive-only repair call fire unconditionally on
+            // a timer" across two consecutive tests. Reverted the
+            // "unconditional" part permanently — this block stays strictly
+            // reactive (offSocket-gated only, same throttle as before).
+            //
+            // 2026-08-16, later: REPLACED the repair action itself, not just
+            // its frequency. Full bytecode decode of
+            // BP_JigPickupComponent_C::ValidateAttachedActor (research/
+            // 04_ida_investigation_log.md) found this is exactly what the
+            // real game does to fix a misplaced-but-still-attached item: NOT
+            // a re-attach (K2_AttachToComponent, what this block used to
+            // call — only re-confirms the parent-child relationship, which
+            // was never actually broken; AttachChildren's own count stays
+            // steady through every reported occurrence of this bug) but a
+            // direct reposition — read the parent socket's CURRENT transform
+            // and K2_SetActorTransform the item onto it with bTeleport=true.
+            // SetActorTransform is UE's general "move any actor" API, which
+            // drives the same render-transform-dirty path any actor move
+            // goes through — a plausible way to force the render refresh
+            // this whole investigation has been chasing, that a bare
+            // re-attach apparently doesn't. Skips ValidateAttachedActor's own
+            // parent-rediscovery/Character-cast steps — this scan already
+            // knows ctx->mesh is the confirmed parent (that's what's being
+            // walked), so re-deriving and re-checking it here would be
+            // redundant, not safer.
+            if (offSocket) {
+                UFunction* getOwnerFn = childObj->GetFunctionByNameInChain(L"GetOwner");
+                UFunction* getSocketTransformFn = ctx->mesh->GetFunctionByNameInChain(L"GetSocketTransform");
+                struct OwnerParams { AActor* ReturnValue = nullptr; } ownerParams;
+                if (getOwnerFn) childObj->ProcessEvent(getOwnerFn, &ownerParams);
+
+                UFunction* setActorTransformFn = ownerParams.ReturnValue
+                    ? ownerParams.ReturnValue->GetFunctionByNameInChain(L"K2_SetActorTransform")
+                    : nullptr;
+
+                if (getOwnerFn && ownerParams.ReturnValue && getSocketTransformFn && setActorTransformFn) {
+                    // Same proven 96-byte Kismet FTransform marshaling shape
+                    // used throughout this project (rotation quat, location+
+                    // pad, scale+pad, all doubles) — see FreezeCheckNativeFTransform's
+                    // own comment further down this file for the precedent.
+                    struct SocketTransformNative {
+                        double rotX = 0.0, rotY = 0.0, rotZ = 0.0, rotW = 1.0;
+                        double locX = 0.0, locY = 0.0, locZ = 0.0, locPad = 0.0;
+                        double scaleX = 1.0, scaleY = 1.0, scaleZ = 1.0, scalePad = 0.0;
+                    };
+                    struct SocketTransformParams {
+                        RawFGameplayTag InSocketName{};
+                        uint8_t RelativeSpace = 0; // ERelativeTransformSpace::RTS_World, matches the decoded ByteConst 0
+                        SocketTransformNative ReturnValue{};
+                    } stParams;
+                    stParams.InSocketName = socket;
+                    ctx->mesh->ProcessEvent(getSocketTransformFn, &stParams);
+
+                    struct SetTransformParams {
+                        SocketTransformNative NewTransform{};
+                        bool       bSweep = false;
+                        FHitResult SweepHitResult{};
+                        bool       bTeleport = true;
+                        bool       ReturnValue = false;
+                    } setParams;
+                    setParams.NewTransform = stParams.ReturnValue;
+                    ownerParams.ReturnValue->ProcessEvent(setActorTransformFn, &setParams);
+
+                    debug_log("attach_health: " + ctx->label + " transform-snapped OFF-SOCKET child ptr=0x" +
+                              std::to_string(child) + " was " + std::to_string(sDist) +
+                              " units from its own socket, K2_SetActorTransform returned " +
+                              std::to_string(setParams.ReturnValue));
+                } else {
+                    debug_log("attach_health: " + ctx->label + " OFF-SOCKET child ptr=0x" +
+                              std::to_string(child) +
+                              " but GetOwner/GetSocketTransform/K2_SetActorTransform not found, skipped repair");
+                }
             }
         }
+    }
+}
+
+// 2026-08-16: targeted diagnostic for the item-detach investigation.
+// CORRECTED same night, later: a full bytecode decode of
+// CheckDistanceFromActor (research/04_ida_investigation_log.md,
+// "CheckDistanceFromActor — fully decoded, and it CORRECTS an earlier
+// assumption") proved this original comment wrong. CheckDistanceFromActor
+// does NOT "auto-release" an item — past 300 units it only clears its own
+// repeating timer, calls OnInteractActorOverDistance on CurrentActor (the
+// interacting CHARACTER, cast to BP_JigCharacterInterface — not the item)
+// to close its own interaction prompt, then nulls its own CurrentActor
+// tracking variable. Nothing in that path touches attachment, socket, or
+// physics state. CurrentActor/InteractingActorLoc (comp+0xE0/+0xE8) track
+// the loot-interaction-prompt lifecycle (walk away from an item you were
+// about to interact with → its prompt cancels), not an equipped item's
+// ongoing physical state — ruled out as a lead for the render/attachment
+// desync bug this diagnostic was chasing. Left running (harmless,
+// informational) but treat any findings here as unrelated to that bug.
+// Forward-declared — real definition lives later in the file, needed here
+// for check_current_actor_diagnostic's "local" scan target.
+static AActor* cached_find_local_pawn();
+
+struct CurrentActorFinding { uintptr_t pickupComp; void* currentActor; uintptr_t childPtr; };
+struct CurrentActorScanCtx { AActor* actor; std::vector<CurrentActorFinding>* findings; };
+
+static void do_current_actor_scan(void* rawCtx)
+{
+    auto* ctx = static_cast<CurrentActorScanCtx*>(rawCtx);
+    auto** meshSlot = static_cast<UObject**>(ctx->actor->GetValuePtrByPropertyNameInChain(L"Mesh"));
+    UObject* mesh = (meshSlot && *meshSlot) ? *meshSlot : nullptr;
+    if (!mesh) return;
+
+    const uintptr_t meshAddr = reinterpret_cast<uintptr_t>(mesh);
+    const uintptr_t childrenData  = *reinterpret_cast<uintptr_t*>(meshAddr + 0x00C0);
+    const int32_t   childrenCount = *reinterpret_cast<int32_t*>(meshAddr + 0x00C0 + 0x08);
+    if (childrenCount < 0 || childrenCount > 64 || !childrenData) return;
+
+    for (int32_t c = 0; c < childrenCount; ++c) {
+        uintptr_t child = *reinterpret_cast<uintptr_t*>(childrenData + static_cast<size_t>(c) * 8);
+        if (!child) continue;
+        UObject* childObj = reinterpret_cast<UObject*>(child);
+
+        auto** pickupSlot = static_cast<UObject**>(childObj->GetValuePtrByPropertyNameInChain(L"BP_JigPickupComponent"));
+        UObject* pickupComp = (pickupSlot && *pickupSlot) ? *pickupSlot : nullptr;
+        if (!pickupComp) continue;
+
+        const uintptr_t pickupAddr = reinterpret_cast<uintptr_t>(pickupComp);
+        void* currentActor = *reinterpret_cast<void**>(pickupAddr + 0xE0);
+        ctx->findings->push_back({ pickupAddr, currentActor, child });
+    }
+}
+
+static void check_current_actor_diagnostic()
+{
+    static uint64_t s_lastCheckUs = 0;
+    const uint64_t now = sdb::now_micros();
+    if (now - s_lastCheckUs < 1'000'000ULL) return;
+    s_lastCheckUs = now;
+
+    static std::unordered_map<uintptr_t, bool> s_wasNonNull; // keyed by pickup component ptr
+
+    auto scanOne = [](const char* label, AActor* actor) {
+        if (!actor) return;
+        std::vector<CurrentActorFinding> findings;
+        CurrentActorScanCtx ctx{ actor, &findings };
+        if (!seh_invoke(do_current_actor_scan, &ctx)) {
+            debug_log(std::string("current_actor_diag: ") + label + " scan crashed, caught via SEH");
+            return;
+        }
+        for (const auto& f : findings) {
+            const bool nonNull = f.currentActor != nullptr;
+            bool& was = s_wasNonNull[f.pickupComp];
+            if (nonNull && !was) {
+                char buf[256];
+                snprintf(buf, sizeof(buf),
+                    "current_actor_diag: %s child=0x%llx pickupComp=0x%llx CurrentActor BECAME NON-NULL = 0x%llx",
+                    label, static_cast<unsigned long long>(f.childPtr),
+                    static_cast<unsigned long long>(f.pickupComp),
+                    reinterpret_cast<unsigned long long>(f.currentActor));
+                debug_log(buf);
+            } else if (!nonNull && was) {
+                char buf[192];
+                snprintf(buf, sizeof(buf),
+                    "current_actor_diag: %s child=0x%llx pickupComp=0x%llx CurrentActor cleared back to null",
+                    label, static_cast<unsigned long long>(f.childPtr),
+                    static_cast<unsigned long long>(f.pickupComp));
+                debug_log(buf);
+            }
+            was = nonNull;
+        }
+    };
+
+    scanOne("local", cached_find_local_pawn());
+
+    std::lock_guard<std::mutex> lk(sdb::g_state().playersMtx);
+    int i = 0;
+    for (auto& [id, player] : sdb::g_state().players) {
+        if (!player.proxyActor) continue;
+        std::string label = "proxy" + std::to_string(i++);
+        scanOne(label.c_str(), static_cast<AActor*>(player.proxyActor));
+    }
+}
+
+// 2026-08-16: pure render/world-position freeze detector — live-reported
+// "PC1's helmet froze locally" while read_local_weapon_attachments still
+// showed it correctly present in AttachChildren at the exact same moment,
+// proving this is a DIFFERENT failure mode than either DETACHED (leaves
+// AttachChildren) or DRIFTED/OFF-SOCKET (RelativeLocation moves away from
+// where it should be) — both of those only read the DATA MODEL, which this
+// report shows can look completely correct while the actual per-frame
+// world transform the engine draws simply stops updating. Also reported:
+// seems more common with a proxy connected — worth watching whether this
+// correlates with proxy sync bursts once live data comes in. Tracks each
+// equipped item's own live K2_GetComponentToWorld() position against the
+// owning character's K2_GetActorLocation() across consecutive polls — if
+// the character moved meaningfully but a specific item barely moved, that's
+// the freeze signature, independent of what the attachment data claims.
+// Same NativeFTransform layout already proven for this exact call in
+// proxy_manager.cpp's spawn_and_equip_item_visual (Kismet FTransform return
+// marshaling — rotation quat, then location+pad, then scale+pad, 96 bytes).
+struct FreezeCheckNativeFTransform {
+    double rotX = 0.0, rotY = 0.0, rotZ = 0.0, rotW = 1.0;
+    double locX = 0.0, locY = 0.0, locZ = 0.0, locPad = 0.0;
+    double scaleX = 1.0, scaleY = 1.0, scaleZ = 1.0, scalePad = 0.0;
+};
+
+struct FreezeItemFinding { uintptr_t itemRoot; double x, y, z; };
+struct FreezeScanCtx {
+    AActor* actor;
+    std::vector<FreezeItemFinding>* findings;
+    double actorX = 0, actorY = 0, actorZ = 0;
+    bool actorLocValid = false;
+};
+
+static void do_freeze_check_scan(void* rawCtx)
+{
+    auto* ctx = static_cast<FreezeScanCtx*>(rawCtx);
+
+    UFunction* getLocFn = ctx->actor->GetFunctionByNameInChain(L"K2_GetActorLocation");
+    if (getLocFn) {
+        struct { double X = 0, Y = 0, Z = 0; } loc;
+        ctx->actor->ProcessEvent(getLocFn, &loc);
+        ctx->actorX = loc.X; ctx->actorY = loc.Y; ctx->actorZ = loc.Z;
+        ctx->actorLocValid = true;
+    }
+
+    auto** meshSlot = static_cast<UObject**>(ctx->actor->GetValuePtrByPropertyNameInChain(L"Mesh"));
+    UObject* mesh = (meshSlot && *meshSlot) ? *meshSlot : nullptr;
+    if (!mesh) return;
+
+    const uintptr_t meshAddr = reinterpret_cast<uintptr_t>(mesh);
+    const uintptr_t childrenData  = *reinterpret_cast<uintptr_t*>(meshAddr + 0x00C0);
+    const int32_t   childrenCount = *reinterpret_cast<int32_t*>(meshAddr + 0x00C0 + 0x08);
+    if (childrenCount < 0 || childrenCount > 64 || !childrenData) return;
+
+    for (int32_t c = 0; c < childrenCount; ++c) {
+        uintptr_t child = *reinterpret_cast<uintptr_t*>(childrenData + static_cast<size_t>(c) * 8);
+        if (!child) continue;
+        UObject* childObj = reinterpret_cast<UObject*>(child);
+
+        UFunction* toWorldFn = childObj->GetFunctionByNameInChain(L"K2_GetComponentToWorld");
+        if (!toWorldFn) continue;
+        struct Params { FreezeCheckNativeFTransform ReturnValue; } wparams;
+        childObj->ProcessEvent(toWorldFn, &wparams);
+
+        ctx->findings->push_back({ child, wparams.ReturnValue.locX, wparams.ReturnValue.locY, wparams.ReturnValue.locZ });
+    }
+}
+
+// 2s poll (not every tick) — this does a K2_GetActorLocation plus one
+// K2_GetComponentToWorld ProcessEvent call per attached item (up to ~16),
+// so keeping it infrequent matters after tonight's own FindFirstOf-every-
+// tick FPS regression lesson, even though this is far cheaper (no
+// UObjectGlobals scan, just direct ProcessEvent calls on already-known
+// pointers).
+static void check_item_freeze_diagnostic()
+{
+    static uint64_t s_lastCheckUs = 0;
+    const uint64_t now = sdb::now_micros();
+    if (now - s_lastCheckUs < 2'000'000ULL) return;
+    s_lastCheckUs = now;
+
+    struct LastState { double x = 0, y = 0, z = 0; bool valid = false; };
+    static std::unordered_map<uintptr_t, LastState> s_lastItemPos;
+    static std::unordered_map<std::string, LastState> s_lastActorPos;
+
+    auto scanOne = [](const char* label, AActor* actor) {
+        if (!actor) {
+            debug_log(std::string("item_freeze_diag: ") + label + " actor is null, skipping");
+            return;
+        }
+        std::vector<FreezeItemFinding> findings;
+        FreezeScanCtx ctx{ actor, &findings };
+        if (!seh_invoke(do_freeze_check_scan, &ctx)) {
+            debug_log(std::string("item_freeze_diag: ") + label + " scan crashed, caught via SEH");
+            return;
+        }
+        if (!ctx.actorLocValid) {
+            debug_log(std::string("item_freeze_diag: ") + label + " K2_GetActorLocation failed/not found");
+            return;
+        }
+
+        LastState& lastActor = s_lastActorPos[label];
+        double actorDeltaSq = 0;
+        if (lastActor.valid) {
+            const double dx = ctx.actorX - lastActor.x, dy = ctx.actorY - lastActor.y, dz = ctx.actorZ - lastActor.z;
+            actorDeltaSq = dx * dx + dy * dy + dz * dz;
+        }
+        const bool actorMoved = lastActor.valid && actorDeltaSq > (50.0 * 50.0);
+        lastActor = { ctx.actorX, ctx.actorY, ctx.actorZ, true };
+
+        // 2026-08-16: heartbeat every poll (not just on a FROZEN hit) —
+        // live-reported "axe froze" produced zero output at all, need to
+        // see whether this is even running/finding items/meeting the
+        // movement threshold, rather than guessing again.
+        char hb[192];
+        snprintf(hb, sizeof(hb),
+            "item_freeze_diag: %s heartbeat items=%zu actorMovedThisPoll=%d actorDelta=%.1f",
+            label, findings.size(), actorMoved, std::sqrt(actorDeltaSq));
+        debug_log(hb);
+
+        for (const auto& f : findings) {
+            LastState& lastItem = s_lastItemPos[f.itemRoot];
+            if (lastItem.valid && actorMoved) {
+                const double dx = f.x - lastItem.x, dy = f.y - lastItem.y, dz = f.z - lastItem.z;
+                const double itemDeltaSq = dx * dx + dy * dy + dz * dz;
+                char buf[256];
+                snprintf(buf, sizeof(buf),
+                    "item_freeze_diag: %s item=0x%llx actorMoved=%.1f itemMoved=%.1f%s",
+                    label, static_cast<unsigned long long>(f.itemRoot),
+                    std::sqrt(actorDeltaSq), std::sqrt(itemDeltaSq),
+                    itemDeltaSq < (10.0 * 10.0) ? " <-- FROZEN" : "");
+                debug_log(buf);
+            }
+            lastItem = { f.x, f.y, f.z, true };
+        }
+    };
+
+    scanOne("local", cached_find_local_pawn());
+
+    std::lock_guard<std::mutex> lk(sdb::g_state().playersMtx);
+    int i = 0;
+    for (auto& [id, player] : sdb::g_state().players) {
+        if (!player.proxyActor) continue;
+        std::string label = "proxy" + std::to_string(i++);
+        scanOne(label.c_str(), static_cast<AActor*>(player.proxyActor));
     }
 }
 
@@ -2322,6 +4067,11 @@ static void check_attach_health(const std::string& label, AActor* actor,
     if (!mesh) return;
 
     std::vector<uintptr_t> weaponsAndItems = check_attach_health_component(label, mesh, snapshots, itemHadMesh, itemLastPos);
+
+    // Mirror into the recent-calls forensic watch (see its own comment) —
+    // only "local" drives that investigation, same scoping as the clothing
+    // watch this sits alongside.
+    if (label == "local") set_item_recent_calls_watch(weaponsAndItems);
 
     // One level deeper: each equipped item's own attachments (weapon
     // scopes/mags/suppressors, per the same JigPickupComponent/socket
@@ -2379,6 +4129,8 @@ struct ComponentDriftCtx {
     // check already proven for item attachments (see do_attach_health_scan)
     // instead of the origin check.
     const wchar_t* expectedSocket = nullptr;
+    uint64_t healthySinceUs = 0;   // 2026-08-16 — see do_component_drift_scan's firstSeenUs comment
+    uint64_t lastLeaderPoseRefreshUs = 0; // 2026-08-16 — see check_component_drift's proactive-refresh comment
     int repairAttempts = 0;        // capped — see do_component_drift_scan's repair-call comment
     // 2026-08-14, second root-cause pass: firstSeenUs anchors a grace period
     // before repair starts counting against the cap at all, lastRepairAttemptUs
@@ -2410,7 +4162,12 @@ struct ComponentDriftCtx {
 // [[feedback_sdo_gameplaytag_ci_unstable]]), these are compile-time string
 // literals baked into the shipped build's Kismet bytecode, deterministically
 // ordered by the cooked global name table, not runtime DataTable load order.
-struct BodyPartRepairCtx { AActor* owner; int32_t ci; const std::string* key; const wchar_t* clothingOnRepName; UObject* comp; };
+// clothingCompOffset: the corresponding Clothing_X overlay component's raw
+// offset on the owner (0 = no counterpart, e.g. for the Clothing_X repair
+// entries themselves, which ARE the counterpart). See do_body_part_repair's
+// own comment for why this is needed: a null base-mesh slot is CORRECT,
+// not broken, whenever clothing actually covers that slot.
+struct BodyPartRepairCtx { AActor* owner; int32_t ci; const std::string* key; const wchar_t* clothingOnRepName; UObject* comp; uintptr_t clothingCompOffset; };
 
 // UpdateBodyParts alone reapplies the BARE body mesh only — live-reported
 // 2026-08-14: after repair, bare skin showed through gaps in the pants
@@ -2427,10 +4184,102 @@ struct BodyPartRepairCtx { AActor* owner; int32_t ci; const std::string* key; co
 // dumps) lives down near on_process_event_pre, needed here and in
 // do_component_drift_scan below.
 static void dump_recent_calls();
+// Forward-declared — real definitions live near on_actor_tick, needed here
+// (on_process_event_pre, above both) for the reliability watchdog. See
+// register_actor_tick_hook's own comment for why this exists.
+static bool register_actor_tick_hook();
+// Forward-declared — real definition lives near register_actor_tick_hook,
+// needed here (do_game_tick, above it) to make the one-time first
+// registration call once a real pawn exists. See its own comment.
+static void fixup_and_register_actor_tick_hook(AActor* pawn);
+// Forward-declared — real definition lives near register_actor_tick_hook,
+// needed here (do_game_tick, above it) to start the WndProc-subclass clean
+// tick trigger once a real pawn exists. See its own comment and the
+// "Reliable GameThread Trigger via WndProc Subclass" plan.
+static void ensure_hwnd_ticker_started();
+// Forward-declared — real definition lives right after ensure_hwnd_ticker_
+// started, needed here (do_game_tick, above it) to fire the one-time
+// a.ParallelAnimEvaluation=0 console command once a real pawn exists. See
+// its own comment for the full UE-191796 research writeup.
+static void ensure_parallel_anim_eval_disabled(AActor* worldContextActor);
+// Forward-declared — real definition lives near do_game_tick, needed here
+// (check_attach_health_trigger, above it) now that it's called every
+// do_game_tick() invocation instead of only once per 300ms. 100ms-cached
+// wrapper around the expensive find_local_pawn() reflection scan — see
+// check_attach_health_trigger's own comment for why the raw scan can't be
+// used here anymore.
+static AActor* cached_find_local_pawn();
 
 static void do_body_part_repair(void* ctxRaw)
 {
     auto* ctx = static_cast<BodyPartRepairCtx*>(ctxRaw);
+
+    // 2026-08-15: a null BASE mesh (Torso/Legs/Feet) is the CORRECT state
+    // whenever clothing actually covers that slot — the real game hides the
+    // bare mesh and shows the Clothing_X overlay instead (confirmed live:
+    // bracketed logging showed OnRep_ClothingXEquipped? clearing this exact
+    // slot back to null immediately after every repair, which turned out to
+    // be that function correctly re-asserting "clothing is on, hide the
+    // bare mesh" — not a bug). Treating null as always-broken here is what
+    // caused the endless UpdateBodyParts-vs-OnRep fight every ~1.2s all
+    // session. Check the actual Clothing_X overlay's own mesh first: if
+    // it's set (clothing genuinely equipped), leave this slot alone
+    // entirely — nothing to repair. Only proceed to UpdateBodyParts below
+    // when clothing is NOT covering this slot, i.e. bare skin should
+    // genuinely be showing and isn't.
+    if (ctx->clothingCompOffset) {
+        auto* clothingComp = *reinterpret_cast<UObject**>(
+            reinterpret_cast<uintptr_t>(ctx->owner) + ctx->clothingCompOffset);
+        if (clothingComp) {
+            void** clothMeshSlot = static_cast<void**>(clothingComp->GetValuePtrByPropertyNameInChain(L"SkeletalMesh"));
+            if (!clothMeshSlot) clothMeshSlot = static_cast<void**>(clothingComp->GetValuePtrByPropertyNameInChain(L"SkeletalMeshAsset"));
+            if (clothMeshSlot && *clothMeshSlot) {
+                // 2026-08-15: mesh-presence alone isn't sufficient proof the
+                // clothing is actually showing — live-reported immediately
+                // after the mesh-only version of this check shipped: boots/
+                // shirt genuinely invisible (not just bare skin underneath)
+                // while this exact skip fired continuously, meaning
+                // Clothing_Feet/Torso had a valid mesh reference but was
+                // hidden (bVisible false) — likely a stale SetVisibility
+                // (false) from some earlier point that never got reversed.
+                // Check visibility too: if hidden, that's the real bug —
+                // show it — rather than falling through to bare skin, which
+                // isn't correct either when clothing is genuinely equipped.
+                UFunction* isVisFn = clothingComp->GetFunctionByNameInChain(L"IsVisible");
+                bool isVisible = true; // fail open — don't force a SetVisibility call if we can't even check
+                if (isVisFn) {
+                    struct Params { bool ReturnValue = false; } vparams;
+                    clothingComp->ProcessEvent(isVisFn, &vparams);
+                    isVisible = vparams.ReturnValue;
+                }
+                if (!isVisible) {
+                    UFunction* setVisFn = clothingComp->GetFunctionByNameInChain(L"SetVisibility");
+                    if (setVisFn) {
+                        struct Params { bool bNewVisibility = true; bool bPropagateToChildren = false; } vparams;
+                        clothingComp->ProcessEvent(setVisFn, &vparams);
+                        debug_log("component_drift: " + *ctx->key + " Clothing_X overlay had a mesh but was HIDDEN — re-shown");
+                    }
+                } else {
+                    // 2026-08-15: refresh the leader-pose link routinely here
+                    // too, not just right after WE change the mesh — a
+                    // live-reported recurrence (shirt/pants still not
+                    // showing, this exact "equipped and visible" skip still
+                    // firing) proved the desync can happen from something
+                    // outside our own repair flow (the game's own initial
+                    // equip, most likely), in which case this component
+                    // never gets touched by any mesh-setting call site at
+                    // all — nothing would ever refresh it. Cheap and
+                    // idempotent if the link is already fine; see
+                    // refresh_leader_pose's own comment (proxy_manager.cpp).
+                    auto** leaderMeshSlot2 = static_cast<UObject**>(ctx->owner->GetValuePtrByPropertyNameInChain(L"Mesh"));
+                    sdb::refresh_leader_pose(clothingComp, (leaderMeshSlot2 && *leaderMeshSlot2) ? *leaderMeshSlot2 : nullptr);
+                    debug_log("component_drift: " + *ctx->key + " skipped mesh-repair (Clothing_X equipped+visible) but refreshed leader-pose link");
+                }
+                return;
+            }
+        }
+    }
+
     // 2026-08-15: ci==0 now means "clothing-overlay-only repair" (see the
     // Clothing_Torso/Legs/Feet kNames entries and check_component_drift's
     // relaxed repair gate) — UpdateBodyParts doesn't know these component
@@ -2448,9 +4297,22 @@ static void do_body_part_repair(void* ctxRaw)
     // something else — live-reported the same session: 14-20 consecutive
     // calls with zero effect on the LOCAL player (not just proxies, contrary
     // to this project's prior assumption).
-    void** meshSlot = ctx->comp ? static_cast<void**>(ctx->comp->GetValuePtrByPropertyNameInChain(L"SkeletalMesh")) : nullptr;
-    if (meshSlot && !*meshSlot) meshSlot = static_cast<void**>(ctx->comp->GetValuePtrByPropertyNameInChain(L"SkeletalMeshAsset"));
+    // 2026-08-15: "meshBefore=0x0 meshImmediatelyAfter=0x0" on every single
+    // retry for 5 straight minutes (a live-reported occurrence, female
+    // character) is ambiguous with the existing logging alone — meshSlot
+    // itself (the property pointer, not its value) being null produces the
+    // exact same "0x0" output as UpdateBodyParts genuinely having zero
+    // effect on a resolved slot. Log which case this actually is before
+    // guessing at a fix.
+    void** skelMeshSlot = ctx->comp ? static_cast<void**>(ctx->comp->GetValuePtrByPropertyNameInChain(L"SkeletalMesh")) : nullptr;
+    void** skelMeshAssetSlot = ctx->comp ? static_cast<void**>(ctx->comp->GetValuePtrByPropertyNameInChain(L"SkeletalMeshAsset")) : nullptr;
+    void** meshSlot = (skelMeshSlot && *skelMeshSlot) ? skelMeshSlot : (skelMeshAssetSlot ? skelMeshAssetSlot : skelMeshSlot);
     const void* before = meshSlot ? *meshSlot : nullptr;
+    debug_log("component_drift: " + *ctx->key + " repair-diag compValid=" + std::to_string(ctx->comp != nullptr) +
+              " UpdateBodyPartsFn=" + std::to_string(fn != nullptr) +
+              " SkeletalMeshSlot=" + std::to_string(skelMeshSlot != nullptr) +
+              " SkeletalMeshAssetSlot=" + std::to_string(skelMeshAssetSlot != nullptr) +
+              " chosenSlot=" + std::to_string(meshSlot != nullptr));
 
     // 2026-08-14: an earlier attempt at dumping here (one debug_log call per
     // ring-buffer line) stalled the game thread for ~7 real seconds and was
@@ -2475,6 +4337,16 @@ static void do_body_part_repair(void* ctxRaw)
     if (fn) {
         struct Params { int32_t ComparisonIndex; int32_t Number; } params{ ctx->ci, 0 };
         ctx->owner->ProcessEvent(fn, &params);
+        // Defensive — UpdateBodyParts is the game's own Blueprint function
+        // (not ours to inspect/modify), so whether it internally refreshes
+        // the leader-pose bone mapping after changing this component's
+        // SkinnedAsset is unconfirmed. Refresh unconditionally after calling
+        // it, matching every other direct SetSkinnedAssetAndUpdate call site
+        // in this project — see refresh_leader_pose's own comment
+        // (proxy_manager.cpp) for the full rationale. Harmless no-op if
+        // UpdateBodyParts already handled it correctly.
+        auto** leaderMeshSlot = static_cast<UObject**>(ctx->owner->GetValuePtrByPropertyNameInChain(L"Mesh"));
+        sdb::refresh_leader_pose(ctx->comp, (leaderMeshSlot && *leaderMeshSlot) ? *leaderMeshSlot : nullptr);
     }
 
     const void* immediatelyAfter = meshSlot ? *meshSlot : nullptr;
@@ -2483,7 +4355,25 @@ static void do_body_part_repair(void* ctxRaw)
               " meshBefore=0x" + std::to_string(reinterpret_cast<uintptr_t>(before)) +
               " meshImmediatelyAfter=0x" + std::to_string(reinterpret_cast<uintptr_t>(immediatelyAfter)));
 
-    if (ctx->clothingOnRepName) {
+    // 2026-08-15: PROVEN live (not theory) — bracketed read confirmed
+    // calling this OnRep from the BASE Torso/Legs/Feet repair (ci != 0)
+    // clears the mesh it was just set to, every single time
+    // (meshBeforeOnRep=<valid> meshAfterOnRep=0x0), explaining the
+    // "reverts within ~1.2s, forever" pattern observed all session. The
+    // earlier theory ("OnRep_ClothingLegsEquipped? only touches the
+    // Clothing_Legs overlay, not the bare Legs mesh") was wrong — its real
+    // logic toggles between showing the clothing overlay and showing the
+    // bare mesh based on the actual equip state, so calling it from the
+    // BASE mesh's own repair fights whatever state it just decided (if
+    // clothing is genuinely equipped, a null base mesh is the CORRECT
+    // state — our repair had been endlessly re-setting it, and this
+    // function endlessly re-clearing it back, an unbounded and entirely
+    // pointless fight against the game's own intended behavior). Restricted
+    // to ci == 0 (the Clothing_Torso/Legs/Feet overlay-component repair
+    // path), the one place calling it is actually correct — there, a
+    // missing Clothing_X mesh while the OWN component's read shows null is
+    // exactly the case this function is meant to fix.
+    if (ctx->clothingOnRepName && ctx->ci == 0) {
         UFunction* clothFn = ctx->owner->GetFunctionByNameInChain(ctx->clothingOnRepName);
         if (clothFn) {
             ctx->owner->ProcessEvent(clothFn, nullptr);
@@ -2618,10 +4508,26 @@ static void do_component_drift_scan(void* ctxRaw)
     // never ran. Real diagnostic gap, not evidence those components were
     // actually fine.
     void** meshSlot = static_cast<void**>(ctx->comp->GetValuePtrByPropertyNameInChain(L"SkeletalMesh"));
+    bool isSkeletalComp = meshSlot != nullptr;
     if (!meshSlot) meshSlot = static_cast<void**>(ctx->comp->GetValuePtrByPropertyNameInChain(L"SkeletalMeshAsset"));
-    if (!meshSlot) meshSlot = static_cast<void**>(ctx->comp->GetValuePtrByPropertyNameInChain(L"StaticMesh"));
+    if (meshSlot && !isSkeletalComp) isSkeletalComp = true; // resolved via the SkeletalMeshAsset fallback, still skeletal
+    if (!meshSlot) { meshSlot = static_cast<void**>(ctx->comp->GetValuePtrByPropertyNameInChain(L"StaticMesh")); isSkeletalComp = false; }
     if (meshSlot) {
         const bool hasMeshNow = (*meshSlot != nullptr);
+        // 2026-08-15: routine leader-pose refresh — every skeletal component
+        // tracked here (Torso/Legs/Feet/Arms/head/Hands/Clothing_X, per the
+        // confirmed FModel export) is a leader-pose follower. Unlike the
+        // mesh/position checks above, a stale leader-pose link doesn't
+        // change RelativeLocation OR clear the mesh reference — it only
+        // affects which bone transforms actually get used to render, so
+        // this is the ONLY place that would ever catch/fix a desync that
+        // happened outside our own repair flow (e.g. the game's own initial
+        // equip). Cheap and idempotent when already correctly linked; see
+        // refresh_leader_pose's own comment (proxy_manager.cpp).
+        if (isSkeletalComp && hasMeshNow) {
+            auto** leaderMeshSlotRoutine = static_cast<UObject**>(ctx->owner->GetValuePtrByPropertyNameInChain(L"Mesh"));
+            sdb::refresh_leader_pose(ctx->comp, (leaderMeshSlotRoutine && *leaderMeshSlotRoutine) ? *leaderMeshSlotRoutine : nullptr);
+        }
         // 2026-08-15: transition-only detection ("was set, now null") has a
         // real blind spot — live-reported same day: a part missing on the
         // very FIRST sample after a fresh join/respawn baseline reset never
@@ -2741,8 +4647,50 @@ static void do_component_drift_scan(void* ctxRaw)
         // above — same reasoning, same "flip back once answered" note.
         static constexpr bool kEnableAppearanceRepair = true;
         const uint64_t nowUs = sdb::now_micros();
-        if (ctx->firstSeenUs == 0) ctx->firstSeenUs = nowUs;
-        const bool wallClockExpired = nowUs - ctx->firstSeenUs >= 300'000'000ULL; // 5 min hard ceiling
+        // 2026-08-16: firstSeenUs was being stamped unconditionally on this
+        // ctx's very first scan ever (component healthy or not), not on
+        // first-seen-BROKEN as the comment above claims and as the 5-minute
+        // ceiling's own name implies. Live-confirmed the bug: at 13:09:45-48
+        // essentially every tracked category on BOTH local and proxy0 (most
+        // of which were healthy the whole time — e.g. local:Legs was still
+        // logging benign "skipped mesh-repair...refreshed leader-pose link"
+        // at 13:06:0x) hit "giving up PERMANENTLY" within the same 3-second
+        // window — that's "5 minutes since character load", not "5 minutes
+        // since broken". Once tripped, repair is disabled for that component
+        // for the rest of the session even if it breaks for the first time
+        // minutes later (live-reported: local:Legs/"pants" froze ~9 minutes
+        // after its ceiling had already silently tripped).
+        //
+        // First fix attempt (only arm firstSeenUs the first time hasMeshNow
+        // reads false, never reset it back) was INCOMPLETE — live-reproduced
+        // again immediately after redeploy: 13:32:36-13:33:18 hit the exact
+        // same mass-simultaneous "giving up PERMANENTLY" across nearly every
+        // local AND proxy0 category. Cause: most components are broken for a
+        // moment right at spawn (mesh still streaming in — the very reason
+        // the 2s no-repair grace below exists), which arms firstSeenUs once,
+        // and since it was never reset, the 5-minute clock still expires on
+        // schedule even though the component has been solidly healthy for
+        // the entire 5 minutes since. Real fix: track how long the
+        // component has been CONTINUOUSLY healthy (healthySinceUs); once
+        // that streak is comfortably past the loading-grace window, clear
+        // firstSeenUs entirely, so a component that recovered and stayed
+        // recovered stops being tracked as "stuck" at all. A component that
+        // flaps (our own repair transiently fixes it for ~1s, then it
+        // breaks again) never accumulates a long enough healthy streak to
+        // clear firstSeenUs, so the 2026-08-15 anti-flapping ceiling still
+        // holds for the case it was actually built for.
+        if (hasMeshNow) {
+            if (ctx->healthySinceUs == 0) ctx->healthySinceUs = nowUs;
+            if (ctx->firstSeenUs != 0 && nowUs - ctx->healthySinceUs >= 10'000'000ULL) {
+                ctx->firstSeenUs = 0;
+                ctx->loggedWallClockGiveUp = false;
+            }
+        } else {
+            ctx->healthySinceUs = 0;
+            if (ctx->firstSeenUs == 0) ctx->firstSeenUs = nowUs;
+        }
+        const bool wallClockExpired = ctx->firstSeenUs != 0 &&
+                                       nowUs - ctx->firstSeenUs >= 300'000'000ULL; // 5 min hard ceiling, anchored to first-seen-BROKEN
         if (hasMeshNow) {
             ctx->repairAttempts = 0;
         } else if (kEnableBodyPartRepairCalls && ctx->owner &&
@@ -2780,12 +4728,30 @@ static void do_component_drift_scan(void* ctxRaw)
                     else if (f == "eyebrows") { name = &good.eyebrowsMeshName; isSkeletal = false; }
                     else if (f == "mouth")    { name = &good.mouthMeshName; isSkeletal = false; }
                     else if (f == "hands")    { name = &good.bodyPartMeshNames[8]; isSkeletal = true; }
-                    const bool applied = name && sdb::reapply_named_mesh(ctx->comp, *name, isSkeletal);
+                    // leaderMesh only matters for isSkeletal (Hands) — see
+                    // reapply_named_mesh/refresh_leader_pose's own comments.
+                    auto** leaderMeshSlot = isSkeletal ? static_cast<UObject**>(ctx->owner->GetValuePtrByPropertyNameInChain(L"Mesh")) : nullptr;
+                    UObject* leaderMesh = (leaderMeshSlot && *leaderMeshSlot) ? *leaderMeshSlot : nullptr;
+                    const bool applied = name && sdb::reapply_named_mesh(ctx->comp, *name, isSkeletal, leaderMesh);
                     debug_log("component_drift: " + ctx->key + " local appearance repair field=" + f +
                               " cachedName=" + (name ? *name : "<none>") + " applied=" + std::to_string(applied));
                 }
             } else {
-                BodyPartRepairCtx repairCtx{ ctx->owner, ctx->bodyPartCi, &ctx->key, ctx->clothingOnRepName, ctx->comp };
+                // See BodyPartRepairCtx::clothingCompOffset's comment.
+                // Offsets match the Clothing_Torso/Legs/Feet entries already
+                // used elsewhere in this file (proxy_manager.cpp's
+                // sync_equipment clothing-slot switch, this file's own
+                // kNames table) — 0 for anything without a base/overlay
+                // pair (including the Clothing_X rows themselves, ci==0,
+                // which don't need this check at all).
+                uintptr_t clothingOffset = 0;
+                switch (ctx->bodyPartCi) {
+                    case 1732710: clothingOffset = 0x0770; break; // Torso
+                    case 1732718: clothingOffset = 0x0768; break; // Legs
+                    case 1732721: clothingOffset = 0x0760; break; // Feet
+                    default: break;
+                }
+                BodyPartRepairCtx repairCtx{ ctx->owner, ctx->bodyPartCi, &ctx->key, ctx->clothingOnRepName, ctx->comp, clothingOffset };
                 if (!seh_invoke(do_body_part_repair, &repairCtx))
                     debug_log("component_drift: " + ctx->key + " repair crashed, caught via SEH");
             }
@@ -2869,15 +4835,22 @@ static void check_component_drift(const std::string& label, AActor* actor,
         // Added 2026-08-15: Clothing_Gloves/Clothing_Armor (BP_PlayerCharacter.hpp
         // @0x0780/@0x07B8) were never tracked at all — every OTHER clothing
         // slot got added over the course of tonight except these two.
-        // OnRep_ClothingGlovesEquipped?/OnRep_ClothingArmorEquipped? are a
-        // guess following the exact naming convention already confirmed live
-        // for Torso/Legs/Feet — GetFunctionByNameInChain safely returns
-        // null and do_body_part_repair logs "NOT FOUND" if the guess is
-        // wrong, same harmless fallback already proven throughout this file.
+        // OnRep_ClothingGlovesEquipped? guessed correctly (verified against
+        // BP_PlayerCharacter.hpp: matches the real ClothingGlovesEquipped?
+        // property). Armor's guess was WRONG and live-confirmed as
+        // "NOT FOUND" — the game's own naming breaks convention for this one
+        // slot: the real property/function is BodyArmorEquipped? /
+        // OnRep_BodyArmorEquipped? (BP_PlayerCharacter.hpp line 226/288),
+        // not "Clothing"-prefixed like every other slot.
         { L"Clothing_Gloves", "Clothing_Gloves", 0, L"OnRep_ClothingGlovesEquipped?", nullptr, nullptr },
-        { L"Clothing_Armor", "Clothing_Armor", 0, L"OnRep_ClothingArmorEquipped?", nullptr, nullptr },
+        { L"Clothing_Armor", "Clothing_Armor", 0, L"OnRep_BodyArmorEquipped?", nullptr, nullptr },
     };
     UObject* torsoComp = nullptr; UObject* legsComp = nullptr; UObject* feetComp = nullptr;
+    UObject* leaderMesh = nullptr;
+    {
+        auto** meshSlot = static_cast<UObject**>(actor->GetValuePtrByPropertyNameInChain(L"Mesh"));
+        leaderMesh = (meshSlot && *meshSlot) ? *meshSlot : nullptr;
+    }
     for (const auto& entry : kNames) {
         auto** slot = static_cast<UObject**>(actor->GetValuePtrByPropertyNameInChain(entry.w));
         UObject* comp = (slot && *slot) ? *slot : nullptr;
@@ -2897,6 +4870,77 @@ static void check_component_drift(const std::string& label, AActor* actor,
         ctx.bodyPartCi = entry.ci;
         if (!seh_invoke(do_component_drift_scan, &ctx))
             debug_log("component_drift: " + key + " scan crashed, caught via SEH");
+
+        // 2026-08-16: PROACTIVE leader-pose refresh — see refresh_leader_
+        // pose's own comment (proxy_manager.cpp) for the mechanism. Its
+        // bone-mapping can go stale independent of the mesh ASSET pointer
+        // staying perfectly valid, so a component whose mesh asset never
+        // reads null (do_component_drift_scan's hasMeshNow check above)
+        // never reaches ANY repair call, reactive or otherwise — live-
+        // confirmed real gap: local:Clothing_Legs (the actual visible
+        // pants mesh) logged one "initial post-join state = SET" and
+        // NOTHING else for 20+ minutes, while local:Legs (the hidden naked
+        // mesh underneath, on the reactive path since clothing keeps its
+        // own hasMeshNow reading false) got a leader-pose refresh ~63
+        // times over the same window. This closes that gap by refreshing
+        // EVERY tracked component unconditionally, not just ones whose
+        // mesh asset happens to go null.
+        //
+        // 2026-08-16, throttle widened 1s -> 20s: both PC1 and PC2 hung
+        // simultaneously shortly after this went live at 1/s/component —
+        // ~20 tracked components per character means up to ~20 ProcessEvent
+        // calls to SetLeaderPoseComponent per second per character, a large
+        // increase over the previous (reactive-only, mostly-idle) call
+        // volume, right when this project's own documented
+        // SetSkinnedAssetAndUpdate/attach-vs-ParallelAnimUpdate lock-
+        // contention hazard is the leading suspect for exactly this kind of
+        // hang. Widening the throttle to 20s was NOT enough — the very next
+        // live test crashed instead (0xe06d7363, an unhandled C++ exception,
+        // stack running entirely through this mod's own module from the
+        // WndProc path, while the player was idle — no dump was generated to
+        // pin the exact throw site). Two different failure modes (hang, then
+        // crash) from this same proactive addition across two consecutive
+        // live tests is strong enough evidence the mechanism itself — not
+        // just its frequency — is unsafe in some circumstance not yet
+        // identified. Kill-switched back to OFF (matching this project's own
+        // established pattern for exactly this situation) rather than
+        // continuing to guess at tuning. The reactive-only path (this
+        // function's "skipped mesh-repair...refreshed leader-pose link"
+        // branch and do_body_part_repair's own leader-pose refresh) is
+        // unaffected and was never implicated in either failure — it stays
+        // on. This reopens the Clothing_Legs-never-revisited gap this was
+        // built to close; that's a real, known, accepted regression until
+        // this can be root-caused properly (ideally against an actual
+        // symbolized dump) rather than live-guessed again.
+        // 2026-08-16, re-enabled: the hang (1/s throttle) and the crash (20s
+        // throttle, combined with the transform-snap unconditional test) both
+        // predate two changes since found/added: (1) this call already runs
+        // inside the WndProc clean-trigger's cleanContext-gated path — traced
+        // 2026-08-16 that the crash's own stack ran through that exact path
+        // already, so cleanContext does NOT by itself rule out a repeat (the
+        // crash's real cause is still unidentified, not proven nesting-
+        // related) — but its core invariant (t_processEventDepth==0 whenever
+        // cleanContext is true) has now held 1852/1852 checks with zero
+        // violations across a real 7-hour, 45-relaunch session, so at minimum
+        // this isn't running from a provably-bad context anymore; (2)
+        // do_game_tick_clean_ctx (the WndProc handler's entry point) is now
+        // SEH-wrapped, added specifically after that crash — same catch-and-
+        // log pattern proven repeatedly elsewhere in this codebase all
+        // session — so a repeat of the same unhandled-C++-exception failure
+        // mode should now be caught and logged instead of taking the process
+        // down. Re-enabling on that basis, kept at the already-widened 20s
+        // throttle, leader-pose refresh ONLY (the transform-snap unconditional
+        // variant stays off — not part of this decision). If it fails again,
+        // revert this one line; see this comment block and audit_todo.md
+        // item 6 for the full reasoning either way.
+        static constexpr bool kEnableProactiveLeaderPoseRefresh = true;
+        if (kEnableProactiveLeaderPoseRefresh) {
+            const uint64_t nowUsRefresh = sdb::now_micros();
+            if (nowUsRefresh - ctx.lastLeaderPoseRefreshUs >= 20'000'000ULL) {
+                ctx.lastLeaderPoseRefreshUs = nowUsRefresh;
+                sdb::refresh_leader_pose(comp, leaderMesh);
+            }
+        }
     }
     // See set_recent_calls_watch's comment (near the ring buffer) for why
     // this is filtered to just these objects — only bother for "local",
@@ -2951,7 +4995,12 @@ static bool reset_label_snapshots_if_actor_changed(
     return true;
 }
 
-static void check_attach_health_trigger()
+// cleanContext: see do_game_tick's own comment — gates the actual
+// check_attach_health/check_component_drift scan (ProcessEvent-heavy) below;
+// everything else in this function (throttle, pawn lookup, reset-detection)
+// still runs regardless so a just-changed actor's stale snapshot never
+// lingers, and the rotation index stays correct once scanning resumes.
+static void check_attach_health_trigger(bool cleanContext)
 {
     static uint64_t s_lastCheckUs = 0;
     static std::unordered_map<std::string, std::vector<uintptr_t>> s_snapshots;
@@ -2959,17 +5008,33 @@ static void check_attach_health_trigger()
     static std::unordered_map<uintptr_t, bool> s_itemHadMesh;
     static std::unordered_map<uintptr_t, std::array<double, 3>> s_itemLastPos;
     static std::unordered_map<std::string, AActor*> s_lastActorForLabel;
+    static size_t s_rotateIndex = 0;
     const uint64_t now = sdb::now_micros();
-    // 2026-08-14: tightened from 2s to 300ms specifically to pair with the
-    // new recent-calls ring buffer — a smaller gap between the actual clear
-    // event and this check noticing it means the dump (when triggered)
-    // still has the real causal calls in it, not just several seconds of
-    // unrelated activity that happened after. More frequent reflection
-    // property reads, acceptable tradeoff for tonight's active debugging.
-    if (now - s_lastCheckUs < 300'000ULL) return;
-    s_lastCheckUs = now;
-
-    AActor* localPawn = find_local_pawn();
+    // 2026-08-16: this throttle used to gate the WHOLE function, including
+    // reset-detection/target-building that must run regardless of
+    // cleanContext. That created a real starvation bug once the scan itself
+    // became cleanContext-gated below: on_process_event_pre's do_game_tick
+    // (false) fires far more often than the ~16ms WndProc ticker or
+    // on_actor_tick, so a false-context call would almost always win this
+    // timestamp first and reset it right before a true-context call
+    // arrived — meaning the actual scan (only enabled for cleanContext)
+    // almost never got a turn even though do_game_tick(true) calls were
+    // confirmed happening regularly. Live-reported: meshes staying
+    // "animation locked" after respawn — exactly what starving this scan
+    // would produce. Fix: s_lastCheckUs/300ms now ONLY gates the scan
+    // itself, checked and updated inside the cleanContext block below, so a
+    // non-clean call can no longer consume this window. Reset-detection and
+    // target-building run every call (do_game_tick's own 5ms throttle is
+    // the only cadence limit on those) — cheap pointer comparisons, no
+    // ProcessEvent calls, no reason to also throttle them here. localPawn
+    // itself DOES still need its own guard though: find_local_pawn() is an
+    // expensive UE4SS reflection scan (see s_drop_fn's comment elsewhere in
+    // this file for the same warning), and removing the whole-function
+    // throttle above means this would otherwise run on every do_game_tick()
+    // call (~5ms) instead of at most once per 300ms — cached_find_local_
+    // pawn() (100ms-cached, already used by do_game_tick itself) is the
+    // right call here now, not the raw scan.
+    AActor* localPawn = cached_find_local_pawn();
     // 2026-08-15: unambiguous hex-formatted pawn-pointer heartbeat, added
     // specifically for live IDA work — every other pointer this file logs
     // goes through debug_log("...0x" + std::to_string(ptr)), which prints
@@ -3012,10 +5077,48 @@ static void check_attach_health_trigger()
     // baseline is simply seeded fresh, alarm-free, the first time we do
     // resume scanning post-load, instead of being sampled mid-load and
     // misread as a genuine clear.
-    if (sdb::g_state().equipDataReady.load(std::memory_order_acquire)) {
-        check_attach_health("local", localPawn, s_snapshots, s_itemHadMesh, s_itemLastPos);
-        check_component_drift("local", localPawn, s_driftSnapshots);
-    }
+    //
+    // 2026-08-16: ALSO gated on time-since-pawnValidSinceUs now (state.hpp's
+    // own comment) — equipDataReady tracks network-replication readiness,
+    // a different thing from asset-streaming readiness. Several separate
+    // live freezes (death, save-load, new-character+move, a new-character/
+    // death/save-load combo) all happened doing exactly this scan's repair
+    // work (SetSkinnedAssetAndUpdate/leader-pose refresh/clothing OnRep/
+    // off-socket reattachment) shortly after the local pawn became valid —
+    // matching a known hazard already documented elsewhere in this file:
+    // this class of call can block GameThread on a critical section shared
+    // with FAsyncLoadingThread when the character's own mesh/material
+    // assets are still mid-stream. 3s mirrors (slightly more generous than)
+    // RemotePlayer::proxySpawnedAtUs's existing 2s grace period for
+    // proxies, since a local player's own full character+equipment is a
+    // heavier load than a single proxy visual.
+    constexpr uint64_t kLocalPawnRepairGraceUs = 3'000'000ULL;
+    const bool localPawnPastGrace =
+        (now - sdb::g_state().pawnValidSinceUs.load(std::memory_order_relaxed)) >= kLocalPawnRepairGraceUs;
+    const bool localEligible = localPawn && localPawnPastGrace &&
+                                sdb::g_state().equipDataReady.load(std::memory_order_acquire);
+
+    // 2026-08-16: this used to run check_attach_health + check_component_drift
+    // for "local" AND every connected proxy, all in one do_game_tick()
+    // invocation, every 300ms. Live-captured evidence the same morning (both
+    // PC1 and PC2, each independently frozen) showed proxy0's
+    // component_drift running immediately followed by local's in the exact
+    // same burst, right before the identical GameThread-parked-in-
+    // WaitUntilTasksComplete hang traced earlier this session. Rotating to
+    // one target per call spreads that burst out, mirroring the same fix
+    // already proven for ProxyManager::tick()'s equipment/weapon-attachment/
+    // appearance sync (2026-08-15) — same risk class (ProcessEvent-heavy
+    // component/mesh repair calls stacking up nested inside another
+    // ProcessEvent dispatch), same fix shape. Reset-detection (cheap, no
+    // ProcessEvent calls) still runs for every known target every tick, so a
+    // just-changed actor's stale snapshot never lingers past its next
+    // rotation turn; only the expensive scan itself is rotated.
+    // Live-verified: this rotation has run continuously across the whole
+    // 2026-08-16/17 marathon session (hours, dozens of relaunches) with no
+    // recurrence of the hang this was built to prevent.
+    struct AttachHealthTarget { std::string label; AActor* actor; };
+    std::vector<AttachHealthTarget> targets;
+    if (localEligible) targets.push_back({"local", localPawn});
 
     int proxyCount = 0;
     {
@@ -3029,10 +5132,31 @@ static void check_attach_health_trigger()
                 s_itemHadMesh.clear();
                 s_itemLastPos.clear();
             }
-            check_attach_health(label, proxyActor, s_snapshots, s_itemHadMesh, s_itemLastPos);
-            check_component_drift(label, proxyActor, s_driftSnapshots);
+            targets.push_back({label, proxyActor});
         }
         proxyCount = i;
+    }
+
+    // 2026-08-16: gated on cleanContext — rotating one target per tick
+    // reduced frequency but didn't remove the underlying re-entrancy risk
+    // (confirmed: froze again on both machines even with the rotation in
+    // place). See the "Reliable GameThread Trigger via WndProc Subclass"
+    // plan — this scan only runs from mod.cpp's WndProc-triggered
+    // clean-context tick now, never from the nested on_process_event_pre
+    // fallback. Not advancing s_rotateIndex when skipped means the next
+    // allowed call picks up the same target that would have run, rather
+    // than silently skipping it.
+    //
+    // 300ms throttle (2026-08-14's original rationale, see above) now lives
+    // HERE specifically — checked and updated only on this cleanContext
+    // path, so a non-clean call can never consume it. See this function's
+    // own opening comment for the starvation bug this fixes.
+    if (cleanContext && !targets.empty() && now - s_lastCheckUs >= 300'000ULL) {
+        s_lastCheckUs = now;
+        const auto& t = targets[s_rotateIndex % targets.size()];
+        ++s_rotateIndex;
+        check_attach_health(t.label, t.actor, s_snapshots, s_itemHadMesh, s_itemLastPos);
+        check_component_drift(t.label, t.actor, s_driftSnapshots);
     }
 
     // Heartbeat (2026-08-14) — every 30s, so a future "zero hits" result can
@@ -3086,12 +5210,10 @@ static void check_watch_rotation_trigger()
     std::lock_guard<std::mutex> lk(sdb::g_state().playersMtx);
     for (auto& [id, player] : sdb::g_state().players) {
         if (!player.proxyActor) continue;
-        // Same 2s post-spawn grace period used everywhere else a proxy gets
-        // touched — see on_process_event_post's own comment for why.
-        // TEMPORARILY DISABLED 2026-08-13 for testing, see mod.cpp's earlier
-        // grace-period comment for why it exists — re-enable if this causes
-        // spawn-time crashes/deadlocks again.
-        // if (sdb::now_micros() - player.proxySpawnedAtUs < 2'000'000ULL) continue;
+        // The 2s post-spawn grace period used elsewhere for proxy writes was
+        // tested disabled here starting 2026-08-13 (read-only diagnostic, not
+        // a write) — 4 days of live sessions with no incident. Kept off
+        // permanently.
         auto* actor = static_cast<AActor*>(player.proxyActor);
         const FRotator rot = actor->K2_GetActorRotation();
         char line[200];
@@ -3158,10 +5280,10 @@ static void check_active_weapon_trigger()
     std::lock_guard<std::mutex> lk(sdb::g_state().playersMtx);
     for (auto& [id, player] : sdb::g_state().players) {
         if (!player.proxyActor) continue;
-        // TEMPORARILY DISABLED 2026-08-13 for testing, see mod.cpp's earlier
-        // grace-period comment for why it exists — re-enable if this causes
-        // spawn-time crashes/deadlocks again.
-        // if (sdb::now_micros() - player.proxySpawnedAtUs < 2'000'000ULL) continue;
+        // The 2s post-spawn grace period used elsewhere for proxy writes was
+        // tested disabled here starting 2026-08-13 (read-only diagnostic, not
+        // a write) — 4 days of live sessions with no incident. Kept off
+        // permanently.
         logOne("proxy", static_cast<AActor*>(player.proxyActor));
         char buf[256];
         snprintf(buf, sizeof(buf),
@@ -3243,10 +5365,10 @@ static void check_fabrik_dump_trigger()
     std::lock_guard<std::mutex> lk(sdb::g_state().playersMtx);
     for (auto& [id, player] : sdb::g_state().players) {
         if (!player.proxyActor) continue;
-        // TEMPORARILY DISABLED 2026-08-13 for testing, see mod.cpp's earlier
-        // grace-period comment for why it exists — re-enable if this causes
-        // spawn-time crashes/deadlocks again.
-        // if (sdb::now_micros() - player.proxySpawnedAtUs < 2'000'000ULL) continue;
+        // The 2s post-spawn grace period used elsewhere for proxy writes was
+        // tested disabled here starting 2026-08-13 (read-only diagnostic, not
+        // a write) — 4 days of live sessions with no incident. Kept off
+        // permanently.
         DumpCtx proxyCtx{"proxy", L"proxy", static_cast<AActor*>(player.proxyActor), outDir, dn};
         if (!seh_invoke(dumpOneRaw, &proxyCtx))
             debug_log("fabrik_dump: proxy crashed, caught via SEH");
@@ -3359,6 +5481,148 @@ static void check_mem_dump_trigger()
     }
 }
 
+// Flag file content: two lines, class name then the delegate's own property
+// name (e.g. "OnAttachmentsUpdated") — reads a live FMulticastScriptDelegate
+// property's own storage directly as a TArray (data ptr, count, max), the
+// same layout already live-confirmed once this session for a DIFFERENT
+// delegate (OnEquipmentUpdated, read via IDA's debugger, InvocationList
+// data_ptr=0x0 count=0 — see research/04_ida_investigation_log.md). Reuses
+// GetValuePtrByPropertyNameInChain (the same reflection call this whole file
+// already uses everywhere) instead of needing a raw byte offset for the
+// property — it returns a pointer straight to the delegate's own storage,
+// which per the same precedent IS the TArray, no extra indirection needed.
+// Read-only, SEH-wrapped, flag-triggered — same safety class as every other
+// diagnostic in this file; not the unconditional-repair-call pattern that
+// caused tonight's hang/crash.
+// 2026-08-17: watches Clothing_Gloves' and Hands' own raw bVisible flag
+// (USceneComponent+0x188, already-proven offset — see
+// research/04_ida_investigation_log.md's "Weapon-visual attempts 9-11")
+// and SkinnedAsset pointer (+0x5B8, same offset convention used throughout
+// this file, e.g. read_local_pawn_appearance) directly off each
+// component's own live memory, every game tick, logging only on an actual
+// change (edge-triggered — can't flood the log even at high tick rate).
+// Built specifically to answer whether a live-reported "gloves flicker,
+// skin showing through, roughly every ~10s" on the local character is a
+// real state change (bVisible actually flips, or the mesh pointer actually
+// changes) or a pure render-thread artifact where neither ever changes and
+// only the pixels are wrong for a frame — every other diagnostic tried
+// tonight (the game's own AttachClothing/EquipClothingToMesh hooks,
+// component_drift's periodic scan, mesh-cleared detection) found nothing,
+// so this is the most direct read available: no reflection/ProcessEvent
+// round-trip that could itself introduce timing slop.
+struct GlovesFlickerCompState { bool visible = false; uintptr_t meshPtr = 0; bool haveBaseline = false; };
+static GlovesFlickerCompState s_glovesFlickerGloves;
+static GlovesFlickerCompState s_glovesFlickerHands;
+
+static void check_one_gloves_flicker_component(AActor* pawn, const wchar_t* propName,
+                                                const char* label, GlovesFlickerCompState& st)
+{
+    auto* compSlot = static_cast<UObject**>(pawn->GetValuePtrByPropertyNameInChain(propName));
+    UObject* comp = (compSlot && *compSlot) ? *compSlot : nullptr;
+    if (!comp) return;
+
+    struct ReadCtx { UObject* comp; bool visible; uintptr_t meshPtr; };
+    ReadCtx ctx{ comp, false, 0 };
+    const bool ok = seh_invoke([](void* raw) {
+        auto* c = static_cast<ReadCtx*>(raw);
+        c->visible = *reinterpret_cast<const uint8_t*>(reinterpret_cast<uintptr_t>(c->comp) + 0x188) != 0;
+        c->meshPtr = *reinterpret_cast<const uintptr_t*>(reinterpret_cast<uintptr_t>(c->comp) + 0x5B8);
+    }, &ctx);
+    if (!ok) return;
+
+    if (!st.haveBaseline) {
+        st.haveBaseline = true;
+        st.visible = ctx.visible;
+        st.meshPtr = ctx.meshPtr;
+        char buf[160];
+        snprintf(buf, sizeof(buf), "gloves_flicker: %s baseline visible=%d meshPtr=0x%llx",
+                 label, ctx.visible ? 1 : 0, static_cast<unsigned long long>(ctx.meshPtr));
+        debug_log(buf);
+        return;
+    }
+
+    if (ctx.visible != st.visible || ctx.meshPtr != st.meshPtr) {
+        char buf[224];
+        snprintf(buf, sizeof(buf),
+            "gloves_flicker: %s CHANGED visible %d->%d meshPtr 0x%llx->0x%llx",
+            label, st.visible ? 1 : 0, ctx.visible ? 1 : 0,
+            static_cast<unsigned long long>(st.meshPtr), static_cast<unsigned long long>(ctx.meshPtr));
+        debug_log(buf);
+        st.visible = ctx.visible;
+        st.meshPtr = ctx.meshPtr;
+    }
+}
+
+static void check_gloves_visibility_flicker()
+{
+    AActor* pawn = cached_find_local_pawn();
+    if (!pawn) return;
+    check_one_gloves_flicker_component(pawn, L"Clothing_Gloves", "Clothing_Gloves", s_glovesFlickerGloves);
+    check_one_gloves_flicker_component(pawn, L"Hands", "Hands", s_glovesFlickerHands);
+}
+
+static void check_dump_delegate_trigger()
+{
+    wchar_t path[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return;
+    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\dump_delegate.flag";
+    if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+
+    std::ifstream in(flag, std::ios::binary);
+    std::string classNameU8, propNameU8;
+    std::getline(in, classNameU8);
+    std::getline(in, propNameU8);
+    in.close();
+    DeleteFileW(flag.c_str());
+    if (!classNameU8.empty() && classNameU8.back() == '\r') classNameU8.pop_back();
+    if (!propNameU8.empty() && propNameU8.back() == '\r') propNameU8.pop_back();
+    if (classNameU8.empty() || propNameU8.empty()) {
+        debug_log("dump_delegate: flag file missing class/property name lines");
+        return;
+    }
+
+    auto widen = [](const std::string& s) {
+        std::wstring w(s.size(), L'\0');
+        int wn = MultiByteToWideChar(CP_UTF8, 0, s.data(), (int)s.size(), w.data(), (int)w.size());
+        w.resize(wn);
+        return w;
+    };
+    std::wstring className = widen(classNameU8);
+    std::wstring propName  = widen(propNameU8);
+
+    UObject* obj = UObjectGlobals::FindFirstOf(className.c_str());
+    if (!obj) { debug_log("dump_delegate: " + classNameU8 + " instance/CDO not found"); return; }
+
+    struct DumpCtx { UObject* obj; const wchar_t* prop; uintptr_t delegateAddr; uint64_t dataPtr; int32_t count; int32_t max; bool found; };
+    DumpCtx dctx{ obj, propName.c_str(), 0, 0, 0, 0, false };
+    auto dumpFn = [](void* raw) {
+        auto* c = static_cast<DumpCtx*>(raw);
+        void* slot = c->obj->GetValuePtrByPropertyNameInChain(c->prop);
+        if (!slot) return;
+        c->delegateAddr = reinterpret_cast<uintptr_t>(slot);
+        c->dataPtr = *reinterpret_cast<const uint64_t*>(c->delegateAddr);
+        c->count   = *reinterpret_cast<const int32_t*>(c->delegateAddr + 8);
+        c->max     = *reinterpret_cast<const int32_t*>(c->delegateAddr + 12);
+        c->found = true;
+    };
+    if (!seh_invoke(dumpFn, &dctx)) {
+        debug_log("dump_delegate: " + classNameU8 + "." + propNameU8 + " crashed reading, caught via SEH");
+        return;
+    }
+    if (!dctx.found) {
+        debug_log("dump_delegate: " + propNameU8 + " property not found on " + classNameU8);
+        return;
+    }
+    char buf[192];
+    snprintf(buf, sizeof(buf),
+             "dump_delegate: %s.%s @0x%llx InvocationList data_ptr=0x%llx count=%d max=%d",
+             classNameU8.c_str(), propNameU8.c_str(),
+             static_cast<unsigned long long>(dctx.delegateAddr),
+             static_cast<unsigned long long>(dctx.dataPtr), dctx.count, dctx.max);
+    debug_log(buf);
+}
+
 // Flag file content: two lines, class name then no-arg function name — a
 // generic "find this class, call this zero-parameter function on it" live
 // action trigger, for one-off manual pokes (e.g. RemoveFromParent on a
@@ -3410,6 +5674,23 @@ static bool try_open_world()
 {
     if (find_local_pawn()) return true; // already in-world
 
+    // Testing escape hatch (2026-08-17) — drop a `disable_auto_continue.flag`
+    // file in %APPDATA%\SurrounDeadBridge\ to skip the auto-click below
+    // entirely and leave the menu alone, e.g. for testing menu-level
+    // ProcessEvent calls (SaveMenu_C::LoadGameFromSlot etc.) that need to
+    // observe/interact with the actual interactive main menu rather than
+    // being yanked straight into gameplay. Checked once per call (cheap
+    // file-existence check), not cached, so it can be toggled without a
+    // relaunch.
+    {
+        wchar_t path[MAX_PATH];
+        DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+        if (n != 0 && n < MAX_PATH) {
+            std::wstring disableFlag = std::wstring(path, n) + L"\\SurrounDeadBridge\\disable_auto_continue.flag";
+            if (GetFileAttributesW(disableFlag.c_str()) != INVALID_FILE_ATTRIBUTES) return false;
+        }
+    }
+
     // Only auto-click through the menu when this launch is actually
     // configured to join the bridge (a real ticket in session.cfg) — a
     // plain solo/offline launch (no session.cfg, or an empty ticket) should
@@ -3452,78 +5733,17 @@ static void check_inventory_pickup(AActor* pawn); // defined below, alongside ch
 // pickup hook resolution's own find_local_pawn() calls (see s_drop_fn
 // above) — throttling the *tick's* lookup was missed. 100ms is plenty
 // responsive for detecting death/respawn pawn transitions.
-// Read-only diagnostic (2026-08-13): Player_AnimBP_C's own Speed/Direction
-// variables are compiler-anonymized in this Shipping build's FModel export
-// (Exports/.../Player_AnimBP.json's CDO shows a "__AnimBlueprintMutables"
-// struct of 53 fields named "__FloatProperty_N"/"__IntProperty_N"/
-// "__BoolProperty_N", no real names preserved) — but the struct itself IS a
-// real, named UPROPERTY, reachable via the same GetValuePtrByPropertyNameInChain
-// reflection lookup already used throughout this project (e.g. "Mesh",
-// "BP_JigPickupComponent"), sidestepping the need to know AnimInstance's own
-// base-class size to locate it. Dumps all 53 as raw floats (some are really
-// int32/bool, but those will just show as 0 or a garbage-looking float,
-// easy to tell apart from a real Speed value visually) so the LOCAL
-// player's own values can be diffed stationary vs walking to identify which
-// index is Speed, entirely read-only — no risk to the proxy or to this
-// pawn's own state, unlike the CharacterMovementComponent write attempts
-// that crashed the game twice already this session.
-static void dump_animbp_mutables(AActor* pawn)
-{
-    static uint64_t s_lastDumpUs = 0;
-    const uint64_t now = sdb::now_micros();
-    if (now - s_lastDumpUs < 1'000'000ULL) return;
-    s_lastDumpUs = now;
-
-    auto** meshSlot = static_cast<UObject**>(pawn->GetValuePtrByPropertyNameInChain(L"Mesh"));
-    UObject* mesh = (meshSlot && *meshSlot) ? *meshSlot : nullptr;
-    if (!mesh) { debug_log("dump_animbp_mutables: Mesh not found"); return; }
-
-    UFunction* getAnimFn = mesh->GetFunctionByNameInChain(L"GetAnimInstance");
-    if (!getAnimFn) { debug_log("dump_animbp_mutables: GetAnimInstance NOT FOUND"); return; }
-    struct Params { UObject* ReturnValue = nullptr; } aparams;
-    mesh->ProcessEvent(getAnimFn, &aparams);
-    if (!aparams.ReturnValue) { debug_log("dump_animbp_mutables: AnimInstance is null"); return; }
-
-    const float* vals = static_cast<const float*>(
-        aparams.ReturnValue->GetValuePtrByPropertyNameInChain(L"__AnimBlueprintMutables"));
-    if (!vals) { debug_log("dump_animbp_mutables: __AnimBlueprintMutables not found"); return; }
-
-    std::string line = "dump_animbp_mutables:";
-    for (int i = 0; i < 53; ++i) {
-        char buf[24];
-        snprintf(buf, sizeof(buf), " [%d]=%.2f", i, vals[i]);
-        line += buf;
-    }
-    debug_log(line);
-
-    // Bytecode analysis (2026-08-13, GetSpeed&Direction) found "Speed" is an
-    // 8-byte DoubleProperty, not one of the 4-byte floats in the list above
-    // — reading it as two adjacent floats there would misinterpret it.
-    // FField::NamePrivate (confirmed live at the property's own +0x20,
-    // resolved via resolve_fname to literally "Speed") sits right next to
-    // FProperty::Offset_Internal further into the same struct, empirically
-    // read as 23232 from that property's own memory — trying it here
-    // directly as a byte offset from the AnimInstance object's own base,
-    // not from __AnimBlueprintMutables, since Offset_Internal for a
-    // Blueprint-compiled AnimGraph mutable appears to be object-relative.
-    {
-        struct Ctx { uintptr_t animBase; double result; } ctx{
-            reinterpret_cast<uintptr_t>(aparams.ReturnValue), 0.0 };
-        auto readFn = [](void* raw) {
-            auto* c = static_cast<Ctx*>(raw);
-            c->result = *reinterpret_cast<const double*>(c->animBase + 23232);
-        };
-        char buf[96];
-        if (seh_invoke(readFn, &ctx)) {
-            snprintf(buf, sizeof(buf), "dump_animbp_mutables: animBase=0x%llx offset23232_asDouble=%.3f",
-                     static_cast<unsigned long long>(ctx.animBase), ctx.result);
-        } else {
-            snprintf(buf, sizeof(buf), "dump_animbp_mutables: animBase=0x%llx offset23232 read CRASHED (SEH caught)",
-                     static_cast<unsigned long long>(ctx.animBase));
-        }
-        debug_log(buf);
-    }
-}
+// dump_animbp_mutables (2026-08-13, removed 2026-08-17): the one-off,
+// purpose-fulfilled diagnostic that found Player_AnimBP_C's "Speed"
+// scratch DoubleProperty sits at object-relative offset 23232 off the
+// AnimInstance base (compiler-anonymized in this Shipping build's FModel
+// export, so found empirically via bytecode_dump.flag + mem_dump.flag +
+// resolve_fname.flag rather than a named UPROPERTY lookup). That offset's
+// own consumer (writing Speed directly) was itself later found not to work
+// and removed — see proxy_manager.cpp's apply_proxy_speed_safe history —
+// leaving this dump with no remaining purpose. Removed rather than kept
+// dormant like the reusable flag-file diagnostics elsewhere in this file,
+// since it was single-purpose from the start.
 
 static AActor* cached_find_local_pawn()
 {
@@ -3536,6 +5756,188 @@ static AActor* cached_find_local_pawn()
         s_cached = find_local_pawn();
     }
     return s_cached;
+}
+
+// World/weather actors are stable per-level singletons (unlike the pawn,
+// which can be destroyed/respawned), so a slower 2s re-check interval is
+// plenty — just enough to pick up a fresh instance after a level reload.
+static AActor* cached_find_sky_actor()
+{
+    static std::atomic<uint64_t> s_last_try_us{0};
+    static AActor* s_cached = nullptr;
+    const uint64_t now = sdb::now_micros();
+    const uint64_t last = s_last_try_us.load(std::memory_order_relaxed);
+    if (last == 0 || now - last >= 2'000'000ULL) {
+        s_last_try_us.store(now, std::memory_order_relaxed);
+        s_cached = static_cast<AActor*>(UObjectGlobals::FindFirstOf(STR("Ultra_Dynamic_Sky_C")));
+    }
+    return s_cached;
+}
+
+static AActor* cached_find_weather_actor()
+{
+    static std::atomic<uint64_t> s_last_try_us{0};
+    static AActor* s_cached = nullptr;
+    const uint64_t now = sdb::now_micros();
+    const uint64_t last = s_last_try_us.load(std::memory_order_relaxed);
+    if (last == 0 || now - last >= 2'000'000ULL) {
+        s_last_try_us.store(now, std::memory_order_relaxed);
+        s_cached = static_cast<AActor*>(UObjectGlobals::FindFirstOf(STR("Ultra_Dynamic_Weather_C")));
+    }
+    return s_cached;
+}
+
+// World/weather/time sync — applies the server-authoritative WorldState
+// broadcast (host-agent.js runs an independent time simulation and
+// broadcasts it every worldStateIntervalMs; see server/src/host-agent.js's
+// _broadcastWorldState) into the live Ultra Dynamic Sky / Ultra Dynamic
+// Weather actors. This mod bypasses UE's real replication entirely (see
+// [[project_sdo_bytecode_decode_pipeline]] investigation 2026-08-17 into how
+// little of the engine's native networking SDO actually uses) — UDS's own
+// "Replicated Time of Day" property is dead weight here, so this writes
+// straight into the raw live properties the sky/weather systems read every
+// frame instead. Offsets are from a raw member dump (research/
+// CXXHeaderDump/Ultra_Dynamic_Sky.hpp's "Time of Day" @0x0320,
+// Ultra_Dynamic_Weather.hpp's Cloud Coverage/Rain/Snow/Thunder/Wind
+// Intensity/Fog @0x0310-0x0360), not guessed — but NOT yet live-verified
+// (written while the game wasn't running this session). Verify these read
+// back a plausible time-of-day/weather range before trusting further.
+static uint32_t s_lastAppliedWorldRevision = 0;
+
+static void apply_world_state()
+{
+    sdb::WorldState ws;
+    bool valid = false;
+    {
+        std::lock_guard<std::mutex> lk(sdb::g_state().worldMtx);
+        valid = sdb::g_state().worldStateValid;
+        if (valid) ws = sdb::g_state().worldState;
+    }
+    if (!valid || ws.revision == s_lastAppliedWorldRevision) return;
+    s_lastAppliedWorldRevision = ws.revision;
+
+    if (AActor* sky = cached_find_sky_actor()) {
+        const auto base = reinterpret_cast<uintptr_t>(sky);
+        // Live-confirmed 2026-08-17, two rounds: a raw write to "Time of
+        // Day" alone caused visible oscillation (UDS's own "Time Speed"
+        // kept advancing it locally between our ~2.2s applies, so each
+        // write briefly won before local drift crept past it again).
+        // Freezing "Time Speed" to 0 fixed the oscillation but broke the
+        // watch UI entirely — it stopped updating altogether, meaning
+        // whatever refreshes that widget is gated on UDS's own change-
+        // notification pipeline, not a raw memory poke, and that pipeline
+        // apparently no-ops when Time Speed is 0 ("nothing is supposed to
+        // be changing, skip the notify"). Fix: keep Time Speed frozen (no
+        // competing local driver) but go through UDS's real public
+        // "Transition Time of Day" UFunction instead of writing the raw
+        // property directly — that's the actual intended API for external
+        // callers, so it should carry the same notify/refresh side effects
+        // the watch depends on. A 2s transition duration (matching the
+        // server's ~2.2s broadcast cadence) also gives smooth per-frame
+        // motion between our discrete updates instead of a step function.
+        //
+        // 2026-08-17, later: briefly reverted this whole ProcessEvent
+        // approach back to raw writes after a player's pawn appearance got
+        // corrupted and needed their save deleted. Root cause was NOT
+        // confirmed to be these calls specifically — a same-position
+        // server-side DB position edit happened around the same time and is
+        // an equally live suspect (see
+        // feedback_sdo_live_data_corruption_incident memory) — restored on
+        // explicit user instruction. Still genuinely unverified in
+        // isolation; treat with real caution until it gets a clean,
+        // isolated live test.
+        *reinterpret_cast<double*>(base + 0x0A48) = 0.0;
+        if (UFunction* fn = sky->GetFunctionByNameInChain(L"Transition Time of Day")) {
+            struct Params {
+                double  NewTimeOfDay             = 0.0;
+                double  TransitionDurationSeconds = 0.0;
+                uint8_t EasingFunction            = 0;   // TEnumAsByte<EEasingFunc::Type>, Linear=0
+                double  EasingExponent            = 2.0;
+                bool    AllowTimeGoingBackwards   = true; // needed for the 2400->0 midnight wrap
+            } params;
+            params.NewTimeOfDay              = static_cast<double>(ws.timeOfDay);
+            params.TransitionDurationSeconds = 2.0;
+            sky->ProcessEvent(fn, &params);
+        } else {
+            // Fallback so time sync doesn't silently stop working if the
+            // function name/signature ever changes — not yet observed live.
+            *reinterpret_cast<double*>(base + 0x0320) = static_cast<double>(ws.timeOfDay);
+            debug_log("apply_world_state: Transition Time of Day not found, used raw write fallback");
+        }
+    }
+    if (AActor* weather = cached_find_weather_actor()) {
+        // Weather (unlike time) has no single "SetWeather(floats)" entry
+        // point — UDW models weather as a target *state object*
+        // (UUDS_Weather_Settings_C*) you populate then transition to.
+        // Persistent across calls (not reallocated every apply):
+        // "Construct...if Invalid" only actually constructs the first time,
+        // matching the pattern of reusing one object as a scratch target.
+        static void* s_weatherStateObj = nullptr;
+
+        if (UFunction* ctorFn = weather->GetFunctionByNameInChain(L"Construct Weather State Object if Invalid")) {
+            struct ConstructParams { void* State = nullptr; } cparams;
+            cparams.State = s_weatherStateObj;
+            weather->ProcessEvent(ctorFn, &cparams);
+            s_weatherStateObj = cparams.State;
+        }
+
+        if (s_weatherStateObj) {
+            if (UFunction* popFn = weather->GetFunctionByNameInChain(L"Populate Weather State")) {
+                struct PopulateParams {
+                    void*  State         = nullptr;
+                    double CloudCoverage = 0.0;
+                    double Rain          = 0.0;
+                    double Snow          = 0.0;
+                    double Thunder       = 0.0;
+                    double WindIntensity = 0.0;
+                    double Fog           = 0.0;
+                    double Dust          = 0.0;
+                    double MaterialWetness = 0.0;
+                    double MaterialSnow    = 0.0;
+                    double MaterialDust    = 0.0;
+                } pparams;
+                pparams.State         = s_weatherStateObj;
+                pparams.CloudCoverage = static_cast<double>(ws.cloudCover);
+                pparams.Rain          = static_cast<double>(ws.rain);
+                pparams.Snow          = static_cast<double>(ws.snow);
+                pparams.Thunder       = static_cast<double>(ws.thunder);
+                pparams.WindIntensity = static_cast<double>(ws.wind);
+                pparams.Fog           = static_cast<double>(ws.fog);
+                // Dust/Material* aren't in our protocol's WorldState — left
+                // at 0, not guessed correlated values.
+                weather->ProcessEvent(popFn, &pparams);
+            }
+            if (UFunction* changeFn = weather->GetFunctionByNameInChain(L"Change Weather")) {
+                struct ChangeWeatherParams {
+                    void*  NewWeatherType      = nullptr;
+                    double TransitionSeconds   = 0.0;
+                } chparams;
+                chparams.NewWeatherType    = s_weatherStateObj;
+                chparams.TransitionSeconds = 2.0; // matches the sky's transition duration
+                weather->ProcessEvent(changeFn, &chparams);
+            }
+        } else {
+            // Fallback so weather sync doesn't silently stop working if the
+            // state-object API ever changes — not yet observed live.
+            const auto base = reinterpret_cast<uintptr_t>(weather);
+            *reinterpret_cast<double*>(base + 0x0310) = static_cast<double>(ws.cloudCover);
+            *reinterpret_cast<double*>(base + 0x0320) = static_cast<double>(ws.rain);
+            *reinterpret_cast<double*>(base + 0x0330) = static_cast<double>(ws.snow);
+            *reinterpret_cast<double*>(base + 0x0340) = static_cast<double>(ws.thunder);
+            *reinterpret_cast<double*>(base + 0x0350) = static_cast<double>(ws.wind);
+            *reinterpret_cast<double*>(base + 0x0360) = static_cast<double>(ws.fog);
+            debug_log("apply_world_state: weather state-object API unavailable, used raw write fallback");
+        }
+    }
+
+    char line[256];
+    snprintf(line, sizeof(line),
+             "apply_world_state: revision=%u timeOfDay=%.2f rain=%.2f snow=%.2f fog=%.2f cloud=%.2f wind=%.2f thunder=%.2f"
+             " sky=%s weather=%s",
+             ws.revision, ws.timeOfDay, ws.rain, ws.snow, ws.fog, ws.cloudCover, ws.wind, ws.thunder,
+             cached_find_sky_actor() ? "found" : "MISSING",
+             cached_find_weather_actor() ? "found" : "MISSING");
+    debug_log(line);
 }
 
 // Core game-tick logic — called from both on_actor_tick and on_process_event_pre.
@@ -3570,9 +5972,11 @@ static AActor* cached_find_local_pawn()
 // guessed offsets, called through the same GetFunctionByNameInChain+
 // ProcessEvent pattern used everywhere else in this file.
 //
-// NOT YET LIVE-VERIFIED (2026-08-14) — run once, throttled-retried like
-// every other one-shot resolution in this file, since spawner actors only
-// exist once the level has finished loading.
+// Live-verified: this project's own later notes recorded 857/857 spawners
+// successfully suppressed across every attempt in a full session, zero
+// issues — run once, throttled-retried like every other one-shot resolution
+// in this file, since spawner actors only exist once the level has finished
+// loading.
 static bool suppress_zombie_spawners()
 {
     static const wchar_t* kSpawnerClasses[] = {
@@ -3835,7 +6239,92 @@ static void do_equip_restore_retry(void* ctxRaw)
     }
 }
 
-static void do_game_tick()
+// Detects a UWorld destroy+recreate (loading a save, level travel) and safely
+// drops every remote player's and world entity's now-dangling actor pointer
+// without touching it — the old UWorld tore down every actor in it, so
+// calling ProcessEvent/destroy_actor_safe on these pointers would touch freed
+// memory. Root-caused 2026-08-15/16: a live-reproduced freeze on loading a
+// save to switch characters showed the identical GameThread-parked-in-
+// FTaskGraphImplementation::WaitUntilTasksComplete signature already traced
+// for the MsgType::Death self-proxy bug earlier this session (decompiled
+// shipping-binary stack cross-referenced against real UE 5.3.2 TaskGraph.cpp
+// source) — consistent with ProxyManager::tick()/EntityManager::tick()
+// touching a stale actor pointer into a torn-down world and the engine's own
+// mesh/component teardown never returning when re-entered from that context.
+// Cached transform/equipment/appearance data is deliberately KEPT (only the
+// actor pointers are cleared) and every dirty flag force-set, so the
+// existing "!actor -> spawn" paths in both managers respawn fresh actors in
+// the new world and immediately re-dress them from data already on hand,
+// with no need to wait on the server to resend anything. NOT YET LIVE-
+// VERIFIED — next step after this build is repeating the same save-load
+// repro that found the bug.
+static void* g_last_world = nullptr;
+
+static void reset_stale_actors_on_world_change(UWorld* world)
+{
+    if (!world || world == g_last_world) { g_last_world = world; return; }
+    const bool firstWorld = (g_last_world == nullptr);
+    g_last_world = world;
+    if (firstWorld) return; // nothing to reset on the very first tick
+
+    auto& st = sdb::g_state();
+    size_t playerCount = 0, entityCount = 0;
+    {
+        std::lock_guard<std::mutex> lk(st.playersMtx);
+        for (auto& [id, player] : st.players) {
+            player.proxyActor                 = nullptr;
+            player.primaryWeaponVisualActor   = nullptr;
+            player.facewearVisualActor        = nullptr;
+            player.headwearVisualActor        = nullptr;
+            player.eyewearVisualActor         = nullptr;
+            player.backpackVisualActor        = nullptr;
+            player.secondaryWeaponVisualActor = nullptr;
+            player.sidearmVisualActor         = nullptr;
+            player.meleeVisualActor           = nullptr;
+            player.weaponAttachmentActors.clear();
+            player.activeWeaponSlot    = 0xFF;
+            player.handAttachedSlot    = 0xFF;
+            player.appearanceSyncStage = 0;
+            player.appliedAppearanceKey.clear();
+            player.deathStateApplied = false; // freshly-spawned proxy hasn't had DeathState re-applied yet
+            player.equipmentDirty         = true;
+            player.weaponAttachmentsDirty = true;
+            player.appearanceDirty        = true;
+            player.proxySpawnedAtUs = 0; // treat as brand-new for the 2s grace period too
+        }
+        playerCount = st.players.size();
+    }
+    {
+        std::lock_guard<std::mutex> lk(st.entityMtx);
+        for (auto& [id, entity] : st.entities) {
+            entity.actor             = nullptr;
+            entity.lastActorAttemptUs = 0;
+        }
+        entityCount = st.entities.size();
+    }
+    debug_log("reset_stale_actors_on_world_change: world changed, reset " +
+              std::to_string(playerCount) + " player(s), " +
+              std::to_string(entityCount) + " entit(y/ies)");
+}
+
+// cleanContext: true when this call is known NOT to be nested inside another
+// ProcessEvent dispatch — either from on_actor_tick (never reached from
+// inside ProcessEvent at all) or the new WndProc-triggered tick (mod.cpp's
+// "Reliable GameThread Trigger via WndProc Subclass" plan; UE5's own
+// Windows-message pump runs once per frame outside any ProcessEvent chain).
+// False from on_process_event_pre's fallback — that path starts execution
+// from inside another call's pre-hook, so it's unavoidably nested even
+// before this function's own ProcessEvent-based work begins (see that call
+// site's own comment for the full derivation). Threaded through to
+// ProxyManager::tick()'s allowDirtyStateSync and
+// check_attach_health_trigger()'s own gate — the specific ProcessEvent-heavy
+// calls (SetSkinnedAssetAndUpdate/SetLeaderPoseComponent/clothing OnRep_*)
+// confirmed present in every live-captured freeze this session only run
+// when cleanContext is true. Everything else in this function (movement
+// send, teleport/velocity/rotation writes, the various check_*_trigger
+// diagnostic reads) is unaffected — none of those has ever shown up as the
+// hang site, so there's no reason to gate them.
+static void do_game_tick(bool cleanContext)
 {
     static bool s_in_game_tick = false;
     if (s_in_game_tick) return;
@@ -3849,23 +6338,110 @@ static void do_game_tick()
     if (now - g_last_tick_us.load(std::memory_order_relaxed) < 5'000ULL) return;
     g_last_tick_us.store(now, std::memory_order_relaxed);
 
+    // Verification signal for cleanContext, not the gate itself — see
+    // t_processEventDepth's own comment and the "Reliable GameThread
+    // Trigger via WndProc Subclass" plan. depth should be 0 every single
+    // time cleanContext is true (on_actor_tick or the new WndProc trigger);
+    // an unthrottled warning here (this branch should be rare/never) is
+    // worth more than a throttled one that could mask the first occurrence.
+    // The periodic confirmation heartbeat (throttled — this runs every 5ms)
+    // is so a clean run is visibly confirmed in the log, not just assumed
+    // from the absence of a warning.
+    if (cleanContext) {
+        if (t_processEventDepth != 0) {
+            debug_log("do_game_tick: cleanContext=true but t_processEventDepth=" +
+                       std::to_string(t_processEventDepth) +
+                       " — the 'message pump is clean' assumption is WRONG, investigate");
+        } else {
+            static uint64_t s_lastCleanConfirmUs = 0;
+            if (now - s_lastCleanConfirmUs >= 10'000'000ULL) {
+                s_lastCleanConfirmUs = now;
+                debug_log("do_game_tick: cleanContext=true, t_processEventDepth=0 confirmed");
+            }
+        }
+    }
+
     check_trace_trigger();
     check_bytecode_dump_trigger();
+    // SEH-wrapped: brand-new, never-yet-fired ProcessEvent calls
+    // (WidgetBlueprintLibrary::Create, AddToViewport) with a hand-built
+    // params struct that hasn't been live-verified — same caution as the
+    // watch_* diagnostics just below, applied proactively here rather than
+    // after a crash, given the recent live data-corruption incident from an
+    // unverified ProcessEvent call.
+    if (!seh_invoke([](void*) { check_open_barber_menu_trigger(); }, nullptr))
+        debug_log("open_barber_menu: crashed, caught via SEH");
+    if (!seh_invoke([](void*) { check_restore_camera_trigger(); }, nullptr))
+        debug_log("restore_camera: crashed, caught via SEH");
+    check_barber_widget_removed_poller();
+    if (!seh_invoke([](void*) { check_dump_playerstarts_trigger(); }, nullptr))
+        debug_log("dump_playerstarts: crashed, caught via SEH");
+    if (!seh_invoke([](void*) { check_teleport_random_spawn_trigger(); }, nullptr))
+        debug_log("teleport_random_spawn: crashed, caught via SEH");
+    if (!seh_invoke([](void*) { check_reset_player_stats_trigger(); }, nullptr))
+        debug_log("reset_player_stats: crashed, caught via SEH");
+    if (!seh_invoke([](void*) { check_max_vitals_trigger(); }, nullptr))
+        debug_log("max_vitals: crashed, caught via SEH");
+    if (!seh_invoke([](void*) { check_load_game_from_slot_trigger(); }, nullptr))
+        debug_log("load_game_from_slot: crashed, caught via SEH");
+    if (!seh_invoke([](void*) { check_set_current_save_slot_trigger(); }, nullptr))
+        debug_log("set_current_save_slot: crashed, caught via SEH");
+    if (!seh_invoke([](void*) { check_read_current_save_slot_trigger(); }, nullptr))
+        debug_log("read_current_save_slot: crashed, caught via SEH");
+    if (!seh_invoke([](void*) { check_set_save_name_direct_trigger(); }, nullptr))
+        debug_log("set_save_name_direct: crashed, caught via SEH");
     check_resolve_fname_trigger();
     check_resolve_ptr_trigger();
     check_resolve_fprop_trigger();
-    check_watch_aimoffset_trigger();
-    check_watch_rotation_trigger();
-    check_watch_lefthand_trigger();
-    check_watch_activeslot_trigger();
-    check_attach_health_trigger();
-    check_active_weapon_trigger();
+    // 2026-08-16: SEH-wrapped — live-crashed (EXCEPTION_ACCESS_VIOLATION,
+    // real crash log with symbolized stack) inside check_watch_activeslot_
+    // trigger, reading a proxy's player.proxyActor pointer that had gone
+    // stale (world torn down by a save-load) before reset_stale_actors_on_
+    // world_change() got a chance to null it out — that cleanup only runs
+    // once a NEW valid local pawn is found, further down in this function,
+    // while these four watch_* diagnostics run here, earlier, unconditional
+    // on pawn state. All four share the identical pattern (dereferencing
+    // player.proxyActor with no validity check — see check_watch_rotation_
+    // trigger/log_lefthand_values/log_activeslot_values/log_aimoffset_values),
+    // so all four get the same guard rather than fixing just the one that
+    // happened to be caught. These are flag-file-gated diagnostic tools, not
+    // core gameplay logic — SEH-wrapping the call site is the right scope
+    // for the fix, not restructuring when world-change cleanup runs.
+    if (!seh_invoke([](void*) { check_watch_aimoffset_trigger(); }, nullptr))
+        debug_log("do_game_tick: check_watch_aimoffset_trigger crashed, caught via SEH");
+    if (!seh_invoke([](void*) { check_watch_rotation_trigger(); }, nullptr))
+        debug_log("do_game_tick: check_watch_rotation_trigger crashed, caught via SEH");
+    if (!seh_invoke([](void*) { check_watch_lefthand_trigger(); }, nullptr))
+        debug_log("do_game_tick: check_watch_lefthand_trigger crashed, caught via SEH");
+    if (!seh_invoke([](void*) { check_watch_activeslot_trigger(); }, nullptr))
+        debug_log("do_game_tick: check_watch_activeslot_trigger crashed, caught via SEH");
+    // 2026-08-16: SEH-wrapped, same audit that found the check_watch_*
+    // crash above. check_attach_health_trigger's rotated scan reads
+    // player.proxyActor and calls check_attach_health/check_component_drift
+    // (ProcessEvent-heavy repair calls) on it with no staleness guard — this
+    // one runs UNCONDITIONALLY every 300ms whenever a proxy exists (no flag
+    // file gate, unlike the watch_* diagnostics), making it the single
+    // highest-frequency touch of a possibly-stale proxyActor pointer in the
+    // whole tick, and the leading suspect for the second (unsymbolized)
+    // "loading a save after already joining" crash on PC2 — that repro has
+    // no diagnostic flag involved, which the four already-fixed watch_*
+    // triggers all require. check_active_weapon_trigger has the identical
+    // pattern (reads player.proxyActor via a flag-gated diagnostic) — same
+    // fix for the same reason, lower frequency since it needs its flag set.
+    if (!seh_invoke([](void* raw) { check_attach_health_trigger(*static_cast<bool*>(raw)); }, &cleanContext))
+        debug_log("do_game_tick: check_attach_health_trigger crashed, caught via SEH");
+    if (!seh_invoke([](void*) { check_active_weapon_trigger(); }, nullptr))
+        debug_log("do_game_tick: check_active_weapon_trigger crashed, caught via SEH");
+    check_current_actor_diagnostic(); // self-SEH-wrapped internally, see its own comment
+    check_item_freeze_diagnostic(); // self-SEH-wrapped internally, see its own comment
     check_fabrik_dump_trigger();
     check_widget_scan_trigger();
     check_scan_pickup_class_trigger();
     check_dump_clothing_table_trigger();
     check_call_trigger();
     check_mem_dump_trigger();
+    check_dump_delegate_trigger();
+    check_gloves_visibility_flicker(); // unconditional, cheap raw reads — see its own comment
 
     // Lazy-connect: open TCP once a pawn exists (level fully loaded).
     if (!g_tcp.is_open()) {
@@ -3883,65 +6459,38 @@ static void do_game_tick()
     }
 
     // 1. Drain receive buffer.
-    for (const auto& f : g_tcp.recv_all())
-        dispatch_frame(f);
-
-    // 1b. New-player detection: if no PlayerProgressRestore arrives within 6s
-    //     of session latch, this is a first join → trigger character creation.
-    {
-        auto& st2 = sdb::g_state();
-        const uint64_t latch = st2.sessionLatchUs.load(std::memory_order_relaxed);
-        if (latch != 0
-            && !st2.receivedProgressRestore.load(std::memory_order_relaxed)
-            && !st2.ccRequestWritten.load(std::memory_order_relaxed)
-            && !st2.ccDone.load(std::memory_order_relaxed)
-            && now - latch >= 6'000'000ULL)
-        {
-            st2.ccRequestWritten.store(true, std::memory_order_relaxed);
-            // Write the flag file the Lua mod polls for.
-            HANDLE h = CreateFileW(CC_REQUEST_FLAG.c_str(),
-                GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
-                FILE_ATTRIBUTE_NORMAL, nullptr);
-            if (h != INVALID_HANDLE_VALUE) CloseHandle(h);
-            Output::send<LogLevel::Normal>(
-                STR("SDB: new player detected — character creation requested\n"));
-        }
+    // 2026-08-16 audit: SEH-wrapped after a live crash — EXCEPTION_MSVC_CXX
+    // (0xE06D7363, a genuine thrown C++ exception, not an access violation)
+    // inside ProxyManager::on_movement(), reached from here with no guard at
+    // all. This whole dispatch path (every inbound Movement/Equipment/
+    // WeaponAttachments/PawnAppearance/PlayMontage/Death/Respawn/WorldState/
+    // PlayerDamage/entity-lifecycle message) had ZERO exception protection
+    // before this — unlike every local-side proxy/actor touch this project
+    // has spent tonight hardening, a single bad inbound frame could crash
+    // the client outright. Wrapping per-frame (not the whole loop) so one
+    // bad frame doesn't stop the rest of the batch from being processed.
+    for (const auto& f : g_tcp.recv_all()) {
+        const sdb::Frame* fptr = &f;
+        if (!seh_invoke([](void* raw) { dispatch_frame(*static_cast<const sdb::Frame*>(raw)); }, const_cast<sdb::Frame*>(fptr)))
+            debug_log("do_game_tick: dispatch_frame crashed on an inbound frame, caught via SEH");
     }
 
-    // 1c. Poll for character creation completion (Lua writes CC_DONE_FILE).
+    // 1b. First-join flow: server's FirstJoin message (authoritative —
+    // gateway.js sends it exactly when this playerId has no saved
+    // progress) means this is a genuinely new player. Deferred here rather
+    // than handled inline in dispatch_frame since a live pawn may not
+    // exist yet the instant the message arrives. Retired the old 6s-
+    // timeout heuristic + SDOnline Lua script hand-off this replaced
+    // (2026-08-17) — see pendingFirstJoin's own comment in state.hpp.
     {
         auto& st2 = sdb::g_state();
-        if (st2.ccRequestWritten.load(std::memory_order_relaxed)
-            && !st2.ccDone.load(std::memory_order_relaxed))
-        {
-            HANDLE h = CreateFileW(CC_DONE_FILE.c_str(),
-                GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING,
-                FILE_ATTRIBUTE_NORMAL, nullptr);
-            if (h != INVALID_HANDLE_VALUE) {
-                char buf[2048] = {};
-                DWORD n = 0;
-                ReadFile(h, buf, sizeof(buf) - 1, &n, nullptr);
-                CloseHandle(h);
-                DeleteFileW(CC_DONE_FILE.c_str());
-
-                // Parse character fields from done JSON.
-                std::string json(buf, n);
-                {
-                    std::lock_guard<std::mutex> lk(st2.sessionMtx);
-                    st2.ccForename   = sdb::json_str(json, "forename");
-                    st2.ccSurname    = sdb::json_str(json, "surname");
-                    st2.ccSex        = sdb::json_str(json, "sex");
-                    st2.ccAge        = sdb::json_str(json, "age");
-                    st2.ccOccupation = static_cast<int>(
-                        sdb::json_double(json, "occupation"));
-                }
-
-                st2.ccDone.store(true, std::memory_order_relaxed);
-                Output::send<LogLevel::Normal>(
-                    STR("SDB: character creation complete\n"));
-
-                send_character_create();
-            }
+        if (st2.pendingFirstJoin.load(std::memory_order_acquire) && cached_find_local_pawn()) {
+            st2.pendingFirstJoin.store(false, std::memory_order_release);
+            st2.inFirstJoinFlow = true;
+            Output::send<LogLevel::Normal>(
+                STR("SDB: first join — opening barber menu for character customization\n"));
+            if (!seh_invoke([](void*) { do_open_barber_menu(); }, nullptr))
+                debug_log("do_game_tick: do_open_barber_menu (first-join) crashed, caught via SEH");
         }
     }
 
@@ -3952,6 +6501,42 @@ static void do_game_tick()
     if (pawn) {
         g_local_helper_ptr.store(*reinterpret_cast<uintptr_t*>(
             reinterpret_cast<uintptr_t>(pawn) + 0x700), std::memory_order_relaxed);
+
+        static bool s_actorTickRegistered = false;
+        if (!s_actorTickRegistered) {
+            s_actorTickRegistered = true;
+            fixup_and_register_actor_tick_hook(pawn);
+        }
+
+        ensure_hwnd_ticker_started(); // idempotent — only does real work the first time, see its own comment
+        ensure_parallel_anim_eval_disabled(pawn); // idempotent — see its own comment (UE-191796 candidate fix)
+
+        // 2026-08-16: health-based death detection. Root-caused via a live
+        // zombie-kill retest: cached_find_local_pawn() NEVER returned null
+        // for a real death all session (server log showed zero DeathRequest
+        // frames ever sent, despite multiple confirmed deaths) — the pawn
+        // persists, just frozen in place (matches an earlier finding: a real
+        // death "froze in place, still standing, not ragdolled"), so the
+        // !pawn branch below never has a chance to fire for a genuine
+        // combat/zombie death, only for an actual pawn-instance swap (level
+        // reload, new character). Reads the same proven-safe offset the
+        // vitals-restore path already uses (pawn+0x7D0 -> +0xD0, Medical
+        // Component.Health) via read_local_health_only() — NOT the full
+        // read_local_progress(), which also does a FindFirstOf scan; see
+        // that dedicated helper's own comment for why (live-reproduced 1 FPS
+        // regression). Treats health<=0 as death independently of pawn-
+        // nullness — see state.hpp's sentDeathByHealth comment for why this
+        // is a separate flag rather than merged into hasPawn/sentDeath.
+        const double localHealth = read_local_health_only(pawn);
+        const bool healthDead = localHealth <= 0.0;
+        const bool wasHealthDead = st.sentDeathByHealth.exchange(healthDead, std::memory_order_relaxed);
+        if (healthDead && !wasHealthDead) {
+            send_header_only(sdb::MsgType::DeathRequest);
+            debug_log("do_game_tick: health<=0 (" + std::to_string(localHealth) + ") detected, sent DeathRequest");
+        } else if (!healthDead && wasHealthDead) {
+            send_header_only(sdb::MsgType::RespawnRequest);
+            debug_log("do_game_tick: health recovered (" + std::to_string(localHealth) + "), sent RespawnRequest");
+        }
     }
 
     if (!pawn) {
@@ -3966,17 +6551,32 @@ static void do_game_tick()
             }
         }
 
-        sdb::g_proxy_manager().tick(nullptr, nullptr);
+        sdb::g_proxy_manager().tick(nullptr, nullptr, cleanContext);
         return;
     }
 
     const bool was_dead = st.sentDeath.exchange(false);
     if (!st.hasPawn.exchange(true) || was_dead) {
         st.noPlayerSinceUs.store(0);
+        st.pawnValidSinceUs.store(now, std::memory_order_relaxed);
         if (was_dead) send_header_only(sdb::MsgType::RespawnRequest);
         // New/respawned pawn — RepActorsData hasn't necessarily replicated
         // back in yet. See state.hpp's equipDataReady comment.
         st.equipDataReady.store(false, std::memory_order_release);
+    }
+    // Belt-and-braces alongside the hasPawn-transition check above: character
+    // creation may hand back a genuinely new pawn INSTANCE without hasPawn
+    // ever observably going false in between (no guarantee cached_find_local_
+    // pawn() returns null even briefly during that specific transition,
+    // unlike a real death/respawn or level reload). Comparing the raw
+    // pointer catches that case too — same pawnValidSinceUs refresh either
+    // way.
+    {
+        static AActor* s_lastPawnPtr = nullptr;
+        if (pawn != s_lastPawnPtr) {
+            s_lastPawnPtr = pawn;
+            st.pawnValidSinceUs.store(now, std::memory_order_relaxed);
+        }
     }
 
     // 3. Apply pending teleport from PlayerProgressRestore.
@@ -4146,7 +6746,8 @@ static void do_game_tick()
 
     // 5. Drive proxy actors.
     UWorld* world = pawn->GetWorld();
-    sdb::g_proxy_manager().tick(world, pawn);
+    reset_stale_actors_on_world_change(world);
+    sdb::g_proxy_manager().tick(world, pawn, cleanContext);
 
     // 6. Drive world entities.
     sdb::g_entity_manager().tick(world, pawn);
@@ -4193,6 +6794,29 @@ static void do_game_tick()
         send_weapon_attachments(pawn);
         send_pawn_appearance(pawn);
     }
+
+    // 9. Flashlight/NVG toggle sync — unthrottled (called every tick, not
+    // gated behind the 2s equip cadence above): two raw bool reads plus a
+    // comparison, negligible cost, and send_player_lights is internally
+    // change-detected so this can't spam the network — only sends the
+    // instant either value actually flips, for near-immediate proxy sync on
+    // a discrete player action instead of riding the slower 2s equip cycle.
+    send_player_lights(pawn);
+
+    // 9b. Weapon-fire first-shot detection — same unthrottled cadence as
+    // step 9 (see check_weapon_fire_edge's own comment for why this exists
+    // instead of a ProcessEvent hook).
+    check_weapon_fire_edge(pawn);
+
+    // 9c. TEMPORARY head-look diagnostic — see check_head_rot_diagnostic's
+    // own comment. Remove once the real mapping is confirmed.
+    check_head_rot_diagnostic(pawn);
+
+    // 10. World/weather/time sync — unthrottled like step 9: a single
+    // revision-number comparison, apply_world_state itself only does real
+    // work when the server's periodic WorldState broadcast actually changed
+    // something.
+    apply_world_state();
 }
 
 // Item-drop hook: BP_JigMultiplayer_C::ItemDropRequest_Event_0(UJSI_Slot_C*
@@ -4213,6 +6837,53 @@ static void do_game_tick()
 // and compared by pointer on every call — cheap enough to check
 // unconditionally, same reasoning as the equip-trace diagnostic.
 static UFunction* s_drop_fn = nullptr;
+
+// See on_process_event_pre's weapon-fire-sync comment for the full story —
+// resolved once off any live BP_FirearmPickup_C instance (or its CDO),
+// shared per-class same as every other UFunction* pointer in this file.
+static UFunction* s_fireBullet_fn = nullptr;
+
+// 2026-08-21: Local_StartShooting's decoded bytecode (research/bytecode/
+// ubergraph_decoded/BP_FirearmPickup_C_Local_StartShooting.decoded.txt)
+// shows the FIRST bullet of every trigger pull — single-fire's only bullet,
+// and full-auto's first round alike — is fired via two back-to-back
+// EX_LocalVirtualFunction calls (FireBullet, then Event_FireRate). Only
+// once IsWeaponAutomatic? is true does it arm K2_SetTimer(Self,
+// "FireBullet", rate, looping=true); that timer's repeat callbacks DO
+// dispatch via real ProcessEvent, which is what s_fireBullet_fn was
+// actually catching all along — explaining "single click = nothing, full
+// auto = works" (and meaning full-auto's own first round has always been
+// silently missed too, just unnoticed among many).
+//
+// Tried hooking Svr_WeaponShot(bool Started?) instead (plain EX_VirtualFunction,
+// same object) — resolved fine but never matched live. Tried hooking
+// Local_StartShooting itself next: traced its real caller in
+// BP_PlayerCharacter_C's Ubergraph (InpActEvt_IA_PrimaryAction_..._64, entry
+// 60116/0xead4) and confirmed it's invoked via EX_Context{object_expr=
+// CurrentFiringWeapon} + EX_LocalVirtualFunction — i.e. even a genuine
+// cross-object call (character → weapon actor) goes through the "Local"
+// opcode and does NOT re-enter ProcessEvent. Live-tested 2026-08-21: resolved
+// fine, never matched despite repeated confirmed firing. So neither the
+// Local/plain-Virtual distinction nor same-object/cross-object is what
+// determines ProcessEvent visibility — only a genuine external→ProcessEvent
+// root (Enhanced Input calling the InpActEvt wrapper itself, or the Timer
+// Manager calling FireBullet) is visible; anything that function calls
+// internally, however it's wrapped, is invisible to this hook.
+//
+// Given three straight hook attempts failed, switched approach entirely:
+// this project's own established, *proven* pattern for "detect a local
+// player state change and sync it" is direct polling of a persistent
+// instance property (see read_local_player_lights's FlashlightOn?/
+// NightVisionOn? — raw offset reads, edge-detected against a static
+// last-value, no ProcessEvent involved at all). BP_PlayerCharacter.hpp lists
+// `CurrentFiringWeapon` (ABP_FirearmPickup_C*, offset 0x0930) — set to the
+// weapon actor by this exact Ubergraph entry right before calling
+// Local_StartShooting, and cleared to null by Local_StopShooting's entry
+// (59833/0xe9b9). Polling this pointer for a null→non-null edge each tick
+// (see check_weapon_fire_edge, mod.cpp) catches the first bullet of every
+// trigger pull — single or auto — with the same accepted dry-fire tradeoff
+// (ammo isn't checked until inside Local_StartShooting) any of the three
+// hook attempts would have had.
 
 // Building placement (2026-08-14, PlacedStructure server-authoritative
 // rewrite — research/04_ida_investigation_log.md Session 58). Resolved off
@@ -4265,57 +6936,22 @@ static UFunction* s_svrMontage_fn = nullptr;
 // s_lastUpdateFn in on_process_event_post.
 static UFunction* s_montagePlayEngine_fn = nullptr;
 
-static void handle_montage_play_engine_hook(void* params)
-{
-    if (!params) return;
-    auto* montage = *reinterpret_cast<UObject**>(static_cast<uint8_t*>(params) + 0x00);
-    const float playRate = *reinterpret_cast<const float*>(static_cast<uint8_t*>(params) + 0x08);
-    if (!montage) return;
-
-    const std::string montageName = short_object_name(montage);
-    if (montageName.empty()) return;
-
-    sdb::PlayMontageData m;
-    m.montageName = montageName;
-    m.playRate    = playRate;
-
-    sdb::Frame f;
-    f.type    = sdb::MsgType::PlayMontage;
-    f.payload = sdb::encode_play_montage(m);
-    build_session_frame(f);
-    send_frame(f);
-
-    char buf[128];
-    snprintf(buf, sizeof(buf), "send_play_montage(engine): montage=%s playRate=%.2f",
-             montageName.c_str(), playRate);
-    debug_log(buf);
-}
-
-static void handle_play_montage_hook(void* params)
-{
-    if (!params) return;
-    auto* montage  = *reinterpret_cast<UObject**>(static_cast<uint8_t*>(params) + 0x00);
-    const double playRate = *reinterpret_cast<const double*>(static_cast<uint8_t*>(params) + 0x08);
-    if (!montage) return;
-
-    const std::string montageName = short_object_name(montage);
-    if (montageName.empty()) return;
-
-    sdb::PlayMontageData m;
-    m.montageName = montageName;
-    m.playRate    = static_cast<float>(playRate);
-
-    sdb::Frame f;
-    f.type    = sdb::MsgType::PlayMontage;
-    f.payload = sdb::encode_play_montage(m);
-    build_session_frame(f);
-    send_frame(f);
-
-    char buf[128];
-    snprintf(buf, sizeof(buf), "send_play_montage: montage=%s playRate=%.2f",
-             montageName.c_str(), playRate);
-    debug_log(buf);
-}
+// handle_montage_play_engine_hook and handle_play_montage_hook (both
+// 2026-08-13, removed 2026-08-17): both hooks fired correctly, but
+// UFunction* is per-CLASS not per-instance, so the same pointer resolved
+// off the local player also matched PlayMontage/Montage_Play calls made on
+// PROXY actors of the same class — once on_play_montage (proxy_manager.cpp)
+// started actually calling PlayMontage to apply a received montage on a
+// proxy, these hooks fired for that call too, treated it as a fresh local
+// action, and re-broadcast it: client A's own montage bounced to client B's
+// proxy-of-A, which re-broadcast back to A applied to B's proxy, forever,
+// amplifying with whatever both sides had recently played. Looked like
+// severe jitter/desync live (send_play_montage spamming the same ~9-montage
+// sequence every ~30ms). check_local_montage_change() (the
+// GetCurrentMontage() poll, below) supersedes both entirely and is
+// correctly scoped — called directly on a known local-pawn pointer, never
+// resolved as a bare class-wide UFunction* compared against every
+// ProcessEvent call in the process.
 
 // Melee swing/push/reload/equip montages (2026-08-13): the six candidate
 // trigger points hooked above (PlayMontage, MC_Montage, Svr_Montage,
@@ -4673,25 +7309,46 @@ static int s_recentCallsIdx = 0;
 // set_recent_calls_watch below. Everything else is skipped before it ever
 // touches the ring buffer, so the buffer now covers a real multi-second
 // window of exactly the activity worth seeing.
-static UObject* s_watchObjs[8] = {};
-static int s_watchCount = 0;
+// 2026-08-16: extended with a second, independently-refreshed region for
+// the weapon/item-attach desync investigation (shotgun/pistol rendering
+// stuck on the ground while still genuinely AttachParent'd — see
+// do_attach_health_scan's DETACHED-diff comment). [0,5) stays the original
+// clothing watch (pawn/torso/legs/feet/helper, set_recent_calls_watch,
+// unchanged); [5,21) holds the local player's currently-attached top-level
+// item children, refreshed every check_attach_health("local", ...) poll via
+// set_item_recent_calls_watch below — that scan already computes this exact
+// list for its own detach-diffing, so this just mirrors it into the watch.
+// Without this, the DETACHED handler's dump_recent_calls() call has nothing
+// to show for a weapon/item hit (live-confirmed 2026-08-16: a real shotgun/
+// pistol detach produced a dump with zero matching entries, since neither
+// was ever in the old 5-slot clothing-only watch).
+static UObject* s_watchObjs[21] = {};
+static constexpr int kItemWatchBase = 5;
+static constexpr int kItemWatchMax  = 16;
 
 static void set_recent_calls_watch(UObject* pawn, UObject* torso, UObject* legs, UObject* feet, UObject* helper)
 {
-    int n = 0;
-    if (pawn)   s_watchObjs[n++] = pawn;
-    if (torso)  s_watchObjs[n++] = torso;
-    if (legs)   s_watchObjs[n++] = legs;
-    if (feet)   s_watchObjs[n++] = feet;
-    if (helper) s_watchObjs[n++] = helper;
-    s_watchCount = n;
+    s_watchObjs[0] = pawn;
+    s_watchObjs[1] = torso;
+    s_watchObjs[2] = legs;
+    s_watchObjs[3] = feet;
+    s_watchObjs[4] = helper;
+}
+
+static void set_item_recent_calls_watch(const std::vector<uintptr_t>& children)
+{
+    const int n = static_cast<int>((std::min)(children.size(), static_cast<size_t>(kItemWatchMax)));
+    for (int i = 0; i < n; ++i)
+        s_watchObjs[kItemWatchBase + i] = reinterpret_cast<UObject*>(children[i]);
+    for (int i = n; i < kItemWatchMax; ++i)
+        s_watchObjs[kItemWatchBase + i] = nullptr;
 }
 
 static void record_recent_call(UObject* obj, UFunction* func)
 {
     bool watched = false;
-    for (int i = 0; i < s_watchCount; ++i) {
-        if (s_watchObjs[i] == obj) { watched = true; break; }
+    for (UObject* w : s_watchObjs) {
+        if (w == obj) { watched = true; break; }
     }
     if (!watched) return;
     s_recentCalls[s_recentCallsIdx] = { func, obj, sdb::now_micros() };
@@ -4852,6 +7509,125 @@ static UFunction* s_svrAttachClothingFn = nullptr;
 static UFunction* s_mcAttachClothingFn = nullptr;
 static UFunction* s_equipClothingToMeshFn = nullptr;
 
+// Temporary diagnostic (2026-08-17): trying to find the real FGameplayTag
+// "Option" value BP_Barber_C::OnServerExecuteInteract receives when a real
+// player interaction opens CharacterBarberMenu — needed to eventually
+// force-open that menu for a first-time joiner. The Ubergraph decode
+// (research/bytecode/pc1_decoded/, ExecuteUbergraph_BP_Barber) dispatches
+// via a computed jump read from a local variable, not a simple offset
+// table, so reversing the exact tag from static bytecode alone wasn't
+// practical — capturing the real live value from an actual interaction is
+// the same "verify, don't guess" approach used throughout this project.
+// Remove once the real tag value has been captured and used.
+// Broadened after two guessed functions (OnServerExecuteInteract,
+// OnExecuteInteract) both failed to fire despite the menu genuinely being
+// open live — rather than keep guessing param layouts one function at a
+// time, just detect which of BP_Barber_C's interact-related functions
+// fires AT ALL first (name + obj only, no param decoding yet), then do one
+// precise follow-up pass once the real one is known.
+static constexpr const wchar_t* kBarberCandidateFns[] = {
+    L"OnBeginInteract", L"OnEndInteract", L"OnExecuteInteract",
+    L"OnExecuteInteractDialogue", L"OnExecuteInteractEnded",
+    L"OnRequestServerInteract", L"OnServerExecuteInteract", L"OnStopExecuteInteract",
+};
+static UFunction* s_barberCandidateFnPtrs[std::size(kBarberCandidateFns)] = {};
+
+static void check_barber_interact_diagnostic(UObject* obj, UFunction* func, void* /*params*/)
+{
+    bool anyUnresolved = false;
+    for (auto* p : s_barberCandidateFnPtrs) if (!p) { anyUnresolved = true; break; }
+    if (anyUnresolved) {
+        static std::atomic<uint64_t> s_lastTryUs{0};
+        const uint64_t now = sdb::now_micros();
+        const uint64_t last = s_lastTryUs.load(std::memory_order_relaxed);
+        if (last == 0 || now - last >= 1'000'000ULL) {
+            s_lastTryUs.store(now, std::memory_order_relaxed);
+            if (UObject* barber = UObjectGlobals::FindFirstOf(STR("BP_Barber_C"))) {
+                for (size_t i = 0; i < std::size(kBarberCandidateFns); ++i) {
+                    if (s_barberCandidateFnPtrs[i]) continue;
+                    s_barberCandidateFnPtrs[i] = barber->GetFunctionByNameInChain(kBarberCandidateFns[i]);
+                }
+                debug_log("check_barber_interact_diagnostic: resolve pass complete");
+            }
+        }
+    }
+    if (!func) return;
+    for (size_t i = 0; i < std::size(kBarberCandidateFns); ++i) {
+        if (func != s_barberCandidateFnPtrs[i]) continue;
+        std::string objClass = obj ? short_object_name(obj) : "<null>";
+        char line[256];
+        int need = WideCharToMultiByte(CP_UTF8, 0, kBarberCandidateFns[i], -1, nullptr, 0, nullptr, nullptr);
+        std::string fnName(need > 1 ? need - 1 : 0, '\0');
+        if (need > 0) WideCharToMultiByte(CP_UTF8, 0, kBarberCandidateFns[i], -1, fnName.data(), need, nullptr, nullptr);
+        snprintf(line, sizeof(line),
+                 "check_barber_interact_diagnostic: FIRED %s obj=0x%llx objClass=%s",
+                 fnName.c_str(), reinterpret_cast<unsigned long long>(obj), objClass.c_str());
+        debug_log(line);
+    }
+}
+
+// Automatic camera/input restore when the barber menu's real Exit button is
+// clicked — user-requested 2026-08-17 after live-testing showed clicking
+// the widget's own exit left the camera stuck (check_open_barber_menu_
+// trigger only replicates the game's *open* sequence, so nothing was
+// wired to reverse it on close).
+//
+// Two wrong guesses before this, both from reasoning off the static decode
+// alone instead of re-verifying live — the actual lesson of this whole
+// saga:
+// 1. Hooked BP_Barber_C's own "Event_Exit" (bound via EX_BindDelegate/
+//    EX_AddMulticastDelegate to the widget's "ExitMenu" multicast delegate
+//    in the real open flow, per BP_Barber_C's Ubergraph). Fired once live,
+//    then appeared to go silent on the next test — but see below, it was
+//    never actually broken.
+// 2. Theorized (wrongly) that check_open_barber_menu_trigger's widget never
+//    gets Event_Exit bound to its ExitMenu delegate (since the bind step
+//    was never replicated), so switched to hooking
+//    CharacterBarberMenu_C::Exit() directly (the 18-byte trampoline that
+//    calls ExecuteUbergraph_CharacterBarberMenu(1385)). This was wrong too
+//    — confirmed via a real trace_trigger.flag full-ProcessEvent-trace
+//    (2026-08-17) that Exit() never fires at all; the real button-click
+//    handler is a UMG-generated bound-event function named
+//    BndEvt__BackButton_K2Node_ComponentBoundEvent_13_
+//    OnButtonClickedEvent__DelegateSignature, which dispatches into the
+//    Ubergraph internally (EX_LocalFinalFunction, no separate reflected
+//    ProcessEvent call for Exit() itself). That SAME trace also showed
+//    BP_Barber_C::Event_Exit DOES fire correctly right after the click —
+//    proving guess #1 was actually right all along, and the "silent"
+//    result before was something else (most likely a stale non-rebuilt
+//    DLL still deployed, or restore_camera.flag manual testing masking
+//    whether the automatic hook had actually run) rather than a real gap
+//    in the delegate-binding replication theory.
+// Back to hooking BP_Barber_C::Event_Exit, now trace-confirmed rather than
+// assumed. Resolved once per live barber instance (same throttled-retry-
+// then-cache shape as kBarberCandidateFns/s_barberCandidateFnPtrs above)
+// and matched by function pointer only — see
+// [[feedback_sdo_ufunction_shared_per_class]] for why that caveat doesn't
+// apply here (local-player-only interaction).
+static UFunction* s_barberEventExitFn = nullptr;
+
+static void check_barber_exit_hook(UObject* obj, UFunction* func)
+{
+    if (!s_barberEventExitFn) {
+        static std::atomic<uint64_t> s_lastTryUs{0};
+        const uint64_t now = sdb::now_micros();
+        const uint64_t last = s_lastTryUs.load(std::memory_order_relaxed);
+        if (last == 0 || now - last >= 1'000'000ULL) {
+            s_lastTryUs.store(now, std::memory_order_relaxed);
+            if (UObject* barber = UObjectGlobals::FindFirstOf(STR("BP_Barber_C"))) {
+                s_barberEventExitFn = barber->GetFunctionByNameInChain(L"Event_Exit");
+                debug_log(s_barberEventExitFn ? "check_barber_exit_hook: Event_Exit resolved"
+                                               : "check_barber_exit_hook: Event_Exit NOT FOUND");
+            }
+        }
+    }
+    if (!func || func != s_barberEventExitFn) return;
+    debug_log("check_barber_exit_hook: FIRED Event_Exit obj=0x" +
+              std::to_string(reinterpret_cast<uintptr_t>(obj)) + " — restoring camera/input");
+    if (!seh_invoke([](void*) { do_restore_camera_and_input(); }, nullptr))
+        debug_log("check_barber_exit_hook: do_restore_camera_and_input crashed, caught via SEH");
+}
+
 static void check_attach_clothing_hooks(UObject* obj, UFunction* func)
 {
     if (!s_svrAttachClothingFn || !s_mcAttachClothingFn || !s_equipClothingToMeshFn) {
@@ -4877,10 +7653,28 @@ static void check_attach_clothing_hooks(UObject* obj, UFunction* func)
 
 static void on_process_event_pre(UObject* obj, UFunction* func, void* params)
 {
+    ++t_processEventDepth; // see t_processEventDepth's own comment — always first, always paired with on_process_event_post's decrement
+
+    // 2026-08-15: REVERTED the GameThread-only guard that was here —
+    // live-reported immediately after deploy: on_unreal_init's own
+    // "hooks registered" log line was the LAST thing ever logged, meaning
+    // g_game_thread_id (captured in on_unreal_init) does NOT actually match
+    // the thread this hook fires on for real gameplay calls — UE4SS
+    // apparently calls on_unreal_init from a different (loader?) thread
+    // than the one driving ProcessEvent/tick, disproving the assumption
+    // this guard was built on. The underlying finding (a hang dump showed
+    // ProcessEvent reaching our code from a Background Worker thread) may
+    // still be real, but needs a reliable GameThread anchor that isn't
+    // on_unreal_init before trying this again — not attempted further
+    // tonight given how badly the wrong anchor broke things. See
+    // g_game_thread_id's own comment for the original (now-disproven)
+    // reasoning.
     record_recent_call(obj, func);
     check_load_data_requested_hook(obj, func);
     check_set_sex_mesh_hook(obj, func);
     check_attach_clothing_hooks(obj, func);
+    check_barber_interact_diagnostic(obj, func, params);
+    check_barber_exit_hook(obj, func);
 
     // Resolving s_drop_fn needs find_local_pawn() — a UE4SS reflection scan
     // over all live UObjects, expensive enough that it must NOT run on every
@@ -4913,6 +7707,104 @@ static void on_process_event_pre(UObject* obj, UFunction* func, void* params)
     }
     if (func && func == s_drop_fn) {
         handle_drop_hook(params);
+    }
+
+    // 2026-08-20: weapon-fire sync. Live trace_trigger.flag capture during a
+    // real shot showed firing never plays a UAnimMontage at all (nothing
+    // check_local_montage_change's GetCurrentMontage() poll could ever
+    // catch) — the real visual/audio trigger is BP_FirearmPickup_C::
+    // FireBullet(), which calls MuzzleEffects() then StartRecoil()
+    // unconditionally on every real trigger pull, before any ammo/damage
+    // logic (research/bytecode/ubergraph_decoded/BP_FirearmPickup_C_
+    // FireBullet.decoded.txt). Resolving FireBullet's UFunction* once (any
+    // live instance or the CDO — the pointer is shared per-class, same
+    // proven-safe resolve pattern as s_drop_fn just above) is enough to
+    // detect ANY weapon firing, local or proxy — unlike the PlayMontage/
+    // Montage_Play hooks abandoned 2026-08-17 (see feedback_sdo_ufunction_
+    // shared_per_class memory), this doesn't risk an echo loop: the receive
+    // side (ProxyManager::on_weapon_fired) calls MuzzleEffects/StartRecoil
+    // directly, never FireBullet itself, so a proxy replay can never
+    // re-trigger this hook. Still gated on GetOwner()==local pawn (the same
+    // GetOwner-via-ProcessEvent pattern do_weapon_attach_scan already uses)
+    // so only the local player's own shots get broadcast, not every
+    // proxy's.
+    static std::atomic<uint64_t> s_last_fire_bullet_fn_try_us{0};
+    if (func && !s_fireBullet_fn) {
+        const uint64_t now = sdb::now_micros();
+        const uint64_t last = s_last_fire_bullet_fn_try_us.load(std::memory_order_relaxed);
+        if (last == 0 || now - last >= 1'000'000ULL) {
+            s_last_fire_bullet_fn_try_us.store(now, std::memory_order_relaxed);
+            UObject* firearm = UObjectGlobals::FindFirstOf(L"BP_FirearmPickup_C");
+            if (!firearm) {
+                UObject* const kAnyPackage = reinterpret_cast<UObject*>(static_cast<intptr_t>(-1));
+                firearm = UObjectGlobals::FindObject(nullptr, kAnyPackage, L"Default__BP_FirearmPickup_C");
+            }
+            if (firearm) {
+                s_fireBullet_fn = firearm->GetFunctionByNameInChain(L"FireBullet");
+                debug_log(s_fireBullet_fn ? "on_process_event_pre: FireBullet resolved"
+                                           : "on_process_event_pre: FireBullet NOT FOUND on BP_FirearmPickup_C");
+            } else {
+                debug_log("on_process_event_pre: BP_FirearmPickup_C instance/CDO not found (fire-bullet resolve)");
+            }
+        }
+    }
+    if (func && func == s_fireBullet_fn && obj) {
+        UFunction* getOwnerFn = obj->GetFunctionByNameInChain(L"GetOwner");
+        AActor* owner = nullptr;
+        if (getOwnerFn) obj->ProcessEvent(getOwnerFn, &owner);
+        AActor* localPawn = find_local_pawn();
+        debug_log("on_process_event_pre: FireBullet MATCHED obj=0x" +
+                  std::to_string(reinterpret_cast<uintptr_t>(obj)) +
+                  " getOwnerFn=" + std::to_string(getOwnerFn != nullptr) +
+                  " owner=0x" + std::to_string(reinterpret_cast<uintptr_t>(owner)) +
+                  " localPawn=0x" + std::to_string(reinterpret_cast<uintptr_t>(localPawn)) +
+                  " isLocal=" + std::to_string(owner && localPawn && owner == localPawn));
+        if (owner && localPawn && owner == localPawn) {
+            send_header_only(sdb::MsgType::WeaponFired);
+            debug_log("on_process_event_pre: local FireBullet detected, sent WeaponFired");
+        }
+    }
+
+
+    // 2026-08-16: purely observational — correlates the periodic scene-wide
+    // item-detach bursts (research/04_ida_investigation_log.md Session 60:
+    // proxy's ENTIRE loadout and the local player's own equipped knife
+    // detached within 0.5s of each other, at irregular-but-roughly-15-minute
+    // intervals, ruling out any of this mod's own per-tick proxy code as the
+    // cause since it never touches the local player's real pawn) against
+    // this game's own confirmed AutoSaveGame/Event_AutoSave/EventSave
+    // functions (BP_SurroundeadGameMode_C, bp_catalog_player_core.md). Each
+    // client runs its own local UE5 world (this project's own custom TCP
+    // layer syncs state between separate local sessions, not native UE
+    // networking) — proxies are locally-spawned actors in THIS client's own
+    // world, so a local save/serialize pass hitting the whole scene would
+    // explain hitting both the real pawn's and the proxy's attachments
+    // identically. Same throttled-FindFirstOf-then-cache-pointer shape as
+    // s_drop_fn/s_buildFn above — a per-call string lookup here would repeat
+    // the FindFirstOf-every-tick FPS regression already hit once tonight.
+    static UFunction* s_autoSaveGameFn = nullptr;
+    static UFunction* s_eventAutoSaveFn = nullptr;
+    static UFunction* s_eventSaveFn = nullptr;
+    static std::atomic<uint64_t> s_last_gamemode_fn_try_us{0};
+    if (func && (!s_autoSaveGameFn || !s_eventAutoSaveFn || !s_eventSaveFn)) {
+        const uint64_t now = sdb::now_micros();
+        const uint64_t last = s_last_gamemode_fn_try_us.load(std::memory_order_relaxed);
+        if (last == 0 || now - last >= 1'000'000ULL) {
+            s_last_gamemode_fn_try_us.store(now, std::memory_order_relaxed);
+            if (UObject* gm = UObjectGlobals::FindFirstOf(STR("BP_SurroundeadGameMode_C"))) {
+                if (!s_autoSaveGameFn)  s_autoSaveGameFn  = gm->GetFunctionByNameInChain(L"AutoSaveGame");
+                if (!s_eventAutoSaveFn) s_eventAutoSaveFn = gm->GetFunctionByNameInChain(L"Event_AutoSave");
+                if (!s_eventSaveFn)     s_eventSaveFn     = gm->GetFunctionByNameInChain(L"EventSave");
+                debug_log(std::string("on_process_event_pre: GameMode save fns AutoSaveGame=") +
+                          (s_autoSaveGameFn ? "resolved" : "NOT FOUND") + " Event_AutoSave=" +
+                          (s_eventAutoSaveFn ? "resolved" : "NOT FOUND") + " EventSave=" +
+                          (s_eventSaveFn ? "resolved" : "NOT FOUND"));
+            }
+        }
+    }
+    if (func && (func == s_autoSaveGameFn || func == s_eventAutoSaveFn || func == s_eventSaveFn)) {
+        debug_log("SAVE_EVENT_FIRED: " + std::string(
+            func == s_autoSaveGameFn ? "AutoSaveGame" : func == s_eventAutoSaveFn ? "Event_AutoSave" : "EventSave"));
     }
 
     // Same throttled-retry shape as s_drop_fn above, but resolved off
@@ -4967,22 +7859,12 @@ static void on_process_event_pre(UObject* obj, UFunction* func, void* params)
         handle_pickup_hook(find_local_pawn(), params);
     }
 
-    // handle_play_montage_hook (below) is now DEAD/disabled — 2026-08-13.
-    // UFunction* is per-CLASS, not per-instance: s_playMontage_fn resolved
-    // off find_local_pawn() is the SAME pointer PROXY actors call PlayMontage
-    // through too (BP_PlayerCharacter_C, same class). Once on_play_montage
-    // (proxy_manager.cpp) started actually calling PlayMontage on proxies to
-    // apply a received montage, this hook fired for THAT call too, treated
-    // it as a fresh local action, and re-broadcast it — client A's own
-    // montage bounces to client B's proxy-of-A, which re-broadcasts back to
-    // A applied to B's proxy, forever, amplifying with whatever both sides
-    // happened to have played recently. Looked like severe jitter/desync
-    // live (send_play_montage: spamming the same ~9-montage sequence every
-    // ~30ms). check_local_montage_change() (the GetCurrentMontage() poll,
-    // further down this file) already supersedes this hook entirely and is
-    // correctly scoped — it's called directly on a known local-pawn
-    // pointer, never resolved as a bare class-wide UFunction* compared
-    // against every ProcessEvent call in the process.
+    // The PlayMontage hook that used to fire here was removed 2026-08-17 —
+    // per-class UFunction* echo-loop bug (a proxy's PlayMontage call shared
+    // the same UFunction* as the local player's, so applying a received
+    // montage to a proxy re-triggered this hook and re-broadcast it,
+    // forever). Full history preserved next to check_local_montage_change's
+    // declaration, which supersedes it.
 
     // Diagnostic-only resolution for MC_Montage/Svr_Montage — see their
     // declaration comment above. Same throttled-retry shape.
@@ -5003,11 +7885,9 @@ static void on_process_event_pre(UObject* obj, UFunction* func, void* params)
     if (func && func == s_mcMontage_fn)  debug_log("montage_diag: MC_Montage fired");
     if (func && func == s_svrMontage_fn) debug_log("montage_diag: Svr_Montage fired");
 
-    // handle_montage_play_engine_hook is also DEAD/disabled — 2026-08-13,
-    // same reason as the PlayMontage hook above: UAnimInstance::Montage_Play
-    // is one shared UFunction* per class, and proxies' AnimInstances are
-    // that same class, so this fired for proxy playback too and fed the
-    // same echo loop. Superseded by check_local_montage_change() below.
+    // The Montage_Play engine hook that used to fire here was removed
+    // 2026-08-17 — same per-class UFunction* echo-loop bug as the PlayMontage
+    // hook above. Superseded by check_local_montage_change() below.
 
     // Equip-trace diagnostic (temporary, see research/04_ida_investigation_log.md):
     // our own synthetic SetEquippedInfoBySlot call reports success but never
@@ -5047,9 +7927,48 @@ static void on_process_event_pre(UObject* obj, UFunction* func, void* params)
         }
     }
 
-    // Full game tick — runs here because on_actor_tick is not reliable after
-    // level transitions in this version of UE4SS.
-    do_game_tick();
+    // 2026-08-15: on_actor_tick reliability watchdog + conditional fallback.
+    // Historically this called do_game_tick() unconditionally here because
+    // on_actor_tick can go silent (root cause never reverse-engineered —
+    // see register_actor_tick_hook's comment). The problem: THIS call site
+    // is itself nested inside UE4SS's ProcessEvent pre-hook, i.e. inside the
+    // engine's own outer ProcessEvent dispatch for whatever unrelated
+    // function triggered this sampled tick — a live-captured hang dump
+    // proved a single SetSkinnedAssetAndUpdate call made from exactly this
+    // nested position can block GameThread on a critical section shared
+    // with FAsyncLoadingThread (RtlEnterCriticalSection at the top of the
+    // stack, FAsyncLoadingThread the only non-idle thread in the dump) —
+    // a risk that exists independent of call volume, so every earlier
+    // mitigation tonight (spreading bursts, capping retries) reduced
+    // frequency but couldn't eliminate it. on_actor_tick's own dispatch
+    // point doesn't have this problem — it isn't reached from inside
+    // another ProcessEvent call. So: only use this risky path when the
+    // clean one is confirmed NOT currently working (silent for >500ms
+    // despite having fired at least once before), and actively try to
+    // recover the clean path rather than just permanently relying on this
+    // fallback.
+    const uint64_t lastActorTick = g_last_actor_tick_us.load(std::memory_order_relaxed);
+    const bool actorTickWorking = g_actor_tick_ever_fired.load(std::memory_order_relaxed) &&
+                                   (now - lastActorTick < 500'000ULL);
+    if (!actorTickWorking) {
+        // Recovery attempt, throttled to once per 2s so a persistently
+        // broken hook doesn't get re-registered on every single sample.
+        // Skipped entirely before on_actor_tick has EVER fired once —
+        // nothing to recover yet this early (e.g. still on the main menu,
+        // no world/actors ticking at all), and hammering the registration
+        // call before UE4SS's own hook table is ready is untested territory
+        // this session didn't need to risk.
+        if (g_actor_tick_ever_fired.load(std::memory_order_relaxed)) {
+            const uint64_t lastReregister = g_last_actor_tick_reregister_us.load(std::memory_order_relaxed);
+            if (now - lastReregister >= 2'000'000ULL) {
+                g_last_actor_tick_reregister_us.store(now, std::memory_order_relaxed);
+                const bool reregistered = register_actor_tick_hook();
+                debug_log("watchdog: on_actor_tick silent for " + std::to_string((now - lastActorTick) / 1000) +
+                          "ms, re-registered=" + std::to_string(reregistered));
+            }
+        }
+        do_game_tick(false); // nested inside this ProcessEvent's own pre-hook — see do_game_tick's own comment
+    }
 }
 
 // Look-direction/crouch/ADS/falling sync, take 2 (2026-08-13): GetAimOffset
@@ -5149,14 +8068,70 @@ static void do_aim_write(void* ctxRaw)
 
     if (auto* crouching = static_cast<uint8_t*>(obj->GetValuePtrByPropertyNameInChain(L"IsCrouching")))
         *crouching = (player.movState & 0x01) ? 1 : 0;
+    const bool isAds = (player.movState & 0x02) != 0;
     if (auto* ads = static_cast<uint8_t*>(obj->GetValuePtrByPropertyNameInChain(L"IsADS")))
-        *ads = (player.movState & 0x02) ? 1 : 0;
+        *ads = isAds ? 1 : 0;
     if (auto* falling = static_cast<uint8_t*>(obj->GetValuePtrByPropertyNameInChain(L"Falling")))
         *falling = (player.movState & 0x04) ? 1 : 0;
+
+    // Head-look sync (2026-08-21): Player_AnimBP_C::GetHeadRot (decoded via
+    // bytecode_dump.flag, research/bytecode/ubergraph_decoded/
+    // Player_AnimBP_C_GetHeadRot.decoded.txt) computes HeadRotation/HeadQuat
+    // from NormalizedDeltaRotator(ControlRotation, ActorRotation) every
+    // frame — the exact same "reads a real Controller a proxy doesn't have"
+    // problem already fixed above for Pitch/Yaw (GetAimOffset), just for a
+    // separate property pair never touched before. Decoded logic: clamp
+    // Pitch to [-60,60], clamp Yaw to [-40,40] then again to [-90,30] (net
+    // effect [-40,30]), RInterpTo-smooth (not re-implemented here —
+    // player.renderAimPitch/renderAimYaw are already smoothed upstream by
+    // ProxyManager::update_proxy_render_smoothing), and force (0,0,0)
+    // whenever IsADS && !InMeleeStance (melee-stance exception skipped —
+    // ADS-while-melee isn't a real combination in this game). HeadQuat is
+    // Conv_RotatorToQuaternion(HeadRotation) in the real function; computed
+    // here via FRotator::Quaternion()'s standard formula (stable across UE
+    // versions) rather than calling the native function live. Sign
+    // (positive renderAimYaw, unlike Pitch/Yaw's negated write above) is
+    // NOT yet live-confirmed — NormalizedDeltaRotator is a plain rotation
+    // delta, not an authored blendspace sample, so it shouldn't carry this
+    // game's blendspace-specific inversion, but flip if a live test shows
+    // the head turning the wrong way.
+    struct FRotatorD { double Pitch, Yaw, Roll; };
+    struct FQuatD    { double X, Y, Z, W; };
+    if (auto* headRot = static_cast<FRotatorD*>(obj->GetValuePtrByPropertyNameInChain(L"HeadRotation"))) {
+        FRotatorD r{ 0.0, 0.0, 0.0 };
+        if (!isAds) {
+            r.Pitch = std::clamp(static_cast<double>(player.renderAimPitch), -60.0, 60.0);
+            r.Yaw   = std::clamp(static_cast<double>(player.renderAimYaw),   -40.0, 30.0);
+        }
+        *headRot = r;
+        if (auto* headQuat = static_cast<FQuatD*>(obj->GetValuePtrByPropertyNameInChain(L"HeadQuat"))) {
+            constexpr double kDegToRad = 3.14159265358979323846 / 180.0;
+            const double sp = std::sin(r.Pitch * kDegToRad * 0.5), cp = std::cos(r.Pitch * kDegToRad * 0.5);
+            const double sy = std::sin(r.Yaw   * kDegToRad * 0.5), cy = std::cos(r.Yaw   * kDegToRad * 0.5);
+            const double sr = std::sin(r.Roll  * kDegToRad * 0.5), cr = std::cos(r.Roll  * kDegToRad * 0.5);
+            headQuat->X =  cr*sp*sy - sr*cp*cy;
+            headQuat->Y = -cr*sp*cy - sr*cp*sy;
+            headQuat->Z =  cr*cp*sy - sr*sp*cy;
+            headQuat->W =  cr*cp*cy + sr*sp*sy;
+        }
+    }
 }
 
 static void on_process_event_post(UObject* obj, UFunction* func, void* /*params*/)
 {
+    // Always first, always pairs with on_process_event_pre's increment —
+    // see t_processEventDepth's own comment. Placed before the early return
+    // below so it fires unconditionally, matching UE4SS's own guarantee
+    // (DetourInstance.hpp's Invoke()) that every Pre callback invocation is
+    // followed by a Post invocation regardless of what happens in between.
+    // The underflow guard is defensive only — this thread_local starts at 0
+    // and every decrement should have already been preceded by an
+    // increment, but this hook fires thousands of times a frame and a
+    // silent wrap-to-huge-number on any missed pairing would be far worse
+    // than a one-line guard.
+    if (t_processEventDepth > 0) --t_processEventDepth;
+
+    // 2026-08-15: REVERTED — see on_process_event_pre's matching comment.
     if (!obj || !func) return;
 
     // Lazily resolve once, off the LOCAL player's own AnimInstance — the
@@ -5223,16 +8198,16 @@ static void on_process_event_post(UObject* obj, UFunction* func, void* /*params*
     for (auto& [id, player] : sdb::g_state().players) {
         if (static_cast<AActor*>(player.proxyActor) != owner) continue;
 
-        // Same 2s post-spawn grace period ProxyManager::tick() already uses
-        // before its own heavy sync calls (RemotePlayer::proxySpawnedAtUs) —
-        // a freshly-spawned proxy's components aren't fully ready yet.
-        // TEMPORARILY DISABLED 2026-08-13 for testing at the user's request
-        // — this is the aim pitch/yaw write path specifically, a much
-        // lighter operation (two pointer writes) than the equipment-sync
-        // burst that originally caused this grace period to be added; may
-        // not need it at all. Re-enable if proxies crash/deadlock right
-        // after spawn again.
-        // if (sdb::now_micros() - player.proxySpawnedAtUs < 2'000'000ULL) break;
+        // ProxyManager::tick()'s own 2s post-spawn grace period
+        // (RemotePlayer::proxySpawnedAtUs) guards its heavy equipment/
+        // weapon-attachment/appearance sync burst — that one turned out to
+        // be load-bearing (disabling it 2026-08-13 caused a real live freeze
+        // two days later, re-enabled 2026-08-15). This aim pitch/yaw path is
+        // a much lighter operation (two pointer writes, tested disabled
+        // separately since 2026-08-13) and has run 4 days of live sessions
+        // with no incident — kept off permanently, but this is NOT the same
+        // proven-safe conclusion as the heavier sync burst above; revisit if
+        // proxies ever crash/deadlock right after spawn again.
 
         // Smoothed values (ProxyManager::update_proxy_render_smoothing, run
         // from the game tick), not the raw packet-driven aimPitchByte/aimYaw
@@ -5268,7 +8243,382 @@ static void on_process_event_post(UObject* obj, UFunction* func, void* /*params*
 // Fires per actor per frame; drives do_game_tick when on_actor_tick is available.
 static void on_actor_tick(AActor* /*actor*/, float /*delta*/)
 {
-    do_game_tick();
+    const uint64_t now = sdb::now_micros();
+    g_last_actor_tick_us.store(now, std::memory_order_relaxed);
+    g_actor_tick_ever_fired.store(true, std::memory_order_relaxed);
+    do_game_tick(true); // never reached from inside a ProcessEvent dispatch — genuinely clean, see do_game_tick's own comment
+}
+
+// Root-caused 2026-08-16 (real UE4SS 3.0.1 source, deps/first/Unreal/src/
+// UnrealInitializer.cpp:846 + Metadata.hpp:229-236): UE4SS resolves the
+// AActorTick hook's target address from AActor's own Class Default Object
+// (/Script/Engine.Default__Actor) — the BASE, un-overridden Tick vtable
+// slot. ACharacter/APawn (the real native ancestors of every playable
+// character class) virtually always override Tick, so the actual player
+// pawn's vtable slot for Tick points somewhere else entirely — the hook
+// UE4SS installs is simply never reached by the player's own pawn, or by
+// any other Character/Pawn-derived actor. Whatever occasionally satisfied
+// the existing silence-watchdog (register_actor_tick_hook, below) before
+// was coincidental: some plain AActor-derived, non-overriding actor
+// happening to tick in whichever level was loaded. A level transition
+// changing which such actors exist fully explains "on_actor_tick goes
+// silent after level transitions" without anything actually breaking.
+//
+// Fix: before EVER calling RegisterAActorTickPreCallback for the first
+// time (which is what actually installs the binary detour, using whatever
+// address AActor::TickInternal currently resolves to — see
+// TDetourInstance::InstallHook, DetourInstance.hpp:110), overwrite that
+// resolved address with the REAL player pawn's own vtable-slot value for
+// Tick. AActor::TickInternal is exported by UE4SS.dll as raw static data
+// (confirmed directly against the DLL's export table, not guessed) with
+// UE4SS's own RC::Function<void(AActor*,float)> layout (deps/first/
+// Function/include/Function/Function.hpp): three pointers then a bool
+// (active func / stored-original func / address / is_ready). The vtable
+// slot's offset isn't separately exported, so it's found empirically: scan
+// the CDO's own vtable for whichever slot currently matches
+// AActor::TickInternal's already-resolved (CDO-based) address, then read
+// that same slot index off the real pawn's vtable. Slot values are run
+// through the same "resolve past a potential jmp thunk" step UE4SS itself
+// uses (ASM::resolve_function_address_from_potential_jmp) so a thunked
+// vtable entry doesn't produce a false non-match.
+// NOT YET LIVE-VERIFIED — next step after this build is repeating the
+// same "new character, move around" repro that found the underlying
+// nested-ProcessEvent hang, watching for on_actor_tick to now stay live
+// instead of falling back to the risky nested on_process_event_pre path.
+struct RawUE4SSFunctionLayout { void* active_func; void* stored_original_func; void* function_address; bool is_ready; };
+
+static void* resolve_potential_jmp_thunk(void* addr)
+{
+    if (!addr) return nullptr;
+    auto* bytes = static_cast<uint8_t*>(addr);
+    if (bytes[0] == 0xE9) { // near relative jmp — same opcode UE4SS's own resolver checks for
+        const int32_t rel = *reinterpret_cast<int32_t*>(bytes + 1);
+        return bytes + 5 + rel;
+    }
+    return addr;
+}
+
+struct TickVTableFixupCtx { AActor* pawn; bool success = false; };
+
+static void do_fixup_actor_tick_hook_target(void* ctxRaw)
+{
+    auto* ctx = static_cast<TickVTableFixupCtx*>(ctxRaw);
+    auto* ue4ss = GetModuleHandleW(L"UE4SS.dll");
+    if (!ue4ss) return;
+
+    auto* tickInternal = reinterpret_cast<RawUE4SSFunctionLayout*>(GetProcAddress(ue4ss,
+        "?TickInternal@AActor@Unreal@RC@@2V?$Function@$$A6AXPEAVAActor@Unreal@RC@@M@Z@3@A"));
+    if (!tickInternal || !tickInternal->is_ready || !tickInternal->function_address) {
+        debug_log("fixup_actor_tick: AActor::TickInternal export not found or not yet resolved");
+        return;
+    }
+
+    UObject* const kAnyPackage = reinterpret_cast<UObject*>(static_cast<intptr_t>(-1));
+    UObject* cdo = UObjectGlobals::FindObject(nullptr, kAnyPackage, L"/Script/Engine.Default__Actor");
+    if (!cdo) {
+        debug_log("fixup_actor_tick: Default__Actor CDO not found");
+        return;
+    }
+
+    void** cdoVtable  = *reinterpret_cast<void***>(cdo);
+    void** pawnVtable = *reinterpret_cast<void***>(ctx->pawn);
+    void*  baseAddr   = tickInternal->function_address;
+
+    constexpr int kMaxVtableScan = 600; // generous — AActor's own vtable is nowhere near this large
+    int matchIndex = -1;
+    for (int i = 0; i < kMaxVtableScan; ++i) {
+        if (resolve_potential_jmp_thunk(cdoVtable[i]) == baseAddr) { matchIndex = i; break; }
+    }
+    if (matchIndex < 0) {
+        debug_log("fixup_actor_tick: couldn't find Tick's vtable slot on Default__Actor (scanned " +
+                  std::to_string(kMaxVtableScan) + " slots)");
+        return;
+    }
+
+    void* pawnAddr = resolve_potential_jmp_thunk(pawnVtable[matchIndex]);
+    char addrBuf[96];
+    snprintf(addrBuf, sizeof(addrBuf), "fixup_actor_tick: Tick vtable slot=%d base(CDO)=0x%llx pawn=0x%llx",
+              matchIndex,
+              static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(baseAddr)),
+              static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(pawnAddr)));
+    debug_log(std::string(addrBuf) +
+              (pawnAddr == baseAddr ? " (same — pawn doesn't override Tick, nothing to fix)"
+                                    : " (DIFFERENT — pawn overrides Tick, correcting hook target)"));
+    if (!pawnAddr || pawnAddr == baseAddr) { ctx->success = true; return; } // nothing to change, not a failure
+
+    tickInternal->active_func          = pawnAddr;
+    tickInternal->stored_original_func = pawnAddr;
+    tickInternal->function_address     = pawnAddr;
+    tickInternal->is_ready             = true;
+    ctx->success = true;
+}
+
+// 2026-08-15: factored out of on_unreal_init so the reliability watchdog
+// (on_process_event_pre) can call the exact same registration again later.
+// Root cause of "on_actor_tick is not reliable after level transitions"
+// was never actually reverse-engineered this session (would need static
+// analysis of UE4SS.dll's own hook implementation, not attempted) — this
+// takes the pragmatic path instead: detect the SYMPTOM (the hook goes
+// silent) and re-register, which recovers regardless of the underlying
+// mechanism, without needing to understand it. Safe to call repeatedly —
+// UE4SS's own registration just installs/overwrites the callback pointer,
+// no observed teardown step required first.
+static bool register_actor_tick_hook()
+{
+    auto* ue4ss = GetModuleHandleW(L"UE4SS.dll");
+    using RegTick = void(*)(Hook::AActorTickFn);
+    auto* fn_tick = ue4ss ? reinterpret_cast<RegTick>(GetProcAddress(ue4ss,
+        "?RegisterAActorTickPreCallback@Hook@Unreal@RC@@YAXV?$function"
+        "@$$A6AXPEAVAActor@Unreal@RC@@M@Z@std@@@Z")) : nullptr;
+    if (!fn_tick) return false;
+    fn_tick(on_actor_tick);
+    return true;
+}
+
+// One-time entry point: corrects AActor::TickInternal's resolved address
+// (see do_fixup_actor_tick_hook_target's own comment) and ONLY THEN makes
+// the very first call to register_actor_tick_hook — the first call to
+// RegisterAActorTickPreCallback for this detour target is what actually
+// installs the binary patch, at whatever address is currently resolved, so
+// the fixup has to land before it, not after. Called once, the first time
+// do_game_tick() has a real pawn to read a vtable from; on_unreal_init()
+// runs far too early for that (no pawn exists yet), which is exactly the
+// timing gap this fixup needs.
+static void fixup_and_register_actor_tick_hook(AActor* pawn)
+{
+    TickVTableFixupCtx ctx{ pawn };
+    if (!seh_invoke(do_fixup_actor_tick_hook_target, &ctx))
+        debug_log("fixup_and_register_actor_tick_hook: vtable fixup crashed, caught via SEH — registering with UE4SS's original (possibly-wrong) address instead");
+    else if (!ctx.success)
+        debug_log("fixup_and_register_actor_tick_hook: vtable fixup did not find a corrected address — registering with UE4SS's original address");
+
+    if (!register_actor_tick_hook())
+        Output::send<LogLevel::Error>(STR("SDB: RegisterAActorTickPreCallback not found\n"));
+}
+
+// ── Reliable clean-context tick trigger ("Reliable GameThread Trigger via
+// WndProc Subclass" plan, 2026-08-16) ──────────────────────────────────────
+// AActorTick's silence (see register_actor_tick_hook's own comment) and
+// on_process_event_pre's inherent nesting (see do_game_tick's own comment)
+// leave no reliable, genuinely non-nested way to drive the risky
+// (SetSkinnedAssetAndUpdate/SetLeaderPoseComponent/clothing OnRep_*-class)
+// per-tick work — confirmed the hard way: 10+ live-captured freezes across
+// two machines, byte-identical GameThread-parked-in-WaitUntilTasksComplete
+// signature every time, even after real mitigations (grace period, one-
+// target-per-tick rotation) that reduced frequency but not the underlying
+// risk. UE4SS exports no EngineTick/AsyncTask-equivalent hook either
+// (checked directly against UE4SS.dll's PE export table).
+//
+// This uses a mechanism outside UE4SS's hook system entirely: a background
+// thread's ONLY job is periodically posting a custom message to the game's
+// own window (PostMessage is explicitly documented as thread-safe from any
+// thread); a subclassed WndProc catches it and runs the risky tick work
+// from there. UE5's standalone-game Windows message pump runs once per
+// frame from early in the engine loop, dispatching messages from a point
+// that is NOT nested inside any ProcessEvent dispatch — structurally the
+// same kind of clean entry point AActorTick provides when it fires, just
+// reached through the OS message queue instead of depending on UE4SS's own
+// (unreliable, for AActorTick; unexported, for EngineTick) hook resolution.
+//
+// SetWindowLongPtr-based WndProc subclassing is a standard, well-understood
+// Win32 technique (used internally by MFC and many frameworks) — a
+// fundamentally lower risk class than the raw inline-hooking/vtable-
+// patching this project has used elsewhere for genuinely unavoidable cases.
+//
+// Live-verified 2026-08-17: t_processEventDepth (see do_game_tick's own
+// comment) read 0 on every single check across a real 7-hour, 45-relaunch
+// session — 1852/1852, zero violations — confirming this really is a clean,
+// non-nested entry point in practice, not just in theory.
+static constexpr UINT kCleanTickMessage = WM_APP + 1;
+
+static std::atomic<bool> g_hwndTickerRunning{false};
+static std::atomic<bool> g_hwndTickerStop{false};
+static std::thread       g_hwndTickerThread;
+static HWND              g_gameHwnd = nullptr;
+static WNDPROC           g_originalWndProc = nullptr;
+
+// 2026-08-16: defensive SEH wrap — added after a live crash (0xe06d7363,
+// unhandled C++ exception) whose stack ran entirely through this mod's own
+// module via this exact WndProc path. do_game_tick(true) was previously
+// called directly here with no outer guard, unlike every other entry point
+// into this mod's tick logic; this is the newest, least-proven trigger
+// mechanism (added this session), so bringing it in line with the rest of
+// the codebase's belt-and-suspenders SEH coverage is warranted regardless
+// of whether this specific wrap would have caught that exact crash.
+static void do_game_tick_clean_ctx(void*) { do_game_tick(true); }
+
+static LRESULT CALLBACK sdb_wnd_proc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+    if (msg == kCleanTickMessage) {
+        if (!seh_invoke(do_game_tick_clean_ctx, nullptr))
+            debug_log("sdb_wnd_proc: do_game_tick(true) crashed, caught via SEH");
+    }
+    // Always call through — must never disrupt normal input/resize/close
+    // handling. CallWindowProc (not calling g_originalWndProc directly) is
+    // the standard, correct way to chain a subclassed WndProc.
+    return CallWindowProcW(g_originalWndProc, hwnd, msg, wParam, lParam);
+}
+
+namespace {
+struct FindHwndCtx { DWORD pid; HWND result; };
+BOOL CALLBACK find_hwnd_for_pid(HWND hwnd, LPARAM lParam)
+{
+    auto* ctx = reinterpret_cast<FindHwndCtx*>(lParam);
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid == ctx->pid && IsWindowVisible(hwnd)) {
+        ctx->result = hwnd;
+        return FALSE; // stop enumeration — found it
+    }
+    return TRUE;
+}
+} // namespace
+
+// Idempotent — safe to call every time a pawn is found; only does real work
+// the first time (guarded by do_game_tick's own s_actorTickRegistered-style
+// static at its call site). On any failure (no visible window found yet, or
+// SetWindowLongPtr fails), the risky work simply keeps running through the
+// existing on_process_event_pre fallback rather than never running at all —
+// same fallback-not-silent-failure principle as fixup_and_register_actor_
+// tick_hook's own error paths.
+static void ensure_hwnd_ticker_started()
+{
+    static bool s_attempted = false;
+    if (s_attempted) return;
+    s_attempted = true;
+
+    FindHwndCtx ctx{ GetCurrentProcessId(), nullptr };
+    EnumWindows(find_hwnd_for_pid, reinterpret_cast<LPARAM>(&ctx));
+    if (!ctx.result) {
+        debug_log("hwnd_ticker: no visible top-level window found for this process yet — risky tick work stays on the existing nested fallback");
+        return;
+    }
+    g_gameHwnd = ctx.result;
+
+    g_originalWndProc = reinterpret_cast<WNDPROC>(
+        SetWindowLongPtrW(g_gameHwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(sdb_wnd_proc)));
+    if (!g_originalWndProc) {
+        debug_log("hwnd_ticker: SetWindowLongPtrW failed, GetLastError=" + std::to_string(GetLastError()) +
+                   " — risky tick work stays on the existing nested fallback");
+        g_gameHwnd = nullptr;
+        return;
+    }
+
+    g_hwndTickerThread = std::thread([] {
+        while (!g_hwndTickerStop.load(std::memory_order_relaxed)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(16));
+            if (g_gameHwnd) PostMessageW(g_gameHwnd, kCleanTickMessage, 0, 0);
+        }
+    });
+    g_hwndTickerRunning.store(true, std::memory_order_relaxed);
+
+    char buf[96];
+    snprintf(buf, sizeof(buf), "hwnd_ticker: started, hwnd=0x%llx",
+             static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(g_gameHwnd)));
+    debug_log(buf);
+}
+
+// 2026-08-17: candidate root-cause fix for tonight's whole render/animation-
+// desync investigation (mag/laser/shotgun floating, PC2's helmet, PC1's
+// shotgun+pistol, PC2's frozen-but-attached body animation) — researched
+// against real UE5 engine behavior rather than guessed further. Confirmed
+// Epic-tracked bug UE-191796, affecting exactly engine versions 5.2 and 5.3
+// (this game is 5.3.2): in 5.2 the bone-buffer swap for a
+// USkinnedMeshComponent moved from the sequential PrePhysics tick to the
+// *parallel* end-of-frame render-data update, which now runs concurrently
+// across every mesh component in the scene. That creates a race — on some
+// frames a leader-pose FOLLOWER's parallel task can run before its LEADER's
+// buffer swap finishes, so the follower reads last frame's stale bone data.
+// Matches every symptom chased tonight: attachment/transform machinery is
+// completely untouched (why every one of this project's own AttachParent/
+// socket-distance checks reads clean), only the bone data itself goes stale
+// — and a stale-boned socket's own world transform can read wrong too, which
+// plausibly explains why items looked misplaced even while "properly
+// attached." A related Epic forum report describes the identical symptom
+// class (random skeletal-mesh detach + animation stop) specifically on
+// *packaged* builds with *networked/proxy* characters — this project's exact
+// setup. Epic has only a tentative source-level fix, not yet in a shipped
+// 5.3.2 patch — nothing this project can pull in directly.
+//
+// The one lever actually available from here: `a.ParallelAnimEvaluation 0`
+// forces all animation evaluation back onto the game thread sequentially,
+// eliminating the race by construction (no more parallel tasks to race)
+// instead of the detect-and-repair-after-the-fact approach every other fix
+// tonight has taken. Set via UKismetSystemLibrary::ExecuteConsoleCommand —
+// a standard BlueprintCallable static (Engine.hpp), called through this
+// project's own established GetFunctionByNameInChain+ProcessEvent pattern on
+// the class CDO, same as every other native-function call in this codebase.
+// Retried at most every 2s until it succeeds once, then never again — not a
+// recurring per-frame repair operation, a fundamentally different (and much
+// lower) risk class than tonight's earlier proactive-repair attempts.
+// Trade-off: parallel anim evaluation exists to spread
+// animation cost across worker threads, so this does cost some CPU; likely
+// immaterial for a 1-2 player session, but worth knowing if a future session
+// ever needs to revisit it.
+static void ensure_parallel_anim_eval_disabled(AActor* worldContextActor)
+{
+    static bool s_done = false;
+    if (s_done) return;
+
+    // Retried every 2s rather than a true one-shot, though in practice the
+    // fix below (2026-08-17, second pass) should now succeed on the first
+    // try — kept as a safety margin regardless. Same throttled-retry-until-
+    // success shape as s_last_drop_fn_try_us elsewhere in this file, not a
+    // tight per-tick loop.
+    static uint64_t s_lastTryUs = 0;
+    const uint64_t nowUs = sdb::now_micros();
+    if (nowUs - s_lastTryUs < 2'000'000ULL) return;
+    s_lastTryUs = nowUs;
+
+    // 2026-08-17, second pass: FindFirstOf(L"KismetSystemLibrary") never
+    // found anything live-tested (6+ retries over 12+ real seconds of active
+    // play on both machines, well past when any lazy-construction theory
+    // should have kicked in) — FindFirstOf matches by an object's CLASS
+    // name, but a class-default-object is never returned that way here; it
+    // needs to be looked up by its own actual object name. Every UObject CDO
+    // in UE is unconditionally named "Default__<ClassName>"
+    // (UClass::GetDefaultObjectName(), a hardcoded engine-wide convention,
+    // not something guessed per-game) — so look it up directly by that exact
+    // name via the same UObjectGlobals::FindObject(Class=nullptr,
+    // InOuter=ANY_PACKAGE, Name) call resolve_class_by_name already uses
+    // successfully elsewhere in this codebase (proxy_manager.cpp) for
+    // exact-path lookups FindAllOf/FindFirstOf can't do. Kept the original
+    // FindFirstOf as a fallback in case this build's CDO is ever found the
+    // other way for some reason.
+    UObject* const kAnyPackage = reinterpret_cast<UObject*>(static_cast<intptr_t>(-1));
+    UObject* sysLib = UObjectGlobals::FindObject(nullptr, kAnyPackage, L"Default__KismetSystemLibrary");
+    if (!sysLib) sysLib = UObjectGlobals::FindFirstOf(L"KismetSystemLibrary");
+    if (!sysLib) {
+        debug_log("parallel_anim_eval: KismetSystemLibrary CDO not found yet, will retry");
+        return;
+    }
+    s_done = true;
+    UFunction* execFn = sysLib->GetFunctionByNameInChain(L"ExecuteConsoleCommand");
+    if (!execFn) {
+        debug_log("parallel_anim_eval: ExecuteConsoleCommand UFunction not found, skipped");
+        return;
+    }
+
+    static const wchar_t kCmd[] = L"a.ParallelAnimEvaluation 0";
+    struct ExecConsoleCommandParams {
+        UObject*             WorldContextObject = nullptr;
+        native::UnrealFString CommandStr{};
+        AActor*              SpecificPlayer = nullptr;
+    } params;
+    params.WorldContextObject = worldContextActor;
+    params.CommandStr = native::UnrealFString{ const_cast<wchar_t*>(kCmd),
+                                                static_cast<int32_t>(std::size(kCmd)),
+                                                static_cast<int32_t>(std::size(kCmd)) };
+
+    struct CallCtx { UObject* obj; UFunction* fn; ExecConsoleCommandParams* p; };
+    CallCtx ctx{ sysLib, execFn, &params };
+    const bool ok = seh_invoke([](void* raw) {
+        auto* c = static_cast<CallCtx*>(raw);
+        c->obj->ProcessEvent(c->fn, c->p);
+    }, &ctx);
+
+    debug_log(ok ? "parallel_anim_eval: executed 'a.ParallelAnimEvaluation 0'"
+                 : "parallel_anim_eval: ExecuteConsoleCommand crashed, caught via SEH");
 }
 
 // ── UE4SS 3.x mod class ───────────────────────────────────────────────────
@@ -5280,10 +8630,31 @@ public:
 
     void on_unreal_init() override
     {
+        // Diagnostic (2026-08-16): debug_log's own file (%APPDATA%\
+        // SurrounDeadBridge\debug.log) stopped receiving any writes at all
+        // partway through tonight — no new lines across the last several
+        // launches, including ones that clearly reached real gameplay per a
+        // live screenshot. Windows Defender's Controlled Folder Access was
+        // suspected but directly ruled out (zero 1123/1124 block events in
+        // Microsoft-Windows-Windows Defender/Operational, which has 11k+
+        // other records, so the log itself is capturing things fine). This
+        // uses UE4SS's own Output::send instead of debug_log specifically
+        // so it can't be affected by whatever debug_log's specific file-I/O
+        // path is hitting — Output::send is what populates UE4SS.log, and
+        // that log demonstrably keeps updating every launch. If this line
+        // shows up in UE4SS.log but debug_log's lines still don't appear in
+        // debug.log, the problem is narrowly in debug_log's own file
+        // handling; if THIS line is also missing, on_unreal_init itself
+        // isn't being reached at all, which would be a much bigger problem
+        // than a broken log file.
+        Output::send<LogLevel::Normal>(STR("SDB: on_unreal_init ENTRY (Output::send diagnostic)\n"));
         debug_log("on_unreal_init: entered");
+        // See g_game_thread_id's own comment — captured here since UE4SS
+        // only ever calls on_unreal_init from GameThread.
+        g_game_thread_id = GetCurrentThreadId();
 
-        init_cc_ipc_paths();
         auto sc = load_session_config();
+        merge_command_line_args(sc);
 
         cfg_gateway_host     = cfg_get(sc, "SDB_GATEWAY_HOST");
         if (cfg_gateway_host.empty()) cfg_gateway_host = "game.ristl.org";
@@ -5310,12 +8681,11 @@ public:
 
         auto* ue4ss = GetModuleHandleW(L"UE4SS.dll");
 
-        using RegTick = void(*)(Hook::AActorTickFn);
-        auto* fn_tick = ue4ss ? reinterpret_cast<RegTick>(GetProcAddress(ue4ss,
-            "?RegisterAActorTickPreCallback@Hook@Unreal@RC@@YAXV?$function"
-            "@$$A6AXPEAVAActor@Unreal@RC@@M@Z@std@@@Z")) : nullptr;
-        if (fn_tick) fn_tick(on_actor_tick);
-        else Output::send<LogLevel::Error>(STR("SDB: RegisterAActorTickPreCallback not found\n"));
+        // AActorTick registration is deliberately NOT done here — see
+        // fixup_and_register_actor_tick_hook's own comment. No real pawn
+        // exists this early to read a corrected hook target from; that
+        // first registration now happens from do_game_tick() instead, the
+        // first time a real pawn is available.
 
         using RegPE = void(*)(std::function<void(UObject*, UFunction*, void*)>);
         auto* fn_pe = ue4ss ? reinterpret_cast<RegPE>(GetProcAddress(ue4ss,

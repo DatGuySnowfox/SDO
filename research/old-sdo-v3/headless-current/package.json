@@ -1,0 +1,9 @@
+{
+  "name": "sdo-v3-gateway-runtime",
+  "version": "3.0.0-alpha.1",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=18.19.0"
+  }
+}

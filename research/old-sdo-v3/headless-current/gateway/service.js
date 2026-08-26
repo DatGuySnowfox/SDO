@@ -1,0 +1,635 @@
+import { createServer as createHttpServer } from 'node:http';
+import { createServer as createHttpsServer } from 'node:https';
+import { readFileSync } from 'node:fs';
+import { createServer } from 'node:net';
+import { encodeFrame, encodeJoinRequest, encodeString, decodeString, decodeWorldEntityDescriptor, decodeWorldEntityState, FrameDecoder, issueJoinTicket, MessageType, PROTOCOL_VERSION, ProtocolError, stableNumericId, validateJoinTicket, WorldEntityKind } from "../shared-protocol/index.js";
+import { log } from "../shared/log.js";
+function secretsMatch(left, right) {
+    const a = Buffer.from(left);
+    const b = Buffer.from(right);
+    return a.length === b.length && a.length > 0 && cryptoTimingSafeEqual(a, b);
+}
+import { timingSafeEqual as cryptoTimingSafeEqual } from 'node:crypto';
+export class GatewayService {
+    config;
+    server;
+    healthServer;
+    nextConnectionId = 1n;
+    connections = new Map();
+    usedTickets = new Set();
+    hostConnection;
+    hostLastHeartbeatMs = 0;
+    hostReady = false;
+    hostMetadata = {};
+    timer;
+    sessionId = '00000000-0000-0000-0000-000000000000';
+    metrics = {
+        connectionsAccepted: 0,
+        authenticationAccepted: 0,
+        authenticationRejected: 0,
+        malformedFrames: 0,
+        ticketRequestsIssued: 0,
+        ticketRequestsRejected: 0
+    };
+    constructor(config) {
+        this.config = config;
+        if (config.hostSecret.length < 16 || config.ticketSecret.length < 16) {
+            throw new Error('Gateway secrets must be at least 16 characters');
+        }
+    }
+    async start() {
+        this.server = createServer((socket) => this.accept(socket));
+        const httpHandler = (request, response) => {
+            void this.handleHttp(request, response).catch((error) => {
+                log('error', 'gateway_http_error', {
+                    error: error instanceof Error ? error.message : 'unknown'
+                });
+                if (!response.headersSent)
+                    this.sendJson(response, 500, {
+                        ok: false,
+                        error: 'internal_error'
+                    });
+                else
+                    response.end();
+            });
+        };
+        this.healthServer = (this.config.healthTlsCertPath && this.config.healthTlsKeyPath
+            ? createHttpsServer({
+                cert: readFileSync(this.config.healthTlsCertPath),
+                key: readFileSync(this.config.healthTlsKeyPath)
+            }, httpHandler)
+            : createHttpServer(httpHandler));
+        await Promise.all([
+            new Promise((resolve, reject) => {
+                this.server.once('error', reject);
+                this.server.listen(this.config.port ?? 0, this.config.host ?? '127.0.0.1', resolve);
+            }),
+            new Promise((resolve, reject) => {
+                this.healthServer.once('error', reject);
+                this.healthServer.listen(this.config.healthPort ?? 0, this.config.healthHost ?? this.config.host ?? '127.0.0.1', resolve);
+            })
+        ]);
+        this.timer = setInterval(() => this.expireConnections(), 250);
+        this.timer.unref();
+        const port = this.server.address().port;
+        const healthPort = this.healthServer.address().port;
+        log('info', 'gateway_started', { port, healthPort, worldId: this.config.worldId });
+        return { port, healthPort };
+    }
+    status() {
+        const hostHealthy = Boolean(this.hostConnection &&
+            this.hostReady &&
+            Date.now() - this.hostLastHeartbeatMs <= (this.config.hostTimeoutMs ?? 5_000));
+        const players = [...this.connections.values()].filter((item) => item.role === 'client' && item.joined).length;
+        return {
+            ok: true,
+            service: 'sdo-gateway',
+            protocolVersion: 3,
+            worldId: this.config.worldId,
+            sessionId: this.sessionId,
+            worldOnline: hostHealthy,
+            hostConnected: Boolean(this.hostConnection),
+            hostHealthy,
+            host: this.hostMetadata,
+            playerCount: players,
+            connections: {
+                total: this.connections.size,
+                unauthenticated: [...this.connections.values()].filter((item) => item.role === 'unknown').length,
+                authenticatedClients: [...this.connections.values()].filter((item) => item.role === 'client').length
+            }
+        };
+    }
+    connectionMetrics() {
+        return {
+            ...this.metrics,
+            activeConnections: this.connections.size,
+            activePlayers: Number(this.status().playerCount)
+        };
+    }
+    async stop() {
+        if (this.timer)
+            clearInterval(this.timer);
+        for (const connection of this.connections.values())
+            connection.socket.destroy();
+        await Promise.all([
+            this.server ? new Promise((resolve) => this.server.close(() => resolve())) : Promise.resolve(),
+            this.healthServer ? new Promise((resolve) => this.healthServer.close(() => resolve())) : Promise.resolve()
+        ]);
+        log('info', 'gateway_stopped');
+    }
+    accept(socket) {
+        this.metrics.connectionsAccepted += 1;
+        socket.setNoDelay(true);
+        socket.setKeepAlive(true, 2_000);
+        const connection = {
+            id: this.nextConnectionId++,
+            socket,
+            decoder: new FrameDecoder(),
+            role: 'unknown',
+            malformed: 0,
+            lastSeenMs: Date.now(),
+            joined: false,
+            rateWindowMs: Date.now(),
+            rateCount: 0
+        };
+        this.connections.set(connection.id, connection);
+        socket.on('data', (chunk) => {
+            try {
+                const bytes = typeof chunk === 'string' ? Buffer.from(chunk) : chunk;
+                for (const frame of connection.decoder.push(bytes))
+                    this.handle(connection, frame);
+            }
+            catch (error) {
+                this.malformed(connection, error);
+            }
+        });
+        socket.on('error', (error) => log('warning', 'gateway_socket_error', {
+            connectionId: connection.id, error: error.message
+        }));
+        socket.on('close', () => this.closed(connection));
+    }
+    handle(connection, frame) {
+        const now = Date.now();
+        connection.lastSeenMs = now;
+        if (now - connection.rateWindowMs >= 1_000) {
+            connection.rateWindowMs = now;
+            connection.rateCount = 0;
+        }
+        connection.rateCount += 1;
+        const frameLimit = connection.role === 'host'
+            ? (this.config.maxHostFramesPerSecond ?? 4_096)
+            : (this.config.maxFramesPerSecond ?? 120);
+        if (connection.rateCount > frameLimit) {
+            throw new ProtocolError('rate_limited', 'Connection frame rate exceeded');
+        }
+        if (connection.role === 'unknown') {
+            if (frame.type === MessageType.HostAuthenticate)
+                return this.authenticateHost(connection, frame);
+            if (frame.type === MessageType.ClientAuthenticate)
+                return this.authenticateClient(connection, frame);
+            throw new ProtocolError('authentication_required', 'First message must authenticate');
+        }
+        if (connection.role === 'host')
+            return this.handleHost(connection, frame);
+        return this.handleClient(connection, frame);
+    }
+    authenticateHost(connection, frame) {
+        const supplied = decodeString(frame.payload, 512);
+        if (!secretsMatch(supplied, this.config.hostSecret))
+            return this.reject(connection, 'host_authentication_failed');
+        if (this.hostConnection && this.hostConnection !== connection)
+            this.hostConnection.socket.destroy();
+        connection.role = 'host';
+        this.hostConnection = connection;
+        this.hostLastHeartbeatMs = Date.now();
+        this.hostReady = false;
+        this.sessionId = frame.sessionId;
+        this.send(connection, { type: MessageType.AuthenticationAccepted, sessionId: this.sessionId });
+        log('info', 'host_connected', { connectionId: connection.id, sessionId: this.sessionId, worldId: this.config.worldId });
+        for (const client of this.connections.values()) {
+            if (client.role === 'client' && client.ticket && client.numericPlayerId)
+                this.sendJoinToHost(client);
+        }
+    }
+    authenticateClient(connection, frame) {
+        const token = decodeString(frame.payload, 4096);
+        let ticket;
+        try {
+            ticket = validateJoinTicket(token, this.config.ticketSecret);
+            if (ticket.worldId !== this.config.worldId)
+                throw new ProtocolError('wrong_world', 'Ticket is for another world');
+            if (this.usedTickets.has(ticket.ticketId))
+                throw new ProtocolError('ticket_replay', 'Ticket was already used');
+            const activeClients = [...this.connections.values()].filter((item) => item !== connection && item.role === 'client').length;
+            if (activeClients >= (this.config.maxPlayers ?? 32)) {
+                throw new ProtocolError('server_full', 'Server player limit reached');
+            }
+        }
+        catch (error) {
+            return this.reject(connection, error instanceof ProtocolError ? error.code : 'invalid_ticket');
+        }
+        this.usedTickets.add(ticket.ticketId);
+        connection.role = 'client';
+        connection.ticket = ticket;
+        connection.numericPlayerId = stableNumericId(ticket.playerId);
+        for (const existing of this.connections.values()) {
+            if (existing !== connection &&
+                existing.role === 'client' &&
+                existing.numericPlayerId === connection.numericPlayerId) {
+                existing.closeReason = 'replaced_by_new_connection';
+                existing.socket.destroy();
+            }
+        }
+        this.send(connection, {
+            type: MessageType.AuthenticationAccepted,
+            connectionId: connection.id,
+            worldId: this.config.worldId,
+            playerId: connection.numericPlayerId
+        });
+        log('info', 'client_authenticated', {
+            connectionId: connection.id, playerId: connection.numericPlayerId, worldId: this.config.worldId
+        });
+        this.metrics.authenticationAccepted += 1;
+        if (this.hostConnection)
+            this.sendJoinToHost(connection);
+        else
+            this.send(connection, { type: MessageType.JoinRejected, payload: encodeString('host_offline', 128) });
+    }
+    sendJoinToHost(client) {
+        if (!this.hostConnection || !client.ticket || !client.numericPlayerId)
+            return;
+        this.send(this.hostConnection, {
+            type: MessageType.JoinRequest,
+            connectionId: client.id,
+            sessionId: this.sessionId,
+            worldId: this.config.worldId,
+            playerId: client.numericPlayerId,
+            payload: encodeJoinRequest(client.ticket.playerId, client.ticket.displayName)
+        });
+    }
+    handleClient(connection, frame) {
+        if (!connection.numericPlayerId)
+            throw new ProtocolError('invalid_state', 'Client identity missing');
+        if (frame.type === MessageType.ClientHeartbeat)
+            return;
+        if (frame.type === MessageType.Movement) {
+            if (!connection.joined || !this.hostConnection)
+                return;
+            this.send(this.hostConnection, {
+                ...frame,
+                connectionId: connection.id,
+                sessionId: this.sessionId,
+                worldId: this.config.worldId,
+                playerId: connection.numericPlayerId
+            });
+            return;
+        }
+        if ([
+            MessageType.Equipment, MessageType.InteractionRequest,
+            MessageType.ProfileRevision, MessageType.DeathRequest,
+            MessageType.RespawnRequest, MessageType.ItemDropRequest,
+            MessageType.ItemPickupRequest, MessageType.ZombieAttackRequest
+        ].includes(frame.type)) {
+            if (connection.joined && this.hostConnection)
+                this.send(this.hostConnection, {
+                    ...frame, connectionId: connection.id, playerId: connection.numericPlayerId
+                });
+            return;
+        }
+        throw new ProtocolError('client_message_not_allowed', `Client message ${frame.type} is not allowed`);
+    }
+    handleHost(_connection, frame) {
+        if (frame.type === MessageType.HostHeartbeat) {
+            this.hostLastHeartbeatMs = Date.now();
+            this.hostReady = (frame.flags & 1) === 1;
+            if (frame.payload.length > 0) {
+                try {
+                    const metadata = JSON.parse(decodeString(frame.payload, 512));
+                    this.hostMetadata = {
+                        protocolVersion: metadata.protocolVersion,
+                        buildId: metadata.buildId,
+                        map: metadata.map,
+                        ready: metadata.ready
+                    };
+                }
+                catch {
+                    this.hostMetadata = {};
+                }
+            }
+            return;
+        }
+        if (frame.type === MessageType.JoinAccepted || frame.type === MessageType.JoinRejected) {
+            const client = this.connections.get(frame.connectionId);
+            if (!client || client.role !== 'client')
+                return;
+            client.joined = frame.type === MessageType.JoinAccepted;
+            client.entityId = client.joined ? frame.entityId : undefined;
+            this.send(client, frame);
+            if (client.joined)
+                this.broadcast({
+                    type: MessageType.PlayerConnected,
+                    connectionId: client.id,
+                    sessionId: this.sessionId,
+                    worldId: this.config.worldId,
+                    playerId: client.numericPlayerId,
+                    entityId: frame.entityId,
+                    payload: client.ticket ? encodeString(client.ticket.displayName, 64) : Buffer.alloc(0)
+                });
+            if (client.joined)
+                this.replayExistingPlayersTo(client);
+            return;
+        }
+        if ([
+            MessageType.ItemDropResult,
+            MessageType.ItemPickupResult,
+            MessageType.ZombieDamageResult,
+            MessageType.PlayerDamage,
+            MessageType.PlayerProgressRestore
+        ].includes(frame.type)) {
+            const client = this.connections.get(frame.connectionId);
+            if (client?.role === 'client' && client.joined)
+                this.send(client, frame);
+            return;
+        }
+        if (frame.type === MessageType.Movement) {
+            const client = this.connections.get(frame.connectionId);
+            if (client?.role === 'client' && client.joined)
+                client.lastMovementFrame = frame;
+            // A client already renders its local pawn. Echoing its authoritative
+            // movement back makes older single-proxy bridges select that local
+            // entity as the remote proxy, leaving the actual peer invisible.
+            this.broadcast(frame, frame.connectionId);
+            return;
+        }
+        if (frame.type === MessageType.Equipment) {
+            const client = this.connections.get(frame.connectionId);
+            if (client?.role === 'client' && client.joined)
+                client.lastEquipmentFrame = frame;
+            this.broadcast(frame, frame.connectionId);
+            return;
+        }
+        if ([
+            MessageType.PlayerDisconnected,
+            MessageType.Death, MessageType.Respawn, MessageType.SaveAcknowledgement,
+            MessageType.InteractionResult, MessageType.WorldState,
+            MessageType.EntitySpawn, MessageType.EntityState,
+            MessageType.EntityDespawn
+        ].includes(frame.type)) {
+            if ((frame.type === MessageType.EntitySpawn ||
+                frame.type === MessageType.EntityState ||
+                frame.type === MessageType.EntityDespawn) &&
+                frame.connectionId !== undefined &&
+                frame.connectionId !== 0n) {
+                const target = this.connections.get(frame.connectionId);
+                const sharedWorldProp = this.isSharedWorldPropFrame(frame);
+                const broadcastFrame = { ...frame, connectionId: 0n };
+                if (target?.role === 'client' && target.joined) {
+                    this.send(target, frame);
+                    if (sharedWorldProp) {
+                        this.broadcast(broadcastFrame, target.id);
+                        return;
+                    }
+                    return;
+                }
+                if (sharedWorldProp) {
+                    this.broadcast(broadcastFrame);
+                    return;
+                }
+            }
+            this.broadcast({ ...frame, connectionId: 0n });
+            return;
+        }
+        throw new ProtocolError('host_message_not_allowed', `Host message ${frame.type} is not allowed`);
+    }
+    expireConnections() {
+        const now = Date.now();
+        const idle = this.config.clientIdleMs ?? 15_000;
+        for (const connection of this.connections.values()) {
+            if (connection.role === 'client' && now - connection.lastSeenMs > idle)
+                connection.socket.destroy();
+        }
+    }
+    closed(connection) {
+        if (!this.connections.delete(connection.id))
+            return;
+        if (connection === this.hostConnection) {
+            this.hostConnection = undefined;
+            this.hostLastHeartbeatMs = 0;
+            this.hostReady = false;
+            this.hostMetadata = {};
+            log('warning', 'host_disconnected', { connectionId: connection.id, worldId: this.config.worldId });
+            return;
+        }
+        if (connection.role === 'client' && connection.numericPlayerId) {
+            if (this.hostConnection)
+                this.send(this.hostConnection, {
+                    type: MessageType.PlayerDisconnected,
+                    connectionId: connection.id,
+                    sessionId: this.sessionId,
+                    worldId: this.config.worldId,
+                    playerId: connection.numericPlayerId,
+                    entityId: connection.entityId ?? 0n,
+                    payload: encodeString(connection.closeReason ?? 'connection_closed', 128)
+                });
+            if (connection.joined)
+                this.broadcast({
+                    type: MessageType.PlayerDisconnected,
+                    connectionId: connection.id,
+                    sessionId: this.sessionId,
+                    worldId: this.config.worldId,
+                    playerId: connection.numericPlayerId,
+                    entityId: connection.entityId ?? 0n,
+                    payload: encodeString(connection.closeReason ?? 'connection_closed', 128)
+                });
+            log('info', 'client_disconnected', {
+                connectionId: connection.id, playerId: connection.numericPlayerId,
+                worldId: this.config.worldId,
+                disconnectReason: connection.closeReason ?? 'connection_closed'
+            });
+        }
+    }
+    malformed(connection, error) {
+        connection.malformed += 1;
+        this.metrics.malformedFrames += 1;
+        log('warning', 'malformed_packet', {
+            connectionId: connection.id,
+            count: connection.malformed,
+            error: error instanceof Error ? error.message : 'unknown'
+        });
+        if (connection.malformed >= (this.config.malformedLimit ?? 3))
+            connection.socket.destroy();
+    }
+    reject(connection, reason) {
+        this.metrics.authenticationRejected += 1;
+        log('warning', 'authentication_rejected', {
+            connectionId: connection.id,
+            reason
+        });
+        this.send(connection, { type: MessageType.AuthenticationRejected, payload: encodeString(reason, 128) });
+        connection.socket.end();
+    }
+    async handleHttp(request, response) {
+        const url = new URL(request.url ?? '/', 'http://gateway.local');
+        const isLoopback = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(request.socket.remoteAddress ?? '');
+        if (request.method === 'POST' && url.pathname === '/shutdown' && isLoopback) {
+            response.writeHead(202).end();
+            setImmediate(() => void this.stop());
+            return;
+        }
+        if (request.method === 'GET' && ['/health', '/status'].includes(url.pathname)) {
+            this.sendJson(response, 200, this.status());
+            return;
+        }
+        if (request.method === 'GET' && url.pathname === '/player-count') {
+            const status = this.status();
+            this.sendJson(response, 200, {
+                ok: true,
+                protocolVersion: PROTOCOL_VERSION,
+                worldId: this.config.worldId,
+                worldOnline: status.worldOnline,
+                playerCount: status.playerCount
+            });
+            return;
+        }
+        if (request.method === 'GET' && url.pathname === '/metrics') {
+            this.sendJson(response, 200, {
+                ok: true,
+                protocolVersion: PROTOCOL_VERSION,
+                ...this.connectionMetrics()
+            });
+            return;
+        }
+        if (request.method === 'POST' && url.pathname === '/v1/tickets') {
+            await this.issueTicket(request, response);
+            return;
+        }
+        this.sendJson(response, 404, { ok: false, error: 'not_found' });
+    }
+    async issueTicket(request, response) {
+        let body;
+        try {
+            body = JSON.parse(await this.readBody(request, 4_096));
+        }
+        catch {
+            this.metrics.ticketRequestsRejected += 1;
+            this.sendJson(response, 400, { ok: false, error: 'invalid_request' });
+            return;
+        }
+        const playerId = typeof body.playerId === 'string' ? body.playerId.trim() : '';
+        const displayName = typeof body.displayName === 'string' ? body.displayName.trim() : '';
+        if (!/^[A-Za-z0-9_-]{8,128}$/.test(playerId) ||
+            displayName.length < 1 ||
+            displayName.length > 64 ||
+            /[\r\n\t<>|]/.test(displayName)) {
+            this.metrics.ticketRequestsRejected += 1;
+            this.sendJson(response, 400, { ok: false, error: 'invalid_identity' });
+            return;
+        }
+        const authorization = request.headers.authorization ?? '';
+        const bearer = authorization.startsWith('Bearer ')
+            ? authorization.slice('Bearer '.length)
+            : '';
+        const stagingAuthorized = Boolean(bearer &&
+            this.config.stagingIssuerSecret &&
+            secretsMatch(bearer, this.config.stagingIssuerSecret));
+        let identityAuthorized = false;
+        if (!stagingAuthorized && bearer && this.config.identityValidationUrl) {
+            try {
+                const validation = await fetch(`${this.config.identityValidationUrl.replace(/\/+$/, '')}/v1/profiles/${encodeURIComponent(playerId)}/meta`, {
+                    headers: { authorization: `Bearer ${bearer}` },
+                    signal: AbortSignal.timeout(2_500)
+                });
+                if (validation.ok) {
+                    const value = await validation.json();
+                    identityAuthorized = value.playerId === playerId;
+                }
+            }
+            catch {
+                identityAuthorized = false;
+            }
+        }
+        if (!stagingAuthorized && !identityAuthorized) {
+            this.metrics.ticketRequestsRejected += 1;
+            this.sendJson(response, 401, { ok: false, error: 'identity_unauthorized' });
+            return;
+        }
+        const ttlMs = Math.min(Math.max(this.config.ticketTtlMs ?? 120_000, 10_000), 300_000);
+        const expiresAtMs = Date.now() + ttlMs;
+        const ticket = issueJoinTicket({
+            playerId,
+            displayName,
+            worldId: this.config.worldId,
+            expiresAtMs
+        }, this.config.ticketSecret);
+        this.metrics.ticketRequestsIssued += 1;
+        this.sendJson(response, 201, {
+            ok: true,
+            protocolVersion: PROTOCOL_VERSION,
+            worldId: this.config.worldId,
+            gatewayHost: this.config.publicGatewayHost ?? '127.0.0.1',
+            gatewayPort: this.config.publicGatewayPort ?? this.config.port ?? 0,
+            expiresAtMs,
+            ticket
+        });
+    }
+    async readBody(request, limit) {
+        const chunks = [];
+        let size = 0;
+        for await (const chunk of request) {
+            const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+            size += bytes.length;
+            if (size > limit)
+                throw new Error('request_too_large');
+            chunks.push(bytes);
+        }
+        return Buffer.concat(chunks).toString('utf8');
+    }
+    sendJson(response, statusCode, value) {
+        const body = JSON.stringify(value);
+        response.writeHead(statusCode, {
+            'content-type': 'application/json; charset=utf-8',
+            'content-length': Buffer.byteLength(body),
+            'cache-control': 'no-store',
+            'x-content-type-options': 'nosniff'
+        });
+        response.end(body);
+    }
+    isSharedWorldPropFrame(frame) {
+        try {
+            if (frame.type === MessageType.EntitySpawn) {
+                const descriptor = decodeWorldEntityDescriptor(frame.payload);
+                return descriptor.kind === WorldEntityKind.Vehicle ||
+                    descriptor.kind === WorldEntityKind.PlacedStructure;
+            }
+            if (frame.type === MessageType.EntityState) {
+                const state = decodeWorldEntityState(frame.payload);
+                return state.kind === WorldEntityKind.Vehicle ||
+                    state.kind === WorldEntityKind.PlacedStructure;
+            }
+        }
+        catch {
+            return false;
+        }
+        return false;
+    }
+    broadcast(frame, excludedConnectionId) {
+        const bytes = encodeFrame(frame);
+        for (const connection of this.connections.values()) {
+            if (connection.role === 'client' &&
+                connection.joined &&
+                connection.id !== excludedConnectionId &&
+                !connection.socket.destroyed) {
+                connection.socket.write(bytes);
+            }
+        }
+    }
+    replayExistingPlayersTo(joinedClient) {
+        for (const existing of this.connections.values()) {
+            if (existing === joinedClient ||
+                existing.role !== 'client' ||
+                !existing.joined ||
+                !existing.numericPlayerId ||
+                !existing.entityId) {
+                continue;
+            }
+            this.send(joinedClient, {
+                type: MessageType.PlayerConnected,
+                connectionId: existing.id,
+                sessionId: this.sessionId,
+                worldId: this.config.worldId,
+                playerId: existing.numericPlayerId,
+                entityId: existing.entityId,
+                payload: existing.ticket ? encodeString(existing.ticket.displayName, 64) : Buffer.alloc(0)
+            });
+            if (existing.lastEquipmentFrame)
+                this.send(joinedClient, existing.lastEquipmentFrame);
+            if (existing.lastMovementFrame)
+                this.send(joinedClient, existing.lastMovementFrame);
+        }
+    }
+    send(connection, frame) {
+        if (!connection.socket.destroyed)
+            connection.socket.write(encodeFrame(frame));
+    }
+}
+//# sourceMappingURL=service.js.map

@@ -25,7 +25,7 @@ target("SurrounDeadBridge")
     add_includedirs(path.join(ue4ss_sdk, "include"))
 
     add_linkdirs(path.join(ue4ss_sdk, "lib"))
-    add_links("UE4SS", "Ws2_32")
+    add_links("UE4SS", "Ws2_32", "User32")
 
     add_defines("UNICODE", "_UNICODE", "WIN32_LEAN_AND_MEAN", "NOMINMAX",
                 "_CRT_SECURE_NO_WARNINGS")

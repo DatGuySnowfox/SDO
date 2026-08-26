@@ -1,0 +1,26 @@
+[Unit]
+Description=SD-Online Server-Owned Profile Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/sdo-profile-service
+Environment=HOST=127.0.0.1
+Environment=PORT=27881
+Environment=STATE_DIR=/var/lib/sdo-profile-service
+Environment=MAX_UPLOAD_BYTES=268435456
+Environment=MAX_BACKUPS=10
+Environment=REGISTER_LIMIT_PER_HOUR=12
+ExecStart=/usr/bin/node /opt/sdo-profile-service/profile-service.js
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/sdo-profile-service
+
+[Install]
+WantedBy=multi-user.target

@@ -32,6 +32,8 @@ find_library(UE4SS_LIB
 target_link_libraries(SurrounDeadBridge PRIVATE
     ${UE4SS_LIB}
     Ws2_32
+    User32
+    Shell32
 )
 
 target_compile_definitions(SurrounDeadBridge PRIVATE

@@ -225,6 +225,7 @@ class HostAgent {
 
         case MsgType.DeathRequest: {
             const p = this._players.get(f.playerId);
+            console.log(`[host] DeathRequest playerId=${f.playerId}  knownPlayer=${!!p}  trackedPlayerIds=[${[...this._players.keys()].join(',')}]`);
             if (!p) break;
             this._socket.write(encodeFrame({
                 type:         MsgType.Death,

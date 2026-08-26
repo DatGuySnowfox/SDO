@@ -1,0 +1,20 @@
+name = "sdo-directory"
+main = "src/index.js"
+compatibility_date = "2026-08-21"
+
+# Custom domain — requires sdo.ristl.org's zone (ristl.org) to already be
+# active on this same Cloudflare account. `wrangler deploy` provisions the
+# DNS record itself via the Workers routes API (no separate DNS access
+# needed beyond the existing wrangler login token).
+routes = [
+  { pattern = "sdo.ristl.org", custom_domain = true }
+]
+
+# Created via `npx wrangler kv namespace create SERVERS` — paste the id it
+# prints back here before the first deploy. See README.md in this folder.
+kv_namespaces = [
+  { binding = "SERVERS", id = "5930bb296a11483da1cb2ae9aa3b955c" }
+]
+
+# Set the real value with `npx wrangler secret put DIRECTORY_KEY` — never
+# commit the actual key here. Host-agent's SDB_DIRECTORY_KEY must match it.

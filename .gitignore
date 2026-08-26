@@ -24,6 +24,27 @@ launcher/obj/
 node_modules/
 *.db
 server/settings.json
+server/directory-server-id.txt
+
+# Cloudflare Worker local dev
+directory-worker/.dev.vars
+directory-worker/.wrangler/
+
+# Real deployment secrets (see server/.env.example for the shape)
+server/.env
+
+# Bytecode research dumps/decodes — large, regenerable via the documented
+# pipeline (research/bytecode/kismet_disasm.py + batch_resolve_local.py),
+# same rationale as Exports/ above.
+research/bytecode/*.log
+research/bytecode/probe_*.txt
+research/bytecode/targets_*.txt
+research/bytecode/ubergraph_out/
+research/bytecode/ubergraph_decoded/
+research/bytecode/pc1_decode_out/
+research/bytecode/pc1_decoded/
+research/bytecode/playercharacter_decoded/
+research/bytecode/barber_out/
 
 # Logs / downloads
 wget-log

@@ -45,6 +45,9 @@ const MsgType = Object.freeze({
     WeaponAttachments:     43,
     PawnAppearance:        44,
     PlayMontage:           45,
+    PlayerLights:          46,
+    FirstJoin:             47,
+    WeaponFired:           48,
 });
 
 function decodeFrame(buf) {

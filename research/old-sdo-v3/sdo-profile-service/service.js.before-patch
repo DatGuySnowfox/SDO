@@ -1,0 +1,256 @@
+import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createServer } from 'node:http';
+import { validateJoinTicket } from "../shared-protocol/index.js";
+import { validSteamIdentity } from "./bundle.js";
+import { PlayerProfileStore, ProfileConflictError } from "./store.js";
+export class ProfileService {
+    config;
+    store;
+    server;
+    constructor(config) {
+        this.config = config;
+        if (config.ticketSecret.length < 16 || config.sessionSecret.length < 16) {
+            throw new Error('Profile service secrets must be at least 16 characters');
+        }
+        this.store = new PlayerProfileStore(config.root, config.keepBackups ?? 5);
+    }
+    async start() {
+        this.server = createServer((request, response) => {
+            void this.handle(request, response).catch((error) => {
+                this.sendJson(response, 500, {
+                    ok: false,
+                    error: error instanceof Error ? error.message : 'profile_service_error'
+                });
+            });
+        });
+        await new Promise((resolve, reject) => {
+            this.server.once('error', reject);
+            this.server.listen(this.config.port ?? 0, this.config.host ?? '127.0.0.1', resolve);
+        });
+        return { port: this.server.address().port };
+    }
+    async stop() {
+        if (!this.server)
+            return;
+        await new Promise((resolve) => this.server.close(() => resolve()));
+        this.server = undefined;
+    }
+    async handle(request, response) {
+        const url = new URL(request.url ?? '/', 'http://profile.local');
+        const isLoopback = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(request.socket.remoteAddress ?? '');
+        if (request.method === 'POST' && url.pathname === '/shutdown' && isLoopback) {
+            response.writeHead(202).end();
+            setImmediate(() => void this.stop());
+            return;
+        }
+        if (request.method === 'GET' && url.pathname === '/health') {
+            this.sendJson(response, 200, { ok: true, service: 'sdo-profile-service', version: 1 });
+            return;
+        }
+        if (request.method === 'POST' && url.pathname === '/v1/admin/bootstrap') {
+            // Server-only mode: admin endpoint to create/seed player profiles
+            // Usage: POST /v1/admin/bootstrap with admin token
+            if (!isLoopback) {
+                this.sendJson(response, 403, { ok: false, error: 'admin_endpoint_loopback_only' });
+                return;
+            }
+            let input;
+            try {
+                input = JSON.parse(await this.readBody(request, 48 * 1024 * 1024));
+            }
+            catch {
+                this.sendJson(response, 400, { ok: false, error: 'invalid_request_body' });
+                return;
+            }
+            const bootstrap = input;
+            const steamId = bootstrap.steamId;
+            const profile = bootstrap.profile;
+            if (typeof steamId !== 'string' ||
+                !validSteamIdentity(steamId) ||
+                !profile ||
+                typeof profile !== 'object') {
+                this.sendJson(response, 400, { ok: false, error: 'invalid_bootstrap_params' });
+                return;
+            }
+            try {
+                // Create profile at revision 0 if it doesn't exist, idempotent
+                const record = await this.store.save(steamId, 0, `bootstrap:${steamId}:${Date.now()}`, profile);
+                this.sendJson(response, 201, {
+                    ok: true,
+                    steamId,
+                    revision: record.revision,
+                    sha256: record.sha256,
+                    savedAtMs: record.savedAtMs,
+                    message: 'Player profile bootstrapped on server'
+                });
+                return;
+            }
+            catch (error) {
+                if (error instanceof ProfileConflictError) {
+                    // Profile already exists, return existing
+                    const existing = await this.store.load(steamId);
+                    if (existing) {
+                        this.sendJson(response, 200, {
+                            ok: true,
+                            steamId,
+                            revision: existing.revision,
+                            sha256: existing.sha256,
+                            savedAtMs: existing.savedAtMs,
+                            message: 'Player profile already exists'
+                        });
+                        return;
+                    }
+                }
+                throw error;
+            }
+        }
+        if (request.method === 'POST' && url.pathname === '/v1/sessions') {
+            const ticket = this.bearer(request);
+            let claims;
+            try {
+                claims = validateJoinTicket(ticket, this.config.ticketSecret);
+            }
+            catch {
+                this.sendJson(response, 401, { ok: false, error: 'invalid_join_ticket' });
+                return;
+            }
+            if (!validSteamIdentity(claims.playerId)) {
+                this.sendJson(response, 400, { ok: false, error: 'steam_identity_required' });
+                return;
+            }
+            const session = {
+                steamId: claims.playerId,
+                expiresAtMs: Date.now() + Math.max(60_000, this.config.sessionTtlMs ?? 24 * 60 * 60_000)
+            };
+            this.sendJson(response, 201, {
+                ok: true,
+                steamId: session.steamId,
+                expiresAtMs: session.expiresAtMs,
+                token: this.signSession(session)
+            });
+            return;
+        }
+        const match = /^\/v1\/profiles\/(steam_7656119[0-9]{10})$/.exec(url.pathname);
+        if (!match) {
+            this.sendJson(response, 404, { ok: false, error: 'not_found' });
+            return;
+        }
+        const steamId = match[1];
+        const session = this.verifySession(this.bearer(request));
+        if (!session || session.steamId !== steamId) {
+            this.sendJson(response, 403, { ok: false, error: 'profile_identity_mismatch' });
+            return;
+        }
+        if (request.method === 'GET') {
+            const record = await this.store.load(steamId);
+            if (!record) {
+                this.sendJson(response, 404, { ok: false, error: 'profile_not_found' });
+                return;
+            }
+            this.sendJson(response, 200, {
+                ok: true,
+                revision: record.revision,
+                sha256: record.sha256,
+                savedAtMs: record.savedAtMs,
+                bundle: record.bundle
+            });
+            return;
+        }
+        if (request.method === 'PUT') {
+            const expectedRevision = Number(request.headers['x-profile-base-revision'] ?? -1);
+            const idempotencyKey = String(request.headers['x-idempotency-key'] ?? '');
+            if (!Number.isSafeInteger(expectedRevision) ||
+                expectedRevision < 0 ||
+                !/^[A-Za-z0-9._:-]{8,128}$/.test(idempotencyKey)) {
+                this.sendJson(response, 400, { ok: false, error: 'invalid_profile_headers' });
+                return;
+            }
+            let input;
+            try {
+                input = JSON.parse(await this.readBody(request, 48 * 1024 * 1024));
+            }
+            catch {
+                this.sendJson(response, 400, { ok: false, error: 'invalid_profile_body' });
+                return;
+            }
+            try {
+                const record = await this.store.save(steamId, expectedRevision, idempotencyKey, input);
+                this.sendJson(response, 200, {
+                    ok: true,
+                    revision: record.revision,
+                    sha256: record.sha256,
+                    savedAtMs: record.savedAtMs
+                });
+            }
+            catch (error) {
+                if (error instanceof ProfileConflictError) {
+                    this.sendJson(response, 409, {
+                        ok: false,
+                        error: error.message,
+                        currentRevision: error.revision
+                    });
+                    return;
+                }
+                throw error;
+            }
+            return;
+        }
+        this.sendJson(response, 405, { ok: false, error: 'method_not_allowed' });
+    }
+    signSession(session) {
+        const body = Buffer.from(JSON.stringify(session)).toString('base64url');
+        const signature = createHmac('sha256', this.config.sessionSecret)
+            .update(body)
+            .digest('base64url');
+        return `${body}.${signature}`;
+    }
+    verifySession(token) {
+        const [body, suppliedText, extra] = token.split('.');
+        if (!body || !suppliedText || extra)
+            return undefined;
+        const expected = createHmac('sha256', this.config.sessionSecret).update(body).digest();
+        const supplied = Buffer.from(suppliedText, 'base64url');
+        if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected))
+            return undefined;
+        try {
+            const value = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+            return validSteamIdentity(value.steamId) &&
+                Number.isSafeInteger(value.expiresAtMs) &&
+                value.expiresAtMs > Date.now()
+                ? value
+                : undefined;
+        }
+        catch {
+            return undefined;
+        }
+    }
+    bearer(request) {
+        const authorization = request.headers.authorization ?? '';
+        return authorization.startsWith('Bearer ') ? authorization.slice(7) : '';
+    }
+    async readBody(request, limit) {
+        const chunks = [];
+        let size = 0;
+        for await (const chunk of request) {
+            const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+            size += bytes.length;
+            if (size > limit)
+                throw new Error('request_too_large');
+            chunks.push(bytes);
+        }
+        return Buffer.concat(chunks).toString('utf8');
+    }
+    sendJson(response, status, value) {
+        if (response.headersSent)
+            return;
+        const body = JSON.stringify(value);
+        response.writeHead(status, {
+            'content-type': 'application/json',
+            'content-length': Buffer.byteLength(body),
+            'cache-control': 'no-store',
+            'x-content-type-options': 'nosniff'
+        });
+        response.end(body);
+    }
+}
+//# sourceMappingURL=service.js.map
