@@ -94,4 +94,17 @@ module.exports = {
     directoryHeartbeatMs:  int('SDB_DIRECTORY_HEARTBEAT_MS',  'directoryHeartbeatMs',  60_000),
     serverName:            str('SDB_SERVER_NAME',             'serverName',            'SurrounDead Server'),
     publicHost:            str('SDB_PUBLIC_HOST',             'publicHost',            ''),
+
+    // Ground-item lifecycle and BUILD-placement validation — ported from the
+    // old SDO v3 alpha's host-agent, which had this world tuned from real
+    // play (that codebase is not distributed with this repo). TTL/max-count
+    // defaults match that alpha's
+    // production values verbatim; buildMaxDistance reuses the same reach
+    // distance that alpha used for both vehicle- and structure-placement
+    // requests (this server has no player-initiated vehicle placement, only
+    // BUILD, so it's applied there only).
+    groundItemTtlMs:       int('SDB_GROUND_ITEM_TTL_MS',      'groundItemTtlMs',      6 * 60 * 60_000),
+    groundItemMaxCount:    int('SDB_GROUND_ITEM_MAX_COUNT',   'groundItemMaxCount',   128),
+    groundItemPruneMs:     int('SDB_GROUND_ITEM_PRUNE_MS',    'groundItemPruneMs',    60_000),
+    buildMaxDistance:      int('SDB_BUILD_MAX_DISTANCE',      'buildMaxDistance',     600),
 };

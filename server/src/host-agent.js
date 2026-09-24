@@ -76,6 +76,7 @@ class HostAgent {
         this._worldStateTimer = null;
         this._reconnectTimer  = null;
         this._zombieTickTimer = null;
+        this._groundItemPruneTimer = null;
 
         const worldData = loadWorldData();
         this._zombieSim = worldData ? new ZombieSimulation(worldData, () => this._randomEntityId()) : null;
@@ -125,6 +126,10 @@ class HostAgent {
                 quantity: e.attributes.quantity ?? 0,
                 itemId: e.attributes.itemId ?? '',
                 x: e.x, y: e.y, z: e.z, yaw: e.yaw,
+                // Only meaningful for GroundItem TTL pruning (_pruneGroundItems);
+                // updatedAt is the DB's own last-write time, which for an
+                // untouched dropped item equals its drop time.
+                createdAtMs: e.updatedAt,
             });
         }
         console.log(`[host] loaded ${this._entities.size} world entities from DB`);
@@ -319,6 +324,7 @@ class HostAgent {
                     kind: EntityKind.GroundItem,
                     itemId: req.itemId, quantity: qty,
                     x: req.posX, y: req.posY, z: req.posZ, yaw: 0,
+                    createdAtMs: Date.now(),
                 });
 
                 const descPayload = encodeEntityDescriptor({
@@ -382,17 +388,7 @@ class HostAgent {
 
                 // Add to inventory
                 p.inventory[targetSlot] = { itemId, quantity };
-                this._entities.delete(f.entityId);
-                db.deleteEntity(f.entityId);
-
-                // Tell all clients the entity is gone.
-                this._socket.write(encodeFrame({
-                    type:      MsgType.EntityDespawn,
-                    sessionId: SESSION_ID,
-                    worldId:   cfg.worldId,
-                    entityId:  f.entityId,
-                    payload:   Buffer.from([1]), // reason=1: picked_up
-                }));
+                this._despawnEntity(f.entityId, 1); // reason=1: picked_up
 
                 this._sendTo(p.connectionId, MsgType.ItemPickupResult,
                     f.playerId, p.entityId,
@@ -414,10 +410,33 @@ class HostAgent {
                 const req = decodeInteractionRequest(f.payload);
 
                 if (req.interactionType === InteractionType.BUILD) {
-                    if (!req.itemId) {
+                    // Validation ported from the old SDO v3 alpha's host-agent
+                    // (not distributed with this repo), adapted to what this
+                    // protocol actually carries: itemId is a short DataAsset name
+                    // (e.g. "AK15", "DisplayPlaque" — confirmed against real
+                    // GroundItem rows in players.db), not a full /Game/...
+                    // class path, so the old code's keyword-based classPath
+                    // allowlist doesn't apply — a plain charset/length check
+                    // is the safe equivalent without assuming a naming
+                    // convention we have no PlacedStructure data to confirm.
+                    // Position/yaw bounds and the max-build-distance reuse
+                    // that alpha's own tuned values (same distance it used
+                    // for both vehicle- and structure-placement requests).
+                    const posValid =
+                        Number.isFinite(req.posX) && Number.isFinite(req.posY) && Number.isFinite(req.posZ) &&
+                        Math.abs(req.posX) < 10_000_000 && Math.abs(req.posY) < 10_000_000 && Math.abs(req.posZ) < 10_000_000;
+                    const yawValid = Number.isFinite(req.yaw) && Math.abs(req.yaw) <= 360_000;
+                    const itemIdValid = typeof req.itemId === 'string' && /^[A-Za-z0-9_.-]{1,128}$/.test(req.itemId);
+                    const distanceValid = posValid && !!p.lastPos &&
+                        (req.posX - p.lastPos.x) ** 2 + (req.posY - p.lastPos.y) ** 2 + (req.posZ - p.lastPos.z) ** 2
+                            <= cfg.buildMaxDistance ** 2;
+
+                    if (!itemIdValid || !posValid || !yawValid || !distanceValid) {
                         this._sendTo(p.connectionId, MsgType.InteractionResult,
                             f.playerId, p.entityId,
                             encodeInteractionResult({ success: false, interactionType: InteractionType.BUILD }));
+                        console.warn(`[host] rejected BUILD from player ${f.playerId}: ` +
+                            `itemIdValid=${itemIdValid} posValid=${posValid} yawValid=${yawValid} distanceValid=${distanceValid}`);
                         break;
                     }
                     const entityId = this._randomEntityId();
@@ -548,6 +567,49 @@ class HostAgent {
         return id === 0n ? 1n : id;
     }
 
+    // Removes an entity from memory + DB and tells every client it's gone.
+    // reasonByte is purely informational (server-side logging) — the client
+    // (entity_manager.cpp's on_entity_despawn) destroys the actor by
+    // entityId alone and never reads the despawn payload.
+    _despawnEntity(entityId, reasonByte) {
+        this._entities.delete(entityId);
+        db.deleteEntity(entityId);
+        this._socket.write(encodeFrame({
+            type:      MsgType.EntityDespawn,
+            sessionId: SESSION_ID,
+            worldId:   cfg.worldId,
+            entityId,
+            payload:   Buffer.from([reasonByte]),
+        }));
+    }
+
+    // Ground-item lifecycle: TTL expiry + a max-count budget (oldest evicted
+    // first), ported from the old SDO v3 alpha's host-agent (not distributed
+    // with this repo) — that world had neither before, so dropped items
+    // simply accumulated forever. createdAtMs is set at drop time (or, for
+    // entities loaded from DB at startup, backfilled from the DB row's own
+    // updatedAt — see _loadEntities).
+    _pruneGroundItems() {
+        const now = Date.now();
+        const groundItems = [...this._entities.entries()]
+            .filter(([, e]) => e.kind === EntityKind.GroundItem);
+
+        for (const [entityId, e] of groundItems) {
+            const ageMs = now - (e.createdAtMs ?? now);
+            if (ageMs >= cfg.groundItemTtlMs) {
+                this._despawnEntity(entityId, 3); // reason=3: ttl_expired
+            }
+        }
+
+        const remaining = [...this._entities.entries()]
+            .filter(([, e]) => e.kind === EntityKind.GroundItem)
+            .sort((a, b) => (a[1].createdAtMs ?? 0) - (b[1].createdAtMs ?? 0));
+        const overflow = remaining.length - cfg.groundItemMaxCount;
+        for (let i = 0; i < overflow; i++) {
+            this._despawnEntity(remaining[i][0], 4); // reason=4: budget_exceeded
+        }
+    }
+
     _applyProfileRevision(f) {
         const p = this._players.get(f.playerId);
         if (!p || f.payload.length < 51) return;
@@ -605,6 +667,11 @@ class HostAgent {
                 this._tickZombies();
             }, cfg.zombieTickIntervalMs);
         }
+
+        this._groundItemPruneTimer = setInterval(() => {
+            if (this._state !== 'active') return;
+            this._pruneGroundItems();
+        }, cfg.groundItemPruneMs);
     }
 
     // Drives ZombieSimulation with currently-known player positions and
@@ -741,6 +808,7 @@ class HostAgent {
         if (this._heartbeatTimer)  { clearInterval(this._heartbeatTimer);  this._heartbeatTimer  = null; }
         if (this._worldStateTimer) { clearInterval(this._worldStateTimer); this._worldStateTimer = null; }
         if (this._zombieTickTimer) { clearInterval(this._zombieTickTimer); this._zombieTickTimer = null; }
+        if (this._groundItemPruneTimer) { clearInterval(this._groundItemPruneTimer); this._groundItemPruneTimer = null; }
         if (this._reconnectTimer)  { clearTimeout(this._reconnectTimer);   this._reconnectTimer  = null; }
     }
 }
