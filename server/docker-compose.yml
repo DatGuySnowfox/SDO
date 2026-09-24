@@ -4,7 +4,7 @@ services:
     image: sdo-gateway
     restart: unless-stopped
     ports:
-      - "31000:31000"   # game gateway (mod default: gateway.example.com:31000)
+      - "31000:31000"   # game gateway (the mod's default port)
       - "31001:31001"   # HTTP: tickets, health, and directory-worker's /v1/join proxy
     environment:
       SDB_GATEWAY_PORT: "31000"
@@ -17,10 +17,10 @@ services:
       SDB_MAX_PLAYERS: "32"
       SDB_TICKET_REPLAY_PROTECTION: "false"
 
-      SDB_DIRECTORY_URL: "https://directory.example.com"
+      SDB_DIRECTORY_URL: "${SDB_DIRECTORY_URL}"
       SDB_DIRECTORY_KEY: "${SDB_DIRECTORY_KEY}"
-      SDB_SERVER_NAME: "Reference Official Server"
-      SDB_PUBLIC_HOST: "gateway.example.com"
+      SDB_SERVER_NAME: "${SDB_SERVER_NAME:-SurrounDead Server}"
+      SDB_PUBLIC_HOST: "${SDB_PUBLIC_HOST}"
       SDB_DB_PATH: "/app/data/players.db"
 
     volumes:

@@ -7,15 +7,14 @@ namespace SDB;
 
 public partial class MainWindow : Window
 {
-    // Hardcoded rather than configurable: this is the one directory this
-    // launcher is built for, same as the URL baked into directory-worker's
-    // own served join.ps1 template (see that file's history — the earlier
-    // PowerShell approach this replaces).
-    const string DirectoryUrl = "https://directory.example.com";
-    const string SteamAppId   = "1645820";
+    const string SteamAppId = "1645820";
 
-    readonly Settings        _settings = SettingsStore.Load();
-    readonly DirectoryClient _directory = new(DirectoryUrl);
+    readonly Settings _settings = SettingsStore.Load();
+    // No server address ships with this repo — configure one via
+    // SDB_DIRECTORY_URL or HKCU\Software\SDB\DirectoryUrl.
+    // See SettingsStore.DirectoryUrl().
+    readonly string          _directoryUrl = SettingsStore.DirectoryUrl();
+    readonly DirectoryClient _directory    = new(SettingsStore.DirectoryUrl());
     readonly ObservableCollection<ServerEntry> _servers = [];
     GameInfo _game;
 
@@ -48,6 +47,13 @@ public partial class MainWindow : Window
 
     async Task RefreshAsync()
     {
+        if (string.IsNullOrWhiteSpace(_directoryUrl))
+        {
+            _servers.Clear();
+            SetStatus("No directory configured — set SDB_DIRECTORY_URL (or HKCU\\Software\\SDB\\DirectoryUrl).",
+                      (Brush)FindResource("Bad"));
+            return;
+        }
         SetStatus("Loading server list…", (Brush)FindResource("Warn"));
         BtnRefresh.IsEnabled = false;
         try

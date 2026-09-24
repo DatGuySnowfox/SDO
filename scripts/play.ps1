@@ -3,7 +3,7 @@
 
 param(
     [Parameter(Mandatory)][string]$Name,
-    [string]$Server   = "gateway.example.com",
+    [string]$Server   = "127.0.0.1",
     [int]$DirPort     = 31100,
     [int]$GwPort      = 31000,
     [string]$ServerId = "customer-world-1",

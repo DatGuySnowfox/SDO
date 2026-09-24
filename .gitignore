@@ -19,6 +19,8 @@ build/
 # .NET build output
 launcher/bin/
 launcher/obj/
+launcher/publish/
+launcher/installer/Output/
 
 # Node
 node_modules/
@@ -81,3 +83,9 @@ tools/dumps/
 # Third-party tool bundles / large binary assets
 .data/
 research/Mappings.usmap
+
+# Local secret backups (e.g. settings.json.pre-rotation.bak)
+server/settings.json*.bak
+
+# Deployment config containing a real custom domain (see wrangler.toml)
+directory-worker/wrangler.prod.toml
