@@ -1760,12 +1760,17 @@ static void dispatch_frame(const sdo::Frame& f)
         if (!dmg) break;
         // Write straight into MedicalComponent.Health — this frame carries the
         // server-authoritative current/max health, not a delta to apply.
+        // Was pawn+0x7D0 -> +0xD0/+0xD8, a UE 5.3 chase. MedicalComponent is
+        // at +0x7A8 on 5.6, so this wrote two doubles through an unrelated
+        // pointer on the local pawn every time a health frame arrived.
         if (AActor* pawn = find_local_pawn()) {
-            const auto base = reinterpret_cast<uintptr_t>(pawn);
-            const auto med  = *reinterpret_cast<uintptr_t*>(base + 0x7D0);
-            if (med) {
-                *reinterpret_cast<double*>(med + 0xD0) = static_cast<double>(dmg->current);
-                *reinterpret_cast<double*>(med + 0xD8) = static_cast<double>(dmg->maximum);
+            if (UObject* med = obj_prop(pawn, STR("MedicalComponent"))) {
+                if (auto* cur = static_cast<double*>(med->GetValuePtrByPropertyNameInChain(STR("Health"))))
+                    *cur = static_cast<double>(dmg->current);
+                if (auto* max = static_cast<double*>(med->GetValuePtrByPropertyNameInChain(STR("MaxHealth"))))
+                    *max = static_cast<double>(dmg->maximum);
+            } else {
+                debug_log("player_damage: MedicalComponent not found");
             }
         }
         Output::send<LogLevel::Normal>(
@@ -2571,13 +2576,16 @@ static void check_max_vitals_trigger()
     AActor* pawn = find_local_pawn();
     if (!pawn) { debug_log("max_vitals: no local pawn"); return; }
 
-    const auto base = reinterpret_cast<uintptr_t>(pawn);
-    if (const auto med = *reinterpret_cast<uintptr_t*>(base + 0x7D0))
-        *reinterpret_cast<double*>(med + 0xD0) = 100.0;
-    if (const auto ht = *reinterpret_cast<uintptr_t*>(base + 0x7F8)) {
-        *reinterpret_cast<double*>(ht + 0xC8) = 100.0;
-        *reinterpret_cast<double*>(ht + 0xD8) = 100.0;
-    }
+    // Same UE 5.3 offsets as the other vitals writers had; resolved by name
+    // now so this cannot scribble over unrelated pawn memory.
+    auto set_double = [&](const wchar_t* comp, const wchar_t* field, double value) {
+        if (UObject* c = obj_prop(pawn, comp))
+            if (auto* slot = static_cast<double*>(c->GetValuePtrByPropertyNameInChain(field)))
+                *slot = value;
+    };
+    set_double(STR("MedicalComponent"),       STR("Health"),        100.0);
+    set_double(STR("Hunger&ThirstComponent"), STR("CurrentHunger"), 100.0);
+    set_double(STR("Hunger&ThirstComponent"), STR("CurrentThirst"), 100.0);
     debug_log("max_vitals: health/hunger/thirst set to 100");
 }
 
@@ -2950,6 +2958,56 @@ static void check_teleport_random_spawn_trigger()
     AActor* pawn = find_local_pawn();
     if (!pawn) { debug_log("teleport_random_spawn: no local pawn"); return; }
     teleport_to_random_spawn_point(pawn);
+}
+
+// Teleport the local player to explicit world coordinates.
+//
+// Drop %APPDATA%\SDO\teleport.flag containing one line:
+//     <x> <y> <z> [yaw]
+// e.g. "115013.6 133181.6 1185.0" — the safezone barber.
+//
+// Reuses the pendingTeleport path the server's PlayerProgressRestore already
+// drives (see do_game_tick step 3), rather than calling K2_SetActorLocation
+// from here: that path is the one that has actually been exercised in live
+// play, it runs on the clean engine-tick context, and it keeps the single
+// join-time teleport shape this codebase already reasoned about. Setting the
+// coordinates and the flag is the whole job.
+//
+// Note the existing 500-unit threshold in that code: a target closer than
+// that to the pawn's current position is treated as a no-op, so this cannot
+// be used for fine positioning.
+static void check_teleport_trigger()
+{
+    wchar_t path[MAX_PATH];
+    DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH) return;
+    std::wstring flag = std::wstring(path, n) + L"\\SDO\\teleport.flag";
+    if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
+
+    std::ifstream in(flag, std::ios::binary);
+    std::string line;
+    std::getline(in, line);
+    in.close();
+    DeleteFileW(flag.c_str());
+
+    double x = 0, y = 0, z = 0, yaw = 0;
+    const int got = sscanf_s(line.c_str(), "%lf %lf %lf %lf", &x, &y, &z, &yaw);
+    if (got < 3) {
+        debug_log("teleport: could not parse '" + line + "' — expected: <x> <y> <z> [yaw]");
+        return;
+    }
+
+    auto& st = sdo::g_state();
+    st.teleportX   = static_cast<float>(x);
+    st.teleportY   = static_cast<float>(y);
+    st.teleportZ   = static_cast<float>(z);
+    st.teleportYaw = static_cast<float>(got >= 4 ? yaw : 0.0);
+    st.pendingTeleport.store(true, std::memory_order_release);
+
+    char buf[160];
+    snprintf(buf, sizeof(buf), "teleport: queued x=%.1f y=%.1f z=%.1f yaw=%.1f", x, y, z,
+             got >= 4 ? yaw : 0.0);
+    debug_log(buf);
 }
 
 static void check_bytecode_dump_trigger()
@@ -4507,6 +4565,33 @@ static void do_body_part_repair(void* ctxRaw)
 // tries both plausible property names since the exact one on
 // USkeletalMeshComponent for this engine version wasn't independently
 // confirmed (UE renamed SkeletalMesh -> SkeletalMeshAsset around 5.1).
+// Bisect hatch for the "local player cannot move" regression.
+//
+// Set SDO_NO_LOCAL_REPAIR=1 to make the drift scan read-only: it still logs
+// what it sees, but performs no K2_SetRelativeLocation / leader-pose repair
+// writes on the local player's own components.
+//
+// Why this exists: this repair path only started doing anything on 2026-09-24.
+// It writes through USceneComponent::RelativeLocation, which this codebase had
+// hardcoded at 0x128 — an offset that has been wrong since the UE 5.6 update,
+// so every repair silently wrote to the wrong field and did nothing. Fixing
+// the offset made roughly 400 of these writes per session suddenly real,
+// against the local pawn's own components, at which point the local character
+// stopped moving. That correlation is suggestive but unproven, and guessing
+// at it twice already made things worse — so this switch answers it in one
+// launch instead of another speculative change.
+static bool local_repair_disabled()
+{
+    static const bool s_off = [] {
+        wchar_t buf[8];
+        const DWORD n = GetEnvironmentVariableW(L"SDO_NO_LOCAL_REPAIR", buf, 8);
+        const bool off = (n > 0 && n < 8 && buf[0] == L'1');
+        if (off) debug_log("component_drift: SDO_NO_LOCAL_REPAIR=1 — repair writes disabled, scan is read-only");
+        return off;
+    }();
+    return s_off;
+}
+
 static void do_component_drift_scan(void* ctxRaw)
 {
     auto* ctx = static_cast<ComponentDriftCtx*>(ctxRaw);
@@ -4601,7 +4686,7 @@ static void do_component_drift_scan(void* ctxRaw)
             nowUs - ctx->lastRepairAttemptUs >= 1'000'000ULL) {
             ctx->lastRepairAttemptUs = nowUs;
             UFunction* setRelFn = ctx->comp->GetFunctionByNameInChain(L"K2_SetRelativeLocation");
-            if (setRelFn) {
+            if (setRelFn && !local_repair_disabled()) {
                 struct Params { FVector NewLocation; bool bSweep; FHitResult SweepHitResult; bool bTeleport; } params{};
                 params.NewLocation = FVector{ 0.0, 0.0, 0.0 };
                 params.bSweep = false;
@@ -6145,19 +6230,40 @@ static constexpr bool kEnableVitalsWrite = true;
 static void do_vitals_restore(void* ctxRaw)
 {
     auto* ctx = static_cast<VitalsRestoreCtx*>(ctxRaw);
-    const auto base = reinterpret_cast<uintptr_t>(ctx->pawn);
     if constexpr (kEnableVitalsWrite) {
-        if (const auto med = *reinterpret_cast<uintptr_t*>(base + 0x7D0))
-            *reinterpret_cast<double*>(med + 0xD0) = static_cast<double>(ctx->health);
-        if (const auto ht = *reinterpret_cast<uintptr_t*>(base + 0x7F8)) {
-            *reinterpret_cast<double*>(ht + 0xC8) = static_cast<double>(ctx->hunger);
-            *reinterpret_cast<double*>(ht + 0xD8) = static_cast<double>(ctx->thirst);
-        }
-        if (const auto stam = *reinterpret_cast<uintptr_t*>(base + 0x800))
-            *reinterpret_cast<double*>(stam + 0xC8) = static_cast<double>(ctx->stamina);
-        if (const auto rad = *reinterpret_cast<uintptr_t*>(base + 0x7F0))
-            *reinterpret_cast<double*>(rad + 0xC8) = static_cast<double>(ctx->radiation);
-        debug_log("vitals_restore: applied deferred vitals write");
+        // These were pawn byte offsets captured against UE 5.3:
+        //   MedicalComponent +0x7D0, RadiationComponent +0x7F0,
+        //   Hunger&ThirstComponent +0x7F8, StaminaComponent +0x800,
+        // each followed by a field offset inside the component.
+        //
+        // read_local_progress was converted to name lookups during the UE 5.6
+        // port; this write-back path was missed. On 5.6 MedicalComponent is at
+        // +0x7A8, so every one of those chases dereferenced an unrelated
+        // pointer and then wrote a double into it — into the LOCAL player's own
+        // object graph, two seconds after spawn, every single join.
+        //
+        // That delay is why this was so hard to see: movement worked fine for
+        // about two seconds after loading in and then stopped dead. The write
+        // is deferred by vitalsRestoreReadyAtUs (+2s), and it lands right on
+        // top of whatever now occupies those addresses.
+        //
+        // Same component and field names as read_local_progress uses, so the
+        // read and write sides cannot drift apart again.
+        auto write_double = [&](const wchar_t* comp, const wchar_t* field, float value) {
+            UObject* c = obj_prop(ctx->pawn, comp);
+            if (!c) { debug_log(std::string("vitals_restore: component not found")); return; }
+            if (auto* slot = static_cast<double*>(c->GetValuePtrByPropertyNameInChain(field)))
+                *slot = static_cast<double>(value);
+            else
+                debug_log("vitals_restore: field not found on component");
+        };
+
+        write_double(STR("MedicalComponent"),       STR("Health"),           ctx->health);
+        write_double(STR("Hunger&ThirstComponent"), STR("CurrentHunger"),    ctx->hunger);
+        write_double(STR("Hunger&ThirstComponent"), STR("CurrentThirst"),    ctx->thirst);
+        write_double(STR("StaminaComponent"),       STR("CurrentStamina"),   ctx->stamina);
+        write_double(STR("RadiationComponent"),     STR("CurrentRadiation"), ctx->radiation);
+        debug_log("vitals_restore: applied deferred vitals write (by name)");
     } else {
         debug_log("vitals_restore: SKIPPED (kEnableVitalsWrite=false, testing cascade correlation)");
     }
@@ -6496,6 +6602,8 @@ static void do_game_tick(bool cleanContext)
         debug_log("dump_playerstarts: crashed, caught via SEH");
     if (!seh_invoke([](void*) { check_teleport_random_spawn_trigger(); }, nullptr))
         debug_log("teleport_random_spawn: crashed, caught via SEH");
+    if (!seh_invoke([](void*) { check_teleport_trigger(); }, nullptr))
+        debug_log("teleport: crashed, caught via SEH");
     if (!seh_invoke([](void*) { check_reset_player_stats_trigger(); }, nullptr))
         debug_log("reset_player_stats: crashed, caught via SEH");
     if (!seh_invoke([](void*) { check_max_vitals_trigger(); }, nullptr))
