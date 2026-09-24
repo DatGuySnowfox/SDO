@@ -303,7 +303,7 @@ static AActor* find_and_claim_native_pickup(UClass* pickupClass, const WorldEnti
 // above, deliberately avoiding every risky new technique that caused the
 // zombie-proxy crash saga this session. Unlike GroundItem (one exact class
 // per item), a vehicle spawn point can hold any of ~17 confirmed vehicle
-// Blueprint classes (research pak_all_files.txt, cross-referenced against
+// Blueprint classes (research/archive-ue5.3/pak_all_files.txt, cross-referenced
 // Session 12's "17 vehicle types" finding) — checks all of them since the
 // server doesn't currently tell the client which one to expect.
 // FIXED 2026-08-14 (live freeze on both test machines, reproducible) — this
@@ -398,7 +398,7 @@ static AActor* spawn_placed_structure_actor(UWorld* world, void* itemAsset, cons
 // not a real JigsawItem itemId — there's no DataAsset behind it at all, so
 // this resolves the class directly via resolve_class_by_name() instead of
 // going through resolve_item_asset(). Full package paths from
-// research/pak_all_files.txt; only the three archetypes the server-side
+// research/archive-ue5.3/pak_all_files.txt; only the three archetypes the server-side
 // simulation actually spawns (server/src/world/zombie-simulation.js's
 // ZONE_KIND_TO_ARCHETYPE) are mapped — anything else falls through to
 // nullptr, same "log and bail" shape as every other resolve failure here.

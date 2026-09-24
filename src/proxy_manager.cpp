@@ -3478,7 +3478,7 @@ static void update_proxy_render_smoothing(RemotePlayer& player)
     player.renderAimYaw = static_cast<float>(wrap_angle_deg(player.renderAimYaw + aimYawDelta * factor));
 
     // Clamp to the AnimBP blendspace's own configured range (confirmed via
-    // FModel export, Exports/.../AimOffsets/RifleIronsightsAimOffset.json's
+    // FModel export, research/Exports/.../AimOffsets/RifleIronsightsAimOffset.json's
     // AxisX/AxisY Min/Max: ±90) — 2026-08-13, replaces the removed
     // turn-in-place attempt above. Beyond this the pose just holds at its
     // max turned pose rather than attempting to physically rotate the body.

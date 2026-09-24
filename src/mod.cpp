@@ -4870,7 +4870,7 @@ static void check_component_drift(const std::string& label, AActor* actor,
     // appearance-repairable (unchanged behavior for those entries).
     // socket column added 2026-08-15 — see ComponentDriftCtx::expectedSocket
     // for why this matters. Confirmed via the FModel export's SCS_Node
-    // "AttachToName" field (Exports/.../BP_PlayerCharacter.json): HairMesh/
+    // "AttachToName" field (research/Exports/.../BP_PlayerCharacter.json): HairMesh/
     // BeardMesh/Mouth all attach to "head", EyebrowsMesh to "eyebrows".
     // Every other row below (including Hands, a SkeletalMeshComponent) has
     // no AttachToName in the export at all — plain direct children, origin
@@ -7867,7 +7867,7 @@ static void on_process_event_pre(UObject* obj, UFunction* func, void* params)
     // intervals, ruling out any of this mod's own per-tick proxy code as the
     // cause since it never touches the local player's real pawn) against
     // this game's own confirmed AutoSaveGame/Event_AutoSave/EventSave
-    // functions (BP_SurroundeadGameMode_C, bp_catalog_player_core.md). Each
+    // functions (BP_SurroundeadGameMode_C, archive-ue5.3/bp_catalog_player_core.md). Each
     // client runs its own local UE5 world (this project's own custom TCP
     // layer syncs state between separate local sessions, not native UE
     // networking) — proxies are locally-spawned actors in THIS client's own

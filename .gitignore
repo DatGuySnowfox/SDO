@@ -1,5 +1,6 @@
 # Editor / IDE
 .claude/
+.vscode/
 CLAUDE.md
 .cursorrules
 .cursorignore
@@ -37,7 +38,7 @@ server/.env
 
 # Bytecode research dumps/decodes — large, regenerable via the documented
 # pipeline (research/bytecode/kismet_disasm.py + batch_resolve_local.py),
-# same rationale as Exports/ above.
+# same rationale as research/Exports/ above.
 research/bytecode/*.log
 research/bytecode/probe_*.txt
 research/bytecode/targets_*.txt
@@ -48,6 +49,9 @@ research/bytecode/pc1_decoded/
 research/bytecode/playercharacter_decoded/
 research/bytecode/barber_out/
 
+# Knowledge-graph tool cache (thousands of hash-named files, regenerable)
+graphify-out/
+
 # Logs / downloads
 wget-log
 wget-log.1
@@ -57,7 +61,7 @@ server/*.log
 server/*.log.err
 
 # FModel asset exports (large, regenerable from the game's own paks)
-Exports/
+research/Exports/
 
 # Screenshots
 *.png

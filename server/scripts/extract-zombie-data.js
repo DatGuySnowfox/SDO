@@ -1,7 +1,7 @@
 'use strict';
 
 // One-time data extraction script (not part of the live server) — mines
-// Exports/ (FModel property dumps) for zombie/vehicle archetype stats,
+// research/Exports/ (FModel property dumps) for zombie/vehicle archetype stats,
 // difficulty multipliers, and spawn-zone/spawn-point world positions, and
 // writes them into a single compact JSON file the server loads at startup.
 // See research/04_ida_investigation_log.md Session 58 and the approved
@@ -15,7 +15,7 @@ const fs   = require('node:fs');
 const path = require('node:path');
 const readline = require('node:readline');
 
-const EXPORTS_ROOT = path.join(__dirname, '..', '..', 'Exports', 'SurrounDead', 'Content');
+const EXPORTS_ROOT = path.join(__dirname, '..', '..', 'research', 'Exports', 'SurrounDead', 'Content');
 const LEVEL_FILE    = path.join(EXPORTS_ROOT, 'Levels', 'LongdownValley.json');
 const OUT_DIR        = path.join(__dirname, '..', 'src', 'data');
 const OUT_FILE       = path.join(OUT_DIR, 'world-data.json');

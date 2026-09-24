@@ -3,7 +3,7 @@
 // Standalone test for ZombieSimulation — pure state machine, no socket/
 // gateway/live-client dependency at all (see its own file-header comment).
 // Uses a small synthetic world instead of the real 913-zone extracted data
-// so test outcomes are deterministic and don't depend on Exports/ being
+// so test outcomes are deterministic and don't depend on research/Exports/ being
 // present.
 
 const { ZombieSimulation } = require('../server/src/world/zombie-simulation');
