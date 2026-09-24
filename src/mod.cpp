@@ -8451,12 +8451,22 @@ static void on_process_event_post(UObject* obj, UFunction* func, void* /*params*
 }
 
 // Fires per actor per frame; drives do_game_tick when on_actor_tick is available.
+// True once the engine-tick hook is live, so the older triggers can stand
+// down rather than driving do_game_tick(true) a second time from a nested
+// context.
+static bool g_engineTickActive = false;
+
 static void on_actor_tick(AActor* /*actor*/, float /*delta*/)
 {
     const uint64_t now = sdo::now_micros();
     g_last_actor_tick_us.store(now, std::memory_order_relaxed);
     g_actor_tick_ever_fired.store(true, std::memory_order_relaxed);
-    do_game_tick(true); // never reached from inside a ProcessEvent dispatch — genuinely clean, see do_game_tick's own comment
+    // Keep the liveness bookkeeping above — the watchdog still reads it — but
+    // stop driving the tick once the engine-tick hook is live. An actor tick
+    // is NOT a clean context: it can run inside a ProcessEvent chain, which is
+    // how do_game_tick(true) ended up firing at t_processEventDepth=51.
+    if (g_engineTickActive) return;
+    do_game_tick(true);
 }
 
 // Root-caused 2026-08-16 (real UE4SS 3.0.1 source, deps/first/Unreal/src/
@@ -8573,6 +8583,60 @@ static void do_fixup_actor_tick_hook_target(void* ctxRaw)
 // mechanism, without needing to understand it. Safe to call repeatedly —
 // UE4SS's own registration just installs/overwrites the callback pointer,
 // no observed teardown step required first.
+// UEngine::Tick pre-callback — the clean per-frame GameThread trigger this
+// file spent a long time not having.
+//
+// The comment further down ("UE4SS exports no EngineTick/AsyncTask-equivalent
+// hook either, checked directly against UE4SS.dll's PE export table") was true
+// of the pinned v3.0.1 build and is false of current ones. Re-checked against
+// the deployed UE4SS.dll: RegisterEngineTickPreCallback, its Post twin and
+// IsEngineTickAvailable are all exported, and the shipped settings file turns
+// HookEngineTick on by default.
+//
+// This matters because AActor::Tick is NOT a clean context. Actor ticks can
+// and do run inside a ProcessEvent chain, so do_game_tick(true) — which
+// asserts depth 0 — was firing at t_processEventDepth=51 in live play, i.e.
+// re-entrantly in the middle of the engine's own call stack. Writing player
+// transform and movement state from there is what made the local character
+// slide and stop responding to look input.
+//
+// Engine tick runs once per frame, outside ProcessEvent dispatch. The depth
+// counter stays exactly as it is: it is the proof this trigger is clean, and
+// the warning in do_game_tick should now never fire.
+static void on_engine_tick(UEngine* /*engine*/, float /*delta*/)
+{
+    do_game_tick(true);
+}
+
+static bool register_engine_tick_hook()
+{
+    auto* ue4ss = GetModuleHandleW(L"UE4SS.dll");
+    if (!ue4ss) return false;
+
+    using IsAvail = bool(*)();
+    auto* avail = reinterpret_cast<IsAvail>(GetProcAddress(ue4ss,
+        "?IsEngineTickAvailable@UE4SSRuntime@RC@@SA_NXZ"));
+    if (avail && !avail()) {
+        debug_log("register_engine_tick_hook: UE4SS reports engine tick unavailable "
+                  "(HookEngineTick disabled in UE4SS-settings.ini?)");
+        return false;
+    }
+
+    using RegEngineTick = void(*)(Hook::EngineTickFn);
+    auto* fn = reinterpret_cast<RegEngineTick>(GetProcAddress(ue4ss,
+        "?RegisterEngineTickPreCallback@Hook@Unreal@RC@@YAXV?$function"
+        "@$$A6AXPEAVUEngine@Unreal@RC@@M@Z@std@@@Z"));
+    if (!fn) {
+        debug_log("register_engine_tick_hook: RegisterEngineTickPreCallback not exported "
+                  "— falling back to the AActor::Tick trigger");
+        return false;
+    }
+
+    fn(on_engine_tick);
+    debug_log("register_engine_tick_hook: engine tick hook registered (clean per-frame trigger)");
+    return true;
+}
+
 static bool register_actor_tick_hook()
 {
     auto* ue4ss = GetModuleHandleW(L"UE4SS.dll");
@@ -8601,6 +8665,14 @@ static void fixup_and_register_actor_tick_hook(AActor* pawn)
         debug_log("fixup_and_register_actor_tick_hook: vtable fixup crashed, caught via SEH — registering with UE4SS's original (possibly-wrong) address instead");
     else if (!ctx.success)
         debug_log("fixup_and_register_actor_tick_hook: vtable fixup did not find a corrected address — registering with UE4SS's original address");
+
+    // Prefer the engine-tick hook: once per frame, outside ProcessEvent
+    // dispatch. The actor-tick hook is still registered below so its watchdog
+    // bookkeeping keeps working, and so there is a fallback on a UE4SS build
+    // that does not export the engine-tick callback.
+    g_engineTickActive = register_engine_tick_hook();
+    Output::send<LogLevel::Normal>(STR("SDO: clean tick trigger = {}\n"),
+                                   g_engineTickActive ? STR("EngineTick") : STR("AActorTick/WndProc"));
 
     if (!register_actor_tick_hook())
         Output::send<LogLevel::Error>(STR("SDO: RegisterAActorTickPreCallback not found\n"));
@@ -8655,7 +8727,13 @@ static WNDPROC           g_originalWndProc = nullptr;
 // mechanism (added this session), so bringing it in line with the rest of
 // the codebase's belt-and-suspenders SEH coverage is warranted regardless
 // of whether this specific wrap would have caught that exact crash.
-static void do_game_tick_clean_ctx(void*) { do_game_tick(true); }
+static void do_game_tick_clean_ctx(void*)
+{
+    // Superseded by the engine-tick hook; kept as the fallback for a UE4SS
+    // build that does not export RegisterEngineTickPreCallback.
+    if (g_engineTickActive) return;
+    do_game_tick(true);
+}
 
 static LRESULT CALLBACK sdo_wnd_proc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
