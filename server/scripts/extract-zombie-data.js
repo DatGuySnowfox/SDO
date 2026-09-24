@@ -169,6 +169,34 @@ function findDamageComponentHealth(exported, className) {
     };
 }
 
+// The .8 update (UE 5.6) renamed every one of these properties, dropping the
+// spaces and switching to an <Attack|Roaming|Alert>Movement* scheme. The old
+// names are kept as fallbacks so this script still works against a pre-.8
+// export. Each also has a `Default_`-prefixed twin holding the same value;
+// the unprefixed one is preferred and the twin is the last resort.
+const PROP_NAMES = {
+    damageToDo:   ['AttackDamage',         'Default_AttackDamage',         'DamageToDo'],
+    roamingSpeed: ['RoamingMovementSpeed', 'Default_RoamingMovementSpeed', 'Roaming Speed'],
+    alertSpeed:   ['AlertMovementSpeed',   'Default_AlertMovementSpeed',   'Alert Speed'],
+    attackSpeed:  ['AttackMovementSpeed',  'Default_AttackMovementSpeed',  'Attack Speed'],
+};
+
+function firstProp(props, candidates) {
+    for (const k of candidates) {
+        if (props[k] !== undefined && props[k] !== null) return props[k];
+    }
+    return null;
+}
+
+// BP_ZombieBoss's AttackDamage became a {X, Y} min/max range in .8 while every
+// other archetype kept a plain number. Normalise so consumers can always treat
+// the primary field as a scalar, with the upper bound alongside it.
+function scalarAndMax(v) {
+    if (typeof v === 'number') return [v, null];
+    if (v && typeof v === 'object' && typeof v.X === 'number') return [v.X, v.Y ?? null];
+    return [null, null];
+}
+
 function extractZombieStats() {
     const archetypes = {
         BP_MasterZombie:    'AI/Zombies/BP_MasterZombie.json',
@@ -186,12 +214,14 @@ function extractZombieStats() {
         if (!exported) continue;
         const props = findClassDefaults(exported, `${name}_C`);
         if (!props) continue;
+        const [damage, damageMax] = scalarAndMax(firstProp(props, PROP_NAMES.damageToDo));
         stats[name] = {
-            health:       findDamageComponentHealth(exported, name),
-            damageToDo:   props['DamageToDo'] ?? null,
-            roamingSpeed: props['Roaming Speed'] ?? null,
-            alertSpeed:   props['Alert Speed'] ?? null,
-            attackSpeed:  props['Attack Speed'] ?? null,
+            health:        findDamageComponentHealth(exported, name),
+            damageToDo:    damage,
+            damageToDoMax: damageMax,
+            roamingSpeed:  firstProp(props, PROP_NAMES.roamingSpeed),
+            alertSpeed:    firstProp(props, PROP_NAMES.alertSpeed),
+            attackSpeed:   firstProp(props, PROP_NAMES.attackSpeed),
         };
     }
     return stats;

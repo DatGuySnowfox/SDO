@@ -26,8 +26,10 @@ reasoning, not the numbers. See its own README before trusting anything in it.
 
 ## Regeneration status
 
-`Exports/` was re-exported from the 5.6 pak on 2026-09-24: 4,753 of 14,097 `.json` files are
-current, the rest are 5.3 leftovers. **`Exports/SurrounDead/Content/Levels/LongdownValley.json` is
-not among the updated ones** — FModel fails to serialize `LongdownValley.umap` on 5.6, dying at
-byte 28. Until that is solved, `server/scripts/extract-zombie-data.js` cannot regenerate
-`server/src/data/world-data.json`, and zombie/vehicle spawn placement stays on 5.3 coordinates.
+`Exports/` was re-exported from the .8 pak on 2026-09-24, including the level, and
+`server/src/data/world-data.json` was regenerated from it: 982 spawn zones, up from 913.
+
+The level is extracted with `tools/asset-export` rather than FModel. FModel's engine version is a
+remembered per-game setting, and extracting a UE 5.6 pak while it still says 5.3 fails at byte 28
+with `VersionException: Read size is smaller than zero` — which looks like a corrupt asset rather
+than a misconfiguration. The CLI takes the version as code instead. See that tool's README.

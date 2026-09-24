@@ -96,3 +96,7 @@ directory-worker/wrangler.prod.toml
 
 # Mod logs when SDO_LOG_DIR points into the checkout
 logs/
+
+# asset-export build output (.NET)
+tools/asset-export/bin/
+tools/asset-export/obj/

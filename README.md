@@ -47,7 +47,7 @@ Verified = observed working in a live two-client test *on UE 5.3*. Everything el
 | `SpawnBuild` / `Svr_SpawnBuild` | Moved to `BuildingComponent` on 5.6; still looked up on the pawn, so building placement will not fire. |
 | Head-look sync | Proxy heads do not track where a player is looking. A fix is in the tree but **was never verified** — it was deployed as a session ended. Diagnostic logging (`proxy_head_write`) is still present, which is the tell. |
 | Attachment toggle-**off** | Turning a tactical light or NVG *off* did not revert on proxies (only the on-path existed). A fix is in the tree, **unverified**. |
-| `research/Exports/` + `world-data.json` | Mostly re-exported from the 5.6 pak (2026-09-24), **except the level**: FModel cannot serialize `LongdownValley.umap` on 5.6, so `world-data.json` still holds 5.3 coordinates. Server-side only, so it cannot crash anything, but zombie/vehicle spawn placement is wrong until the level extracts. Note `extract-zombie-data.js` may need adjusting, not just re-running, if the level's structure changed. |
+| `research/Exports/` + `world-data.json` | Re-extracted from the .8 pak (2026-09-24). 982 spawn zones, up from 913. Regenerate with `tools/asset-export` followed by `extract-zombie-data.js`. |
 
 ### Built but never tested
 
@@ -244,8 +244,9 @@ The highest-value open problems, roughly in order:
 5. **Verify the head-look and attachment-toggle fixes.** Both are written and unverified; confirming
    or refuting them is cheap.
 6. **Test vehicle sync at all.** It has never been run.
-7. **Get `LongdownValley.umap` to extract on 5.6** and regenerate `world-data.json`. The rest of
-   `research/Exports/` re-exported cleanly; the level alone fails in FModel at byte 28.
+7. **Re-check the zombie archetype stats after each update.** The .8 update renamed four of them
+   and turned the boss's attack damage into a range; `extract-zombie-data.js` handles both, but a
+   future rename would show up as silent nulls rather than an error.
 8. **Automatic mod installation** in the launcher.
 
 A note on method, learned the hard way: for anything touching Blueprint behaviour, prefer the
