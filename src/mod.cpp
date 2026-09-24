@@ -1056,7 +1056,16 @@ static void do_weapon_attach_scan(void* ctxRaw)
         // Identify which equipped slot this attached actor belongs to by
         // matching its own ItemDataAsset (BP_JigPickupComponent_C.ItemDataAsset
         // @0x00A8) against the already-read Equipment list.
-        const uintptr_t ownItemDA = *reinterpret_cast<uintptr_t*>(pickupComp + 0x00A8);
+        // Was pickupComp+0x00A8. ItemDataAsset sits at 0x00C0 on UE 5.6, so
+        // this read an unrelated field as a pointer and the fname_to_string
+        // below dereferenced it — the access violation the SEH guard has been
+        // catching and reporting as "stale pointer, likely a concurrent native
+        // equip/unequip change" on every single scan cycle.
+        //
+        // It only started faulting once AttachChildren was fixed: before that
+        // the walk bailed on a garbage count and never reached this line.
+        const uintptr_t ownItemDA = reinterpret_cast<uintptr_t>(
+            obj_prop(reinterpret_cast<UObject*>(pickupComp), STR("ItemDataAsset")));
         if (!ownItemDA) {
             debug_log("read_local_weapon_attachments: child[" + std::to_string(c) + "] owner=" + ownerName + " ItemDataAsset null");
             continue;
@@ -1121,7 +1130,10 @@ static void do_weapon_attach_scan(void* ctxRaw)
 
         // FS_RepWeaponAttachment RepAttachments @0x0110 on BP_JigPickupComponent_C:
         // FGuid MainUID @+0x00 (unused here), TArray<FS_RepAttachmentInfo> Attachments @+0x10.
-        const uintptr_t repAttachments = pickupComp + 0x0110;
+        // Was pickupComp+0x0110; RepAttachments is at 0x0128 on UE 5.6.
+        const uintptr_t repAttachments = reinterpret_cast<uintptr_t>(
+            reinterpret_cast<UObject*>(pickupComp)->GetValuePtrByPropertyNameInChain(STR("RepAttachments")));
+        if (!repAttachments) return;
         const uintptr_t arrayData  = *reinterpret_cast<uintptr_t*>(repAttachments + 0x10 + 0x00);
         const int32_t   arrayCount = *reinterpret_cast<int32_t*>(repAttachments + 0x10 + 0x08);
         debug_log("read_local_weapon_attachments: slot=" + std::to_string(slotIndex) +
@@ -1463,8 +1475,10 @@ static sdo::PlayerLights read_local_player_lights(AActor* pawn)
 {
     sdo::PlayerLights out;
     if (!pawn) return out;
-    out.flashlightOn  = *reinterpret_cast<const bool*>(reinterpret_cast<uintptr_t>(pawn) + 0x13E5);
-    out.nightVisionOn = *reinterpret_cast<const bool*>(reinterpret_cast<uintptr_t>(pawn) + 0x1401);
+    if (auto* fl = static_cast<const bool*>(pawn->GetValuePtrByPropertyNameInChain(STR("FlashlightOn?"))))
+        out.flashlightOn = *fl;
+    if (auto* nv = static_cast<const bool*>(pawn->GetValuePtrByPropertyNameInChain(STR("PlayerUsingNightVision?"))))
+        out.nightVisionOn = *nv;
 
     // Ground-truth from FlashlightToggle's own decoded bytecode: the real
     // on-value is computed per-equipped-item, not a fixed constant. Read it
@@ -1474,7 +1488,7 @@ static sdo::PlayerLights read_local_player_lights(AActor* pawn)
     // only meaningful while flashlightOn is true; left at 0 otherwise so an
     // off-but-stale intensity never gets misread as "was bright".
     if (out.flashlightOn) {
-        auto* lightSlot = *reinterpret_cast<UObject**>(reinterpret_cast<uintptr_t>(pawn) + 0x0738);
+        auto* lightSlot = obj_prop(pawn, STR("Flashlight"));
         if (lightSlot)
             out.flashlightIntensity = *reinterpret_cast<const float*>(
                 reinterpret_cast<uintptr_t>(lightSlot) + 0x02B4);
@@ -3243,7 +3257,7 @@ static void check_scan_pickup_class_trigger()
         UObject* root = nullptr;
         if (rootFn) actor->ProcessEvent(rootFn, &root);
         const void* attachParent = root
-            ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(root) + 0xB0)
+            ? static_cast<void*>(obj_prop(reinterpret_cast<UObject*>(root), STR("AttachParent")))
             : nullptr;
         char buf[128];
         snprintf(buf, sizeof(buf), "scan_pickup_class: instance=0x%llx root=0x%llx AttachParent=0x%llx",
@@ -3765,7 +3779,9 @@ static void do_attach_health_scan(void* ctxRaw)
 
         for (uintptr_t child : current) {
             UObject* childObj = reinterpret_cast<UObject*>(child);
-            const auto* rel = reinterpret_cast<const double*>(child + 0x128);
+            const auto* rel = static_cast<const double*>(
+            reinterpret_cast<UObject*>(child)->GetValuePtrByPropertyNameInChain(STR("RelativeLocation")));
+        if (!rel) continue;
             const double x = rel[0], y = rel[1], z = rel[2];
 
             UFunction* getSocketFn = childObj->GetFunctionByNameInChain(L"GetAttachSocketName");
@@ -4580,22 +4596,126 @@ static void do_body_part_repair(void* ctxRaw)
 // stopped moving. That correlation is suggestive but unproven, and guessing
 // at it twice already made things worse — so this switch answers it in one
 // launch instead of another speculative change.
+// A switch is on if EITHER the environment variable is set to 1, or a file of
+// the matching name exists in the mod's own directory (%APPDATA%\SDO).
+//
+// The file form is the one that actually works in practice. Windows resolves a
+// User-scope environment variable change only for processes started after it,
+// and the game inherits Steam's environment from whenever Steam was launched —
+// so setting a variable and relaunching the game silently tests the OLD value.
+// That invalidated a whole bisect round: apply_world_state kept running with
+// SDO_SAFE_MODE=1 set, because the game never saw it. session.cfg exists for
+// the same reason.
+//
+//   SDO_SAFE_MODE       / safe_mode.flag
+//   SDO_NO_LOCAL_REPAIR / no_local_repair.flag
+//   SDO_NO_WORLD_STATE  / no_world_state.flag
+//   SDO_NO_VITALS_WRITE / no_vitals_write.flag
+static bool env_flag_set(const wchar_t* envName, const wchar_t* fileName)
+{
+    wchar_t buf[8];
+    const DWORD n = GetEnvironmentVariableW(envName, buf, 8);
+    if (n > 0 && n < 8 && buf[0] == L'1') return true;
+
+    wchar_t path[MAX_PATH];
+    const DWORD a = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (a == 0 || a >= MAX_PATH) return false;
+    const std::wstring flag = std::wstring(path, a) + L"\\SDO\\" + fileName;
+    return GetFileAttributesW(flag.c_str()) != INVALID_FILE_ATTRIBUTES;
+}
+
+// Bisect switches for the "local player is frozen and the hotbar never
+// populates" regression. With the mod disabled entirely both work, so
+// something this mod writes into the local player's object graph is at fault;
+// these let one launch clear a whole group instead of one candidate at a time.
+//
+//   SDO_SAFE_MODE=1         all of the below at once
+//   SDO_NO_LOCAL_REPAIR=1   component-drift repair writes (scan stays read-only)
+//   SDO_NO_WORLD_STATE=1    UltraDynamicSky time/weather writes
+//   SDO_NO_VITALS_WRITE=1   deferred vitals write-back
+static bool safe_mode()
+{
+    static const bool s_on = [] {
+        const bool on = env_flag_set(L"SDO_SAFE_MODE", L"safe_mode.flag");
+        if (on) debug_log("SAFE MODE: SDO_SAFE_MODE=1 — all risky local-player writes disabled");
+        return on;
+    }();
+    return s_on;
+}
+
 static bool local_repair_disabled()
 {
     static const bool s_off = [] {
-        wchar_t buf[8];
-        const DWORD n = GetEnvironmentVariableW(L"SDO_NO_LOCAL_REPAIR", buf, 8);
-        const bool off = (n > 0 && n < 8 && buf[0] == L'1');
-        if (off) debug_log("component_drift: SDO_NO_LOCAL_REPAIR=1 — repair writes disabled, scan is read-only");
+        const bool off = env_flag_set(L"SDO_NO_LOCAL_REPAIR", L"no_local_repair.flag");
+        if (off) debug_log("component_drift: repair writes disabled, scan is read-only");
+        return off;
+    }();
+    const bool sm = safe_mode();
+    return s_off || sm;
+}
+
+static bool world_state_disabled()
+{
+    static const bool s_off = [] {
+        const bool off = env_flag_set(L"SDO_NO_WORLD_STATE", L"no_world_state.flag");
+        if (off) debug_log("apply_world_state: disabled by env");
+        return off;
+    }();
+    const bool sm = safe_mode();
+    return s_off || sm;
+}
+
+// Skip every per-tick step that reads or writes the LOCAL player, keeping
+// only the network drain, proxy drive and world-entity drive. Splits the
+// remaining search space in half: if the character moves and the hotbar
+// populates with this on, the fault is in one of the local steps (3b/3c,
+// 6b, 7, 8, 9, 9b, 9c); if it does not, it is in the network/proxy path or
+// in the ProcessEvent hooks themselves.
+//
+//   SDO_NO_TICK_WORK / no_tick_work.flag
+static bool tick_work_disabled()
+{
+    static const bool s_off = [] {
+        const bool off = env_flag_set(L"SDO_NO_TICK_WORK", L"no_tick_work.flag");
+        if (off) debug_log("TICK WORK DISABLED: local per-tick steps skipped (network + proxies only)");
         return off;
     }();
     return s_off;
 }
 
+// Per-step switches, so the remaining suspects can be named individually
+// rather than as a group. All read the same env-or-file form.
+//
+//   SDO_NO_EQUIP_RESTORE  / no_equip_restore.flag    step 3c
+//   SDO_NO_PICKUP_RESOLVE / no_pickup_resolve.flag   step 6b
+//   SDO_NO_PROFILE_REV    / no_profile_rev.flag      step 7
+//   SDO_NO_EQUIP_SEND     / no_equip_send.flag       step 8
+//   SDO_NO_MISC_SYNC      / no_misc_sync.flag        steps 9, 9b, 9c
+#define SDO_STEP_SWITCH(fn, env, file, label)                           static bool fn()                                                    {                                                                       static const bool s_off = [] {                                          const bool off = env_flag_set(L##env, L##file);                     if (off) debug_log(label " disabled");                              return off;                                                     }();                                                                return s_off;                                                   }
+
+SDO_STEP_SWITCH(equip_restore_disabled,  "SDO_NO_EQUIP_RESTORE",  "no_equip_restore.flag",  "step 3c equip-restore")
+SDO_STEP_SWITCH(pickup_resolve_disabled, "SDO_NO_PICKUP_RESOLVE", "no_pickup_resolve.flag", "step 6b pickup-resolve")
+SDO_STEP_SWITCH(profile_rev_disabled,    "SDO_NO_PROFILE_REV",    "no_profile_rev.flag",    "step 7 profile-revision")
+SDO_STEP_SWITCH(equip_send_disabled,     "SDO_NO_EQUIP_SEND",     "no_equip_send.flag",     "step 8 equipment-send")
+SDO_STEP_SWITCH(misc_sync_disabled,      "SDO_NO_MISC_SYNC",      "no_misc_sync.flag",      "steps 9/9b/9c misc-sync")
+
+static bool vitals_write_disabled()
+{
+    static const bool s_off = [] {
+        const bool off = env_flag_set(L"SDO_NO_VITALS_WRITE", L"no_vitals_write.flag");
+        if (off) debug_log("vitals_restore: disabled by env");
+        return off;
+    }();
+    const bool sm = safe_mode();
+    return s_off || sm;
+}
+
 static void do_component_drift_scan(void* ctxRaw)
 {
     auto* ctx = static_cast<ComponentDriftCtx*>(ctxRaw);
-    auto* relLoc = reinterpret_cast<double*>(reinterpret_cast<uintptr_t>(ctx->comp) + 0x0128);
+    auto* relLoc = static_cast<double*>(
+        ctx->comp->GetValuePtrByPropertyNameInChain(STR("RelativeLocation")));
+    if (!relLoc) return;
     const double x = relLoc[0], y = relLoc[1], z = relLoc[2];
     if (ctx->hasLast) {
         const double dx = x - ctx->lastX, dy = y - ctx->lastY, dz = z - ctx->lastZ;
@@ -6004,6 +6124,9 @@ static uint32_t s_lastAppliedWorldRevision = 0;
 
 static void apply_world_state()
 {
+    // Raw sky/weather writes plus an unverified ProcessEvent — the same code
+    // that was suspected (never confirmed) in the save-corruption incident.
+    if (world_state_disabled()) return;
     sdo::WorldState ws;
     bool valid = false;
     {
@@ -6230,6 +6353,7 @@ static constexpr bool kEnableVitalsWrite = true;
 static void do_vitals_restore(void* ctxRaw)
 {
     auto* ctx = static_cast<VitalsRestoreCtx*>(ctxRaw);
+    if (vitals_write_disabled()) { debug_log("vitals_restore: skipped (disabled)"); return; }
     if constexpr (kEnableVitalsWrite) {
         // These were pawn byte offsets captured against UE 5.3:
         //   MedicalComponent +0x7D0, RadiationComponent +0x7F0,
@@ -6301,7 +6425,7 @@ static void do_equip_restore_retry(void* ctxRaw)
     auto* ctx = static_cast<EquipRestoreRetryCtx*>(ctxRaw);
     const auto helper = reinterpret_cast<uintptr_t>(obj_prop(ctx->pawn, STR("BP_JigHelperComp")));
     if (!helper) {
-        debug_log("equip_restore_retry: " + ctx->label + " pawn+0x700 BP_JigHelperComp is null");
+        debug_log("equip_restore_retry: " + ctx->label + " BP_JigHelperComp is null");
         return;
     }
     UFunction* equipFn = reinterpret_cast<UObject*>(helper)->GetFunctionByNameInChain(L"Equip Actor to Socket");
@@ -6353,8 +6477,23 @@ static void do_equip_restore_retry(void* ctxRaw)
         checked++;
 
         auto* actor = reinterpret_cast<AActor*>(actorPtr);
-        const uintptr_t root = *reinterpret_cast<uintptr_t*>(actorPtr + 0x1A0);
-        const uintptr_t attachParent = root ? *reinterpret_cast<uintptr_t*>(root + 0xB0) : 0;
+        // These three reads decide whether a slot is orphaned or drifted, and
+        // every one of them was a UE 5.3 offset:
+        //   AActor::RootComponent        +0x1A0
+        //   USceneComponent::AttachParent +0x0B0  (0x0C8 on 5.6)
+        //   USceneComponent::RelativeLocation +0x128 (0x140 on 5.6)
+        //
+        // With AttachParent reading an unrelated field, the orphan test below
+        // ("no attach parent => needs re-attaching") was true for every slot,
+        // every pass. The live log shows the result plainly: "checked=11
+        // fixed=11" on every run and 1,859 "re-attached orphaned slot" entries
+        // in one session. So the mod tore every equipped item off and
+        // re-attached it via ProcessEvent, continuously, which is why the
+        // hotbar never finished resolving its icons.
+        UObject* rootObj = obj_prop(reinterpret_cast<UObject*>(actorPtr), STR("RootComponent"));
+        const uintptr_t root = reinterpret_cast<uintptr_t>(rootObj);
+        const uintptr_t attachParent = rootObj
+            ? reinterpret_cast<uintptr_t>(obj_prop(rootObj, STR("AttachParent"))) : 0;
 
         struct EquipParams { AActor* ActorRef = nullptr; bool IsSecondary = false; } params;
         params.ActorRef = actor;
@@ -6378,7 +6517,10 @@ static void do_equip_restore_retry(void* ctxRaw)
         // drift, same 30-unit threshold and RelativeLocation offset (0x128)
         // component_drift already uses on body components.
         if (root) {
-            const auto* rel = reinterpret_cast<const double*>(root + 0x128);
+            const auto* rel = rootObj
+                ? static_cast<const double*>(rootObj->GetValuePtrByPropertyNameInChain(STR("RelativeLocation")))
+                : nullptr;
+            if (!rel) continue;
             const double x = rel[0], y = rel[1], z = rel[2];
             auto it = s_lastActorPos.find(actorPtr);
             if (it != s_lastActorPos.end()) {
@@ -6421,8 +6563,12 @@ static void do_equip_restore_retry(void* ctxRaw)
     // matching-Slot RepActorsData entry has a live, attached Actor) since
     // that specific combination is exactly what would explain the observed
     // symptom (equip state fine, visible mesh wrong).
-    const uintptr_t primDataPtr = *reinterpret_cast<uintptr_t*>(helper + 0xAD0);
-    const int32_t   primCount   = *reinterpret_cast<int32_t*>(helper + 0xAD0 + 0x08);
+    // Was helper+0xAD0; RepPrimitiveActorsData is at 0x0AE8 on UE 5.6.
+    auto* primArr = reinterpret_cast<UObject*>(helper)
+                        ->GetValuePtrByPropertyNameInChain(STR("RepPrimitiveActorsData"));
+    const uintptr_t primDataPtr = primArr ? *reinterpret_cast<uintptr_t*>(primArr) : 0;
+    const int32_t   primCount   = primArr
+        ? *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(primArr) + 0x08) : 0;
     if (primDataPtr && primCount > 0 && primCount <= 64) {
         int mismatches = 0;
         for (int32_t i = 0; i < primCount; ++i) {
@@ -6440,8 +6586,10 @@ static void do_equip_restore_retry(void* ctxRaw)
 
                 const uintptr_t repActor = *reinterpret_cast<uintptr_t*>(repEntry + 8);
                 if (!repActor) break; // both empty, consistent, not a mismatch
-                const uintptr_t repRoot = *reinterpret_cast<uintptr_t*>(repActor + 0x1A0);
-                const uintptr_t repAttachParent = repRoot ? *reinterpret_cast<uintptr_t*>(repRoot + 0xB0) : 0;
+                const uintptr_t repRoot = reinterpret_cast<uintptr_t>(
+            obj_prop(reinterpret_cast<UObject*>(repActor), STR("RootComponent")));
+                const uintptr_t repAttachParent = repRoot
+            ? reinterpret_cast<uintptr_t>(obj_prop(reinterpret_cast<UObject*>(repRoot), STR("AttachParent"))) : 0;
                 if (!repAttachParent) break; // RepActorsData itself is broken here too, not the interesting case
 
                 mismatches++;
@@ -6725,8 +6873,8 @@ static void do_game_tick(bool cleanContext)
     AActor* pawn = cached_find_local_pawn();
 
     if (pawn) {
-        g_local_helper_ptr.store(*reinterpret_cast<uintptr_t*>(
-            reinterpret_cast<uintptr_t>(pawn) + 0x700), std::memory_order_relaxed);
+        g_local_helper_ptr.store(reinterpret_cast<uintptr_t>(
+            obj_prop(pawn, STR("BP_JigHelperComp"))), std::memory_order_relaxed);
 
         static bool s_actorTickRegistered = false;
         if (!s_actorTickRegistered) {
@@ -6911,6 +7059,11 @@ static void do_game_tick(bool cleanContext)
         }
     }
 
+    // Bisect gate — see tick_work_disabled(). Placed after the teleport step
+    // so the join still positions the player, and before every local
+    // read/write step.
+    const bool skipLocal = tick_work_disabled();
+
     // 3b. Apply pending vitals restore from PlayerProgressRestore (2026-08-14,
     // see state.hpp's pendingVitalsRestore comment). Deferred ~2s past the
     // join event and SEH-wrapped, replacing an inline raw-memory write that
@@ -6946,7 +7099,8 @@ static void do_game_tick(bool cleanContext)
     // BP_JigHelperComp (same +0x700 offset, same class) and calling the
     // same repair on it is not a new technique, just applying an existing
     // proven one to actors this loop never visited before.
-    if (now - st.lastEquipRestoreRetryUs >= 3'000'000ULL) {
+    if (!skipLocal && !equip_restore_disabled() &&
+        now - st.lastEquipRestoreRetryUs >= 3'000'000ULL) {
         st.lastEquipRestoreRetryUs = now;
         EquipRestoreRetryCtx ctx{ pawn, "local" };
         if (!seh_invoke(do_equip_restore_retry, &ctx))
@@ -7014,15 +7168,17 @@ static void do_game_tick(bool cleanContext)
     // 6b. Resolve any pickup interact caught by handle_pickup_hook a moment
     // ago, plus the inventory-diff fallback for the drag-and-drop UI path
     // the hook doesn't cover (see check_inventory_pickup's comment).
-    check_pending_pickup(pawn);
-    check_inventory_pickup(pawn);
-    debug_log("tick: step 6b done (pickup resolve)");
+    if (!skipLocal && !pickup_resolve_disabled()) {
+        check_pending_pickup(pawn);
+        check_inventory_pickup(pawn);
+        debug_log("tick: step 6b done (pickup resolve)");
+    }
 
     // 7. Periodic profile revision: push live vitals/position to server every 30 s.
     const uint64_t last_prof = g_last_profile_us.load(std::memory_order_relaxed);
     if (last_prof == 0 || now - last_prof >= 30'000'000ULL) {
         g_last_profile_us.store(now, std::memory_order_relaxed);
-        send_profile_revision(pawn);
+        if (!skipLocal && !profile_rev_disabled()) send_profile_revision(pawn);
     }
 
     // 8. Periodic equipment sync: push loadout to other players every 2 s.
@@ -7032,9 +7188,11 @@ static void do_game_tick(bool cleanContext)
     const uint64_t last_equip = g_last_equip_us.load(std::memory_order_relaxed);
     if (last_equip == 0 || now - last_equip >= 2'000'000ULL) {
         g_last_equip_us.store(now, std::memory_order_relaxed);
-        send_equipment(pawn);
-        send_weapon_attachments(pawn);
-        send_pawn_appearance(pawn);
+        if (!skipLocal && !equip_send_disabled()) {
+            send_equipment(pawn);
+            send_weapon_attachments(pawn);
+            send_pawn_appearance(pawn);
+        }
     }
 
     // 9. Flashlight/NVG toggle sync — unthrottled (called every tick, not
@@ -7043,16 +7201,16 @@ static void do_game_tick(bool cleanContext)
     // change-detected so this can't spam the network — only sends the
     // instant either value actually flips, for near-immediate proxy sync on
     // a discrete player action instead of riding the slower 2s equip cycle.
-    send_player_lights(pawn);
+    if (!skipLocal && !misc_sync_disabled()) send_player_lights(pawn);
 
     // 9b. Weapon-fire first-shot detection — same unthrottled cadence as
     // step 9 (see check_weapon_fire_edge's own comment for why this exists
     // instead of a ProcessEvent hook).
-    check_weapon_fire_edge(pawn);
+    if (!skipLocal && !misc_sync_disabled()) check_weapon_fire_edge(pawn);
 
     // 9c. TEMPORARY head-look diagnostic — see check_head_rot_diagnostic's
     // own comment. Remove once the real mapping is confirmed.
-    check_head_rot_diagnostic(pawn);
+    if (!skipLocal && !misc_sync_disabled()) check_head_rot_diagnostic(pawn);
 
     // 10. World/weather/time sync — unthrottled like step 9: a single
     // revision-number comparison, apply_world_state itself only does real
@@ -7360,8 +7518,7 @@ static void handle_build_hook(void* params)
     // -> ItemId (+0x30, FName) — the piece currently selected in build mode,
     // same DataAsset/itemId system GroundItem already uses (research/
     // 04_ida_investigation_log.md Session 58).
-    const uintptr_t buildingComp = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(pawn) + 0x7E0);
+    const uintptr_t buildingComp = reinterpret_cast<uintptr_t>(obj_prop(pawn, STR("BuildingComponent")));
     if (!buildingComp) {
         debug_log("handle_build_hook: pawn+0x7E0 BuildingComponent is null");
         return;
@@ -7689,7 +7846,7 @@ static void check_load_data_requested_hook(UObject* obj, UFunction* func)
         if (last == 0 || now - last >= 1'000'000ULL) {
             s_lastTryUs.store(now, std::memory_order_relaxed);
             if (AActor* pawn = find_local_pawn()) {
-                const auto helper = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(pawn) + 0x700);
+                const auto helper = reinterpret_cast<uintptr_t>(obj_prop(pawn, STR("BP_JigHelperComp")));
                 if (helper)
                     s_loadDataRequestedFn = reinterpret_cast<UObject*>(helper)->GetFunctionByNameInChain(L"OnLoadDataRequested");
             }
@@ -8061,8 +8218,7 @@ static void on_process_event_pre(UObject* obj, UFunction* func, void* params)
         if (last == 0 || now - last >= 1'000'000ULL) {
             s_last_build_fn_try_us.store(now, std::memory_order_relaxed);
             if (AActor* pawn = find_local_pawn()) {
-                const uintptr_t buildingComp = *reinterpret_cast<uintptr_t*>(
-                    reinterpret_cast<uintptr_t>(pawn) + 0x7E0);
+                const uintptr_t buildingComp = reinterpret_cast<uintptr_t>(obj_prop(pawn, STR("BuildingComponent")));
                 if (buildingComp) {
                     auto* comp = reinterpret_cast<UObject*>(buildingComp);
                     if (!s_buildFn)    s_buildFn    = comp->GetFunctionByNameInChain(L"SpawnBuild");

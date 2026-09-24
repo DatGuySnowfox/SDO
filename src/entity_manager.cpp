@@ -382,8 +382,10 @@ static AActor* find_native_vehicle_near(const WorldEntity& entity)
 // those are pickup-specific, not meaningful for a placed structure.
 static AActor* spawn_placed_structure_actor(UWorld* world, void* itemAsset, const WorldEntity& entity)
 {
-    auto* buildClass = *reinterpret_cast<UClass**>(
-        reinterpret_cast<uintptr_t>(itemAsset) + 0x4E8);
+    // Was itemAsset+0x4E8; BuildActorClass is at 0x0548 on UE 5.6.
+    auto** buildSlot = static_cast<UObject**>(
+        reinterpret_cast<UObject*>(itemAsset)->GetValuePtrByPropertyNameInChain(L"BuildActorClass"));
+    auto* buildClass = reinterpret_cast<UClass*>((buildSlot && *buildSlot) ? *buildSlot : nullptr);
     if (!buildClass) {
         debug_log("spawn_placed_structure_actor: BuildActorClass is null for itemId=" + entity.itemId);
         return nullptr;
@@ -580,8 +582,10 @@ AActor* EntityManager::spawn_entity_actor(UWorld* world, const WorldEntity& enti
         isOwnDrop = (entity.ownerPlayerId != 0 && entity.ownerPlayerId == localPlayerId);
     }
 
-    auto* pickupClass = *reinterpret_cast<UClass**>(
-        reinterpret_cast<uintptr_t>(itemAsset) + 0x128);
+    // Was itemAsset+0x128; PickupClass is at 0x0190 on UE 5.6.
+    auto** pickupSlot = static_cast<UObject**>(
+        reinterpret_cast<UObject*>(itemAsset)->GetValuePtrByPropertyNameInChain(L"PickupClass"));
+    auto* pickupClass = reinterpret_cast<UClass*>((pickupSlot && *pickupSlot) ? *pickupSlot : nullptr);
     if (!pickupClass) {
         debug_log("spawn_entity_actor: PickupClass is null for itemId=" + entity.itemId);
         return nullptr;

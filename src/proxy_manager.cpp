@@ -726,8 +726,8 @@ static bool get_equipped_info_by_slot(AActor* actor, uint8_t slotIndex,
     RawFGameplayTag tag;
     if (!slot_tag(slotIndex, tag)) return false;
 
-    const uintptr_t helper = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(actor) + 0x700);
+    const uintptr_t helper = reinterpret_cast<uintptr_t>(
+        prop_obj(reinterpret_cast<UObject*>(actor), STR("BP_JigHelperComp")));
     if (!helper) return false;
 
     auto* helperObj = reinterpret_cast<UObject*>(helper);
@@ -765,8 +765,8 @@ static bool set_equipped_info_by_slot(AActor* actor, uint8_t slotIndex, const st
     RawFGameplayTag tag;
     if (!slot_tag(slotIndex, tag)) return false;
 
-    const uintptr_t helper = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(actor) + 0x700);
+    const uintptr_t helper = reinterpret_cast<uintptr_t>(
+        prop_obj(reinterpret_cast<UObject*>(actor), STR("BP_JigHelperComp")));
     if (!helper) return false;
 
     auto* helperObj = reinterpret_cast<UObject*>(helper);
@@ -817,8 +817,8 @@ static bool set_active_weapon_slot(AActor* actor, uint8_t slotIndex)
     RawFGameplayTag tag;
     if (!slot_tag(slotIndex, tag)) return false;
 
-    const uintptr_t helper = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(actor) + 0x700);
+    const uintptr_t helper = reinterpret_cast<uintptr_t>(
+        prop_obj(reinterpret_cast<UObject*>(actor), STR("BP_JigHelperComp")));
     if (!helper) return false;
 
     auto* helperObj = reinterpret_cast<UObject*>(helper);
@@ -844,8 +844,8 @@ static bool equip_actor_to_socket(AActor* actor, AActor* itemActor, bool isSecon
 {
     if (!actor || !itemActor) return false;
 
-    const uintptr_t helper = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(actor) + 0x700);
+    const uintptr_t helper = reinterpret_cast<uintptr_t>(
+        prop_obj(reinterpret_cast<UObject*>(actor), STR("BP_JigHelperComp")));
     if (!helper) return false;
 
     auto* helperObj = reinterpret_cast<UObject*>(helper);
@@ -1003,8 +1003,8 @@ static bool call_on_rep_active_weapon(AActor* actor)
 {
     if (!actor) return false;
 
-    const uintptr_t helper = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(actor) + 0x700);
+    const uintptr_t helper = reinterpret_cast<uintptr_t>(
+        prop_obj(reinterpret_cast<UObject*>(actor), STR("BP_JigHelperComp")));
     if (!helper) return false;
 
     auto* helperObj = reinterpret_cast<UObject*>(helper);
@@ -1064,8 +1064,8 @@ static AActor* get_current_active_weapon(AActor* actor)
 static AActor* get_helper_active_weapon(AActor* actor)
 {
     if (!actor) return nullptr;
-    const uintptr_t helper = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(actor) + 0x700);
+    const uintptr_t helper = reinterpret_cast<uintptr_t>(
+        prop_obj(reinterpret_cast<UObject*>(actor), STR("BP_JigHelperComp")));
     if (!helper) return nullptr;
 
     auto* helperObj = reinterpret_cast<UObject*>(helper);
@@ -1086,8 +1086,8 @@ static AActor* get_helper_equipped_actor_by_slot(AActor* actor, uint8_t slotInde
     RawFGameplayTag tag;
     if (!slot_tag(slotIndex, tag)) return nullptr;
 
-    const uintptr_t helper = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(actor) + 0x700);
+    const uintptr_t helper = reinterpret_cast<uintptr_t>(
+        prop_obj(reinterpret_cast<UObject*>(actor), STR("BP_JigHelperComp")));
     if (!helper) return nullptr;
 
     auto* helperObj = reinterpret_cast<UObject*>(helper);
@@ -1188,8 +1188,11 @@ static void apply_item_equipped_transform(UObject* itemRoot, void* itemAsset)
     // RelativeLocation/RelativeRotation directly instead; USceneComponent
     // recomputes ComponentToWorld from these each tick for an attached
     // component, so no separate "refresh" call is needed.
-    const auto* eq = reinterpret_cast<const NativeFTransform*>(
-        reinterpret_cast<uintptr_t>(itemAsset) + 0x220);
+    // Was itemAsset+0x220, which lands inside ContextMenuOptions on UE 5.6;
+    // EquippedTransform is at 0x0280.
+    const auto* eq = static_cast<const NativeFTransform*>(
+        reinterpret_cast<UObject*>(itemAsset)->GetValuePtrByPropertyNameInChain(STR("EquippedTransform")));
+    if (!eq) { debug_log("apply_equipped_transform: EquippedTransform not found"); return; }
 
     // Was itemRoot+0x0128. RelativeLocation sits at 0x0140 on UE 5.6, so this
     // wrote the equip offset into whatever preceded it.
@@ -1267,8 +1270,9 @@ static AActor* spawn_and_equip_item_visual(AActor* actor, void* itemAsset, bool 
 {
     if (!actor || !itemAsset) return nullptr;
 
-    auto* pickupClass = *reinterpret_cast<UClass**>(
-        reinterpret_cast<uintptr_t>(itemAsset) + 0x128);
+    // Was itemAsset+0x128; PickupClass is at 0x0190 on UE 5.6.
+    auto* pickupClass = static_cast<UClass*>(
+        prop_obj(reinterpret_cast<UObject*>(itemAsset), STR("PickupClass")));
     if (!pickupClass) {
         debug_log("spawn_and_equip_item_visual: PickupClass is null on item asset");
         return nullptr;
@@ -2090,8 +2094,10 @@ void ProxyManager::sync_equipment(AActor* actor, RemotePlayer& player)
                     // earlier tonight: hide the bare hands whenever gloves
                     // are genuinely equipped.
                     if (called && slot.slotIndex == 5) {
-                        auto* handsComp = *reinterpret_cast<UObject**>(
-                            reinterpret_cast<uintptr_t>(actor) + 0x07B0);
+                        // Was actor+0x07B0, which is VehicleDrivingComponent on UE 5.6 — this was
+                        // grabbing the vehicle component and treating it as the Hands
+                        // mesh. Hands is at 0x0788; resolved by name.
+                        auto* handsComp = prop_obj(reinterpret_cast<UObject*>(actor), STR("Hands"));
                         if (handsComp) {
                             UFunction* visFn = handsComp->GetFunctionByNameInChain(L"SetVisibility");
                             if (visFn) {
@@ -2227,8 +2233,10 @@ void ProxyManager::sync_equipment(AActor* actor, RemotePlayer& player)
                 // Mirror of the hide-on-equip above: gloves coming off means
                 // the bare "Hands" body-part mesh needs to be shown again.
                 if (cleared && i == 5) {
-                    auto* handsComp = *reinterpret_cast<UObject**>(
-                        reinterpret_cast<uintptr_t>(actor) + 0x07B0);
+                    // Was actor+0x07B0, which is VehicleDrivingComponent on UE 5.6 — this was
+                        // grabbing the vehicle component and treating it as the Hands
+                        // mesh. Hands is at 0x0788; resolved by name.
+                        auto* handsComp = prop_obj(reinterpret_cast<UObject*>(actor), STR("Hands"));
                     if (handsComp) {
                         UFunction* visFn = handsComp->GetFunctionByNameInChain(L"SetVisibility");
                         if (visFn) {
