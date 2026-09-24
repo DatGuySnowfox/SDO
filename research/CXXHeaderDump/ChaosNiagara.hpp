@@ -72,9 +72,14 @@ class UNiagaraDataInterfaceChaosDestruction : public UNiagaraDataInterface
 
 class UNiagaraDataInterfaceGeometryCollection : public UNiagaraDataInterface
 {
-    class AGeometryCollectionActor* GeometryCollectionActor;                          // 0x0038 (size: 0x8)
+    ENDIGeometryCollection_SourceMode SourceMode;                                     // 0x0038 (size: 0x1)
+    class UGeometryCollection* DefaultGeometryCollection;                             // 0x0040 (size: 0x8)
+    TSoftObjectPtr<class AGeometryCollectionActor> GeometryCollectionActor;           // 0x0048 (size: 0x28)
+    class UGeometryCollectionComponent* SourceComponent;                              // 0x0070 (size: 0x8)
+    FNiagaraUserParameterBinding GeometryCollectionUserParameter;                     // 0x0078 (size: 0x20)
+    bool bIncludeIntermediateBones;                                                   // 0x0098 (size: 0x1)
 
-}; // Size: 0x40
+}; // Size: 0xA0
 
 class UNiagaraDataInterfacePhysicsField : public UNiagaraDataInterface
 {

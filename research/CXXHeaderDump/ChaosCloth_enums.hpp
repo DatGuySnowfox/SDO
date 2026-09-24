@@ -12,6 +12,7 @@ enum class EChaosWeightMapTarget {
     BackstopDistance = 2,
     BackstopRadius = 3,
     AnimDriveStiffness = 4,
+    TetherEndsMask = 201,
     AnimDriveDamping = 5,
     TetherStiffness = 6,
     TetherScale = 7,
@@ -22,6 +23,9 @@ enum class EChaosWeightMapTarget {
     AreaStiffness = 12,
     BucklingStiffness = 13,
     Pressure = 14,
-    EChaosWeightMapTarget_MAX = 15,
+    FlatnessRatio = 15,
+    OuterDrag = 16,
+    OuterLift = 17,
+    MAX = 18,
 };
 

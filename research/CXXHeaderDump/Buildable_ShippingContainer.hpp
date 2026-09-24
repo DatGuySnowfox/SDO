@@ -3,6 +3,6 @@
 
 class ABuildable_ShippingContainer_C : public ABuildableMaster_Container_C
 {
-}; // Size: 0x488
+}; // Size: 0x490
 
 #endif

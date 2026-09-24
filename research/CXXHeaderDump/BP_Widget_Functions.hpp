@@ -29,7 +29,7 @@ class UBP_Widget_Functions_C : public UBlueprintFunctionLibrary
     FLinearColor SubtractFromColor(const FLinearColor InColor, double Value, class UObject* __WorldContext);
     void GetSize(class USizeBox* SizeBox, class UObject* __WorldContext, double& Width, double& Height);
     void SetSize(class USizeBox* SizeBox, double Width, double Height, class UObject* __WorldContext);
-    FVector2D GetTexture2DSizeClamped(class UTexture2D* Texture2D, FVector2D Clamp, class UObject* __WorldContext);
+    FVector2D GetTexture2DSizeClamped(class UTexture2D* Texture2D, FVector2D clamp, class UObject* __WorldContext);
     FVector2D GetTexture2DSize(class UTexture2D* Texture2D, class UObject* __WorldContext);
 }; // Size: 0x28
 

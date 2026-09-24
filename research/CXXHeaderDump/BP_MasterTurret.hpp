@@ -3,22 +3,22 @@
 
 class ABP_MasterTurret_C : public AActor
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0298 (size: 0x8)
-    class UArrowComponent* FOV Arrow Down;                                            // 0x02A0 (size: 0x8)
-    class UArrowComponent* FOV Arrow Up;                                              // 0x02A8 (size: 0x8)
-    class UArrowComponent* FOV Arrow Right;                                           // 0x02B0 (size: 0x8)
-    class UArrowComponent* FOV Arrow Left;                                            // 0x02B8 (size: 0x8)
-    class UStaticMeshComponent* Turret Base;                                          // 0x02C0 (size: 0x8)
-    class USceneComponent* Scene;                                                     // 0x02C8 (size: 0x8)
-    class USphereComponent* Weapon Muzzle;                                            // 0x02D0 (size: 0x8)
-    class UBP_TurretAIComponent_C* BP_TurretAIComponent;                              // 0x02D8 (size: 0x8)
-    class UArrowComponent* Forward Direction;                                         // 0x02E0 (size: 0x8)
-    class UStaticMeshComponent* Turret;                                               // 0x02E8 (size: 0x8)
-    double FOV Down;                                                                  // 0x02F0 (size: 0x8)
-    double FOV Up;                                                                    // 0x02F8 (size: 0x8)
-    double FOV Right;                                                                 // 0x0300 (size: 0x8)
-    double FOV Left;                                                                  // 0x0308 (size: 0x8)
-    bool Debug Mode;                                                                  // 0x0310 (size: 0x1)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02A8 (size: 0x8)
+    class UArrowComponent* FOV Arrow Down;                                            // 0x02B0 (size: 0x8)
+    class UArrowComponent* FOV Arrow Up;                                              // 0x02B8 (size: 0x8)
+    class UArrowComponent* FOV Arrow Right;                                           // 0x02C0 (size: 0x8)
+    class UArrowComponent* FOV Arrow Left;                                            // 0x02C8 (size: 0x8)
+    class UStaticMeshComponent* Turret Base;                                          // 0x02D0 (size: 0x8)
+    class USceneComponent* Scene;                                                     // 0x02D8 (size: 0x8)
+    class USphereComponent* Weapon Muzzle;                                            // 0x02E0 (size: 0x8)
+    class UBP_TurretAIComponent_C* BP_TurretAIComponent;                              // 0x02E8 (size: 0x8)
+    class UArrowComponent* Forward Direction;                                         // 0x02F0 (size: 0x8)
+    class UStaticMeshComponent* Turret;                                               // 0x02F8 (size: 0x8)
+    double FOV Down;                                                                  // 0x0300 (size: 0x8)
+    double FOV Up;                                                                    // 0x0308 (size: 0x8)
+    double FOV Right;                                                                 // 0x0310 (size: 0x8)
+    double FOV Left;                                                                  // 0x0318 (size: 0x8)
+    bool Debug Mode;                                                                  // 0x0320 (size: 0x1)
 
     void IsObjectDamageable?(bool& Damageable?);
     void AI Is Dead?(bool& Dead);
@@ -42,6 +42,6 @@ class ABP_MasterTurret_C : public AActor
     void ReceiveAnyDamage(float Damage, const class UDamageType* DamageType, class AController* InstigatedBy, class AActor* DamageCauser);
     void Damage_Object(double Damage, class AActor* Damage Causer, class AController* Event Instigator);
     void ExecuteUbergraph_BP_MasterTurret(int32 EntryPoint);
-}; // Size: 0x311
+}; // Size: 0x321
 
 #endif

@@ -12,13 +12,14 @@ class UNarrativeActivatableWidget : public UCommonActivatableWidget
     void UnregisterAllBindings();
     void SetBindingDisplayName(FInputActionBindingHandle BindingHandle, FText NewDisplayName);
     void RegisterBinding(FDataTableRowHandle InputAction, const FRegisterBindingCallback& Callback, FInputActionBindingHandle& BindingHandle, FText OverrideDisplayName, const bool bShouldDisplayInActionBar);
-}; // Size: 0x420
+}; // Size: 0x4B8
 
 class UNarrativeCommonHUD : public UCommonUserWidget
 {
 
     void ShowNotification(const FText& NotificationText, const float Duration);
-}; // Size: 0x2E8
+    void ShowMajorNotification(const FText& NotificationText, const FText& MajorNotificationSubtext, const float Duration, const bool bOverrideCurrentNotification);
+}; // Size: 0x368
 
 class UNarrativeCommonUIFunctionLibrary : public UBlueprintFunctionLibrary
 {

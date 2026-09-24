@@ -17,7 +17,7 @@ class UCPlusPlusFunctionLibrary : public UBlueprintFunctionLibrary
 class UDistanceSort : public UBlueprintFunctionLibrary
 {
 
-    void Distance_Sort(TArray<class AActor*> Array_To_Sort, class AActor* From_Actor, bool Descending, TArray<FActor_Dist>& Sorted_Array);
+    void Distance_Sort(TArray<AActor*> Array_To_Sort, class AActor* From_Actor, bool Descending, TArray<FActor_Dist>& Sorted_Array);
 }; // Size: 0x28
 
 class UGetStreamedLevel : public UBlueprintFunctionLibrary

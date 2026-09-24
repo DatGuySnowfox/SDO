@@ -21,9 +21,9 @@ struct FTemplateMapInfoOverride
 {
     FSoftObjectPath Thumbnail;                                                        // 0x0000 (size: 0x20)
     FSoftObjectPath Map;                                                              // 0x0020 (size: 0x20)
-    FText DisplayName;                                                                // 0x0040 (size: 0x18)
+    FText DisplayName;                                                                // 0x0040 (size: 0x10)
 
-}; // Size: 0x58
+}; // Size: 0x50
 
 class UConsoleSettings : public UObject
 {
@@ -104,19 +104,21 @@ class UGeneralProjectSettings : public UObject
     FString ProjectName;                                                              // 0x00A8 (size: 0x10)
     FString ProjectVersion;                                                           // 0x00B8 (size: 0x10)
     FString SupportContact;                                                           // 0x00C8 (size: 0x10)
-    FText ProjectDisplayedTitle;                                                      // 0x00D8 (size: 0x18)
-    FText ProjectDebugTitleInfo;                                                      // 0x00F0 (size: 0x18)
-    bool bShouldWindowPreserveAspectRatio;                                            // 0x0108 (size: 0x1)
-    bool bUseBorderlessWindow;                                                        // 0x0109 (size: 0x1)
-    bool bStartInVR;                                                                  // 0x010A (size: 0x1)
-    bool bAllowWindowResize;                                                          // 0x010B (size: 0x1)
-    bool bAllowClose;                                                                 // 0x010C (size: 0x1)
-    bool bAllowMaximize;                                                              // 0x010D (size: 0x1)
-    bool bAllowMinimize;                                                              // 0x010E (size: 0x1)
-    float EyeOffsetForFakeStereoRenderingDevice;                                      // 0x0110 (size: 0x4)
-    float FOVForFakeStereoRenderingDevice;                                            // 0x0114 (size: 0x4)
+    FText ProjectDisplayedTitle;                                                      // 0x00D8 (size: 0x10)
+    FText ProjectDebugTitleInfo;                                                      // 0x00E8 (size: 0x10)
+    bool bShouldWindowPreserveAspectRatio;                                            // 0x00F8 (size: 0x1)
+    bool bUseBorderlessWindow;                                                        // 0x00F9 (size: 0x1)
+    bool bStartInVR;                                                                  // 0x00FA (size: 0x1)
+    bool bAllowWindowResize;                                                          // 0x00FB (size: 0x1)
+    bool bAllowClose;                                                                 // 0x00FC (size: 0x1)
+    bool bAllowMaximize;                                                              // 0x00FD (size: 0x1)
+    bool bAllowMinimize;                                                              // 0x00FE (size: 0x1)
+    float EyeOffsetForFakeStereoRenderingDevice;                                      // 0x0100 (size: 0x4)
+    float FOVForFakeStereoRenderingDevice;                                            // 0x0104 (size: 0x4)
+    float TopFOVRatioForFakeStereoRenderingDevice;                                    // 0x0108 (size: 0x4)
+    float DifferenceBetweenEyesForFakeStereoRenderingDevice;                          // 0x010C (size: 0x4)
 
-}; // Size: 0x118
+}; // Size: 0x110
 
 class UHudSettings : public UObject
 {

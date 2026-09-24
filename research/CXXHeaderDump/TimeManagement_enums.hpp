@@ -3,8 +3,9 @@ enum class EFrameNumberDisplayFormats {
     DropFrameTimecode = 1,
     Seconds = 2,
     Frames = 3,
-    MAX_Count = 4,
-    EFrameNumberDisplayFormats_MAX = 5,
+    Custom = 4,
+    MAX_Count = 5,
+    EFrameNumberDisplayFormats_MAX = 6,
 };
 
 enum class ETimedDataInputEvaluationType {

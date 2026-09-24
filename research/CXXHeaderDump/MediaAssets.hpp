@@ -5,10 +5,10 @@
 
 struct FMediaCaptureDevice
 {
-    FText DisplayName;                                                                // 0x0000 (size: 0x18)
-    FString URL;                                                                      // 0x0018 (size: 0x10)
+    FText DisplayName;                                                                // 0x0000 (size: 0x10)
+    FString URL;                                                                      // 0x0010 (size: 0x10)
 
-}; // Size: 0x28
+}; // Size: 0x20
 
 struct FMediaMetadataItemBPT
 {
@@ -71,12 +71,12 @@ class UMediaBlueprintFunctionLibrary : public UBlueprintFunctionLibrary
 
 class UMediaComponent : public UActorComponent
 {
-    class UMediaTexture* MediaTexture;                                                // 0x00A0 (size: 0x8)
-    class UMediaPlayer* MediaPlayer;                                                  // 0x00A8 (size: 0x8)
+    class UMediaTexture* MediaTexture;                                                // 0x00B8 (size: 0x8)
+    class UMediaPlayer* MediaPlayer;                                                  // 0x00C0 (size: 0x8)
 
     class UMediaTexture* GetMediaTexture();
     class UMediaPlayer* GetMediaPlayer();
-}; // Size: 0xB0
+}; // Size: 0xC8
 
 class UMediaPlayer : public UObject
 {
@@ -98,30 +98,36 @@ class UMediaPlayer : public UObject
     void OnMediaPlayerMediaEvent();
     FMediaPlayerOnMetadataChanged OnMetadataChanged;                                  // 0x00B0 (size: 0x10)
     void OnMediaPlayerMediaEvent();
-    FTimespan CacheAhead;                                                             // 0x00C0 (size: 0x8)
-    FTimespan CacheBehind;                                                            // 0x00C8 (size: 0x8)
-    FTimespan CacheBehindGame;                                                        // 0x00D0 (size: 0x8)
-    bool NativeAudioOut;                                                              // 0x00D8 (size: 0x1)
-    bool PlayOnOpen;                                                                  // 0x00D9 (size: 0x1)
-    uint8 Shuffle;                                                                    // 0x00DC (size: 0x1)
-    uint8 Loop;                                                                       // 0x00DC (size: 0x1)
-    class UMediaPlaylist* Playlist;                                                   // 0x00E0 (size: 0x8)
-    int32 PlaylistIndex;                                                              // 0x00E8 (size: 0x4)
-    FTimespan TimeDelay;                                                              // 0x00F0 (size: 0x8)
-    float HorizontalFieldOfView;                                                      // 0x00F8 (size: 0x4)
-    float VerticalFieldOfView;                                                        // 0x00FC (size: 0x4)
-    FRotator ViewRotation;                                                            // 0x0100 (size: 0x18)
-    FGuid PlayerGuid;                                                                 // 0x0140 (size: 0x10)
+    FMediaPlayerOnBufferingStart OnBufferingStart;                                    // 0x00C0 (size: 0x10)
+    void OnMediaPlayerMediaEvent();
+    FMediaPlayerOnBufferingCompleted OnBufferingCompleted;                            // 0x00D0 (size: 0x10)
+    void OnMediaPlayerMediaEvent();
+    FTimespan CacheAhead;                                                             // 0x00E0 (size: 0x8)
+    FTimespan CacheBehind;                                                            // 0x00E8 (size: 0x8)
+    FTimespan CacheBehindGame;                                                        // 0x00F0 (size: 0x8)
+    bool NativeAudioOut;                                                              // 0x00F8 (size: 0x1)
+    bool PlayOnOpen;                                                                  // 0x00F9 (size: 0x1)
+    uint8 Shuffle;                                                                    // 0x00FC (size: 0x1)
+    uint8 Loop;                                                                       // 0x00FC (size: 0x1)
+    class UMediaPlaylist* Playlist;                                                   // 0x0100 (size: 0x8)
+    int32 PlaylistIndex;                                                              // 0x0108 (size: 0x4)
+    FTimespan TimeDelay;                                                              // 0x0110 (size: 0x8)
+    float HorizontalFieldOfView;                                                      // 0x0118 (size: 0x4)
+    float VerticalFieldOfView;                                                        // 0x011C (size: 0x4)
+    FRotator ViewRotation;                                                            // 0x0120 (size: 0x18)
+    FGuid PlayerGuid;                                                                 // 0x0160 (size: 0x10)
 
     bool SupportsSeeking();
     bool SupportsScrubbing();
     bool SupportsRate(float Rate, bool Unthinned);
+    bool SupportsPlaybackTimeRange();
     bool SetViewRotation(const FRotator& Rotation, bool Absolute);
     bool SetViewField(float Horizontal, float Vertical, bool Absolute);
     bool SetVideoTrackFrameRate(int32 TrackIndex, int32 FormatIndex, float FrameRate);
     bool SetTrackFormat(EMediaPlayerTrack TrackType, int32 TrackIndex, int32 FormatIndex);
     void SetTimeDelay(FTimespan TimeDelay);
     bool SetRate(float Rate);
+    bool SetPlaybackTimeRange(FFloatInterval InTimeRange);
     bool SetNativeVolume(float Volume);
     void SetMediaOptions(const class UMediaSource* Options);
     bool SetLooping(bool Looping);
@@ -129,6 +135,7 @@ class UMediaPlayer : public UObject
     void SetBlockOnTime(const FTimespan& Time);
     bool SelectTrack(EMediaPlayerTrack TrackType, int32 TrackIndex);
     bool Seek(const FTimespan& Time);
+    bool Scrub(const FTimespan& Time);
     bool Rewind();
     bool Reopen();
     bool Previous();
@@ -172,10 +179,11 @@ class UMediaPlayer : public UObject
     int32 GetPlaylistIndex();
     class UMediaPlaylist* GetPlaylist();
     FName GetPlayerName();
+    FFloatInterval GetPlaybackTimeRange(EMediaTimeRangeBPType InRangeToGet);
     int32 GetNumTracks(EMediaPlayerTrack TrackType);
     int32 GetNumTrackFormats(EMediaPlayerTrack TrackType, int32 TrackIndex);
     FText GetMediaName();
-    TMap<class FString, class FMediaMetadataItemsBPT> GetMediaMetadataItems();
+    TMap<FString, FMediaMetadataItemsBPT> GetMediaMetadataItems();
     float GetHorizontalFieldOfView();
     FTimespan GetDuration();
     class UMediaTimeStampInfo* GetDisplayTimeStamp();
@@ -188,11 +196,11 @@ class UMediaPlayer : public UObject
     bool CanPlayUrl(FString URL);
     bool CanPlaySource(class UMediaSource* MediaSource);
     bool CanPause();
-}; // Size: 0x168
+}; // Size: 0x188
 
 class UMediaPlaylist : public UObject
 {
-    TArray<class UMediaSource*> Items;                                                // 0x0028 (size: 0x10)
+    TArray<UMediaSource*> Items;                                                      // 0x0028 (size: 0x10)
 
     bool Replace(int32 Index, class UMediaSource* Replacement);
     bool RemoveAt(int32 Index);
@@ -210,11 +218,11 @@ class UMediaPlaylist : public UObject
 
 class UMediaSoundComponent : public USynthComponent
 {
-    EMediaSoundChannels Channels;                                                     // 0x0900 (size: 0x4)
-    bool DynamicRateAdjustment;                                                       // 0x0904 (size: 0x1)
-    float RateAdjustmentFactor;                                                       // 0x0908 (size: 0x4)
-    FFloatRange RateAdjustmentRange;                                                  // 0x090C (size: 0x10)
-    class UMediaPlayer* MediaPlayer;                                                  // 0x0920 (size: 0x8)
+    EMediaSoundChannels Channels;                                                     // 0x08A0 (size: 0x4)
+    bool DynamicRateAdjustment;                                                       // 0x08A4 (size: 0x1)
+    float RateAdjustmentFactor;                                                       // 0x08A8 (size: 0x4)
+    FFloatRange RateAdjustmentRange;                                                  // 0x08AC (size: 0x10)
+    class UMediaPlayer* MediaPlayer;                                                  // 0x08C0 (size: 0x8)
 
     void SetSpectralAnalysisSettings(TArray<float> InFrequenciesToAnalyze, EMediaSoundComponentFFTSize InFFTSize);
     void SetMediaPlayer(class UMediaPlayer* NewMediaPlayer);
@@ -226,7 +234,7 @@ class UMediaSoundComponent : public USynthComponent
     class UMediaPlayer* GetMediaPlayer();
     float GetEnvelopeValue();
     bool BP_GetAttenuationSettingsToApply(FSoundAttenuationSettings& OutAttenuationSettings);
-}; // Size: 0x9E0
+}; // Size: 0x980
 
 class UMediaSource : public UObject
 {
@@ -241,17 +249,15 @@ class UMediaSource : public UObject
 
 class UMediaTexture : public UTexture
 {
-    TEnumAsByte<TextureAddress> AddressX;                                             // 0x01C8 (size: 0x1)
-    TEnumAsByte<TextureAddress> AddressY;                                             // 0x01C9 (size: 0x1)
-    bool AutoClear;                                                                   // 0x01CA (size: 0x1)
-    FLinearColor ClearColor;                                                          // 0x01CC (size: 0x10)
-    bool EnableGenMips;                                                               // 0x01DC (size: 0x1)
-    uint8 NumMips;                                                                    // 0x01DD (size: 0x1)
-    bool NewStyleOutput;                                                              // 0x01DE (size: 0x1)
-    TEnumAsByte<MediaTextureOutputFormat> OutputFormat;                               // 0x01DF (size: 0x1)
-    float CurrentAspectRatio;                                                         // 0x01E0 (size: 0x4)
-    TEnumAsByte<MediaTextureOrientation> CurrentOrientation;                          // 0x01E4 (size: 0x1)
-    class UMediaPlayer* MediaPlayer;                                                  // 0x01E8 (size: 0x8)
+    TEnumAsByte<TextureAddress> AddressX;                                             // 0x0140 (size: 0x1)
+    TEnumAsByte<TextureAddress> AddressY;                                             // 0x0141 (size: 0x1)
+    bool AutoClear;                                                                   // 0x0142 (size: 0x1)
+    FLinearColor ClearColor;                                                          // 0x0144 (size: 0x10)
+    bool EnableGenMips;                                                               // 0x0154 (size: 0x1)
+    bool NewStyleOutput;                                                              // 0x0155 (size: 0x1)
+    float CurrentAspectRatio;                                                         // 0x0158 (size: 0x4)
+    TEnumAsByte<MediaTextureOrientation> CurrentOrientation;                          // 0x015C (size: 0x1)
+    class UMediaPlayer* MediaPlayer;                                                  // 0x0160 (size: 0x8)
 
     void UpdateResource();
     void SetMediaPlayer(class UMediaPlayer* NewMediaPlayer);
@@ -260,7 +266,7 @@ class UMediaTexture : public UTexture
     class UMediaPlayer* GetMediaPlayer();
     int32 GetHeight();
     float GetAspectRatio();
-}; // Size: 0x2B0
+}; // Size: 0x228
 
 class UMediaTimeStampInfo : public UObject
 {

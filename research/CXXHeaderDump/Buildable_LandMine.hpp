@@ -3,11 +3,9 @@
 
 class ABuildable_LandMine_C : public ABuildable_MASTER_C
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0430 (size: 0x8)
-    class USphereComponent* ExplosionSphere;                                          // 0x0438 (size: 0x8)
-    class USphereComponent* CameraShakeSphere;                                        // 0x0440 (size: 0x8)
-    class URadialForceComponent* RadialForce;                                         // 0x0448 (size: 0x8)
-    class UBoxComponent* Box_0;                                                       // 0x0450 (size: 0x8)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0440 (size: 0x8)
+    class UBoxComponent* Box;                                                         // 0x0448 (size: 0x8)
+    double DmgToDo;                                                                   // 0x0450 (size: 0x8)
 
     void IsObjectDamageable?(bool& Damageable?);
     void SpawnCombatText(FVector Location, double Damage);

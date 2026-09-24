@@ -31,6 +31,12 @@ enum class ENDIDataChannelSpawnMode {
     Max = 3,
 };
 
+enum class ENDIDataChannelSpawnScaleMode {
+    Override = 0,
+    Scale = 1,
+    Max = 2,
+};
+
 enum class ENDIExport_GPUAllocationMode {
     FixedSize = 0,
     PerParticle = 1,
@@ -48,7 +54,9 @@ enum class ENDIObjectPropertyReaderSourceMode {
     Binding = 0,
     AttachParentActor = 1,
     BindingThenAttachParentActor = 2,
-    ENDIObjectPropertyReaderSourceMode_MAX = 3,
+    AttachParent = 3,
+    BindingThenAttachParent = 4,
+    ENDIObjectPropertyReaderSourceMode_MAX = 5,
 };
 
 enum class ENDISceneCapture2DOffsetMode {
@@ -105,7 +113,16 @@ enum class ENDISkeletalMesh_SourceMode {
     Default = 0,
     Source = 1,
     AttachParent = 2,
-    ENDISkeletalMesh_MAX = 3,
+    DefaultMeshOnly = 3,
+    ENDISkeletalMesh_MAX = 4,
+};
+
+enum class ENDISocketReaderSourceMode {
+    Default = 0,
+    ParameterBindingOnly = 1,
+    AttachedParentOnly = 2,
+    SourceOnly = 3,
+    ENDISocketReaderSourceMode_MAX = 4,
 };
 
 enum class ENDIStaticMesh_SourceMode {
@@ -113,7 +130,46 @@ enum class ENDIStaticMesh_SourceMode {
     Source = 1,
     AttachParent = 2,
     DefaultMeshOnly = 3,
-    ENDIStaticMesh_MAX = 4,
+    MeshParameterBinding = 4,
+    ENDIStaticMesh_MAX = 5,
+};
+
+enum class ENSMInitialMeshOrientationMode {
+    None = 0,
+    Random = 1,
+    OrientToAxis = 2,
+    ENSMInitialMeshOrientationMode_MAX = 3,
+};
+
+enum class ENSMSubUVAnimation_Mode {
+    DirectSet = 0,
+    InfiniteLoop = 1,
+    Linear = 2,
+    Random = 3,
+    ENSMSubUVAnimation_MAX = 4,
+};
+
+enum class ENSM_ShapePrimitive {
+    Box = 0,
+    Cylinder = 1,
+    Plane = 2,
+    Ring = 3,
+    Sphere = 4,
+    Max = 5,
+};
+
+enum class ENSM_SurfaceExpansionMode {
+    Inner = 0,
+    Centered = 1,
+    Outside = 2,
+    ENSM_MAX = 3,
+};
+
+enum class ENSM_VelocityType {
+    Linear = 0,
+    FromPoint = 1,
+    InCone = 2,
+    ENSM_MAX = 3,
 };
 
 enum class ENiagaraAgeUpdateMode {
@@ -121,6 +177,20 @@ enum class ENiagaraAgeUpdateMode {
     DesiredAge = 1,
     DesiredAgeNoSeek = 2,
     ENiagaraAgeUpdateMode_MAX = 3,
+};
+
+enum class ENiagaraAssetLibraryAssetTypes {
+    Emitters = 1,
+    Systems = 2,
+    Scripts = 4,
+    ENiagaraAssetLibraryAssetTypes_MAX = 5,
+};
+
+enum class ENiagaraAssetTagDefinitionImportance {
+    Primary = 0,
+    Secondary = 1,
+    Internal = 2,
+    ENiagaraAssetTagDefinitionImportance_MAX = 3,
 };
 
 enum class ENiagaraBakerViewMode {
@@ -188,6 +258,14 @@ enum class ENiagaraCompilationState {
     ENiagaraCompilationState_MAX = 9,
 };
 
+enum class ENiagaraCompileErrorSeverity {
+    Ignore = 0,
+    LogOnly = 1,
+    Warning = 2,
+    Error = 3,
+    ENiagaraCompileErrorSeverity_MAX = 4,
+};
+
 enum class ENiagaraCompileUsageStaticSwitch {
     Spawn = 0,
     Update = 1,
@@ -231,7 +309,8 @@ enum class ENiagaraCullReaction {
 
 enum class ENiagaraDataChannelAllocationMode {
     Static = 0,
-    ENiagaraDataChannelAllocationMode_MAX = 1,
+    Dynamic = 1,
+    ENiagaraDataChannelAllocationMode_MAX = 2,
 };
 
 enum class ENiagaraDataInterfaceEmitterBindingMode {
@@ -277,6 +356,12 @@ enum class ENiagaraDebugHUDPerfSampleMode {
     FrameTotal = 0,
     PerInstanceAverage = 1,
     ENiagaraDebugHUDPerfSampleMode_MAX = 2,
+};
+
+enum class ENiagaraDebugHUDPerfUnits {
+    Microseconds = 0,
+    Milliseconds = 1,
+    ENiagaraDebugHUDPerfUnits_MAX = 2,
 };
 
 enum class ENiagaraDebugHudFont {
@@ -352,6 +437,19 @@ enum class ENiagaraDeviceProfileRedirectMode {
     ENiagaraDeviceProfileRedirectMode_MAX = 2,
 };
 
+enum class ENiagaraDistributionMode {
+    Binding = 0,
+    Expression = 1,
+    UniformConstant = 2,
+    NonUniformConstant = 3,
+    UniformRange = 4,
+    NonUniformRange = 5,
+    UniformCurve = 6,
+    NonUniformCurve = 7,
+    ColorGradient = 8,
+    ENiagaraDistributionMode_MAX = 9,
+};
+
 enum class ENiagaraEmitterCalculateBoundMode {
     Dynamic = 0,
     Fixed = 1,
@@ -365,6 +463,18 @@ enum class ENiagaraEmitterDefaultSummaryState {
     ENiagaraEmitterDefaultSummaryState_MAX = 2,
 };
 
+enum class ENiagaraEmitterInactiveResponse {
+    Complete = 0,
+    Kill = 1,
+    ENiagaraEmitterInactiveResponse_MAX = 2,
+};
+
+enum class ENiagaraEmitterMode {
+    Standard = 0,
+    Stateless = 1,
+    ENiagaraEmitterMode_MAX = 2,
+};
+
 enum class ENiagaraExecutionState {
     Active = 0,
     Inactive = 1,
@@ -373,6 +483,16 @@ enum class ENiagaraExecutionState {
     Disabled = 4,
     Num = 5,
     ENiagaraExecutionState_MAX = 6,
+};
+
+enum class ENiagaraExecutionStateManagement {
+    Awaken = 0,
+    SleepAndLetParticlesFinish = 1,
+    SleepAndClearParticles = 2,
+    KillImmediately = 3,
+    KillAfterParticlesFinish = 4,
+    Num = 5,
+    ENiagaraExecutionStateManagement_MAX = 6,
 };
 
 enum class ENiagaraExecutionStateSource {
@@ -438,7 +558,15 @@ enum class ENiagaraInputWidgetType {
     Volume = 2,
     NumericDropdown = 3,
     EnumStyle = 4,
-    ENiagaraInputWidgetType_MAX = 5,
+    SegmentedButtons = 5,
+    ENiagaraInputWidgetType_MAX = 6,
+};
+
+enum class ENiagaraInterpolatedSpawnMode {
+    NoInterpolation = 0,
+    RunUpdateScript = 1,
+    Interpolation = 2,
+    ENiagaraInterpolatedSpawnMode_MAX = 3,
 };
 
 enum class ENiagaraLegacyTrailWidthMode {
@@ -448,12 +576,41 @@ enum class ENiagaraLegacyTrailWidthMode {
     ENiagaraLegacyTrailWidthMode_MAX = 3,
 };
 
+enum class ENiagaraLoopBehavior {
+    Infinite = 0,
+    Multiple = 1,
+    Once = 2,
+    ENiagaraLoopBehavior_MAX = 3,
+};
+
+enum class ENiagaraLoopDurationMode {
+    Fixed = 0,
+    Infinite = 1,
+    ENiagaraLoopDurationMode_MAX = 2,
+};
+
+enum class ENiagaraLwcTileUpdateMode {
+    ResetSimulation = 0,
+    Rebase = 1,
+    RebaseOrResetSimulation = 2,
+    ENiagaraLwcTileUpdateMode_MAX = 3,
+};
+
 enum class ENiagaraMeshFacingMode {
     Default = 0,
     Velocity = 1,
     CameraPosition = 2,
     CameraPlane = 3,
     ENiagaraMeshFacingMode_MAX = 4,
+};
+
+enum class ENiagaraMeshLODMode {
+    LODLevel = 0,
+    LODBias = 1,
+    ByComponentBounds = 2,
+    ComponentOrigin = 3,
+    PerParticle = 4,
+    ENiagaraMeshLODMode_MAX = 5,
 };
 
 enum class ENiagaraMeshLockedAxisSpace {
@@ -755,6 +912,28 @@ enum class ENiagaraStatEvaluationType {
     ENiagaraStatEvaluationType_MAX = 2,
 };
 
+enum class ENiagaraStatelessFeatureMask {
+    ExecuteGPU = 1,
+    ExecuteCPU = 2,
+    None = 0,
+    ExecuteAll = 3,
+    All = 3,
+    ENiagaraStatelessFeatureMask_MAX = 4,
+};
+
+enum class ENiagaraStatelessSpawnInfoType {
+    Burst = 0,
+    Rate = 1,
+    ENiagaraStatelessSpawnInfoType_MAX = 2,
+};
+
+enum class ENiagaraStripScriptByteCodeOption {
+    Default = 0,
+    Strip_Original = 1,
+    Strip_Experimental = 2,
+    ENiagaraStripScriptByteCodeOption_MAX = 3,
+};
+
 enum class ENiagaraStructConversionType {
     CopyOnly = 0,
     DoubleToFloat = 1,
@@ -763,6 +942,12 @@ enum class ENiagaraStructConversionType {
     Vector4 = 4,
     Quat = 5,
     ENiagaraStructConversionType_MAX = 6,
+};
+
+enum class ENiagaraSystemInactiveResponse {
+    Complete = 0,
+    Kill = 1,
+    ENiagaraSystemInactiveResponse_MAX = 2,
 };
 
 enum class ENiagaraSystemInstanceState {
@@ -815,6 +1000,12 @@ enum class ENiagaraVariantMode {
     DataInterface = 2,
     Bytes = 3,
     ENiagaraVariantMode_MAX = 4,
+};
+
+enum class ENiagartaDataChannelReadResult {
+    Success = 0,
+    Failure = 1,
+    ENiagartaDataChannelReadResult_MAX = 2,
 };
 
 enum class ENiagraDataChannel_IslandMode {

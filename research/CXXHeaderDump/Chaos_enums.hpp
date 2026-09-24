@@ -19,6 +19,13 @@ enum class EChaosBufferMode {
     EChaosBufferMode_MAX = 4,
 };
 
+enum class EChaosSoftsSimulationSpace {
+    WorldSpace = 0,
+    ComponentSpace = 1,
+    ReferenceBoneSpace = 2,
+    EChaosSoftsSimulationSpace_MAX = 3,
+};
+
 enum class EChaosSolverTickMode {
     Fixed = 0,
     Variable = 1,
@@ -56,6 +63,12 @@ enum class EConnectionContactMethod {
     None = 0,
     ConvexHullContactArea = 1,
     EConnectionContactMethod_MAX = 2,
+};
+
+enum class EConvexHullProximityFilter {
+    None = 0,
+    BoundingBox = 1,
+    EConvexHullProximityFilter_MAX = 2,
 };
 
 enum class EConvexOverlapRemoval {

@@ -3,14 +3,26 @@
 
 #include "MediaUtils_enums.hpp"
 
+struct FMediaPlayerInitialTrackLanguageSelection
+{
+    FString Video;                                                                    // 0x0000 (size: 0x10)
+    FString Audio;                                                                    // 0x0010 (size: 0x10)
+    FString Subtitle;                                                                 // 0x0020 (size: 0x10)
+    FString Caption;                                                                  // 0x0030 (size: 0x10)
+
+}; // Size: 0x40
+
 struct FMediaPlayerOptions
 {
     FMediaPlayerTrackOptions Tracks;                                                  // 0x0000 (size: 0x1C)
-    FTimespan SeekTime;                                                               // 0x0020 (size: 0x8)
-    EMediaPlayerOptionBooleanOverride PlayOnOpen;                                     // 0x0028 (size: 0x1)
-    EMediaPlayerOptionBooleanOverride Loop;                                           // 0x0029 (size: 0x1)
+    FMediaPlayerInitialTrackLanguageSelection TracksByLanguage;                       // 0x0020 (size: 0x40)
+    EMediaPlayerOptionTrackSelectMode TrackSelection;                                 // 0x0060 (size: 0x1)
+    FTimespan SeekTime;                                                               // 0x0068 (size: 0x8)
+    EMediaPlayerOptionSeekTimeType SeekTimeType;                                      // 0x0070 (size: 0x1)
+    EMediaPlayerOptionBooleanOverride PlayOnOpen;                                     // 0x0071 (size: 0x1)
+    EMediaPlayerOptionBooleanOverride Loop;                                           // 0x0072 (size: 0x1)
 
-}; // Size: 0x30
+}; // Size: 0xC8
 
 struct FMediaPlayerTrackOptions
 {

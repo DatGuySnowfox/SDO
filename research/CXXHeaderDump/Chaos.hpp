@@ -12,23 +12,39 @@ struct FChaosSolverConfiguration
     float CollisionMarginMax;                                                         // 0x0010 (size: 0x4)
     float CollisionCullDistance;                                                      // 0x0014 (size: 0x4)
     float CollisionMaxPushOutVelocity;                                                // 0x0018 (size: 0x4)
-    float ClusterConnectionFactor;                                                    // 0x001C (size: 0x4)
-    EClusterUnionMethod ClusterUnionConnectionType;                                   // 0x0020 (size: 0x1)
-    bool bGenerateCollisionData;                                                      // 0x0021 (size: 0x1)
-    FSolverCollisionFilterSettings CollisionFilterSettings;                           // 0x0024 (size: 0x10)
-    bool bGenerateBreakData;                                                          // 0x0034 (size: 0x1)
-    FSolverBreakingFilterSettings BreakingFilterSettings;                             // 0x0038 (size: 0x10)
-    bool bGenerateTrailingData;                                                       // 0x0048 (size: 0x1)
-    FSolverTrailingFilterSettings TrailingFilterSettings;                             // 0x004C (size: 0x10)
-    int32 Iterations;                                                                 // 0x005C (size: 0x4)
-    int32 PushOutIterations;                                                          // 0x0060 (size: 0x4)
-    bool bGenerateContactGraph;                                                       // 0x0064 (size: 0x1)
+    float CollisionInitialOverlapDepenetrationVelocity;                               // 0x001C (size: 0x4)
+    float ClusterConnectionFactor;                                                    // 0x0020 (size: 0x4)
+    EClusterUnionMethod ClusterUnionConnectionType;                                   // 0x0024 (size: 0x1)
+    FChaosSolverDestructionSettings DestructionSettings;                              // 0x0028 (size: 0x14)
+    bool bGenerateCollisionData;                                                      // 0x003C (size: 0x1)
+    FSolverCollisionFilterSettings CollisionFilterSettings;                           // 0x0040 (size: 0x10)
+    bool bGenerateBreakData;                                                          // 0x0050 (size: 0x1)
+    FSolverBreakingFilterSettings BreakingFilterSettings;                             // 0x0054 (size: 0x10)
+    bool bGenerateTrailingData;                                                       // 0x0064 (size: 0x1)
+    FSolverTrailingFilterSettings TrailingFilterSettings;                             // 0x0068 (size: 0x10)
+    int32 Iterations;                                                                 // 0x0078 (size: 0x4)
+    int32 PushOutIterations;                                                          // 0x007C (size: 0x4)
+    bool bGenerateContactGraph;                                                       // 0x0080 (size: 0x1)
 
-}; // Size: 0x68
+}; // Size: 0x84
+
+struct FChaosSolverDestructionSettings
+{
+    int32 PerAdvanceBreaksAllowed;                                                    // 0x0000 (size: 0x4)
+    int32 PerAdvanceBreaksRescheduleLimit;                                            // 0x0004 (size: 0x4)
+    int32 ClusteringParticleReleaseThrottlingMinCount;                                // 0x0008 (size: 0x4)
+    int32 ClusteringParticleReleaseThrottlingMaxCount;                                // 0x000C (size: 0x4)
+    bool bOptimizeForRuntimeMemory;                                                   // 0x0010 (size: 0x1)
+
+}; // Size: 0x14
 
 struct FClosestPhysicsObjectResult
 {
 }; // Size: 0x28
+
+struct FFieldCollection : public FManagedArrayCollection
+{
+}; // Size: 0xB0
 
 struct FManagedArrayCollection
 {
@@ -52,6 +68,15 @@ struct FRecordedTransformTrack
     TArray<FRecordedFrame> Records;                                                   // 0x0000 (size: 0x10)
 
 }; // Size: 0x10
+
+struct FSerializedSolverScene
+{
+    TArray<FChaosVDParticleDataWrapper> ParticleData;                                 // 0x0000 (size: 0x10)
+    TArray<FChaosVDJointConstraint> JointConstraintData;                              // 0x0010 (size: 0x10)
+    TArray<FChaosVDCharacterGroundConstraint> CharacterGroundConstraintData;          // 0x0020 (size: 0x10)
+    TArray<FChaosVDParticlePairMidPhase> CollisionMidPhaseData;                       // 0x0030 (size: 0x10)
+
+}; // Size: 0x50
 
 struct FSolverBreakingData
 {

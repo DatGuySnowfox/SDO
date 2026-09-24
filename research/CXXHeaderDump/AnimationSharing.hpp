@@ -42,9 +42,10 @@ struct FPerSkeletonAnimationSharingSetup
     TSubclassOf<class UAnimSharingTransitionInstance> BlendAnimBlueprint;             // 0x0010 (size: 0x8)
     TSubclassOf<class UAnimSharingAdditiveInstance> AdditiveAnimBlueprint;            // 0x0018 (size: 0x8)
     TSubclassOf<class UAnimationSharingStateProcessor> StateProcessorClass;           // 0x0020 (size: 0x8)
-    TArray<FAnimationStateEntry> AnimationStates;                                     // 0x0028 (size: 0x10)
+    bool bEnableMaterialParameterCaching;                                             // 0x0028 (size: 0x1)
+    TArray<FAnimationStateEntry> AnimationStates;                                     // 0x0030 (size: 0x10)
 
-}; // Size: 0x38
+}; // Size: 0x40
 
 struct FTickAnimationSharingFunction : public FTickFunction
 {
@@ -52,18 +53,18 @@ struct FTickAnimationSharingFunction : public FTickFunction
 
 class UAnimSharingAdditiveInstance : public UAnimInstance
 {
-    TWeakObjectPtr<class USkeletalMeshComponent> BaseComponent;                       // 0x0348 (size: 0x8)
-    TWeakObjectPtr<class UAnimSequence> AdditiveAnimation;                            // 0x0350 (size: 0x8)
-    float Alpha;                                                                      // 0x0358 (size: 0x4)
-    bool bStateBool;                                                                  // 0x035C (size: 0x1)
+    TWeakObjectPtr<class USkeletalMeshComponent> BaseComponent;                       // 0x03D8 (size: 0x8)
+    TWeakObjectPtr<class UAnimSequence> AdditiveAnimation;                            // 0x03E0 (size: 0x8)
+    float Alpha;                                                                      // 0x03E8 (size: 0x4)
+    bool bStateBool;                                                                  // 0x03EC (size: 0x1)
 
-}; // Size: 0x360
+}; // Size: 0x3F0
 
 class UAnimSharingInstance : public UObject
 {
-    TArray<class AActor*> RegisteredActors;                                           // 0x0028 (size: 0x10)
+    TArray<AActor*> RegisteredActors;                                                 // 0x0028 (size: 0x10)
     class UAnimationSharingStateProcessor* StateProcessor;                            // 0x0088 (size: 0x8)
-    TArray<class UAnimSequence*> UsedAnimationSequences;                              // 0x00C8 (size: 0x10)
+    TArray<UAnimSequence*> UsedAnimationSequences;                                    // 0x00C8 (size: 0x10)
     class UEnum* StateEnum;                                                           // 0x00E8 (size: 0x8)
     class AActor* SharingActor;                                                       // 0x00F0 (size: 0x8)
 
@@ -71,28 +72,28 @@ class UAnimSharingInstance : public UObject
 
 class UAnimSharingStateInstance : public UAnimInstance
 {
-    class UAnimSequence* AnimationToPlay;                                             // 0x0348 (size: 0x8)
-    float PermutationTimeOffset;                                                      // 0x0350 (size: 0x4)
-    float PlayRate;                                                                   // 0x0354 (size: 0x4)
-    bool bStateBool;                                                                  // 0x0358 (size: 0x1)
-    class UAnimSharingInstance* Instance;                                             // 0x0360 (size: 0x8)
+    class UAnimSequence* AnimationToPlay;                                             // 0x03D8 (size: 0x8)
+    float PermutationTimeOffset;                                                      // 0x03E0 (size: 0x4)
+    float PlayRate;                                                                   // 0x03E4 (size: 0x4)
+    bool bStateBool;                                                                  // 0x03E8 (size: 0x1)
+    class UAnimSharingInstance* Instance;                                             // 0x03F0 (size: 0x8)
 
-    void GetInstancedActors(TArray<class AActor*>& Actors);
-}; // Size: 0x370
+    void GetInstancedActors(TArray<AActor*>& Actors);
+}; // Size: 0x400
 
 class UAnimSharingTransitionInstance : public UAnimInstance
 {
-    TWeakObjectPtr<class USkeletalMeshComponent> FromComponent;                       // 0x0348 (size: 0x8)
-    TWeakObjectPtr<class USkeletalMeshComponent> ToComponent;                         // 0x0350 (size: 0x8)
-    float BlendTime;                                                                  // 0x0358 (size: 0x4)
-    bool bBlendBool;                                                                  // 0x035C (size: 0x1)
+    TWeakObjectPtr<class USkeletalMeshComponent> FromComponent;                       // 0x03D8 (size: 0x8)
+    TWeakObjectPtr<class USkeletalMeshComponent> ToComponent;                         // 0x03E0 (size: 0x8)
+    float BlendTime;                                                                  // 0x03E8 (size: 0x4)
+    bool bBlendBool;                                                                  // 0x03EC (size: 0x1)
 
-}; // Size: 0x360
+}; // Size: 0x3F0
 
 class UAnimationSharingManager : public UObject
 {
-    TArray<class USkeleton*> Skeletons;                                               // 0x0028 (size: 0x10)
-    TArray<class UAnimSharingInstance*> PerSkeletonData;                              // 0x0038 (size: 0x10)
+    TArray<USkeleton*> Skeletons;                                                     // 0x0028 (size: 0x10)
+    TArray<UAnimSharingInstance*> PerSkeletonData;                                    // 0x0038 (size: 0x10)
 
     void RegisterActorWithSkeletonBP(class AActor* InActor, const class USkeleton* SharingSkeleton);
     class UAnimationSharingManager* GetAnimationSharingManager(class UObject* WorldContextObject);
@@ -109,7 +110,7 @@ class UAnimationSharingSetup : public UObject
 
 class UAnimationSharingStateProcessor : public UObject
 {
-    TSoftObjectPtr<UEnum> AnimationStateEnum;                                         // 0x0028 (size: 0x28)
+    TSoftObjectPtr<class UEnum> AnimationStateEnum;                                   // 0x0028 (size: 0x28)
 
     void ProcessActorState(int32& OutState, class AActor* InActor, uint8 CurrentState, uint8 OnDemandState, bool& bShouldProcess);
     class UEnum* GetAnimationStateEnum();

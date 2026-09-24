@@ -23,14 +23,10 @@ struct FCharRangeList
 
 }; // Size: 0x10
 
-struct FCustomizedToolMenu
+struct FCustomizedToolMenu : public FToolMenuProfile
 {
-    FName Name;                                                                       // 0x0000 (size: 0x8)
-    TMap<class FName, class FCustomizedToolMenuEntry> Entries;                        // 0x0008 (size: 0x50)
-    TMap<class FName, class FCustomizedToolMenuSection> Sections;                     // 0x0058 (size: 0x50)
-    TMap<class FName, class FCustomizedToolMenuNameArray> EntryOrder;                 // 0x00A8 (size: 0x50)
-    TArray<FName> SectionOrder;                                                       // 0x00F8 (size: 0x10)
-    TArray<FName> SuppressExtenders;                                                  // 0x0108 (size: 0x10)
+    TMap<FName, FCustomizedToolMenuNameArray> EntryOrder;                             // 0x01A0 (size: 0x50)
+    TArray<FName> SectionOrder;                                                       // 0x01F0 (size: 0x10)
 
 }; // Size: 0x200
 
@@ -62,6 +58,22 @@ struct FInputChord
 
 }; // Size: 0x20
 
+struct FInputPreprocessorRegistrationKey
+{
+    EInputPreProcessorType Type;                                                      // 0x0000 (size: 0x1)
+    int32 Priority;                                                                   // 0x0004 (size: 0x4)
+
+}; // Size: 0x8
+
+struct FToolMenuProfile
+{
+    FName Name;                                                                       // 0x0000 (size: 0x8)
+    TMap<FName, FCustomizedToolMenuEntry> Entries;                                    // 0x0008 (size: 0x50)
+    TMap<FName, FCustomizedToolMenuSection> Sections;                                 // 0x0058 (size: 0x50)
+    TArray<FName> SuppressExtenders;                                                  // 0x00A8 (size: 0x10)
+
+}; // Size: 0x1A0
+
 struct FVirtualKeyboardOptions
 {
     bool bEnableAutocorrect;                                                          // 0x0000 (size: 0x1)
@@ -70,57 +82,57 @@ struct FVirtualKeyboardOptions
 
 class UButtonWidgetStyle : public USlateWidgetStyleContainerBase
 {
-    FButtonStyle ButtonStyle;                                                         // 0x0030 (size: 0x3F0)
+    FButtonStyle ButtonStyle;                                                         // 0x0030 (size: 0x390)
 
-}; // Size: 0x420
+}; // Size: 0x3C0
 
 class UCheckBoxWidgetStyle : public USlateWidgetStyleContainerBase
 {
-    FCheckBoxStyle CheckBoxStyle;                                                     // 0x0030 (size: 0xAD0)
+    FCheckBoxStyle CheckBoxStyle;                                                     // 0x0030 (size: 0x950)
 
-}; // Size: 0xB00
+}; // Size: 0x980
 
 class UComboBoxWidgetStyle : public USlateWidgetStyleContainerBase
 {
-    FComboBoxStyle ComboBoxStyle;                                                     // 0x0030 (size: 0x660)
+    FComboBoxStyle ComboBoxStyle;                                                     // 0x0030 (size: 0x5C0)
 
-}; // Size: 0x690
+}; // Size: 0x5F0
 
 class UComboButtonWidgetStyle : public USlateWidgetStyleContainerBase
 {
-    FComboButtonStyle ComboButtonStyle;                                               // 0x0030 (size: 0x600)
+    FComboButtonStyle ComboButtonStyle;                                               // 0x0030 (size: 0x560)
 
-}; // Size: 0x630
+}; // Size: 0x590
 
 class UEditableTextBoxWidgetStyle : public USlateWidgetStyleContainerBase
 {
-    FEditableTextBoxStyle EditableTextBoxStyle;                                       // 0x0030 (size: 0xE80)
+    FEditableTextBoxStyle EditableTextBoxStyle;                                       // 0x0030 (size: 0xC80)
 
-}; // Size: 0xEB0
+}; // Size: 0xCB0
 
 class UEditableTextWidgetStyle : public USlateWidgetStyleContainerBase
 {
-    FEditableTextStyle EditableTextStyle;                                             // 0x0030 (size: 0x2F0)
-
-}; // Size: 0x320
-
-class UProgressWidgetStyle : public USlateWidgetStyleContainerBase
-{
-    FProgressBarStyle ProgressBarStyle;                                               // 0x0030 (size: 0x290)
+    FEditableTextStyle EditableTextStyle;                                             // 0x0030 (size: 0x290)
 
 }; // Size: 0x2C0
 
+class UProgressWidgetStyle : public USlateWidgetStyleContainerBase
+{
+    FProgressBarStyle ProgressBarStyle;                                               // 0x0030 (size: 0x230)
+
+}; // Size: 0x260
+
 class UScrollBarWidgetStyle : public USlateWidgetStyleContainerBase
 {
-    FScrollBarStyle ScrollBarStyle;                                                   // 0x0030 (size: 0x770)
+    FScrollBarStyle ScrollBarStyle;                                                   // 0x0030 (size: 0x650)
 
-}; // Size: 0x7A0
+}; // Size: 0x680
 
 class UScrollBoxWidgetStyle : public USlateWidgetStyleContainerBase
 {
-    FScrollBoxStyle ScrollBoxStyle;                                                   // 0x0030 (size: 0x370)
+    FScrollBoxStyle ScrollBoxStyle;                                                   // 0x0030 (size: 0x2F0)
 
-}; // Size: 0x3A0
+}; // Size: 0x320
 
 class USlateSettings : public UObject
 {
@@ -130,15 +142,15 @@ class USlateSettings : public UObject
 
 class USpinBoxWidgetStyle : public USlateWidgetStyleContainerBase
 {
-    FSpinBoxStyle SpinBoxStyle;                                                       // 0x0030 (size: 0x600)
+    FSpinBoxStyle SpinBoxStyle;                                                       // 0x0030 (size: 0x520)
 
-}; // Size: 0x630
+}; // Size: 0x550
 
 class UTextBlockWidgetStyle : public USlateWidgetStyleContainerBase
 {
-    FTextBlockStyle TextBlockStyle;                                                   // 0x0030 (size: 0x340)
+    FTextBlockStyle TextBlockStyle;                                                   // 0x0030 (size: 0x2E0)
 
-}; // Size: 0x370
+}; // Size: 0x310
 
 class UToolMenuBase : public UObject
 {

@@ -3,22 +3,22 @@
 
 class ULevellingComponent_C : public UBaseComponent_C
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x00B8 (size: 0x8)
-    int32 CurrentLevel;                                                               // 0x00C0 (size: 0x4)
-    int32 LevelCap;                                                                   // 0x00C4 (size: 0x4)
-    double CurrentXP;                                                                 // 0x00C8 (size: 0x8)
-    double CurrentMaxXP;                                                              // 0x00D0 (size: 0x8)
-    double CurrentPercentage;                                                         // 0x00D8 (size: 0x8)
-    double BufferXP;                                                                  // 0x00E0 (size: 0x8)
-    double RemainingXP;                                                               // 0x00E8 (size: 0x8)
-    double MultiplyValue;                                                             // 0x00F0 (size: 0x8)
-    double Difficulty_MultiplierValue;                                                // 0x00F8 (size: 0x8)
-    FLevellingComponent_CUpdateLevelUI UpdateLevelUI;                                 // 0x0100 (size: 0x10)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x00D0 (size: 0x8)
+    int32 CurrentLevel;                                                               // 0x00D8 (size: 0x4)
+    int32 LevelCap;                                                                   // 0x00DC (size: 0x4)
+    double CurrentXP;                                                                 // 0x00E0 (size: 0x8)
+    double CurrentMaxXP;                                                              // 0x00E8 (size: 0x8)
+    double CurrentPercentage;                                                         // 0x00F0 (size: 0x8)
+    double BufferXP;                                                                  // 0x00F8 (size: 0x8)
+    double RemainingXP;                                                               // 0x0100 (size: 0x8)
+    double MultiplyValue;                                                             // 0x0108 (size: 0x8)
+    double Difficulty_MultiplierValue;                                                // 0x0110 (size: 0x8)
+    FLevellingComponent_CUpdateLevelUI UpdateLevelUI;                                 // 0x0118 (size: 0x10)
     void UpdateLevelUI(int32 Level);
-    FLevellingComponent_CUpdateXPUI UpdateXPUI;                                       // 0x0110 (size: 0x10)
+    FLevellingComponent_CUpdateXPUI UpdateXPUI;                                       // 0x0128 (size: 0x10)
     void UpdateXPUI(double CurrentXP, double MaxXP);
 
-    void ComponentsToSave(TArray<class UActorComponent*>& Components);
+    void ComponentsToSave(TArray<UActorComponent*>& Components);
     void Reset();
     void XPDeath();
     void LevelUp();
@@ -37,6 +37,6 @@ class ULevellingComponent_C : public UBaseComponent_C
     void ExecuteUbergraph_LevellingComponent(int32 EntryPoint);
     void UpdateXPUI__DelegateSignature(double CurrentXP, double MaxXP);
     void UpdateLevelUI__DelegateSignature(int32 Level);
-}; // Size: 0x120
+}; // Size: 0x138
 
 #endif

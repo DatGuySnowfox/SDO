@@ -4,6 +4,5 @@ enum class ESoundwaveSampleRateSettings {
     Medium = 2,
     Low = 3,
     Min = 4,
-    MatchDevice_DEPRECATED = 5,
 };
 

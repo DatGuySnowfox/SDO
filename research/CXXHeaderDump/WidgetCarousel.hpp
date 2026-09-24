@@ -3,19 +3,19 @@
 
 struct FWidgetCarouselNavigationBarStyle : public FSlateWidgetStyle
 {
-    FSlateBrush HighlightBrush;                                                       // 0x0010 (size: 0xD0)
-    FButtonStyle LeftButtonStyle;                                                     // 0x00E0 (size: 0x3F0)
-    FButtonStyle CenterButtonStyle;                                                   // 0x04D0 (size: 0x3F0)
-    FButtonStyle RightButtonStyle;                                                    // 0x08C0 (size: 0x3F0)
+    FSlateBrush HighlightBrush;                                                       // 0x0010 (size: 0xB0)
+    FButtonStyle LeftButtonStyle;                                                     // 0x00C0 (size: 0x390)
+    FButtonStyle CenterButtonStyle;                                                   // 0x0450 (size: 0x390)
+    FButtonStyle RightButtonStyle;                                                    // 0x07E0 (size: 0x390)
 
-}; // Size: 0xCB0
+}; // Size: 0xB70
 
 struct FWidgetCarouselNavigationButtonStyle : public FSlateWidgetStyle
 {
-    FButtonStyle InnerButtonStyle;                                                    // 0x0010 (size: 0x3F0)
-    FSlateBrush NavigationButtonLeftImage;                                            // 0x0400 (size: 0xD0)
-    FSlateBrush NavigationButtonRightImage;                                           // 0x04D0 (size: 0xD0)
+    FButtonStyle InnerButtonStyle;                                                    // 0x0010 (size: 0x390)
+    FSlateBrush NavigationButtonLeftImage;                                            // 0x03A0 (size: 0xB0)
+    FSlateBrush NavigationButtonRightImage;                                           // 0x0450 (size: 0xB0)
 
-}; // Size: 0x5A0
+}; // Size: 0x500
 
 #endif

@@ -31,17 +31,23 @@ class IInterchangeVariantSetPayloadInterface : public IInterface
 {
 }; // Size: 0x28
 
+class IInterchangeVolumePayloadInterface : public IInterface
+{
+}; // Size: 0x28
+
 class UInterchangeActorFactory : public UInterchangeFactoryBase
 {
 }; // Size: 0x30
 
 class UInterchangeAnimSequenceFactory : public UInterchangeFactoryBase
 {
-}; // Size: 0x30
+}; // Size: 0x1D8
 
-class UInterchangeAnimationTrackSetFactory : public UInterchangeFactoryBase
+class UInterchangeAssetUserData : public UAssetUserData
 {
-}; // Size: 0x38
+    TMap<FString, FString> MetaData;                                                  // 0x0028 (size: 0x50)
+
+}; // Size: 0x78
 
 class UInterchangeCameraActorFactory : public UInterchangeActorFactory
 {
@@ -53,27 +59,68 @@ class UInterchangeCineCameraActorFactory : public UInterchangeActorFactory
 
 class UInterchangeDDSTranslator : public UInterchangeTranslatorBase
 {
-}; // Size: 0x48
+}; // Size: 0x58
+
+class UInterchangeDecalActorFactory : public UInterchangeActorFactory
+{
+}; // Size: 0x30
 
 class UInterchangeFbxTranslator : public UInterchangeTranslatorBase
 {
-}; // Size: 0x58
+    class UInterchangeFbxTranslatorSettings* CacheFbxTranslatorSettings;              // 0x0068 (size: 0x8)
+
+}; // Size: 0x88
+
+class UInterchangeFbxTranslatorSettings : public UInterchangeTranslatorSettings
+{
+    bool bConvertScene;                                                               // 0x0028 (size: 0x1)
+    bool bForceFrontXAxis;                                                            // 0x0029 (size: 0x1)
+    bool bConvertSceneUnit;                                                           // 0x002A (size: 0x1)
+    bool bKeepFbxNamespace;                                                           // 0x002B (size: 0x1)
+
+}; // Size: 0x30
 
 class UInterchangeGLTFTranslator : public UInterchangeTranslatorBase
 {
-}; // Size: 0x278
+}; // Size: 0x2B8
 
-class UInterchangeIESTranslator : public UInterchangeTranslatorBase
-{
-}; // Size: 0x40
-
-class UInterchangeImageWrapperTranslator : public UInterchangeTranslatorBase
+class UInterchangeGeometryCacheFactory : public UInterchangeFactoryBase
 {
 }; // Size: 0x48
 
+class UInterchangeHeterogeneousVolumeActorFactory : public UInterchangeActorFactory
+{
+}; // Size: 0x30
+
+class UInterchangeIESTranslator : public UInterchangeTranslatorBase
+{
+}; // Size: 0x50
+
+class UInterchangeImageWrapperTranslator : public UInterchangeTranslatorBase
+{
+}; // Size: 0x58
+
 class UInterchangeJPGTranslator : public UInterchangeTranslatorBase
 {
-}; // Size: 0x40
+}; // Size: 0x50
+
+class UInterchangeLevelAssetUserData : public UAssetUserData
+{
+    TArray<FSoftObjectPath> SceneImportPaths;                                         // 0x0028 (size: 0x10)
+
+}; // Size: 0x38
+
+class UInterchangeLevelFactory : public UInterchangeFactoryBase
+{
+}; // Size: 0x30
+
+class UInterchangeLevelInstanceActorFactory : public UInterchangeActorFactory
+{
+}; // Size: 0x30
+
+class UInterchangeLevelSequenceFactory : public UInterchangeFactoryBase
+{
+}; // Size: 0x38
 
 class UInterchangeLightActorFactory : public UInterchangeActorFactory
 {
@@ -89,19 +136,15 @@ class UInterchangeMaterialFunctionFactory : public UInterchangeFactoryBase
 
 class UInterchangeMaterialXTranslator : public UInterchangeTranslatorBase
 {
-}; // Size: 0x40
+}; // Size: 0x50
 
 class UInterchangeOBJTranslator : public UInterchangeTranslatorBase
 {
-}; // Size: 0x50
-
-class UInterchangePCXTranslator : public UInterchangeTranslatorBase
-{
-}; // Size: 0x40
+}; // Size: 0x60
 
 class UInterchangePSDTranslator : public UInterchangeTranslatorBase
 {
-}; // Size: 0x40
+}; // Size: 0x50
 
 class UInterchangePhysicsAssetFactory : public UInterchangeFactoryBase
 {
@@ -121,9 +164,17 @@ class UInterchangeSkeletalMeshActorFactory : public UInterchangeActorFactory
 
 class UInterchangeSkeletalMeshFactory : public UInterchangeFactoryBase
 {
-}; // Size: 0x60
+}; // Size: 0xD0
 
 class UInterchangeSkeletonFactory : public UInterchangeFactoryBase
+{
+}; // Size: 0x30
+
+class UInterchangeSparseVolumeTextureFactory : public UInterchangeFactoryBase
+{
+}; // Size: 0x48
+
+class UInterchangeSpecularProfileFactory : public UInterchangeFactoryBase
 {
 }; // Size: 0x30
 
@@ -133,11 +184,22 @@ class UInterchangeStaticMeshActorFactory : public UInterchangeActorFactory
 
 class UInterchangeStaticMeshFactory : public UInterchangeFactoryBase
 {
-}; // Size: 0x48
+}; // Size: 0x140
 
 class UInterchangeTextureFactory : public UInterchangeFactoryBase
 {
-}; // Size: 0xC0
+}; // Size: 0x108
+
+class UInterchangeUEJPEGTranslator : public UInterchangeTranslatorBase
+{
+}; // Size: 0x50
+
+class UInterchangeVolumeTranslatorSettings : public UInterchangeTranslatorSettings
+{
+    bool bTranslateAdjacentNumberedFiles;                                             // 0x0028 (size: 0x1)
+    FString AnimationID;                                                              // 0x0030 (size: 0x10)
+
+}; // Size: 0x40
 
 class UMaterialExpressionMaterialXAppend3Vector : public UMaterialExpression
 {
@@ -162,6 +224,16 @@ class UMaterialExpressionMaterialXBurn : public UMaterialExpression
     FExpressionInput B;                                                               // 0x00D8 (size: 0x28)
     FExpressionInput Alpha;                                                           // 0x0100 (size: 0x28)
     float ConstAlpha;                                                                 // 0x0128 (size: 0x4)
+
+}; // Size: 0x130
+
+class UMaterialExpressionMaterialXContrast : public UMaterialExpression
+{
+    FExpressionInput Input;                                                           // 0x00B0 (size: 0x28)
+    FExpressionInput Amount;                                                          // 0x00D8 (size: 0x28)
+    FExpressionInput Pivot;                                                           // 0x0100 (size: 0x28)
+    float ConstAmount;                                                                // 0x0128 (size: 0x4)
+    float ConstPivot;                                                                 // 0x012C (size: 0x4)
 
 }; // Size: 0x130
 
@@ -255,6 +327,14 @@ class UMaterialExpressionMaterialXMinus : public UMaterialExpression
 
 }; // Size: 0x130
 
+class UMaterialExpressionMaterialXMod : public UMaterialExpression
+{
+    FExpressionInput A;                                                               // 0x00B0 (size: 0x28)
+    FExpressionInput B;                                                               // 0x00D8 (size: 0x28)
+    float ConstB;                                                                     // 0x0100 (size: 0x4)
+
+}; // Size: 0x108
+
 class UMaterialExpressionMaterialXOut : public UMaterialExpression
 {
     FExpressionInput A;                                                               // 0x00B0 (size: 0x28)
@@ -338,6 +418,24 @@ class UMaterialExpressionMaterialXRampTopBottom : public UMaterialExpression
 
 }; // Size: 0x130
 
+class UMaterialExpressionMaterialXRange : public UMaterialExpression
+{
+    FExpressionInput Input;                                                           // 0x00B0 (size: 0x28)
+    FExpressionInput InputLow;                                                        // 0x00D8 (size: 0x28)
+    FExpressionInput InputHigh;                                                       // 0x0100 (size: 0x28)
+    FExpressionInput TargetLow;                                                       // 0x0128 (size: 0x28)
+    FExpressionInput TargetHigh;                                                      // 0x0150 (size: 0x28)
+    FExpressionInput Gamma;                                                           // 0x0178 (size: 0x28)
+    FExpressionInput clamp;                                                           // 0x01A0 (size: 0x28)
+    float ConstInputLow;                                                              // 0x01C8 (size: 0x4)
+    float ConstInputHigh;                                                             // 0x01CC (size: 0x4)
+    float ConstTargetLow;                                                             // 0x01D0 (size: 0x4)
+    float ConstTargetHigh;                                                            // 0x01D4 (size: 0x4)
+    float ConstGamma;                                                                 // 0x01D8 (size: 0x4)
+    bool bConstClamp;                                                                 // 0x01DC (size: 0x1)
+
+}; // Size: 0x1E0
+
 class UMaterialExpressionMaterialXRemap : public UMaterialExpression
 {
     FExpressionInput Input;                                                           // 0x00B0 (size: 0x28)
@@ -400,12 +498,12 @@ class UMaterialExpressionMaterialXSwizzle : public UMaterialExpression
 
 class UMaterialExpressionMaterialXTextureSampleParameterBlur : public UMaterialExpressionTextureSampleParameter2D
 {
-    EMAterialXTextureSampleBlurKernel KernelSize;                                     // 0x0240 (size: 0x4)
-    float FilterSize;                                                                 // 0x0244 (size: 0x4)
-    float FilterOffset;                                                               // 0x0248 (size: 0x4)
-    EMaterialXTextureSampleBlurFilter Filter;                                         // 0x024C (size: 0x1)
+    EMAterialXTextureSampleBlurKernel KernelSize;                                     // 0x0228 (size: 0x4)
+    float FilterSize;                                                                 // 0x022C (size: 0x4)
+    float FilterOffset;                                                               // 0x0230 (size: 0x4)
+    EMaterialXTextureSampleBlurFilter Filter;                                         // 0x0234 (size: 0x1)
 
-}; // Size: 0x250
+}; // Size: 0x238
 
 class UMaterialExpressionMaterialXUnpremult : public UMaterialExpression
 {

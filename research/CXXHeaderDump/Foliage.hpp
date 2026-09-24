@@ -40,51 +40,51 @@ struct FProceduralFoliageInstance
 
 class AInstancedFoliageActor : public AISMPartitionActor
 {
-}; // Size: 0x2F8
+}; // Size: 0x308
 
 class AInteractiveFoliageActor : public AStaticMeshActor
 {
-    class UCapsuleComponent* CapsuleComponent;                                        // 0x02A8 (size: 0x8)
-    FVector TouchingActorEntryPosition;                                               // 0x02B0 (size: 0x18)
-    FVector FoliageVelocity;                                                          // 0x02C8 (size: 0x18)
-    FVector FoliageForce;                                                             // 0x02E0 (size: 0x18)
-    FVector FoliagePosition;                                                          // 0x02F8 (size: 0x18)
-    float FoliageDamageImpulseScale;                                                  // 0x0310 (size: 0x4)
-    float FoliageTouchImpulseScale;                                                   // 0x0314 (size: 0x4)
-    float FoliageStiffness;                                                           // 0x0318 (size: 0x4)
-    float FoliageStiffnessQuadratic;                                                  // 0x031C (size: 0x4)
-    float FoliageDamping;                                                             // 0x0320 (size: 0x4)
-    float MaxDamageImpulse;                                                           // 0x0324 (size: 0x4)
-    float MaxTouchImpulse;                                                            // 0x0328 (size: 0x4)
-    float MaxForce;                                                                   // 0x032C (size: 0x4)
-    float Mass;                                                                       // 0x0330 (size: 0x4)
+    class UCapsuleComponent* CapsuleComponent;                                        // 0x02B8 (size: 0x8)
+    FVector TouchingActorEntryPosition;                                               // 0x02C0 (size: 0x18)
+    FVector FoliageVelocity;                                                          // 0x02D8 (size: 0x18)
+    FVector FoliageForce;                                                             // 0x02F0 (size: 0x18)
+    FVector FoliagePosition;                                                          // 0x0308 (size: 0x18)
+    float FoliageDamageImpulseScale;                                                  // 0x0320 (size: 0x4)
+    float FoliageTouchImpulseScale;                                                   // 0x0324 (size: 0x4)
+    float FoliageStiffness;                                                           // 0x0328 (size: 0x4)
+    float FoliageStiffnessQuadratic;                                                  // 0x032C (size: 0x4)
+    float FoliageDamping;                                                             // 0x0330 (size: 0x4)
+    float MaxDamageImpulse;                                                           // 0x0334 (size: 0x4)
+    float MaxTouchImpulse;                                                            // 0x0338 (size: 0x4)
+    float MaxForce;                                                                   // 0x033C (size: 0x4)
+    float Mass;                                                                       // 0x0340 (size: 0x4)
 
     void CapsuleTouched(class UPrimitiveComponent* OverlappedComp, class AActor* Other, class UPrimitiveComponent* OtherComp, int32 OtherBodyIndex, bool bFromSweep, const FHitResult& OverlapInfo);
-}; // Size: 0x338
+}; // Size: 0x348
 
 class AProceduralFoliageBlockingVolume : public AVolume
 {
-    class AProceduralFoliageVolume* ProceduralFoliageVolume;                          // 0x02D0 (size: 0x8)
-    FFoliageDensityFalloff DensityFalloff;                                            // 0x02D8 (size: 0x90)
+    class AProceduralFoliageVolume* ProceduralFoliageVolume;                          // 0x02E0 (size: 0x8)
+    FFoliageDensityFalloff DensityFalloff;                                            // 0x02E8 (size: 0x90)
 
-}; // Size: 0x368
+}; // Size: 0x378
 
 class AProceduralFoliageVolume : public AVolume
 {
-    class UProceduralFoliageComponent* ProceduralComponent;                           // 0x02D8 (size: 0x8)
+    class UProceduralFoliageComponent* ProceduralComponent;                           // 0x02E8 (size: 0x8)
 
-}; // Size: 0x2E0
+}; // Size: 0x2F0
 
 class UFoliageInstancedStaticMeshComponent : public UHierarchicalInstancedStaticMeshComponent
 {
-    FFoliageInstancedStaticMeshComponentOnInstanceTakePointDamage OnInstanceTakePointDamage; // 0x0900 (size: 0x10)
+    FFoliageInstancedStaticMeshComponentOnInstanceTakePointDamage OnInstanceTakePointDamage; // 0x0B48 (size: 0x10)
     void InstancePointDamageSignature(int32 InstanceIndex, float Damage, class AController* InstigatedBy, FVector HitLocation, FVector ShotFromDirection, const class UDamageType* DamageType, class AActor* DamageCauser);
-    FFoliageInstancedStaticMeshComponentOnInstanceTakeRadialDamage OnInstanceTakeRadialDamage; // 0x0910 (size: 0x10)
+    FFoliageInstancedStaticMeshComponentOnInstanceTakeRadialDamage OnInstanceTakeRadialDamage; // 0x0B58 (size: 0x10)
     void InstanceRadialDamageSignature(const TArray<int32>& Instances, const TArray<float>& Damages, class AController* InstigatedBy, FVector Origin, float MaxRadius, const class UDamageType* DamageType, class AActor* DamageCauser);
-    bool bEnableDiscardOnLoad;                                                        // 0x0920 (size: 0x1)
-    FGuid GenerationGuid;                                                             // 0x0924 (size: 0x10)
+    bool bEnableDiscardOnLoad;                                                        // 0x0B68 (size: 0x1)
+    FGuid GenerationGuid;                                                             // 0x0B6C (size: 0x10)
 
-}; // Size: 0x940
+}; // Size: 0xB80
 
 class UFoliageStatistics : public UBlueprintFunctionLibrary
 {
@@ -148,89 +148,89 @@ class UFoliageType : public UObject
     uint8 bVisibleInRayTracing;                                                       // 0x01A0 (size: 0x1)
     uint8 bEvaluateWorldPositionOffset;                                               // 0x01A0 (size: 0x1)
     int32 WorldPositionOffsetDisableDistance;                                         // 0x01A4 (size: 0x4)
-    FBodyInstance BodyInstance;                                                       // 0x01A8 (size: 0x190)
-    TEnumAsByte<EHasCustomNavigableGeometry::Type> CustomNavigableGeometry;           // 0x0338 (size: 0x1)
-    FLightingChannels LightingChannels;                                               // 0x0339 (size: 0x1)
-    uint8 bRenderCustomDepth;                                                         // 0x033C (size: 0x1)
-    ERendererStencilMask CustomDepthStencilWriteMask;                                 // 0x0340 (size: 0x1)
-    int32 CustomDepthStencilValue;                                                    // 0x0344 (size: 0x4)
-    int32 TranslucencySortPriority;                                                   // 0x0348 (size: 0x4)
-    float CollisionRadius;                                                            // 0x034C (size: 0x4)
-    float ShadeRadius;                                                                // 0x0350 (size: 0x4)
-    int32 NumSteps;                                                                   // 0x0354 (size: 0x4)
-    float InitialSeedDensity;                                                         // 0x0358 (size: 0x4)
-    float AverageSpreadDistance;                                                      // 0x035C (size: 0x4)
-    float SpreadVariance;                                                             // 0x0360 (size: 0x4)
-    int32 SeedsPerStep;                                                               // 0x0364 (size: 0x4)
-    int32 DistributionSeed;                                                           // 0x0368 (size: 0x4)
-    float MaxInitialSeedOffset;                                                       // 0x036C (size: 0x4)
-    bool bCanGrowInShade;                                                             // 0x0370 (size: 0x1)
-    bool bSpawnsInShade;                                                              // 0x0371 (size: 0x1)
-    float MaxInitialAge;                                                              // 0x0374 (size: 0x4)
-    float MaxAge;                                                                     // 0x0378 (size: 0x4)
-    float OverlapPriority;                                                            // 0x037C (size: 0x4)
-    FFloatInterval ProceduralScale;                                                   // 0x0380 (size: 0x8)
-    FRuntimeFloatCurve ScaleCurve;                                                    // 0x0388 (size: 0x88)
-    FFoliageDensityFalloff DensityFalloff;                                            // 0x0410 (size: 0x90)
-    int32 ChangeCount;                                                                // 0x04A0 (size: 0x4)
-    uint8 ReapplyDensity;                                                             // 0x04A4 (size: 0x1)
-    uint8 ReapplyRadius;                                                              // 0x04A4 (size: 0x1)
-    uint8 ReapplyAlignToNormal;                                                       // 0x04A4 (size: 0x1)
-    uint8 ReapplyRandomYaw;                                                           // 0x04A4 (size: 0x1)
-    uint8 ReapplyScaling;                                                             // 0x04A4 (size: 0x1)
-    uint8 ReapplyScaleX;                                                              // 0x04A4 (size: 0x1)
-    uint8 ReapplyScaleY;                                                              // 0x04A4 (size: 0x1)
-    uint8 ReapplyScaleZ;                                                              // 0x04A4 (size: 0x1)
-    uint8 ReapplyRandomPitchAngle;                                                    // 0x04A5 (size: 0x1)
-    uint8 ReapplyGroundSlope;                                                         // 0x04A5 (size: 0x1)
-    uint8 ReapplyHeight;                                                              // 0x04A5 (size: 0x1)
-    uint8 ReapplyLandscapeLayers;                                                     // 0x04A5 (size: 0x1)
-    uint8 ReapplyZOffset;                                                             // 0x04A5 (size: 0x1)
-    uint8 ReapplyCollisionWithWorld;                                                  // 0x04A5 (size: 0x1)
-    uint8 ReapplyVertexColorMask;                                                     // 0x04A5 (size: 0x1)
-    uint8 bEnableDensityScaling;                                                      // 0x04A5 (size: 0x1)
-    uint8 bEnableDiscardOnLoad;                                                       // 0x04A6 (size: 0x1)
-    uint8 bEnableCullDistanceScaling;                                                 // 0x04A6 (size: 0x1)
-    TArray<class URuntimeVirtualTexture*> RuntimeVirtualTextures;                     // 0x04A8 (size: 0x10)
-    int32 VirtualTextureCullMips;                                                     // 0x04B8 (size: 0x4)
-    ERuntimeVirtualTextureMainPassType VirtualTextureRenderPassType;                  // 0x04BC (size: 0x1)
+    FBodyInstance BodyInstance;                                                       // 0x01A8 (size: 0x180)
+    TEnumAsByte<EHasCustomNavigableGeometry::Type> CustomNavigableGeometry;           // 0x0328 (size: 0x1)
+    FLightingChannels LightingChannels;                                               // 0x0329 (size: 0x1)
+    uint8 bRenderCustomDepth;                                                         // 0x032C (size: 0x1)
+    ERendererStencilMask CustomDepthStencilWriteMask;                                 // 0x0330 (size: 0x1)
+    int32 CustomDepthStencilValue;                                                    // 0x0334 (size: 0x4)
+    int32 TranslucencySortPriority;                                                   // 0x0338 (size: 0x4)
+    float CollisionRadius;                                                            // 0x033C (size: 0x4)
+    float ShadeRadius;                                                                // 0x0340 (size: 0x4)
+    int32 NumSteps;                                                                   // 0x0344 (size: 0x4)
+    float InitialSeedDensity;                                                         // 0x0348 (size: 0x4)
+    float AverageSpreadDistance;                                                      // 0x034C (size: 0x4)
+    float SpreadVariance;                                                             // 0x0350 (size: 0x4)
+    int32 SeedsPerStep;                                                               // 0x0354 (size: 0x4)
+    int32 DistributionSeed;                                                           // 0x0358 (size: 0x4)
+    float MaxInitialSeedOffset;                                                       // 0x035C (size: 0x4)
+    bool bCanGrowInShade;                                                             // 0x0360 (size: 0x1)
+    bool bSpawnsInShade;                                                              // 0x0361 (size: 0x1)
+    float MaxInitialAge;                                                              // 0x0364 (size: 0x4)
+    float MaxAge;                                                                     // 0x0368 (size: 0x4)
+    float OverlapPriority;                                                            // 0x036C (size: 0x4)
+    FFloatInterval ProceduralScale;                                                   // 0x0370 (size: 0x8)
+    FRuntimeFloatCurve ScaleCurve;                                                    // 0x0378 (size: 0x88)
+    FFoliageDensityFalloff DensityFalloff;                                            // 0x0400 (size: 0x90)
+    int32 ChangeCount;                                                                // 0x0490 (size: 0x4)
+    uint8 ReapplyDensity;                                                             // 0x0494 (size: 0x1)
+    uint8 ReapplyRadius;                                                              // 0x0494 (size: 0x1)
+    uint8 ReapplyAlignToNormal;                                                       // 0x0494 (size: 0x1)
+    uint8 ReapplyRandomYaw;                                                           // 0x0494 (size: 0x1)
+    uint8 ReapplyScaling;                                                             // 0x0494 (size: 0x1)
+    uint8 ReapplyScaleX;                                                              // 0x0494 (size: 0x1)
+    uint8 ReapplyScaleY;                                                              // 0x0494 (size: 0x1)
+    uint8 ReapplyScaleZ;                                                              // 0x0494 (size: 0x1)
+    uint8 ReapplyRandomPitchAngle;                                                    // 0x0495 (size: 0x1)
+    uint8 ReapplyGroundSlope;                                                         // 0x0495 (size: 0x1)
+    uint8 ReapplyHeight;                                                              // 0x0495 (size: 0x1)
+    uint8 ReapplyLandscapeLayers;                                                     // 0x0495 (size: 0x1)
+    uint8 ReapplyZOffset;                                                             // 0x0495 (size: 0x1)
+    uint8 ReapplyCollisionWithWorld;                                                  // 0x0495 (size: 0x1)
+    uint8 ReapplyVertexColorMask;                                                     // 0x0495 (size: 0x1)
+    uint8 bEnableDensityScaling;                                                      // 0x0495 (size: 0x1)
+    uint8 bEnableDiscardOnLoad;                                                       // 0x0496 (size: 0x1)
+    uint8 bEnableCullDistanceScaling;                                                 // 0x0496 (size: 0x1)
+    TArray<URuntimeVirtualTexture*> RuntimeVirtualTextures;                           // 0x0498 (size: 0x10)
+    int32 VirtualTextureCullMips;                                                     // 0x04A8 (size: 0x4)
+    ERuntimeVirtualTextureMainPassType VirtualTextureRenderPassType;                  // 0x04AC (size: 0x1)
 
-}; // Size: 0x4C0
+}; // Size: 0x4B0
 
 class UFoliageType_Actor : public UFoliageType
 {
-    TSubclassOf<class AActor> ActorClass;                                             // 0x04C0 (size: 0x8)
-    bool bShouldAttachToBaseComponent;                                                // 0x04C8 (size: 0x1)
-    bool bStaticMeshOnly;                                                             // 0x04C9 (size: 0x1)
-    TSubclassOf<class UFoliageInstancedStaticMeshComponent> StaticMeshOnlyComponentClass; // 0x04D0 (size: 0x8)
+    TSubclassOf<class AActor> ActorClass;                                             // 0x04B0 (size: 0x8)
+    bool bShouldAttachToBaseComponent;                                                // 0x04B8 (size: 0x1)
+    bool bStaticMeshOnly;                                                             // 0x04B9 (size: 0x1)
+    TSubclassOf<class UFoliageInstancedStaticMeshComponent> StaticMeshOnlyComponentClass; // 0x04C0 (size: 0x8)
 
-}; // Size: 0x4D8
+}; // Size: 0x4C8
 
 class UFoliageType_InstancedStaticMesh : public UFoliageType
 {
-    class UStaticMesh* Mesh;                                                          // 0x04C0 (size: 0x8)
-    TArray<class UMaterialInterface*> OverrideMaterials;                              // 0x04C8 (size: 0x10)
-    TArray<class UMaterialInterface*> NaniteOverrideMaterials;                        // 0x04D8 (size: 0x10)
-    TSubclassOf<class UFoliageInstancedStaticMeshComponent> ComponentClass;           // 0x04E8 (size: 0x8)
+    class UStaticMesh* Mesh;                                                          // 0x04B0 (size: 0x8)
+    TArray<UMaterialInterface*> OverrideMaterials;                                    // 0x04B8 (size: 0x10)
+    TArray<UMaterialInterface*> NaniteOverrideMaterials;                              // 0x04C8 (size: 0x10)
+    TSubclassOf<class UFoliageInstancedStaticMeshComponent> ComponentClass;           // 0x04D8 (size: 0x8)
 
-}; // Size: 0x4F0
+}; // Size: 0x4E0
 
 class UGrassInstancedStaticMeshComponent : public UHierarchicalInstancedStaticMeshComponent
 {
-}; // Size: 0x900
+}; // Size: 0xB50
 
 class UInteractiveFoliageComponent : public UStaticMeshComponent
 {
-}; // Size: 0x630
+}; // Size: 0x620
 
 class UProceduralFoliageComponent : public UActorComponent
 {
-    class UProceduralFoliageSpawner* FoliageSpawner;                                  // 0x00A0 (size: 0x8)
-    float TileOverlap;                                                                // 0x00A8 (size: 0x4)
-    class AVolume* SpawningVolume;                                                    // 0x00B0 (size: 0x8)
-    FGuid ProceduralGuid;                                                             // 0x00B8 (size: 0x10)
+    class UProceduralFoliageSpawner* FoliageSpawner;                                  // 0x00B8 (size: 0x8)
+    float TileOverlap;                                                                // 0x00C0 (size: 0x4)
+    class AVolume* SpawningVolume;                                                    // 0x00C8 (size: 0x8)
+    FGuid ProceduralGuid;                                                             // 0x00D0 (size: 0x10)
 
-}; // Size: 0xC8
+}; // Size: 0xE0
 
 class UProceduralFoliageSpawner : public UObject
 {
@@ -240,7 +240,7 @@ class UProceduralFoliageSpawner : public UObject
     float MinimumQuadTreeSize;                                                        // 0x0034 (size: 0x4)
     TArray<FFoliageTypeObject> FoliageTypes;                                          // 0x0040 (size: 0x10)
     bool bUseOverrideFoliageTerrainMaterials;                                         // 0x0050 (size: 0x1)
-    TArray<TSoftObjectPtr<UMaterialInterface>> OverrideFoliageTerrainMaterials;       // 0x0058 (size: 0x10)
+    TArray<TSoftObjectPtr<class UMaterialInterface>> OverrideFoliageTerrainMaterials; // 0x0058 (size: 0x10)
 
     void Simulate(int32 NumSteps);
 }; // Size: 0x80

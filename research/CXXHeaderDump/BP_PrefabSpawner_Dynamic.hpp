@@ -3,6 +3,6 @@
 
 class ABP_PrefabSpawner_Dynamic_C : public ABP_PrefabSpawner_C
 {
-}; // Size: 0x358
+}; // Size: 0x350
 
 #endif

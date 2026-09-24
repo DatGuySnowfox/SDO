@@ -3,6 +3,6 @@
 
 class ABuildable_WoodenWallHalfShort2_C : public ABuildable_WoodenWallHalfShort_C
 {
-}; // Size: 0x478
+}; // Size: 0x488
 
 #endif

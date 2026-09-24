@@ -3,6 +3,6 @@
 
 class ABuildable_WoodenWall2_C : public ABuildable_WoodenWall_C
 {
-}; // Size: 0x520
+}; // Size: 0x530
 
 #endif

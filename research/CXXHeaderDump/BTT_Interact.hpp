@@ -4,7 +4,7 @@
 class UBTT_Interact_C : public UBTTask_BlueprintBase
 {
     FPointerToUberGraphFrame UberGraphFrame;                                          // 0x00A8 (size: 0x8)
-    TArray<class UAnimMontage*> Interaction Animations;                               // 0x00B0 (size: 0x10)
+    TArray<UAnimMontage*> Interaction Animations;                                     // 0x00B0 (size: 0x10)
     int32 Current Anim Index;                                                         // 0x00C0 (size: 0x4)
     class UAnimMontage* Current Animation;                                            // 0x00C8 (size: 0x8)
     FTimerHandle End Timer;                                                           // 0x00D0 (size: 0x8)

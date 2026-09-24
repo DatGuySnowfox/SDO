@@ -3,6 +3,6 @@
 
 class ABP_BarbedWire_Child1_C : public ABP_BarbedWire_C
 {
-}; // Size: 0x2C8
+}; // Size: 0x2D8
 
 #endif

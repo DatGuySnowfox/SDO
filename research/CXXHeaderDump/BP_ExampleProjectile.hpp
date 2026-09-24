@@ -3,8 +3,8 @@
 
 class ABP_ExampleProjectile_C : public ABP_MasterProjectile_C
 {
-    class UStaticMeshComponent* Sphere;                                               // 0x0488 (size: 0x8)
+    class UStaticMeshComponent* Sphere;                                               // 0x0498 (size: 0x8)
 
-}; // Size: 0x490
+}; // Size: 0x4A0
 
 #endif

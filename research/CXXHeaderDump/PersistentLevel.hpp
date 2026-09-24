@@ -3,12 +3,12 @@
 
 class APersistentLevel_C : public ALevelScriptActor
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02A0 (size: 0x8)
-    class ULoadingScreenWidget_C* LoadingScreen;                                      // 0x02A8 (size: 0x8)
-    FName CurrentLevel;                                                               // 0x02B0 (size: 0x8)
-    FPersistentLevel_CRemoveLoadingScreen RemoveLoadingScreen;                        // 0x02B8 (size: 0x10)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02B0 (size: 0x8)
+    class ULoadingScreenWidget_C* LoadingScreen;                                      // 0x02B8 (size: 0x8)
+    FName CurrentLevel;                                                               // 0x02C0 (size: 0x8)
+    FPersistentLevel_CRemoveLoadingScreen RemoveLoadingScreen;                        // 0x02C8 (size: 0x10)
     void RemoveLoadingScreen();
-    FPersistentLevel_CGetLevelName GetLevelName;                                      // 0x02C8 (size: 0x10)
+    FPersistentLevel_CGetLevelName GetLevelName;                                      // 0x02D8 (size: 0x10)
     void GetLevelName(FName Name);
 
     void ReceiveBeginPlay();
@@ -18,6 +18,6 @@ class APersistentLevel_C : public ALevelScriptActor
     void ExecuteUbergraph_PersistentLevel(int32 EntryPoint);
     void GetLevelName__DelegateSignature(FName Name);
     void RemoveLoadingScreen__DelegateSignature();
-}; // Size: 0x2D8
+}; // Size: 0x2E8
 
 #endif

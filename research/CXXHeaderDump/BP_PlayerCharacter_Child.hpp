@@ -3,6 +3,6 @@
 
 class ABP_PlayerCharacter_Child_C : public ABP_PlayerCharacter_C
 {
-}; // Size: 0x1E08
+}; // Size: 0x1E40
 
 #endif

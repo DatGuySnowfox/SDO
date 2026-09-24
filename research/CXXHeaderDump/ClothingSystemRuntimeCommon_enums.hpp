@@ -19,6 +19,9 @@ enum class EWeightMapTargetCommon {
     BackstopRadius = 3,
     AnimDriveStiffness = 4,
     AnimDriveDamping_DEPRECATED = 5,
-    EWeightMapTargetCommon_MAX = 6,
+    FirstUserTarget = 6,
+    LastUserTarget = 200,
+    TetherEndsMask = 201,
+    EWeightMapTargetCommon_MAX = 202,
 };
 

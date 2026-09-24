@@ -100,21 +100,21 @@ struct FAnimNode_DragonAimSolver : public FAnimNode_DragonControlBase
     TEnumAsByte<ETraceTypeQuery> Trace_Channel;                                       // 0x05A5 (size: 0x1)
     float Trace_Up_Height;                                                            // 0x05A8 (size: 0x4)
     float Trace_Down_Height;                                                          // 0x05AC (size: 0x4)
-    EInterpoLocation_Type_Plugin loc_interp_type;                                     // 0x069C (size: 0x1)
-    bool Enable_Interpolation;                                                        // 0x06A5 (size: 0x1)
-    float Interpolation_Speed;                                                        // 0x06A8 (size: 0x4)
-    float Toggle_Interpolation_Speed;                                                 // 0x06AC (size: 0x4)
-    FVector LookAt_Axis;                                                              // 0x0710 (size: 0x18)
-    FVector Upward_Axis;                                                              // 0x0728 (size: 0x18)
-    FVector TargetOffset;                                                             // 0x0740 (size: 0x18)
-    bool Use_Reference_Forward_Axis;                                                  // 0x0758 (size: 0x1)
-    FVector Reference_Constant_Forward_Axis;                                          // 0x0760 (size: 0x18)
-    bool DisplayLineTrace;                                                            // 0x0895 (size: 0x1)
-    FTransform Debug_LookAtLocation;                                                  // 0x08A0 (size: 0x60)
-    TArray<FTransform> Debug_Hand_Locations;                                          // 0x0900 (size: 0x10)
-    class USkeletalMeshComponent* owning_skel;                                        // 0x0CC0 (size: 0x8)
+    EInterpoLocation_Type_Plugin loc_interp_type;                                     // 0x06B4 (size: 0x1)
+    bool Enable_Interpolation;                                                        // 0x06BD (size: 0x1)
+    float Interpolation_Speed;                                                        // 0x06C0 (size: 0x4)
+    float Toggle_Interpolation_Speed;                                                 // 0x06C4 (size: 0x4)
+    FVector LookAt_Axis;                                                              // 0x0728 (size: 0x18)
+    FVector Upward_Axis;                                                              // 0x0740 (size: 0x18)
+    FVector TargetOffset;                                                             // 0x0758 (size: 0x18)
+    bool Use_Reference_Forward_Axis;                                                  // 0x0770 (size: 0x1)
+    FVector Reference_Constant_Forward_Axis;                                          // 0x0778 (size: 0x18)
+    bool DisplayLineTrace;                                                            // 0x08B5 (size: 0x1)
+    FTransform Debug_LookAtLocation;                                                  // 0x08C0 (size: 0x60)
+    TArray<FTransform> Debug_Hand_Locations;                                          // 0x0920 (size: 0x10)
+    class USkeletalMeshComponent* owning_skel;                                        // 0x0CE0 (size: 0x8)
 
-}; // Size: 0xD80
+}; // Size: 0xDA0
 
 struct FAnimNode_DragonControlBase : public FAnimNode_Base
 {
@@ -299,70 +299,73 @@ struct FAnimNode_DragonSpineSolver : public FAnimNode_DragonControlBase
     float Chest_Crouch_Height;                                                        // 0x0328 (size: 0x4)
     float Chest_Crouch_Rotation_Intensity;                                            // 0x032C (size: 0x4)
     FVector Duck_Chest_Trace_Offset;                                                  // 0x0330 (size: 0x18)
-    float Slanted_Height_Up_Offset;                                                   // 0x0578 (size: 0x4)
-    float Slanted_Height_Down_Offset;                                                 // 0x0580 (size: 0x4)
-    float dip_multiplier;                                                             // 0x0584 (size: 0x4)
-    float pelvis_adaptive_gravity;                                                    // 0x0588 (size: 0x4)
-    bool reverse_fabrik;                                                              // 0x058C (size: 0x1)
-    bool Calculation_To_RefPose;                                                      // 0x0594 (size: 0x1)
-    float Chest_Slanted_Height_Up_Offset;                                             // 0x0598 (size: 0x4)
-    float Chest_Slanted_Height_Down_Offset;                                           // 0x059C (size: 0x4)
-    float chest_side_dip_multiplier;                                                  // 0x05A0 (size: 0x4)
-    float chest_adaptive_gravity;                                                     // 0x05A4 (size: 0x4)
-    float Chest_Base_Offset;                                                          // 0x05A8 (size: 0x4)
-    float Pelvis_Base_Offset;                                                         // 0x05AC (size: 0x4)
-    float virtual_leg_width;                                                          // 0x05B0 (size: 0x4)
-    float Maximum_Dip_Height;                                                         // 0x05B4 (size: 0x4)
-    FRuntimeFloatCurve Pelvis_Height_Multiplier_Curve;                                // 0x05C0 (size: 0x88)
-    float Maximum_Dip_Height_Chest;                                                   // 0x0648 (size: 0x4)
-    FRuntimeFloatCurve Chest_Height_Multiplier_Curve;                                 // 0x0650 (size: 0x88)
-    float rotation_power_between;                                                     // 0x06E4 (size: 0x4)
-    bool Use_Automatic_Fabrik_Selection;                                              // 0x06E8 (size: 0x1)
-    float Trace_Lerp_Speed;                                                           // 0x06EC (size: 0x4)
-    float Location_Lerp_Speed;                                                        // 0x06F0 (size: 0x4)
-    float Rotation_Lerp_Speed;                                                        // 0x0704 (size: 0x4)
-    FRuntimeFloatCurve Interpolation_Multiplier_Curve;                                // 0x0710 (size: 0x88)
-    float Chest_Influence_Alpha;                                                      // 0x0798 (size: 0x4)
-    float Pelvis_ForwardRotation_Intensity;                                           // 0x079C (size: 0x4)
-    float Pelvis_UpwardForwardRotation_Intensity;                                     // 0x07A0 (size: 0x4)
-    float Body_Rotation_Intensity;                                                    // 0x07A4 (size: 0x4)
-    FRotator Pelvis_Rotation_Offset_Rotator;                                          // 0x07A8 (size: 0x18)
-    float Chest_ForwardRotation_Intensity;                                            // 0x07C0 (size: 0x4)
-    float Chest_UpwardForwardRotation_Intensity;                                      // 0x07C4 (size: 0x4)
-    float Chest_SidewardRotation_Intensity;                                           // 0x07C8 (size: 0x4)
-    FRotator Chest_Rotation_Offset_Rotator;                                           // 0x07D0 (size: 0x18)
-    bool Full_Extended_Spine;                                                         // 0x0850 (size: 0x1)
-    float max_extension_ratio;                                                        // 0x0854 (size: 0x4)
-    float min_extension_ratio;                                                        // 0x0858 (size: 0x4)
-    float extension_switch_speed;                                                     // 0x085C (size: 0x4)
-    bool enable_solver;                                                               // 0x0864 (size: 0x1)
-    bool Work_Outside_PIE;                                                            // 0x0865 (size: 0x1)
-    bool Use_Fake_Chest_Rotations;                                                    // 0x0866 (size: 0x1)
-    bool Use_Fake_Pelvis_Rotations;                                                   // 0x0867 (size: 0x1)
-    bool Force_Activation;                                                            // 0x086C (size: 0x1)
-    bool accurate_feet_placement;                                                     // 0x086D (size: 0x1)
-    FRuntimeFloatCurve Accurate_Foot_Curve;                                           // 0x0870 (size: 0x88)
-    bool use_crosshair_trace_also_for_fail_distance;                                  // 0x08F8 (size: 0x1)
-    bool Only_Root_Solve;                                                             // 0x08F9 (size: 0x1)
-    bool Ignore_Chest_Solve;                                                          // 0x08FA (size: 0x1)
-    FVector Overall_PostSolved_Offset;                                                // 0x0908 (size: 0x18)
-    FVector character_direction_vector_CS;                                            // 0x0920 (size: 0x18)
-    FVector Forward_Direction_Vector;                                                 // 0x0938 (size: 0x18)
-    bool flip_forward_and_right;                                                      // 0x0950 (size: 0x1)
-    ERefPosePluginEnum SolverReferencePose;                                           // 0x0970 (size: 0x1)
-    bool Spine_Feet_Connect;                                                          // 0x0971 (size: 0x1)
-    float Snake_Joint_Speed;                                                          // 0x0D34 (size: 0x4)
-    bool Enable_Snake_Interpolation;                                                  // 0x0D38 (size: 0x1)
-    bool is_snake;                                                                    // 0x0D39 (size: 0x1)
-    bool Ignore_End_Points;                                                           // 0x0D3A (size: 0x1)
-    float Maximum_Feet_Distance;                                                      // 0x0D3C (size: 0x4)
-    float Minimum_Feet_Distance;                                                      // 0x0D40 (size: 0x4)
-    bool DisplayLineTrace;                                                            // 0x0D44 (size: 0x1)
-    class USkeletalMeshComponent* owning_skel;                                        // 0x0D50 (size: 0x8)
-    class AActor* Character_Actor;                                                    // 0x0D60 (size: 0x8)
-    class USkeleton* skeleton_ref;                                                    // 0x0D68 (size: 0x8)
+    float Slanted_Height_Up_Offset;                                                   // 0x05A8 (size: 0x4)
+    float Slanted_Height_Down_Offset;                                                 // 0x05B0 (size: 0x4)
+    float dip_multiplier;                                                             // 0x05B4 (size: 0x4)
+    float pelvis_adaptive_gravity;                                                    // 0x05B8 (size: 0x4)
+    bool reverse_fabrik;                                                              // 0x05BC (size: 0x1)
+    bool Calculation_To_RefPose;                                                      // 0x05C4 (size: 0x1)
+    float Chest_Slanted_Height_Up_Offset;                                             // 0x05C8 (size: 0x4)
+    float Chest_Slanted_Height_Down_Offset;                                           // 0x05CC (size: 0x4)
+    float chest_side_dip_multiplier;                                                  // 0x05D0 (size: 0x4)
+    float chest_adaptive_gravity;                                                     // 0x05D4 (size: 0x4)
+    float Chest_Base_Offset;                                                          // 0x05D8 (size: 0x4)
+    float Pelvis_Base_Offset;                                                         // 0x05DC (size: 0x4)
+    float virtual_leg_width;                                                          // 0x05E0 (size: 0x4)
+    float Maximum_Dip_Height;                                                         // 0x05E4 (size: 0x4)
+    FRuntimeFloatCurve Pelvis_Height_Multiplier_Curve;                                // 0x05F0 (size: 0x88)
+    float Maximum_Dip_Height_Chest;                                                   // 0x0678 (size: 0x4)
+    FRuntimeFloatCurve Chest_Height_Multiplier_Curve;                                 // 0x0680 (size: 0x88)
+    float rotation_power_between;                                                     // 0x0714 (size: 0x4)
+    bool Use_Automatic_Fabrik_Selection;                                              // 0x0718 (size: 0x1)
+    float Trace_Lerp_Speed;                                                           // 0x071C (size: 0x4)
+    float Location_Lerp_Speed;                                                        // 0x0720 (size: 0x4)
+    float Rotation_Lerp_Speed;                                                        // 0x0734 (size: 0x4)
+    FRuntimeFloatCurve Interpolation_Multiplier_Curve;                                // 0x0740 (size: 0x88)
+    float Chest_Influence_Alpha;                                                      // 0x07C8 (size: 0x4)
+    float Pelvis_ForwardRotation_Intensity;                                           // 0x07CC (size: 0x4)
+    float Pelvis_UpwardForwardRotation_Intensity;                                     // 0x07D0 (size: 0x4)
+    float Body_Rotation_Intensity;                                                    // 0x07D4 (size: 0x4)
+    FRotator Pelvis_Rotation_Offset_Rotator;                                          // 0x07D8 (size: 0x18)
+    float Chest_ForwardRotation_Intensity;                                            // 0x07F0 (size: 0x4)
+    float Chest_UpwardForwardRotation_Intensity;                                      // 0x07F4 (size: 0x4)
+    float Chest_SidewardRotation_Intensity;                                           // 0x07F8 (size: 0x4)
+    FRotator Chest_Rotation_Offset_Rotator;                                           // 0x0800 (size: 0x18)
+    bool Full_Extended_Spine;                                                         // 0x0880 (size: 0x1)
+    float max_extension_ratio;                                                        // 0x0884 (size: 0x4)
+    float min_extension_ratio;                                                        // 0x0888 (size: 0x4)
+    float extension_switch_speed;                                                     // 0x088C (size: 0x4)
+    bool enable_solver;                                                               // 0x0894 (size: 0x1)
+    bool Work_Outside_PIE;                                                            // 0x0895 (size: 0x1)
+    bool Use_Fake_Chest_Rotations;                                                    // 0x0896 (size: 0x1)
+    bool Use_Fake_Pelvis_Rotations;                                                   // 0x0897 (size: 0x1)
+    bool Force_Activation;                                                            // 0x089C (size: 0x1)
+    bool accurate_feet_placement;                                                     // 0x089D (size: 0x1)
+    FRuntimeFloatCurve Accurate_Foot_Curve;                                           // 0x08A0 (size: 0x88)
+    bool use_crosshair_trace_also_for_fail_distance;                                  // 0x0928 (size: 0x1)
+    bool Only_Root_Solve;                                                             // 0x0929 (size: 0x1)
+    bool Ignore_Chest_Solve;                                                          // 0x092A (size: 0x1)
+    FVector Overall_PostSolved_Offset;                                                // 0x0938 (size: 0x18)
+    FVector character_direction_vector_CS;                                            // 0x0950 (size: 0x18)
+    FVector Forward_Direction_Vector;                                                 // 0x0968 (size: 0x18)
+    bool flip_forward_and_right;                                                      // 0x0980 (size: 0x1)
+    ERefPosePluginEnum SolverReferencePose;                                           // 0x09A0 (size: 0x1)
+    bool Spine_Feet_Connect;                                                          // 0x09A1 (size: 0x1)
+    float Snake_Joint_Speed;                                                          // 0x0D64 (size: 0x4)
+    bool Enable_Snake_Interpolation;                                                  // 0x0D68 (size: 0x1)
+    bool Hold_Snake_Root_Bone;                                                        // 0x0D69 (size: 0x1)
+    bool is_snake;                                                                    // 0x0D6A (size: 0x1)
+    bool use_custom_fixed_bone_height;                                                // 0x0D6B (size: 0x1)
+    FDragonData_SnakeCustomHeight_Struct custom_fixed_bone_height;                    // 0x0D70 (size: 0x10)
+    bool Ignore_End_Points;                                                           // 0x0D80 (size: 0x1)
+    float Maximum_Feet_Distance;                                                      // 0x0D84 (size: 0x4)
+    float Minimum_Feet_Distance;                                                      // 0x0D88 (size: 0x4)
+    bool DisplayLineTrace;                                                            // 0x0D8C (size: 0x1)
+    class USkeletalMeshComponent* owning_skel;                                        // 0x0D98 (size: 0x8)
+    class AActor* Character_Actor;                                                    // 0x0DA8 (size: 0x8)
+    class USkeleton* skeleton_ref;                                                    // 0x0DB0 (size: 0x8)
 
-}; // Size: 0xEA0
+}; // Size: 0xEF0
 
 struct FAnimNode_DragonTransformRelayer : public FAnimNode_DragonControlBase
 {
@@ -373,25 +376,34 @@ struct FAnimNode_DragonTransformRelayer : public FAnimNode_DragonControlBase
 
 struct FAnimNode_DragonTwistArmSolver : public FAnimNode_DragonControlBase
 {
-    FDragonData_ArmsData Hand_Input_Info;                                             // 0x00E8 (size: 0x200)
-    FTransform Target_Transform;                                                      // 0x0300 (size: 0x60)
-    FVector Extra_Elbow_Pole_Offset;                                                  // 0x0360 (size: 0x18)
-    EPole_System_DragonIK pole_system_input;                                          // 0x037B (size: 0x1)
-    ETwist_Type_DragonIK arm_twist_axis;                                              // 0x037C (size: 0x1)
-    ERotation_Type_DragonIK hand_rotation_method;                                     // 0x037D (size: 0x1)
-    bool Let_Arm_Twist_With_Hand;                                                     // 0x04A5 (size: 0x1)
-    bool allow_arm_stretch;                                                           // 0x04A6 (size: 0x1)
-    bool Enable_Interpolation;                                                        // 0x05A5 (size: 0x1)
-    float Interpolation_Speed;                                                        // 0x05A8 (size: 0x4)
-    FVector LookAt_Axis;                                                              // 0x0610 (size: 0x18)
-    FVector Upward_Axis;                                                              // 0x0628 (size: 0x18)
-    bool Use_Physics_Adaptation;                                                      // 0x0640 (size: 0x1)
-    FName physics_root_reference;                                                     // 0x0644 (size: 0x8)
-    bool DisplayLineTrace;                                                            // 0x0754 (size: 0x1)
-    TArray<FTransform> Debug_Hand_Locations;                                          // 0x0758 (size: 0x10)
-    class USkeletalMeshComponent* owning_skel;                                        // 0x0940 (size: 0x8)
+    FDragonData_ArmsData Hand_Input_Info;                                             // 0x02B0 (size: 0x200)
+    FTransform Target_Transform;                                                      // 0x04C0 (size: 0x60)
+    TEnumAsByte<EBoneControlSpace> EffectorLocationSpace;                             // 0x0520 (size: 0x1)
+    FBoneSocketTarget EffectorTarget;                                                 // 0x0530 (size: 0x90)
+    FVector Extra_Elbow_Pole_Offset;                                                  // 0x05C0 (size: 0x18)
+    EPole_System_DragonIK pole_system_input;                                          // 0x05DB (size: 0x1)
+    ETwist_Type_DragonIK arm_twist_axis;                                              // 0x05DC (size: 0x1)
+    ERotation_Type_DragonIK hand_rotation_method;                                     // 0x05DD (size: 0x1)
+    bool Let_Arm_Twist_With_Hand;                                                     // 0x0705 (size: 0x1)
+    bool allow_arm_stretch;                                                           // 0x0706 (size: 0x1)
+    bool Enable_Interpolation;                                                        // 0x081D (size: 0x1)
+    float Interpolation_Speed;                                                        // 0x0820 (size: 0x4)
+    FVector LookAt_Axis;                                                              // 0x0888 (size: 0x18)
+    FVector Upward_Axis;                                                              // 0x08A0 (size: 0x18)
+    bool TraceModeLogic;                                                              // 0x08B8 (size: 0x1)
+    TEnumAsByte<ETraceTypeQuery> Trace_Channel;                                       // 0x08B9 (size: 0x1)
+    EIKTrace_Type_Plugin trace_type;                                                  // 0x08BA (size: 0x1)
+    float Trace_Radius;                                                               // 0x08BC (size: 0x4)
+    bool line_trace_hit_complex;                                                      // 0x08C0 (size: 0x1)
+    float Trace_Length_Percent;                                                       // 0x08C4 (size: 0x4)
+    float trace_interval_duration;                                                    // 0x08C8 (size: 0x4)
+    bool Use_Physics_Adaptation;                                                      // 0x08D4 (size: 0x1)
+    FName physics_root_reference;                                                     // 0x08D8 (size: 0x8)
+    bool DisplayLineTrace;                                                            // 0x09E4 (size: 0x1)
+    TArray<FTransform> Debug_Hand_Locations;                                          // 0x09E8 (size: 0x10)
+    class USkeletalMeshComponent* owning_skel;                                        // 0x0BD0 (size: 0x8)
 
-}; // Size: 0xA00
+}; // Size: 0xC90
 
 struct FAnimNode_DragonWarpSolver : public FAnimNode_DragonControlBase
 {
@@ -415,9 +427,9 @@ struct FAnimNode_DragonWarpSolver : public FAnimNode_DragonControlBase
     FRuntimeFloatCurve Limb_Lifting_Curve;                                            // 0x0380 (size: 0x88)
     float Hip_Change_Intensity;                                                       // 0x0408 (size: 0x4)
     FRuntimeFloatCurve Hip_Lifting_Curve;                                             // 0x0410 (size: 0x88)
-    class USkeletalMeshComponent* owning_skel;                                        // 0x06A8 (size: 0x8)
+    class USkeletalMeshComponent* owning_skel;                                        // 0x06D8 (size: 0x8)
 
-}; // Size: 0x6D0
+}; // Size: 0x700
 
 struct FAnimNode_DragonWeaponArmSolver : public FAnimNode_DragonControlBase
 {
@@ -427,15 +439,15 @@ struct FAnimNode_DragonWeaponArmSolver : public FAnimNode_DragonControlBase
     int32 primary_hand_index;                                                         // 0x0168 (size: 0x4)
     ETwist_Type_DragonIK arm_twist_axis;                                              // 0x01CC (size: 0x1)
     bool Let_Arm_Twist_With_Hand;                                                     // 0x02F5 (size: 0x1)
-    bool Enable_Interpolation;                                                        // 0x03F5 (size: 0x1)
-    float Interpolation_Speed;                                                        // 0x03F8 (size: 0x4)
-    FVector LookAt_Axis;                                                              // 0x0730 (size: 0x18)
-    FVector Upward_Axis;                                                              // 0x0748 (size: 0x18)
-    bool DisplayLineTrace;                                                            // 0x08A8 (size: 0x1)
-    TArray<FTransform> Debug_Hand_Locations;                                          // 0x08B0 (size: 0x10)
-    class USkeletalMeshComponent* owning_skel;                                        // 0x0AA0 (size: 0x8)
+    bool Enable_Interpolation;                                                        // 0x040D (size: 0x1)
+    float Interpolation_Speed;                                                        // 0x0410 (size: 0x4)
+    FVector LookAt_Axis;                                                              // 0x0750 (size: 0x18)
+    FVector Upward_Axis;                                                              // 0x0768 (size: 0x18)
+    bool DisplayLineTrace;                                                            // 0x08C8 (size: 0x1)
+    TArray<FTransform> Debug_Hand_Locations;                                          // 0x08D0 (size: 0x10)
+    class USkeletalMeshComponent* owning_skel;                                        // 0x0AC0 (size: 0x8)
 
-}; // Size: 0xB60
+}; // Size: 0xB80
 
 struct FAnimNode_TailSolver : public FAnimNode_DragonControlBase
 {
@@ -685,6 +697,12 @@ struct FDragonData_SingleArmElement
 
 }; // Size: 0x80
 
+struct FDragonData_SnakeCustomHeight_Struct
+{
+    TArray<float> snake_bone_height_array;                                            // 0x0000 (size: 0x10)
+
+}; // Size: 0x10
+
 struct FDragonData_StickyFeetStruct
 {
     TArray<bool> sticky_feet_array;                                                   // 0x0000 (size: 0x10)
@@ -733,24 +751,24 @@ struct FDragonIKTraceKeyValuePair
 {
     FName Key;                                                                        // 0x0000 (size: 0x8)
     FName BoneName;                                                                   // 0x0008 (size: 0x8)
-    FHitResult hit_result;                                                            // 0x0010 (size: 0xE8)
+    FHitResult hit_result;                                                            // 0x0010 (size: 0x100)
 
-}; // Size: 0xF8
+}; // Size: 0x110
 
 struct FDragonIKTraceMParams
 {
-}; // Size: 0x138
+}; // Size: 0x150
 
 struct FDragonIKTraceParamKeyValuePair
 {
     FName Key;                                                                        // 0x0000 (size: 0x8)
-    FDragonIKTraceMParams trace_params;                                               // 0x0008 (size: 0x138)
+    FDragonIKTraceMParams trace_params;                                               // 0x0008 (size: 0x150)
 
-}; // Size: 0x140
+}; // Size: 0x158
 
 struct FDragonTailChainLink
 {
-}; // Size: 0x260
+}; // Size: 0x280
 
 struct FSocketDragonReference
 {
@@ -760,49 +778,49 @@ struct FSocketDragonReference
 
 class ADragonIKPhysicsHolder : public AActor
 {
-    TArray<class UPhysicsHandleComponent*> physics_handle_array;                      // 0x0298 (size: 0x10)
-    class AActor* connected_actor;                                                    // 0x02A8 (size: 0x8)
+    TArray<UPhysicsHandleComponent*> physics_handle_array;                            // 0x02A8 (size: 0x10)
+    class AActor* connected_actor;                                                    // 0x02B8 (size: 0x8)
 
-}; // Size: 0x2B0
+}; // Size: 0x2C0
 
 class UDragonIKFootStepsComponent : public UActorComponent
 {
-    FDragonIKFootStepsComponentOnCharacterFootStep OnCharacterFootStep;               // 0x00A0 (size: 0x10)
+    FDragonIKFootStepsComponentOnCharacterFootStep OnCharacterFootStep;               // 0x00B8 (size: 0x10)
     void CharacterFootStep(FName bone_name, FTransform foot_transform, float height_difference, FHitResult hit_info);
-    FName read_this;                                                                  // 0x0214 (size: 0x8)
-    TArray<FName> foot_socket;                                                        // 0x0220 (size: 0x10)
-    float foot_enter_height;                                                          // 0x0230 (size: 0x4)
-    float foot_exit_height;                                                           // 0x0234 (size: 0x4)
+    FName read_this;                                                                  // 0x023C (size: 0x8)
+    TArray<FName> foot_socket;                                                        // 0x0248 (size: 0x10)
+    float foot_enter_height;                                                          // 0x0258 (size: 0x4)
+    float foot_exit_height;                                                           // 0x025C (size: 0x4)
 
     void CallFootSteps(FName bone_name, FTransform foot_transform, float height_difference, FHitResult hit_info);
-}; // Size: 0x240
+}; // Size: 0x260
 
 class UDragonIKPhysicsComponent : public UActorComponent
 {
-    class USkeletalMeshComponent* owning_skeleton;                                    // 0x00B0 (size: 0x8)
-    class ADragonIKPhysicsHolder* handler_holder;                                     // 0x00B8 (size: 0x8)
-    int32 physanim_tag_index;                                                         // 0x00C0 (size: 0x4)
-    FName Custom_Root_Bone;                                                           // 0x00C4 (size: 0x8)
-    TArray<FName> individual_bone_selection;                                          // 0x00D0 (size: 0x10)
-    TArray<FName> Influence_Stopping_Bones;                                           // 0x0100 (size: 0x10)
-    TArray<FDragonData_PhysicsHandleMultiplier> Override_Handle_Strength_Multiplier;  // 0x0110 (size: 0x10)
-    int32 Linear_Strength;                                                            // 0x0150 (size: 0x4)
-    int32 Angular_Strength;                                                           // 0x0154 (size: 0x4)
-    int32 Linear_Damp;                                                                // 0x0158 (size: 0x4)
-    int32 Angular_Damp;                                                               // 0x015C (size: 0x4)
-    int32 Interpolation_Speed;                                                        // 0x0160 (size: 0x4)
-    float Teleport_Distance;                                                          // 0x0164 (size: 0x4)
-    bool parent_child_ragdoll_state;                                                  // 0x01D0 (size: 0x1)
-    TMap<class FName, class FName> Parent_Child_Connection_Array;                     // 0x01D8 (size: 0x50)
-    bool use_auto_blending_logic;                                                     // 0x0228 (size: 0x1)
-    float Autoblendalpha;                                                             // 0x022C (size: 0x4)
-    bool modify_physics_states;                                                       // 0x0231 (size: 0x1)
-    float Hit_Enable_Speed;                                                           // 0x0234 (size: 0x4)
-    float Hit_Disable_Speed;                                                          // 0x0238 (size: 0x4)
-    float hit_delay_time;                                                             // 0x023C (size: 0x4)
-    FRuntimeFloatCurve Physanim_Enter_Curve;                                          // 0x0248 (size: 0x88)
-    bool blend_to_zero;                                                               // 0x02D0 (size: 0x1)
-    class USceneComponent* mesh_parent_reference;                                     // 0x03E0 (size: 0x8)
+    class USkeletalMeshComponent* owning_skeleton;                                    // 0x00C8 (size: 0x8)
+    class ADragonIKPhysicsHolder* handler_holder;                                     // 0x00D0 (size: 0x8)
+    int32 physanim_tag_index;                                                         // 0x00D8 (size: 0x4)
+    FName Custom_Root_Bone;                                                           // 0x00DC (size: 0x8)
+    TArray<FName> individual_bone_selection;                                          // 0x00E8 (size: 0x10)
+    TArray<FName> Influence_Stopping_Bones;                                           // 0x0118 (size: 0x10)
+    TArray<FDragonData_PhysicsHandleMultiplier> Override_Handle_Strength_Multiplier;  // 0x0128 (size: 0x10)
+    int32 Linear_Strength;                                                            // 0x0168 (size: 0x4)
+    int32 Angular_Strength;                                                           // 0x016C (size: 0x4)
+    int32 Linear_Damp;                                                                // 0x0170 (size: 0x4)
+    int32 Angular_Damp;                                                               // 0x0174 (size: 0x4)
+    int32 Interpolation_Speed;                                                        // 0x0178 (size: 0x4)
+    float Teleport_Distance;                                                          // 0x017C (size: 0x4)
+    bool parent_child_ragdoll_state;                                                  // 0x01F0 (size: 0x1)
+    TMap<FName, FName> Parent_Child_Connection_Array;                                 // 0x01F8 (size: 0x50)
+    bool use_auto_blending_logic;                                                     // 0x0248 (size: 0x1)
+    float Autoblendalpha;                                                             // 0x024C (size: 0x4)
+    bool modify_physics_states;                                                       // 0x0251 (size: 0x1)
+    float Hit_Enable_Speed;                                                           // 0x0254 (size: 0x4)
+    float Hit_Disable_Speed;                                                          // 0x0258 (size: 0x4)
+    float hit_delay_time;                                                             // 0x025C (size: 0x4)
+    FRuntimeFloatCurve Physanim_Enter_Curve;                                          // 0x0268 (size: 0x88)
+    bool blend_to_zero;                                                               // 0x02F0 (size: 0x1)
+    class USceneComponent* mesh_parent_reference;                                     // 0x0400 (size: 0x8)
 
     void UpdateSpecificPhysanimData(FName BoneName, int32 linear_strength_var, int32 angular_strength_var, int32 linear_damp_var, int32 angular_damp_var);
     void UpdatePhysanimData(int32 LinearStrength, int32 AngularStrength, int32 LinearDamp, int32 AngularDamp);
@@ -837,47 +855,47 @@ class UDragonIKPhysicsComponent : public UActorComponent
     void FirstTimeInitialization(class USkeletalMeshComponent* skeleton_input);
     void Control_Bone_Handle(FName bone_name, FTransform override_transform, bool Enable);
     void CacheSimulationStates();
-}; // Size: 0x460
+}; // Size: 0x480
 
 class UDragonIKTraceManagerComponent : public UActorComponent
 {
-    FName read_this;                                                                  // 0x00A0 (size: 0x8)
-    bool Is_Enabled;                                                                  // 0x00A8 (size: 0x1)
-    bool bShow_Spine_Trace_Lines_InGame;                                              // 0x00A9 (size: 0x1)
-    bool bShow_Foot_Trace_Lines_InGame;                                               // 0x00AA (size: 0x1)
-    FDragonIKTraceManagerComponentOnDragonikFootHitData OnDragonikFootHitData;        // 0x00E8 (size: 0x10)
+    FName read_this;                                                                  // 0x00B8 (size: 0x8)
+    bool Is_Enabled;                                                                  // 0x00C0 (size: 0x1)
+    bool bShow_Spine_Trace_Lines_InGame;                                              // 0x00C1 (size: 0x1)
+    bool bShow_Foot_Trace_Lines_InGame;                                               // 0x00C2 (size: 0x1)
+    FDragonIKTraceManagerComponentOnDragonikFootHitData OnDragonikFootHitData;        // 0x0100 (size: 0x10)
     void DragonIKFootSolverTraceData(const TArray<FDragonIKTraceKeyValuePair>& hit_data_pair);
 
     void SpineSolverTraceData(const TArray<FDragonIKTraceKeyValuePair>& hit_data_pair);
-}; // Size: 0xF8
+}; // Size: 0x110
 
 class UDragonIKTransformReceiverComp : public UActorComponent
 {
-    class USkeletalMeshComponent* owning_skeleton;                                    // 0x00B0 (size: 0x8)
-    FName read_this;                                                                  // 0x00B8 (size: 0x8)
-    TMap<class FName, class FTransform> World_Name_Transform_Map;                     // 0x00C0 (size: 0x50)
-    TMap<class FName, class FTransform> Component_Name_Transform_Map;                 // 0x0110 (size: 0x50)
+    class USkeletalMeshComponent* owning_skeleton;                                    // 0x00C8 (size: 0x8)
+    FName read_this;                                                                  // 0x00D0 (size: 0x8)
+    TMap<FName, FTransform> World_Name_Transform_Map;                                 // 0x00D8 (size: 0x50)
+    TMap<FName, FTransform> Component_Name_Transform_Map;                             // 0x0128 (size: 0x50)
 
-}; // Size: 0x160
+}; // Size: 0x178
 
 class UDragonIKWeaponPhysicsComponent : public UActorComponent
 {
-    class USkeletalMeshComponent* owning_skeleton;                                    // 0x00B0 (size: 0x8)
-    class UPhysicsHandleComponent* weapon_physics_handle;                             // 0x00B8 (size: 0x8)
-    class UPhysicsConstraintComponent* weapon_physics_constraint;                     // 0x00C0 (size: 0x8)
-    class UPrimitiveComponent* weapon_input_component;                                // 0x00D0 (size: 0x8)
-    class UPrimitiveComponent* active_weapon_component;                               // 0x00D8 (size: 0x8)
-    FName read_this;                                                                  // 0x04B0 (size: 0x8)
-    float Max_Arm_Length_Percent;                                                     // 0x04B8 (size: 0x4)
-    int32 physanim_tag_index;                                                         // 0x04BC (size: 0x4)
-    int32 Linear_Strength;                                                            // 0x04C0 (size: 0x4)
-    int32 Angular_Strength;                                                           // 0x04C4 (size: 0x4)
-    int32 Linear_Damp;                                                                // 0x04C8 (size: 0x4)
-    int32 Angular_Damp;                                                               // 0x04CC (size: 0x4)
-    int32 Interpolation_Speed;                                                        // 0x04D0 (size: 0x4)
-    float unfreeze_speed;                                                             // 0x04D4 (size: 0x4)
-    bool is_grabbing;                                                                 // 0x04D8 (size: 0x1)
-    float Teleport_Distance;                                                          // 0x04DC (size: 0x4)
+    class USkeletalMeshComponent* owning_skeleton;                                    // 0x00C8 (size: 0x8)
+    class UPhysicsHandleComponent* weapon_physics_handle;                             // 0x00D0 (size: 0x8)
+    class UPhysicsConstraintComponent* weapon_physics_constraint;                     // 0x00D8 (size: 0x8)
+    class UPrimitiveComponent* weapon_input_component;                                // 0x00E8 (size: 0x8)
+    class UPrimitiveComponent* active_weapon_component;                               // 0x00F0 (size: 0x8)
+    FName read_this;                                                                  // 0x04D0 (size: 0x8)
+    float Max_Arm_Length_Percent;                                                     // 0x04D8 (size: 0x4)
+    int32 physanim_tag_index;                                                         // 0x04DC (size: 0x4)
+    int32 Linear_Strength;                                                            // 0x04E0 (size: 0x4)
+    int32 Angular_Strength;                                                           // 0x04E4 (size: 0x4)
+    int32 Linear_Damp;                                                                // 0x04E8 (size: 0x4)
+    int32 Angular_Damp;                                                               // 0x04EC (size: 0x4)
+    int32 Interpolation_Speed;                                                        // 0x04F0 (size: 0x4)
+    float unfreeze_speed;                                                             // 0x04F4 (size: 0x4)
+    bool is_grabbing;                                                                 // 0x04F8 (size: 0x1)
+    float Teleport_Distance;                                                          // 0x04FC (size: 0x4)
 
     void Weapon_Transform_Override(FTransform Weapon_Transform, bool bShould_Override_Weapon_Transform);
     void Unfreeze_Elbows_Function(FName hand_bone);
@@ -915,7 +933,7 @@ class UDragonIKWeaponPhysicsComponent : public UActorComponent
     void DisableWeaponsArms(bool reset_weapon_transform);
     void Destroy_Weapon(class AActor* weapon);
     void Attach_Hand_Only(FName hand_bone, bool arm_position_recalibrate);
-}; // Size: 0x630
+}; // Size: 0x650
 
 class UDragonIK_Library : public UObject
 {

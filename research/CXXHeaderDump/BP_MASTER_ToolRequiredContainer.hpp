@@ -3,37 +3,37 @@
 
 class ABP_MASTER_ToolRequiredContainer_C : public ABP_MasterObject_C
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02A0 (size: 0x8)
-    class UAIOSubjectComponent* AIOSubject;                                           // 0x02A8 (size: 0x8)
-    class UBP_JigMultiplayer_C* BP_JigMultiplayer;                                    // 0x02B0 (size: 0x8)
-    class UStaticMeshComponent* StaticMesh;                                           // 0x02B8 (size: 0x8)
-    FVector InteractingActorLoc;                                                      // 0x02C0 (size: 0x18)
-    class AActor* CurrentActor;                                                       // 0x02D8 (size: 0x8)
-    bool Outline?;                                                                    // 0x02E0 (size: 0x1)
-    bool IsHeld;                                                                      // 0x02E1 (size: 0x1)
-    TEnumAsByte<Enum_ContainerLootTables::Type> LootTable;                            // 0x02E2 (size: 0x1)
-    double DurationToHold;                                                            // 0x02E8 (size: 0x8)
-    double ChanceToMakeNoise;                                                         // 0x02F0 (size: 0x8)
-    double DefaultChanceToProduceNoise;                                               // 0x02F8 (size: 0x8)
-    FText ContainerName;                                                              // 0x0300 (size: 0x18)
-    class UJigsawItem_DataAsset_C* ToolNeeded;                                        // 0x0318 (size: 0x8)
-    bool Opened;                                                                      // 0x0320 (size: 0x1)
-    FBP_MASTER_ToolRequiredContainer_COpenedObject OpenedObject;                      // 0x0328 (size: 0x10)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02B0 (size: 0x8)
+    class UAIOSubjectComponent* AIOSubject;                                           // 0x02B8 (size: 0x8)
+    class UBP_JigComponent_C* BP_JigMultiplayer;                                      // 0x02C0 (size: 0x8)
+    class UStaticMeshComponent* StaticMesh;                                           // 0x02C8 (size: 0x8)
+    FVector InteractingActorLoc;                                                      // 0x02D0 (size: 0x18)
+    class AActor* CurrentActor;                                                       // 0x02E8 (size: 0x8)
+    bool Outline?;                                                                    // 0x02F0 (size: 0x1)
+    bool IsHeld;                                                                      // 0x02F1 (size: 0x1)
+    TEnumAsByte<Enum_ContainerLootTables::Type> LootTable;                            // 0x02F2 (size: 0x1)
+    double DurationToHold;                                                            // 0x02F8 (size: 0x8)
+    double ChanceToMakeNoise;                                                         // 0x0300 (size: 0x8)
+    double DefaultChanceToProduceNoise;                                               // 0x0308 (size: 0x8)
+    FText ContainerName;                                                              // 0x0310 (size: 0x10)
+    class UJigsawItem_DataAsset_C* ToolNeeded;                                        // 0x0320 (size: 0x8)
+    bool Opened;                                                                      // 0x0328 (size: 0x1)
+    FBP_MASTER_ToolRequiredContainer_COpenedObject OpenedObject;                      // 0x0330 (size: 0x10)
     void OpenedObject();
-    bool ContainerLooted;                                                             // 0x0338 (size: 0x1)
-    bool ToolNeeded?;                                                                 // 0x0339 (size: 0x1)
-    FTimerHandle OutlineTimer;                                                        // 0x0340 (size: 0x8)
-    bool PlayerClose?;                                                                // 0x0348 (size: 0x1)
-    FTimerHandle HoldToInteractTimer;                                                 // 0x0350 (size: 0x8)
-    class UAudioComponent* SearchSoundComp;                                           // 0x0358 (size: 0x8)
-    double RefillTimer;                                                               // 0x0360 (size: 0x8)
+    bool ContainerLooted;                                                             // 0x0340 (size: 0x1)
+    bool ToolNeeded?;                                                                 // 0x0341 (size: 0x1)
+    FTimerHandle OutlineTimer;                                                        // 0x0348 (size: 0x8)
+    bool PlayerClose?;                                                                // 0x0350 (size: 0x1)
+    FTimerHandle HoldToInteractTimer;                                                 // 0x0358 (size: 0x8)
+    class UAudioComponent* SearchSoundComp;                                           // 0x0360 (size: 0x8)
+    double RefillTimer;                                                               // 0x0368 (size: 0x8)
     FTransform MagnifierTransform;                                                    // 0x0370 (size: 0x60)
     class UWidgetComponent* W_MagnifierUI;                                            // 0x03D0 (size: 0x8)
     TArray<FS_ReplicatedContainerInfo> MainJigContainers;                             // 0x03D8 (size: 0x10)
     TArray<FGuid> MainUIDs;                                                           // 0x03E8 (size: 0x10)
     TArray<FS_InvWeight> Weights;                                                     // 0x03F8 (size: 0x10)
 
-    void ComponentsToSave(TArray<class UActorComponent*>& Components);
+    void ComponentsToSave(TArray<UActorComponent*>& Components);
     void GetSettings(double& ChanceToProduceNoise, double& Default_ChanceToProduceNoise, double& DurationToHold);
     void IsHeld?(bool& Held?);
     void JigMP_GetLootWidget(class UWidget*& Result, bool& Valid?);
@@ -51,10 +51,10 @@ class ABP_MASTER_ToolRequiredContainer_C : public ABP_MasterObject_C
     void JigMP_OnUpdateChamberUID(FGuid NewUID, bool& Result);
     void JigMP_OnTwoContainersSwap(FName FromContainer, FName ToContainer, bool& Result);
     void GetMainSceneComp(class USceneComponent*& Comp);
-    void GetInteractOptions(TMap<class FGameplayTag, class FText>& Options);
+    void GetInteractOptions(TMap<FGameplayTag, FText>& Options);
     void OnRequestServerInteract(class AActor* Actor, FGameplayTag Option, FS_JigPayload Payload, bool& Result);
     void GetJigMultiplayerComponent(class UActorComponent*& JigComp);
-    void GetItemInfo(class UJigsawItem_DataAsset_C*& Info, int32& Count, FS_RandomStatsConfig& RandomStatsConfig, TMap<class FString, class FString>& CustomData);
+    void GetItemInfo(class UJigsawItem_DataAsset_C*& Info, int32& Count, FS_RandomStatsConfig& RandomStatsConfig, TMap<FString, FString>& CustomData);
     void JigCanInteract(bool& Result);
     void JigSetCanInteract(bool CanInteract, bool EnablePhysics, bool& Result);
     void SetPickupCount(int32 NewCount, bool& Result);
@@ -81,7 +81,7 @@ class ABP_MASTER_ToolRequiredContainer_C : public ABP_MasterObject_C
     void BndEvt__BP_CookingStation_AIOSubject_K2Node_ComponentBoundEvent_0_OnOptimizationUpdate__DelegateSignature(bool bIsBeyondLastLayer, int32 LayerIndex, bool bIsSeen);
     void OnStopExecuteInteract(class AActor* InteractingActor);
     void PauseInteract();
-    void OnBeginInteract(class AActor* InteractingActor, const TMap<class FGameplayTag, class FText> Options);
+    void OnBeginInteract(class AActor* InteractingActor, const TMap<FGameplayTag, FText> Options);
     void OnEndInteract();
     void OnExecuteInteract(class AActor* InteractingActor, FGameplayTag Option);
     void Event_Outline();

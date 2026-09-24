@@ -11,7 +11,7 @@ class ULayersBlueprintLibrary : public UBlueprintFunctionLibrary
 {
 
     void RemoveActorFromLayer(class AActor* InActor, const FActorLayer& Layer);
-    TArray<class AActor*> GetActors(class UObject* WorldContextObject, const FActorLayer& ActorLayer);
+    TArray<AActor*> GetActors(class UObject* WorldContextObject, const FActorLayer& ActorLayer);
     void AddActorToLayer(class AActor* InActor, const FActorLayer& Layer);
 }; // Size: 0x28
 

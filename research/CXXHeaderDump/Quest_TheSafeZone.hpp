@@ -3,9 +3,6 @@
 
 class UQuest_TheSafeZone_C : public UQuest
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0170 (size: 0x8)
-
-    void ExecuteUbergraph_Quest_TheSafeZone(int32 EntryPoint);
-}; // Size: 0x178
+}; // Size: 0x190
 
 #endif

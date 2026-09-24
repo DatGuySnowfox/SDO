@@ -3,6 +3,6 @@
 
 class ABuildable_Tent4_C : public ABuildableMaster_Tent_C
 {
-}; // Size: 0x498
+}; // Size: 0x4A8
 
 #endif

@@ -3,10 +3,6 @@
 
 #include "MeshDescription_enums.hpp"
 
-struct FBoneID : public FElementID
-{
-}; // Size: 0x4
-
 struct FEdgeID : public FElementID
 {
 }; // Size: 0x4

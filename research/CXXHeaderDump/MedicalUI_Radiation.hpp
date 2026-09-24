@@ -3,6 +3,6 @@
 
 class UMedicalUI_Radiation_C : public UMedicalUI_C
 {
-}; // Size: 0x2E0
+}; // Size: 0x360
 
 #endif

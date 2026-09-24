@@ -3,7 +3,7 @@
 
 class UWB_Base_C : public UUserWidget
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02C0 (size: 0x8)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0340 (size: 0x8)
 
     void PB_GetSeparationSteps(int32& Steps);
     void PB_AddEffect(FS_Effects Effect, int32& Index);
@@ -59,6 +59,6 @@ class UWB_Base_C : public UUserWidget
     void PB_SetAllEffectsEnabled(bool IsEnabled);
     void PB_RemoveEffect(int32 Index);
     void ExecuteUbergraph_WB_Base(int32 EntryPoint);
-}; // Size: 0x2C8
+}; // Size: 0x348
 
 #endif

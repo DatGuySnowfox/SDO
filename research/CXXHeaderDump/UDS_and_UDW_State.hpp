@@ -16,12 +16,12 @@ struct FUDS_and_UDW_State
     double TransitionDuration_221_0ADED53C458AAF00B34A5E84027E329B;                   // 0x0148 (size: 0x8)
     double TransitionTimer_222_D52B116947119ECE68EDEFAF45877D80;                      // 0x0150 (size: 0x8)
     double WindDirection_223_C27727CA49EA2613308F638F36486960;                        // 0x0158 (size: 0x8)
-    TArray<class UUDS_Modifier_C*> Modifiers_183_9106119B46CD83CAFE40DAA85329A736;    // 0x0160 (size: 0x10)
+    TArray<UUDS_Modifier_C*> Modifiers_183_9106119B46CD83CAFE40DAA85329A736;          // 0x0160 (size: 0x10)
     TArray<double> ModifierAlphas_224_3F8ABF2F420E35E9BBCCC5963AED568F;               // 0x0170 (size: 0x10)
     TArray<double> ModifierTargets_225_7340DCC245CD95D843EAC2B94658F829;              // 0x0180 (size: 0x10)
     TArray<double> ModifierSpeeds_226_D00457614E1365607A7DA68178982B63;               // 0x0190 (size: 0x10)
     FRandomWeatherVariation_State UDWRandomWeatherState_227_AE829CEC4D89D738E7D506805258238F; // 0x01A0 (size: 0x40)
-    TArray<class AActor*> WOVActors_228_617D1B134B0D80E5D1D5ADBE6FC8A601;             // 0x01E0 (size: 0x10)
+    TArray<AActor*> WOVActors_228_617D1B134B0D80E5D1D5ADBE6FC8A601;                   // 0x01E0 (size: 0x10)
     TArray<FUDW_WOV_State> WOVStates_229_7C8393034CE7618138CCB198E6DD1E76;            // 0x01F0 (size: 0x10)
 
 }; // Size: 0x200

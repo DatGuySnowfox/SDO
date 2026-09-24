@@ -16,16 +16,17 @@ class UConsoleVariablesAsset : public UObject
 
     void SetVariableCollectionDescription(FString InVariableCollectionDescription);
     void ReplaceSavedCommands(const TArray<FConsoleVariablesEditorAssetSaveData>& Replacement);
-    bool RemoveConsoleVariable(const FString InCommandString);
+    bool RemoveConsoleVariable(FString InCommandString);
     FString GetVariableCollectionDescription();
     int32 GetSavedCommandsCount();
     TArray<FString> GetSavedCommandsAsStringArray(bool bOnlyIncludeChecked);
     FString GetSavedCommandsAsCommaSeparatedString(bool bOnlyIncludeChecked);
     TArray<FConsoleVariablesEditorAssetSaveData> GetSavedCommands();
-    bool FindSavedDataByCommandString(const FString InCommandString, FConsoleVariablesEditorAssetSaveData& OutValue, const TEnumAsByte<ESearchCase::Type> SearchCase);
+    bool FindSavedDataByCommandString(FString InCommandString, FConsoleVariablesEditorAssetSaveData& OutValue, const TEnumAsByte<ESearchCase::Type> SearchCase);
     void ExecuteSavedCommands(class UObject* WorldContextObject, bool bOnlyIncludeChecked);
     void CopyFrom(const class UConsoleVariablesAsset* InAssetToCopy);
     void AddOrSetConsoleObjectSavedData(const FConsoleVariablesEditorAssetSaveData& InData);
+    void AddFrom(const class UConsoleVariablesAsset* InAssetToCopy);
 }; // Size: 0x50
 
 #endif

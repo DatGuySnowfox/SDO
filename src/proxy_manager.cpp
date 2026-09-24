@@ -218,23 +218,39 @@ using FMemoryFreeFn   = void(*)(void* ptr);
 // call_begin_deferred_spawn/get_class_private above).
 static std::string fname_to_string(uintptr_t fnamePtr)
 {
-    static auto* toString = reinterpret_cast<FNameToStringFn>(rebase(0x140C9D940));
-    static auto* memFree  = reinterpret_cast<FMemoryFreeFn>(rebase(0x140B27000));
+    // 2026-09-24: see mod.cpp's copy for the full reasoning. Short version:
+    // this used FName::ToString and FMemory::Free as absolute addresses baked
+    // from the UE 5.3 binary. On UE 5.6 they rebase into unrelated code, so
+    // calling them corrupted the process rather than returning a bad string.
+    // Now resolved through the engine's own KismetStringLibrary by name.
+    if (!fnamePtr) return {};
 
-    UnrealFString out{};
-    toString(reinterpret_cast<const void*>(fnamePtr), &out);
-    if (!out.data || out.num <= 0) return {};
-
-    int len = out.num;
-    if (out.data[len - 1] == L'\0') --len; // FString::Num includes the null terminator
-
-    std::string s;
-    if (len > 0) {
-        const int needed = WideCharToMultiByte(CP_UTF8, 0, out.data, len, nullptr, 0, nullptr, nullptr);
-        s.resize(static_cast<size_t>(needed));
-        WideCharToMultiByte(CP_UTF8, 0, out.data, len, s.data(), needed, nullptr, nullptr);
+    static UObject*   s_lib = nullptr;
+    static UFunction* s_fn  = nullptr;
+    static bool       s_tried = false;
+    if (!s_tried) {
+        s_tried = true;
+        s_lib = UObjectGlobals::FindObject(nullptr, reinterpret_cast<UObject*>(-1),
+                                           STR("Default__KismetStringLibrary"));
+        if (s_lib) s_fn = s_lib->GetFunctionByNameInChain(STR("Conv_NameToString"));
+        debug_log(std::string("fname_to_string: Conv_NameToString lib=") +
+                  (s_lib ? "ok" : "NULL") + " fn=" + (s_fn ? "ok" : "NULL"));
     }
-    memFree(out.data);
+    if (!s_lib || !s_fn) return {};
+
+    struct Params { uint32_t ComparisonIndex; uint32_t Number; UnrealFString Out; } params{};
+    params.ComparisonIndex = *reinterpret_cast<const uint32_t*>(fnamePtr);
+    params.Number          = *reinterpret_cast<const uint32_t*>(fnamePtr + 4);
+    s_lib->ProcessEvent(s_fn, &params);
+
+    if (!params.Out.data || params.Out.num <= 0) return {};
+    int len = params.Out.num;
+    if (params.Out.data[len - 1] == L'\0') --len;
+    if (len <= 0) return {};
+
+    const int needed = WideCharToMultiByte(CP_UTF8, 0, params.Out.data, len, nullptr, 0, nullptr, nullptr);
+    std::string s(static_cast<size_t>(needed), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, params.Out.data, len, s.data(), needed, nullptr, nullptr);
     return s;
 }
 

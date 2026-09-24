@@ -3,6 +3,6 @@
 
 class ABP_MasterAIController_Bandits_C : public ABP_MasterAIController_C
 {
-}; // Size: 0x411
+}; // Size: 0x419
 
 #endif

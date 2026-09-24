@@ -3,6 +3,6 @@
 
 class ABP_GuaranteedSpawner_Classified_C : public ABP_GuaranteedSpawner_C
 {
-}; // Size: 0x398
+}; // Size: 0x3A0
 
 #endif

@@ -4,6 +4,14 @@ enum class EGizmoElementArrowHeadType {
     EGizmoElementArrowHeadType_MAX = 2,
 };
 
+enum class EGizmoElementDrawType {
+    None = 0,
+    Fill = 2,
+    Line = 4,
+    FillAndLine = 6,
+    EGizmoElementDrawType_MAX = 7,
+};
+
 enum class EGizmoElementInteractionState {
     None = 0,
     Hovering = 1,
@@ -77,19 +85,32 @@ enum class EInputDevices {
     EInputDevices_MAX = 1025,
 };
 
+enum class ESceneSnapQueryTargetResult {
+    NotSnapped = 0,
+    Snapped = 1,
+    Disabled = 2,
+    Unsupported = 3,
+    ESceneSnapQueryTargetResult_MAX = 4,
+};
+
 enum class ESceneSnapQueryTargetType {
     None = 0,
     MeshVertex = 1,
     MeshEdge = 2,
     Grid = 4,
-    All = 7,
-    ESceneSnapQueryTargetType_MAX = 8,
+    ObjectTransform = 8,
+    Custom = 16,
+    All = 31,
+    ESceneSnapQueryTargetType_MAX = 32,
 };
 
 enum class ESceneSnapQueryType {
     Position = 1,
     Rotation = 2,
-    ESceneSnapQueryType_MAX = 3,
+    RotationAngle = 3,
+    Scale = 4,
+    Transform = 5,
+    ESceneSnapQueryType_MAX = 6,
 };
 
 enum class ESelectedObjectsModificationType {
@@ -115,7 +136,8 @@ enum class EToolChangeTrackingMode {
 enum class EToolContextCoordinateSystem {
     World = 0,
     Local = 1,
-    EToolContextCoordinateSystem_MAX = 2,
+    Screen = 2,
+    EToolContextCoordinateSystem_MAX = 3,
 };
 
 enum class EToolContextTransformGizmoMode {
@@ -125,6 +147,14 @@ enum class EToolContextTransformGizmoMode {
     Scale = 3,
     Combined = 8,
     EToolContextTransformGizmoMode_MAX = 9,
+};
+
+enum class EToolManagerToolSwitchMode {
+    AcceptIfAble = 0,
+    CancelIfAble = 1,
+    CustomizableAcceptIfAble = 2,
+    CustomizableCancelIfAble = 3,
+    EToolManagerToolSwitchMode_MAX = 4,
 };
 
 enum class EToolMessageLevel {
@@ -173,10 +203,12 @@ enum class ETransformGizmoSubElements {
     ScalePlaneXY = 32768,
     ScaleAllPlanes = 57344,
     ScaleUniform = 65536,
-    StandardTranslateRotate = 1022,
-    TranslateRotateUniformScale = 66558,
-    FullTranslateRotateScale = 131070,
-    ETransformGizmoSubElements_MAX = 131071,
+    FreeTranslate = 131072,
+    FreeRotate = 262144,
+    StandardTranslateRotate = 394238,
+    TranslateRotateUniformScale = 459774,
+    FullTranslateRotateScale = 524286,
+    ETransformGizmoSubElements_MAX = 524287,
 };
 
 enum class EViewInteractionState {

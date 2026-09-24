@@ -3,20 +3,20 @@
 
 class UW_TrashBinUI_C : public UUserWidget
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02C0 (size: 0x8)
-    class UTextBlock* BackText;                                                       // 0x02C8 (size: 0x8)
-    class UEquipmentSlotTitle_C* EquipmentSlotTitle;                                  // 0x02D0 (size: 0x8)
-    class UButton* ExitButton;                                                        // 0x02D8 (size: 0x8)
-    class UJSIContainer_C* JSIContainer_1;                                            // 0x02E0 (size: 0x8)
-    TArray<FContainerPickupsInfo> All Items;                                          // 0x02E8 (size: 0x10)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0340 (size: 0x8)
+    class UJSIContainer_C* JSIContainer_1;                                            // 0x0348 (size: 0x8)
+    class UButton* ExitButton;                                                        // 0x0350 (size: 0x8)
+    class UEquipmentSlotTitle_C* EquipmentSlotTitle;                                  // 0x0358 (size: 0x8)
+    class UTextBlock* BackText;                                                       // 0x0360 (size: 0x8)
+    TArray<FContainerPickupsInfo> All Items;                                          // 0x0368 (size: 0x10)
 
     void GetLootContent(class UUserWidget*& Widget);
-    void GetValidReloadContainers(TArray<class UJSIContainer_C*>& Containers);
-    void GetListOfContainers(TArray<class UJSIContainer_C*>& Containers);
+    void GetValidReloadContainers(TArray<UJSIContainer_C*>& Containers);
+    void GetListOfContainers(TArray<UJSIContainer_C*>& Containers);
     void GetContainerByAttachmentType(FGameplayTag Type, class UJSIContainer_C*& JigContainer, int32& ContainerIndex);
     void GetDropWidget(class UDropItemBackGwidget_C*& DropWRef);
     void GetJSIContainerByPlayerSlots(FGameplayTag Slot, class UJSIContainer_C*& Container, class UJSI_Slot_C*& EquippedItem, bool& IsPending?);
-    void GetListOfNonAddContainers(TArray<class UJSIContainer_C*>& Containers);
+    void GetListOfNonAddContainers(TArray<UJSIContainer_C*>& Containers);
     void GetAllAttachments(TArray<FName>& Attachments);
     void SetActionbarFollower(class UJSI_Slot_C* JigRef, bool& Return);
     void SetItemReference(class UJSI_Slot_C* ItemRef);
@@ -29,6 +29,6 @@ class UW_TrashBinUI_C : public UUserWidget
     void OnCreatedFromUtility();
     void BndEvt__BP_BinWidget_ExitButton_K2Node_ComponentBoundEvent_0_OnButtonClickedEvent__DelegateSignature();
     void ExecuteUbergraph_W_TrashBinUI(int32 EntryPoint);
-}; // Size: 0x2F8
+}; // Size: 0x378
 
 #endif

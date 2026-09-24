@@ -3,11 +3,11 @@
 
 class UWBP_NotificationBox_C : public UCommonUserWidget
 {
-    class UVerticalBox* VerticalBox_Notifications;                                    // 0x02E8 (size: 0x8)
-    FText Text;                                                                       // 0x02F0 (size: 0x18)
+    class UVerticalBox* VerticalBox_Notifications;                                    // 0x0368 (size: 0x8)
+    FText Text;                                                                       // 0x0370 (size: 0x10)
 
     void NotificationExpired(class UWBP_NarrativeHUDNotification_C* Notification);
     void ShowNotification(FText Text, double Duration);
-}; // Size: 0x308
+}; // Size: 0x380
 
 #endif

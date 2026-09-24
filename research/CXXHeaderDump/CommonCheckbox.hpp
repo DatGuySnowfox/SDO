@@ -3,32 +3,32 @@
 
 class UCommonCheckbox_C : public UUserWidget
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02C0 (size: 0x8)
-    class USizeBox* BottomSpacer;                                                     // 0x02C8 (size: 0x8)
-    class UTextBlock* CheckboxName;                                                   // 0x02D0 (size: 0x8)
-    class UTextBlock* CheckboxValue;                                                  // 0x02D8 (size: 0x8)
-    class USpacer* LeftMargin;                                                        // 0x02E0 (size: 0x8)
-    class USpacer* RightMargin;                                                       // 0x02E8 (size: 0x8)
-    class UCheckBox* Toggle;                                                          // 0x02F0 (size: 0x8)
-    class USizeBox* TopSpacer;                                                        // 0x02F8 (size: 0x8)
-    FText ToggleTitle;                                                                // 0x0300 (size: 0x18)
-    int32 FontSize;                                                                   // 0x0318 (size: 0x4)
-    FText CheckboxDefaultValueTip;                                                    // 0x0320 (size: 0x18)
-    bool ChangeCheckboxColorWhenFocused?;                                             // 0x0338 (size: 0x1)
-    bool ChangeTextColorWhenFocused?;                                                 // 0x0339 (size: 0x1)
-    FLinearColor FocusedToggleAndTextColor;                                           // 0x033C (size: 0x10)
-    FLinearColor UnfocusedToggleAndTextColor;                                         // 0x034C (size: 0x10)
-    double TopMargin;                                                                 // 0x0360 (size: 0x8)
-    double BottomMargin;                                                              // 0x0368 (size: 0x8)
-    double LeftSideMargin;                                                            // 0x0370 (size: 0x8)
-    double RightSideMargin;                                                           // 0x0378 (size: 0x8)
-    bool DefaultValue;                                                                // 0x0380 (size: 0x1)
-    class UPhotoModeWidget_C* PhotoModeWidget;                                        // 0x0388 (size: 0x8)
-    FText OptionFalse;                                                                // 0x0390 (size: 0x18)
-    FText OptionTrue;                                                                 // 0x03A8 (size: 0x18)
-    FCommonCheckbox_CCheckboxDispatcher CheckboxDispatcher;                           // 0x03C0 (size: 0x10)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0340 (size: 0x8)
+    class USizeBox* TopSpacer;                                                        // 0x0348 (size: 0x8)
+    class UCheckBox* Toggle;                                                          // 0x0350 (size: 0x8)
+    class USpacer* RightMargin;                                                       // 0x0358 (size: 0x8)
+    class USpacer* LeftMargin;                                                        // 0x0360 (size: 0x8)
+    class UTextBlock* CheckboxValue;                                                  // 0x0368 (size: 0x8)
+    class UTextBlock* CheckboxName;                                                   // 0x0370 (size: 0x8)
+    class USizeBox* BottomSpacer;                                                     // 0x0378 (size: 0x8)
+    FText ToggleTitle;                                                                // 0x0380 (size: 0x10)
+    int32 FontSize;                                                                   // 0x0390 (size: 0x4)
+    FText CheckboxDefaultValueTip;                                                    // 0x0398 (size: 0x10)
+    bool ChangeCheckboxColorWhenFocused?;                                             // 0x03A8 (size: 0x1)
+    bool ChangeTextColorWhenFocused?;                                                 // 0x03A9 (size: 0x1)
+    FLinearColor FocusedToggleAndTextColor;                                           // 0x03AC (size: 0x10)
+    FLinearColor UnfocusedToggleAndTextColor;                                         // 0x03BC (size: 0x10)
+    double TopMargin;                                                                 // 0x03D0 (size: 0x8)
+    double BottomMargin;                                                              // 0x03D8 (size: 0x8)
+    double LeftSideMargin;                                                            // 0x03E0 (size: 0x8)
+    double RightSideMargin;                                                           // 0x03E8 (size: 0x8)
+    bool DefaultValue;                                                                // 0x03F0 (size: 0x1)
+    class UPhotoModeWidget_C* PhotoModeWidget;                                        // 0x03F8 (size: 0x8)
+    FText OptionFalse;                                                                // 0x0400 (size: 0x10)
+    FText OptionTrue;                                                                 // 0x0410 (size: 0x10)
+    FCommonCheckbox_CCheckboxDispatcher CheckboxDispatcher;                           // 0x0420 (size: 0x10)
     void CheckboxDispatcher(bool Value);
-    bool Focus?;                                                                      // 0x03D0 (size: 0x1)
+    bool Focus?;                                                                      // 0x0430 (size: 0x1)
 
     class UWidget* ToggleUsingArrows(EUINavigation Navigation);
     void Set Focused or Unfocused Color(bool ChangeCheckboxColorWhenFocused?, bool ChangeTextColorWhenFocused?, class UCheckBox* CheckBox, class UWidget* CheckboxTitle, class UWidget* CheckboxValue);
@@ -43,6 +43,6 @@ class UCommonCheckbox_C : public UUserWidget
     void OnMouseEnter(FGeometry MyGeometry, const FPointerEvent& MouseEvent);
     void ExecuteUbergraph_CommonCheckbox(int32 EntryPoint);
     void CheckboxDispatcher__DelegateSignature(bool Value);
-}; // Size: 0x3D1
+}; // Size: 0x431
 
 #endif

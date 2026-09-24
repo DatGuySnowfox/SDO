@@ -3,6 +3,6 @@
 
 class ABP_Bandit_Melee_C : public ABP_MasterBandit_C
 {
-}; // Size: 0x9C9
+}; // Size: 0x981
 
 #endif

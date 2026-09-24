@@ -378,61 +378,11 @@ namespace EPathFollowingStatus {
     };
 }
 
-namespace EPawnActionAbortState {
-    enum Type {
-        NeverStarted = 0,
-        NotBeingAborted = 1,
-        MarkPendingAbort = 2,
-        LatentAbortInProgress = 3,
-        AbortDone = 4,
-        MAX = 5,
-    };
-}
-
-namespace EPawnActionEventType {
-    enum Type {
-        Invalid = 0,
-        FailedToStart = 1,
-        InstantAbort = 2,
-        FinishedAborting = 3,
-        FinishedExecution = 4,
-        Push = 5,
-        EPawnActionEventType_MAX = 6,
-    };
-}
-
-namespace EPawnActionFailHandling {
-    enum Type {
-        RequireSuccess = 0,
-        IgnoreFailure = 1,
-        EPawnActionFailHandling_MAX = 2,
-    };
-}
-
 namespace EPawnActionMoveMode {
     enum Type {
         UsePathfinding = 0,
         StraightLine = 1,
         EPawnActionMoveMode_MAX = 2,
-    };
-}
-
-namespace EPawnActionResult {
-    enum Type {
-        NotStarted = 0,
-        InProgress = 1,
-        Success = 2,
-        Failed = 3,
-        Aborted = 4,
-        EPawnActionResult_MAX = 5,
-    };
-}
-
-namespace EPawnSubActionTriggeringPolicy {
-    enum Type {
-        CopyBeforeTriggering = 0,
-        ReuseInstances = 1,
-        EPawnSubActionTriggeringPolicy_MAX = 2,
     };
 }
 

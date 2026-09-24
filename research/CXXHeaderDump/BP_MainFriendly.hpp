@@ -3,8 +3,8 @@
 
 class ABP_MainFriendly_C : public ABP_Human_C
 {
-    bool Attacking;                                                                   // 0x068B (size: 0x1)
+    bool Attacking;                                                                   // 0x065B (size: 0x1)
 
-}; // Size: 0x68C
+}; // Size: 0x65C
 
 #endif

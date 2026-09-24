@@ -3,6 +3,6 @@
 
 class UWBP_NarrativeCommonBoundActionButton_C : public UCommonBoundActionButton
 {
-}; // Size: 0x15A0
+}; // Size: 0x1550
 
 #endif

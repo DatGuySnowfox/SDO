@@ -96,11 +96,11 @@ struct FFractureMaterial
 
 class ADestructibleActor : public AActor
 {
-    class UDestructibleComponent* DestructibleComponent;                              // 0x0298 (size: 0x8)
-    FDestructibleActorOnActorFracture OnActorFracture;                                // 0x02A0 (size: 0x10)
+    class UDestructibleComponent* DestructibleComponent;                              // 0x02A8 (size: 0x8)
+    FDestructibleActorOnActorFracture OnActorFracture;                                // 0x02B0 (size: 0x10)
     void ActorFractureSignature(const FVector& HitPoint, const FVector& HitDirection);
 
-}; // Size: 0x2B0
+}; // Size: 0x2C0
 
 class UDestructibleComponent : public USkinnedMeshComponent
 {
@@ -124,16 +124,16 @@ class UDestructibleFractureSettings : public UObject
     int32 RandomSeed;                                                                 // 0x0070 (size: 0x4)
     TArray<FVector> VoronoiSites;                                                     // 0x0078 (size: 0x10)
     int32 OriginalSubmeshCount;                                                       // 0x0088 (size: 0x4)
-    TArray<class UMaterialInterface*> Materials;                                      // 0x0090 (size: 0x10)
+    TArray<UMaterialInterface*> Materials;                                            // 0x0090 (size: 0x10)
     TArray<FDestructibleChunkParameters> ChunkParameters;                             // 0x00A0 (size: 0x10)
 
 }; // Size: 0xB0
 
 class UDestructibleMesh : public USkeletalMesh
 {
-    FDestructibleParameters DefaultDestructibleParameters;                            // 0x04E0 (size: 0xA8)
-    TArray<FFractureEffect> FractureEffects;                                          // 0x0588 (size: 0x10)
+    FDestructibleParameters DefaultDestructibleParameters;                            // 0x0568 (size: 0xA8)
+    TArray<FFractureEffect> FractureEffects;                                          // 0x0610 (size: 0x10)
 
-}; // Size: 0x598
+}; // Size: 0x620
 
 #endif

@@ -3,14 +3,14 @@
 
 class UBP_CustomWaypoint_C : public UUserWidget
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02C0 (size: 0x8)
-    class UTextBlock* Text_Distance;                                                  // 0x02C8 (size: 0x8)
-    class UTextBlock* Text_LocName;                                                   // 0x02D0 (size: 0x8)
-    class UNarrativeTask* Task;                                                       // 0x02D8 (size: 0x8)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0340 (size: 0x8)
+    class UTextBlock* Text_LocName;                                                   // 0x0348 (size: 0x8)
+    class UTextBlock* Text_Distance;                                                  // 0x0350 (size: 0x8)
+    class UNarrativeTask* Task;                                                       // 0x0358 (size: 0x8)
 
     FText GetDistanceFromGoal();
     void Construct();
     void ExecuteUbergraph_BP_CustomWaypoint(int32 EntryPoint);
-}; // Size: 0x2E0
+}; // Size: 0x360
 
 #endif

@@ -3,17 +3,17 @@
 
 class UAmmoStorageContainer_Widget_C : public UUserWidget
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02C0 (size: 0x8)
-    class UJSIContainer_C* MainContainer;                                             // 0x02C8 (size: 0x8)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0340 (size: 0x8)
+    class UJSIContainer_C* MainContainer;                                             // 0x0348 (size: 0x8)
 
     void GetLootContent(class UUserWidget*& Widget);
-    void GetValidReloadContainers(TArray<class UJSIContainer_C*>& Containers);
+    void GetValidReloadContainers(TArray<UJSIContainer_C*>& Containers);
     void SetActionbarFollower(class UJSI_Slot_C* JigRef, bool& Return);
     void GetAllAttachments(TArray<FName>& Attachments);
-    void GetListOfNonAddContainers(TArray<class UJSIContainer_C*>& Containers);
+    void GetListOfNonAddContainers(TArray<UJSIContainer_C*>& Containers);
     void GetJSIContainerByPlayerSlots(FGameplayTag Slot, class UJSIContainer_C*& Container, class UJSI_Slot_C*& EquippedItem, bool& IsPending?);
     void GetDropWidget(class UDropItemBackGwidget_C*& DropWRef);
-    void GetListOfContainers(TArray<class UJSIContainer_C*>& Containers);
+    void GetListOfContainers(TArray<UJSIContainer_C*>& Containers);
     void GetContainerByAttachmentType(FGameplayTag Type, class UJSIContainer_C*& JigContainer, int32& ContainerIndex);
     void SetItemReference(class UJSI_Slot_C* ItemRef);
     void SetActorOwner(class AActor* ActorRef);
@@ -24,6 +24,6 @@ class UAmmoStorageContainer_Widget_C : public UUserWidget
     void SetInspectorRef(class UBP_InspectorWindowWidget_C* Inspector);
     void OnCreatedFromUtility();
     void ExecuteUbergraph_AmmoStorageContainer_Widget(int32 EntryPoint);
-}; // Size: 0x2D0
+}; // Size: 0x350
 
 #endif

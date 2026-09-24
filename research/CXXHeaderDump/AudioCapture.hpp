@@ -37,9 +37,9 @@ class UAudioCaptureBlueprintLibrary : public UBlueprintFunctionLibrary
 
 class UAudioCaptureComponent : public USynthComponent
 {
-    int32 JitterLatencyFrames;                                                        // 0x0900 (size: 0x4)
+    int32 JitterLatencyFrames;                                                        // 0x08A0 (size: 0x4)
 
-}; // Size: 0x9C0
+}; // Size: 0x960
 
 class UAudioCaptureFunctionLibrary : public UBlueprintFunctionLibrary
 {

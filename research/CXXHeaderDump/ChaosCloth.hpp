@@ -22,39 +22,57 @@ class UChaosClothConfig : public UClothConfigCommon
     bool bUseBendingElements;                                                         // 0x004C (size: 0x1)
     float BucklingRatio;                                                              // 0x0050 (size: 0x4)
     FChaosClothWeightedValue BucklingStiffnessWeighted;                               // 0x0054 (size: 0x8)
-    FChaosClothWeightedValue AreaStiffnessWeighted;                                   // 0x005C (size: 0x8)
-    float VolumeStiffness;                                                            // 0x0064 (size: 0x4)
-    FChaosClothWeightedValue TetherStiffness;                                         // 0x0068 (size: 0x8)
-    FChaosClothWeightedValue TetherScale;                                             // 0x0070 (size: 0x8)
-    bool bUseGeodesicDistance;                                                        // 0x0078 (size: 0x1)
-    float ShapeTargetStiffness;                                                       // 0x007C (size: 0x4)
-    float CollisionThickness;                                                         // 0x0080 (size: 0x4)
-    float FrictionCoefficient;                                                        // 0x0084 (size: 0x4)
-    bool bUseCCD;                                                                     // 0x0088 (size: 0x1)
-    bool bUseSelfCollisions;                                                          // 0x0089 (size: 0x1)
-    float SelfCollisionThickness;                                                     // 0x008C (size: 0x4)
-    float SelfCollisionFriction;                                                      // 0x0090 (size: 0x4)
-    bool bUseSelfIntersections;                                                       // 0x0094 (size: 0x1)
-    bool bUseLegacyBackstop;                                                          // 0x0095 (size: 0x1)
-    float DampingCoefficient;                                                         // 0x0098 (size: 0x4)
-    float LocalDampingCoefficient;                                                    // 0x009C (size: 0x4)
-    bool bUsePointBasedWindModel;                                                     // 0x00A0 (size: 0x1)
-    FChaosClothWeightedValue Drag;                                                    // 0x00A4 (size: 0x8)
-    FChaosClothWeightedValue Lift;                                                    // 0x00AC (size: 0x8)
-    bool bUseGravityOverride;                                                         // 0x00B4 (size: 0x1)
-    float GravityScale;                                                               // 0x00B8 (size: 0x4)
-    FVector Gravity;                                                                  // 0x00C0 (size: 0x18)
-    FChaosClothWeightedValue Pressure;                                                // 0x00D8 (size: 0x8)
-    FChaosClothWeightedValue AnimDriveStiffness;                                      // 0x00E0 (size: 0x8)
-    FChaosClothWeightedValue AnimDriveDamping;                                        // 0x00E8 (size: 0x8)
-    FVector LinearVelocityScale;                                                      // 0x00F0 (size: 0x18)
-    float AngularVelocityScale;                                                       // 0x0108 (size: 0x4)
-    float FictitiousAngularScale;                                                     // 0x010C (size: 0x4)
-    bool bUseTetrahedralConstraints;                                                  // 0x0110 (size: 0x1)
-    bool bUseThinShellVolumeConstraints;                                              // 0x0111 (size: 0x1)
-    bool bUseContinuousCollisionDetection;                                            // 0x0112 (size: 0x1)
+    FChaosClothWeightedValue FlatnessRatio;                                           // 0x005C (size: 0x8)
+    FChaosClothWeightedValue AreaStiffnessWeighted;                                   // 0x0064 (size: 0x8)
+    float VolumeStiffness;                                                            // 0x006C (size: 0x4)
+    FChaosClothWeightedValue TetherStiffness;                                         // 0x0070 (size: 0x8)
+    FChaosClothWeightedValue TetherScale;                                             // 0x0078 (size: 0x8)
+    bool bUseGeodesicDistance;                                                        // 0x0080 (size: 0x1)
+    float ShapeTargetStiffness;                                                       // 0x0084 (size: 0x4)
+    float CollisionThickness;                                                         // 0x0088 (size: 0x4)
+    float FrictionCoefficient;                                                        // 0x008C (size: 0x4)
+    bool bUseCCD;                                                                     // 0x0090 (size: 0x1)
+    bool bUseSelfCollisions;                                                          // 0x0091 (size: 0x1)
+    float SelfCollisionThickness;                                                     // 0x0094 (size: 0x4)
+    float SelfCollisionFriction;                                                      // 0x0098 (size: 0x4)
+    bool bUseSelfIntersections;                                                       // 0x009C (size: 0x1)
+    bool bUseSelfCollisionSpheres;                                                    // 0x009D (size: 0x1)
+    float SelfCollisionSphereRadius;                                                  // 0x00A0 (size: 0x4)
+    float SelfCollisionSphereStiffness;                                               // 0x00A4 (size: 0x4)
+    float SelfCollisionSphereRadiusCullMultiplier;                                    // 0x00A8 (size: 0x4)
+    bool bUseLegacyBackstop;                                                          // 0x00AC (size: 0x1)
+    float DampingCoefficient;                                                         // 0x00B0 (size: 0x4)
+    float LocalDampingCoefficient;                                                    // 0x00B4 (size: 0x4)
+    bool bUsePointBasedWindModel;                                                     // 0x00B8 (size: 0x1)
+    FChaosClothWeightedValue Drag;                                                    // 0x00BC (size: 0x8)
+    bool bEnableOuterDrag;                                                            // 0x00C4 (size: 0x1)
+    FChaosClothWeightedValue OuterDrag;                                               // 0x00C8 (size: 0x8)
+    FChaosClothWeightedValue Lift;                                                    // 0x00D0 (size: 0x8)
+    bool bEnableOuterLift;                                                            // 0x00D8 (size: 0x1)
+    FChaosClothWeightedValue OuterLift;                                               // 0x00DC (size: 0x8)
+    bool bUseGravityOverride;                                                         // 0x00E4 (size: 0x1)
+    float GravityScale;                                                               // 0x00E8 (size: 0x4)
+    FVector Gravity;                                                                  // 0x00F0 (size: 0x18)
+    FChaosClothWeightedValue Pressure;                                                // 0x0108 (size: 0x8)
+    FChaosClothWeightedValue AnimDriveStiffness;                                      // 0x0110 (size: 0x8)
+    FChaosClothWeightedValue AnimDriveDamping;                                        // 0x0118 (size: 0x8)
+    EChaosSoftsSimulationSpace VelocityScaleSpace;                                    // 0x0120 (size: 0x1)
+    FVector LinearVelocityScale;                                                      // 0x0128 (size: 0x18)
+    bool bEnableLinearVelocityClamping;                                               // 0x0140 (size: 0x1)
+    FVector3f MaxLinearVelocity;                                                      // 0x0144 (size: 0xC)
+    bool bEnableLinearAccelerationClamping;                                           // 0x0150 (size: 0x1)
+    FVector3f MaxLinearAcceleration;                                                  // 0x0154 (size: 0xC)
+    float AngularVelocityScale;                                                       // 0x0160 (size: 0x4)
+    bool bEnableAngularVelocityClamping;                                              // 0x0164 (size: 0x1)
+    float MaxAngularVelocity;                                                         // 0x0168 (size: 0x4)
+    bool bEnableAngularAccelerationClamping;                                          // 0x016C (size: 0x1)
+    float MaxAngularAcceleration;                                                     // 0x0170 (size: 0x4)
+    float FictitiousAngularScale;                                                     // 0x0174 (size: 0x4)
+    bool bUseTetrahedralConstraints;                                                  // 0x0178 (size: 0x1)
+    bool bUseThinShellVolumeConstraints;                                              // 0x0179 (size: 0x1)
+    bool bUseContinuousCollisionDetection;                                            // 0x017A (size: 0x1)
 
-}; // Size: 0x118
+}; // Size: 0x180
 
 class UChaosClothSharedSimConfig : public UClothSharedConfigCommon
 {
@@ -69,10 +87,12 @@ class UChaosClothSharedSimConfig : public UClothSharedConfigCommon
 class UChaosClothingInteractor : public UClothingInteractor
 {
 
-    void SetWind(FVector2D Drag, FVector2D Lift, float AirDensity, FVector WindVelocity);
+    void SetWind(FVector2D Drag, FVector2D Lift, float AirDensity, FVector WindVelocity, FVector2D OuterDrag, FVector2D OuterLift);
     void SetVelocityScale(FVector LinearVelocityScale, float AngularVelocityScale, float FictitiousAngularScale);
+    void SetVelocityClamps(bool bEnableLinearVelocityClamping, FVector MaxLinearVelocity, bool bEnableLinearAccelerationClamping, FVector MaxLinearAcceleration, bool bEnableAngularVelocityClamping, float MaxAngularVelocity, bool bEnableAngularAccelerationClamping, float MaxAngularAcceleration);
     void SetPressure(FVector2D Pressure);
     void SetMaterialLinear(float EdgeStiffness, float BendingStiffness, float AreaStiffness);
+    void SetMaterialBuckling(FVector2D BucklingRatio, FVector2D BucklingStiffness);
     void SetMaterial(FVector2D EdgeStiffness, FVector2D BendingStiffness, FVector2D AreaStiffness);
     void SetLongRangeAttachmentLinear(float TetherStiffness, float TetherScale);
     void SetLongRangeAttachment(FVector2D TetherStiffness, FVector2D TetherScale);

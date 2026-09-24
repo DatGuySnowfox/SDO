@@ -45,8 +45,10 @@ struct FStructSerializerBuiltinTestStruct
     FGuid Guid;                                                                       // 0x0000 (size: 0x10)
     FName Name;                                                                       // 0x0010 (size: 0x8)
     FString String;                                                                   // 0x0018 (size: 0x10)
-    FText Text;                                                                       // 0x0028 (size: 0x18)
-    FVector Vector;                                                                   // 0x0040 (size: 0x18)
+    FText Text;                                                                       // 0x0028 (size: 0x10)
+    FDateTime DateTime;                                                               // 0x0038 (size: 0x8)
+    FTimespan Timespan;                                                               // 0x0040 (size: 0x8)
+    FVector Vector;                                                                   // 0x0048 (size: 0x18)
     FVector4 Vector4;                                                                 // 0x0060 (size: 0x20)
     FRotator Rotator;                                                                 // 0x0080 (size: 0x18)
     FQuat Quat;                                                                       // 0x00A0 (size: 0x20)
@@ -81,7 +83,7 @@ struct FStructSerializerLWCTypesTest
     float float;                                                                      // 0x02A0 (size: 0x4)
     double Double;                                                                    // 0x02A8 (size: 0x8)
     TArray<FVector> VectorArray;                                                      // 0x02B0 (size: 0x10)
-    TMap<class FString, class FVector> StrToVec;                                      // 0x02C0 (size: 0x50)
+    TMap<FString, FVector> StrToVec;                                                  // 0x02C0 (size: 0x50)
     TSet<FVector> VectorSet;                                                          // 0x0310 (size: 0x50)
 
 }; // Size: 0x360
@@ -89,9 +91,9 @@ struct FStructSerializerLWCTypesTest
 struct FStructSerializerMapTestStruct
 {
     TMap<int32, FString> IntToStr;                                                    // 0x0000 (size: 0x50)
-    TMap<class FString, class FString> StrToStr;                                      // 0x0050 (size: 0x50)
-    TMap<class FString, class FVector> StrToVec;                                      // 0x00A0 (size: 0x50)
-    TMap<class FString, class FStructSerializerBuiltinTestStruct> StrToStruct;        // 0x00F0 (size: 0x50)
+    TMap<FString, FString> StrToStr;                                                  // 0x0050 (size: 0x50)
+    TMap<FString, FVector> StrToVec;                                                  // 0x00A0 (size: 0x50)
+    TMap<FString, FStructSerializerBuiltinTestStruct> StrToStruct;                    // 0x00F0 (size: 0x50)
 
 }; // Size: 0x140
 
@@ -112,21 +114,21 @@ struct FStructSerializerNonLWCTypesTest
     float float;                                                                      // 0x0158 (size: 0x4)
     double Double;                                                                    // 0x0160 (size: 0x8)
     TArray<FVector3f> VectorArray;                                                    // 0x0168 (size: 0x10)
-    TMap<class FString, class FVector3f> StrToVec;                                    // 0x0178 (size: 0x50)
+    TMap<FString, FVector3f> StrToVec;                                                // 0x0178 (size: 0x50)
     TSet<FVector3f> VectorSet;                                                        // 0x01C8 (size: 0x50)
 
 }; // Size: 0x220
 
 struct FStructSerializerNumericTestStruct
 {
-    int8 Int8;                                                                        // 0x0000 (size: 0x1)
-    int16 Int16;                                                                      // 0x0002 (size: 0x2)
+    int8 int8;                                                                        // 0x0000 (size: 0x1)
+    int16 int16;                                                                      // 0x0002 (size: 0x2)
     int32 int32;                                                                      // 0x0004 (size: 0x4)
-    int64 Int64;                                                                      // 0x0008 (size: 0x8)
+    int64 int64;                                                                      // 0x0008 (size: 0x8)
     uint8 uint8;                                                                      // 0x0010 (size: 0x1)
-    uint16 UInt16;                                                                    // 0x0012 (size: 0x2)
+    uint16 uint16;                                                                    // 0x0012 (size: 0x2)
     uint32 uint32;                                                                    // 0x0014 (size: 0x4)
-    uint64 UInt64;                                                                    // 0x0018 (size: 0x8)
+    uint64 uint64;                                                                    // 0x0018 (size: 0x8)
     float float;                                                                      // 0x0020 (size: 0x4)
     double Double;                                                                    // 0x0028 (size: 0x8)
 
@@ -136,16 +138,29 @@ struct FStructSerializerObjectTestStruct
 {
     UClass* RawClass;                                                                 // 0x0000 (size: 0x8)
     UClass* WrappedClass;                                                             // 0x0008 (size: 0x8)
-    TSubclassOf<class UMetaData> SubClass;                                            // 0x0010 (size: 0x8)
-    TSoftClassPtr<UMetaData> SoftClass;                                               // 0x0018 (size: 0x28)
+    TSubclassOf<class UObjectTest> SubClass;                                          // 0x0010 (size: 0x8)
+    TSoftClassPtr<UObjectTest> SoftClass;                                             // 0x0018 (size: 0x28)
     class UObject* RawObject;                                                         // 0x0040 (size: 0x8)
     class UObject* WrappedObject;                                                     // 0x0048 (size: 0x8)
-    TWeakObjectPtr<class UMetaData> WeakObject;                                       // 0x0050 (size: 0x8)
-    TSoftObjectPtr<UMetaData> SoftObject;                                             // 0x0058 (size: 0x28)
+    TWeakObjectPtr<class UObjectTest> WeakObject;                                     // 0x0050 (size: 0x8)
+    TSoftObjectPtr<class UObjectTest> SoftObject;                                     // 0x0058 (size: 0x28)
     FSoftClassPath ClassPath;                                                         // 0x0080 (size: 0x20)
     FSoftObjectPath ObjectPath;                                                       // 0x00A0 (size: 0x20)
 
 }; // Size: 0xC0
+
+struct FStructSerializerOptionalTestStruct
+{
+    TOptional<FString> StrOptional;                                                   // 0x0000 (size: 0x10)
+    TOptional<FString> StrOptionalUnset;                                              // 0x0010 (size: 0x10)
+    TOptional<int32> IntOptional;                                                     // 0x0020 (size: 0x8)
+    TOptional<int32> IntOptionalUnset;                                                // 0x0028 (size: 0x8)
+    TOptional<FName> NameOptional;                                                    // 0x0030 (size: 0x8)
+    TOptional<FName> NameOptionalUnset;                                               // 0x0038 (size: 0x8)
+    TOptional<FStructSerializerBuiltinTestStruct> StructOptional;                     // 0x0040 (size: 0xE0)
+    TOptional<FStructSerializerBuiltinTestStruct> StructOptionalUnset;                // 0x0120 (size: 0xE0)
+
+}; // Size: 0x200
 
 struct FStructSerializerSetTestStruct
 {
@@ -165,8 +180,13 @@ struct FStructSerializerTestStruct
     FStructSerializerArrayTestStruct Arrays;                                          // 0x01D0 (size: 0x60)
     FStructSerializerMapTestStruct Maps;                                              // 0x0230 (size: 0x140)
     FStructSerializerSetTestStruct Sets;                                              // 0x0370 (size: 0x140)
-    FStructSerializerLWCTypesTest LWCTypes;                                           // 0x04B0 (size: 0x360)
+    FStructSerializerOptionalTestStruct Optionals;                                    // 0x04B0 (size: 0x200)
+    FStructSerializerLWCTypesTest LWCTypes;                                           // 0x06B0 (size: 0x360)
 
-}; // Size: 0x810
+}; // Size: 0xA10
+
+class UObjectTest : public UObject
+{
+}; // Size: 0x28
 
 #endif

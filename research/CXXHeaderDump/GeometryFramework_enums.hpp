@@ -27,6 +27,12 @@ enum class EDynamicMeshComponentColorOverrideMode {
     EDynamicMeshComponentColorOverrideMode_MAX = 4,
 };
 
+enum class EDynamicMeshComponentDistanceFieldMode {
+    NoDistanceField = 0,
+    AsyncCPUDistanceField = 1,
+    EDynamicMeshComponentDistanceFieldMode_MAX = 2,
+};
+
 enum class EDynamicMeshComponentRenderUpdateMode {
     NoUpdate = 0,
     FullUpdate = 1,
@@ -40,6 +46,12 @@ enum class EDynamicMeshComponentTangentsMode {
     ExternallyProvided = 2,
     Default = 255,
     EDynamicMeshComponentTangentsMode_MAX = 256,
+};
+
+enum class EDynamicMeshDrawPath {
+    DynamicDraw = 0,
+    StaticDraw = 1,
+    EDynamicMeshDrawPath_MAX = 2,
 };
 
 enum class EDynamicMeshVertexColorTransformMode {

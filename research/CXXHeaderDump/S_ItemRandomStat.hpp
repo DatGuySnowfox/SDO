@@ -10,6 +10,7 @@ struct FS_ItemRandomStat
     bool RollForBothMinMax?_19_FEE7FBE94044DC3E7E09DCA48626158A;                      // 0x0020 (size: 0x1)
     bool Rounded?_28_44A60F2C4A467758D866B5BCE56695AE;                                // 0x0021 (size: 0x1)
     bool ForceToMinValue?_27_531AA2464812E07068161A898359479B;                        // 0x0022 (size: 0x1)
+    bool InvertPercentage?_30_D9ACF4A6427F9E4ABFFEB88CF8BEFFEB;                       // 0x0023 (size: 0x1)
     double Chance_15_AF3D90B44051B6E1B6D8F194C1F20BD4;                                // 0x0028 (size: 0x8)
 
 }; // Size: 0x30

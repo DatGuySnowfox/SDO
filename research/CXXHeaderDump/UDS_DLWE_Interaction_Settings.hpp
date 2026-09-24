@@ -22,8 +22,8 @@ class UUDS_DLWE_Interaction_Settings_C : public UPrimaryDataAsset
     double Puddle Draw Threshold;                                                     // 0x0080 (size: 0x8)
     double Material Check Distance;                                                   // 0x0088 (size: 0x8)
     double Collision Trace Movement Threshold;                                        // 0x0090 (size: 0x8)
-    TArray<class UPhysicalMaterial*> Physical Materials which enable DLWE Interactions on non-Landscapes; // 0x0098 (size: 0x10)
-    TMap<class UPhysicalMaterial*, class USoundBase*> General Surface Impact Sounds;  // 0x00A8 (size: 0x50)
+    TArray<UPhysicalMaterial*> Physical Materials which enable DLWE Interactions on non-Landscapes; // 0x0098 (size: 0x10)
+    TMap<UPhysicalMaterial*, USoundBase*> General Surface Impact Sounds;              // 0x00A8 (size: 0x50)
 
 }; // Size: 0xF8
 

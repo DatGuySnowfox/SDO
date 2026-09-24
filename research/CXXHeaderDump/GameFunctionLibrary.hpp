@@ -4,23 +4,27 @@
 class UGameFunctionLibrary_C : public UBlueprintFunctionLibrary
 {
 
+    void SpawnDamageNumbers(double Dmg, FLinearColor Color, FVector ImpactPoint, class UObject* __WorldContext);
+    void ReplaceKeyWithBinding(FText From, class UObject* __WorldContext, FText& To);
+    void AdjustNoiseMade(double Noise, class UObject* __WorldContext, double& Noise+);
+    void ApplyBiteInfection(class AActor* Actor, double ChanceForInfection, bool Crawler, class UObject* __WorldContext);
     void GetRadiationLevel(TEnumAsByte<Enum_RadiationLevel::Type> Level, class UObject* __WorldContext, double& Value);
     void GetLootTableName(TEnumAsByte<Enum_ContainerLootTables::Type> Selection, class UObject* __WorldContext, FText& Text);
     void GetRandomActorOfClass(TSubclassOf<class AActor> ActorClass, class UObject* __WorldContext, class AActor*& Actor);
-    void SetItemsToSell(TEnumAsByte<Enum_VendorTypes::Type> Table, class UBP_JigMultiplayer_C* JigComp, class UObject* __WorldContext);
+    void SetItemsToSell(TEnumAsByte<Enum_VendorTypes::Type> Table, class UBP_JigComponent_C* JigComp, class UObject* __WorldContext);
     void GetBehindObject?(class AActor* Actor, class AActor* Interactor, FVector Location, class UObject* __WorldContext, bool& BehindObject?);
     void LootDegredationMultiplier(double Chance, class UObject* __WorldContext, double& NewChance);
     void GetGameDirectory(class UObject* __WorldContext, FString& Path);
-    void SetItemsToCraft(TEnumAsByte<Enum_CraftingTableTypes::Type> Table, class UBP_JigMultiplayer_C* JigComp, class UObject* __WorldContext);
+    void SetItemsToCraft(TEnumAsByte<Enum_CraftingTableTypes::Type> Table, class UBP_JigComponent_C* JigComp, class UObject* __WorldContext);
     void GetKey(const class UInputAction* Action, class UObject* __WorldContext, FKey& Key);
     void IsKeyDown(const class UInputAction* Action, class UObject* __WorldContext, bool& Down);
     void LookForMapping(FKeyEvent& Key, const FText Mapping, const class UInputAction* Action, class UObject* __WorldContext, bool& Found);
     void IsOutsideOfPlayerView?(const FVector Loc, class AActor* Actor, class UObject* __WorldContext, bool& NotInPlayerView?);
-    void AddUniqueLoot(TArray<FName>& UnqiueItemsSet, class UBP_JigMultiplayer_C* JigComp, int32 Container, class UObject* __WorldContext);
+    void AddUniqueLoot(TArray<FName>& UnqiueItemsSet, class UBP_JigComponent_C* JigComp, int32 Container, class UObject* __WorldContext);
     void GetLockPickingComponent(class UObject* __WorldContext, class ULockPickingComponent_C*& LevellingComponent);
     void SetDifficulty(FStruct_Difficulty Settings, class UObject* __WorldContext);
     void ChangeDifficulty(TEnumAsByte<Enum_Difficulty::Type> Difficulty, class UObject* __WorldContext);
-    double XpMultiplierCalc(double Min, double Max, class UObject* __WorldContext);
+    double XpMultiplierCalc(double min, double max, class UObject* __WorldContext);
     void GetCharacterFromController(class AController* Object, class UObject* __WorldContext, class ABP_PlayerCharacter_C*& Character);
     void ScalingDamageMultiplier(double Dmg, class UObject* __WorldContext, double& NewDmg);
     void ScalingHealthMultiplier(double MaxHealth, class UObject* __WorldContext, double& NewMaxHealth);
@@ -30,12 +34,12 @@ class UGameFunctionLibrary_C : public UBlueprintFunctionLibrary
     void CreateNotificationUI(FText Message, class UTexture2D* Icon, FLinearColor Icon Colour, double Delay, bool Force Notification?, class UObject* __WorldContext);
     void GetGameHUD(class UObject* __WorldContext, class AHUD_Game_C*& HUD);
     void LootDifficultySetting(FName CVar, TEnumAsByte<Enum_LootDifficulties::Type> Selection1, class UObject* __WorldContext);
-    void LootTypeMultiplier(TEnumAsByte<Enum_LootType::Type> Selection, double Chance, class UObject* __WorldContext, double& Multiplier);
-    void SetLootTable_AI_DA(TEnumAsByte<Enum_AILootTables::Type> Table, class UBP_JigMultiplayer_C* JigComp, int32 Container, class UObject* __WorldContext);
-    void SetLootTable_Container_DA(TEnumAsByte<Enum_ContainerLootTables::Type> Table, class UBP_JigMultiplayer_C* JigComp, int32 Container, class UObject* __WorldContext);
+    void LootTypeMultiplier(double Chance, TEnumAsByte<Enum_LootType::Type> Selection, class UObject* __WorldContext, double& Multiplier);
+    void SetLootTable_AI_DA(TEnumAsByte<Enum_AILootTables::Type> Table, class UBP_JigComponent_C* JigComp, int32 Container, class UObject* __WorldContext);
+    void SetLootTable_Container_DA(TEnumAsByte<Enum_ContainerLootTables::Type> Table, class UBP_JigComponent_C* JigComp, int32 Container, class UObject* __WorldContext);
     void DestroyMainMenuActors(class UObject* __WorldContext);
     void ApplyRadiationDamage(class AActor* Actor, double ChanceForRadDamage, double RadDamage, bool CanMaskProtect?, class UObject* __WorldContext);
-    void ApplyMedicalEffect(class AActor* Actor, TArray<FName>& Medical Effects, double ChanceForBleed, double ChanceForHeavyBleed, double ChanceForBrokenBone, class UObject* __WorldContext);
+    void ApplyMedicalEffect(class AActor* Actor, TArray<FName>& Medical Effects, double ChanceForBleed, double ChanceForHeavyBleed, double ChanceForBrokenBone, double ChanceForInfection, class UObject* __WorldContext);
     void GetSkillTreeManager(class UObject* __WorldContext, class UTechTreeComponent_C*& TechTree);
     void GetPassiveSkillsComponent(class UObject* __WorldContext, class UPassiveSkillsComponent_C*& SkillsComponent);
     void GetGameMode(class UObject* __WorldContext, class ABP_SurroundeadGameMode_C*& GameMode);

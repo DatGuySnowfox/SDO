@@ -3,18 +3,18 @@
 
 class UWB_PB_Linear_Base_C : public UUserWidget
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02C0 (size: 0x8)
-    class UWB_BaseProgressBar_C* BasePB;                                              // 0x02C8 (size: 0x8)
-    class UImage* DesignTimeGradient;                                                 // 0x02D0 (size: 0x8)
-    class UWB_BaseProgressBar_C* GradientPB;                                          // 0x02D8 (size: 0x8)
-    class UOverlay* OV_DesignTimeGradient;                                            // 0x02E0 (size: 0x8)
-    class URetainerBox* RB_Gradient;                                                  // 0x02E8 (size: 0x8)
-    bool bIsDesignTime;                                                               // 0x02F0 (size: 0x1)
-    FVector2D Size;                                                                   // 0x02F8 (size: 0x10)
-    FLinearColor FillColor;                                                           // 0x0308 (size: 0x10)
-    FLinearColor GradientColor;                                                       // 0x0318 (size: 0x10)
-    FLinearColor ProgressChangeColor;                                                 // 0x0328 (size: 0x10)
-    bool bIsChanging;                                                                 // 0x0338 (size: 0x1)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0340 (size: 0x8)
+    class URetainerBox* RB_Gradient;                                                  // 0x0348 (size: 0x8)
+    class UOverlay* OV_DesignTimeGradient;                                            // 0x0350 (size: 0x8)
+    class UWB_BaseProgressBar_C* GradientPB;                                          // 0x0358 (size: 0x8)
+    class UImage* DesignTimeGradient;                                                 // 0x0360 (size: 0x8)
+    class UWB_BaseProgressBar_C* BasePB;                                              // 0x0368 (size: 0x8)
+    bool bIsDesignTime;                                                               // 0x0370 (size: 0x1)
+    FVector2D Size;                                                                   // 0x0378 (size: 0x10)
+    FLinearColor FillColor;                                                           // 0x0388 (size: 0x10)
+    FLinearColor GradientColor;                                                       // 0x0398 (size: 0x10)
+    FLinearColor ProgressChangeColor;                                                 // 0x03A8 (size: 0x10)
+    bool bIsChanging;                                                                 // 0x03B8 (size: 0x1)
 
     FVector2D FindFillSize(class UObject* Object);
     void Rotate_DesignRetainerGradient(double Rotation);
@@ -34,6 +34,6 @@ class UWB_PB_Linear_Base_C : public UUserWidget
     void Reconstruct();
     void Construct();
     void ExecuteUbergraph_WB_PB_Linear_Base(int32 EntryPoint);
-}; // Size: 0x339
+}; // Size: 0x3B9
 
 #endif

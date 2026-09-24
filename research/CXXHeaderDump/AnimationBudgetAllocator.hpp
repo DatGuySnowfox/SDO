@@ -36,11 +36,11 @@ class UAnimationBudgetBlueprintLibrary : public UBlueprintFunctionLibrary
 
 class USkeletalMeshComponentBudgeted : public USkeletalMeshComponent
 {
-    uint8 bAutoRegisterWithBudgetAllocator;                                           // 0x0FC0 (size: 0x1)
-    uint8 bAutoCalculateSignificance;                                                 // 0x0FC0 (size: 0x1)
-    uint8 bShouldUseActorRenderedFlag;                                                // 0x0FC0 (size: 0x1)
+    uint8 bAutoRegisterWithBudgetAllocator;                                           // 0x0FF8 (size: 0x1)
+    uint8 bAutoCalculateSignificance;                                                 // 0x0FF8 (size: 0x1)
+    uint8 bShouldUseActorRenderedFlag;                                                // 0x0FF8 (size: 0x1)
 
     void SetAutoRegisterWithBudgetAllocator(bool bInAutoRegisterWithBudgetAllocator);
-}; // Size: 0xFD0
+}; // Size: 0x1000
 
 #endif

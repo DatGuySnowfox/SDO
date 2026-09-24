@@ -20,6 +20,15 @@ enum class EEventRuntime {
     EEventRuntime_MAX = 3,
 };
 
+enum class EExitDialogueReason {
+    EDR_NoLines = 0,
+    EDR_PlayerExited = 1,
+    EDR_TooFarAway = 2,
+    EDR_NewDialogueStarted = 3,
+    EDR_StoppedByCinematic = 4,
+    EDR_MAX = 5,
+};
+
 enum class ELineDuration {
     LD_Default = 0,
     LD_WhenAudioEnds = 1,

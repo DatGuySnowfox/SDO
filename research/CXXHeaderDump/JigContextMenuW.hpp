@@ -3,34 +3,34 @@
 
 class UJigContextMenuW_C : public UUserWidget
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02C0 (size: 0x8)
-    class UButton* ConsumeBtn;                                                        // 0x02C8 (size: 0x8)
-    class UButton* ConsumeCannedBtn;                                                  // 0x02D0 (size: 0x8)
-    class UButton* DestroyBtn;                                                        // 0x02D8 (size: 0x8)
-    class UButton* DrinkBtn;                                                          // 0x02E0 (size: 0x8)
-    class UButton* DropBtn;                                                           // 0x02E8 (size: 0x8)
-    class UButton* EquipBtn;                                                          // 0x02F0 (size: 0x8)
-    class UButton* FillBtn;                                                           // 0x02F8 (size: 0x8)
-    class UButton* InspectBtn;                                                        // 0x0300 (size: 0x8)
-    class UButton* OpenBtn;                                                           // 0x0308 (size: 0x8)
-    class UButton* OpenLootBoxBtn;                                                    // 0x0310 (size: 0x8)
-    class UVerticalBox* OptionsVB;                                                    // 0x0318 (size: 0x8)
-    class UButton* PlaceBtn;                                                          // 0x0320 (size: 0x8)
-    class UButton* PlayMusicBtn;                                                      // 0x0328 (size: 0x8)
-    class UButton* ReadBtn;                                                           // 0x0330 (size: 0x8)
-    class UButton* RepairArmorBtn;                                                    // 0x0338 (size: 0x8)
-    class UButton* RepairAttachmentBtn;                                               // 0x0340 (size: 0x8)
-    class UButton* RepairWeaponBtn;                                                   // 0x0348 (size: 0x8)
-    class UButton* RipClothingBtn;                                                    // 0x0350 (size: 0x8)
-    class UButton* ScanLaptopBtn;                                                     // 0x0358 (size: 0x8)
-    class UButton* ShowAttachmentsBtn;                                                // 0x0360 (size: 0x8)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0340 (size: 0x8)
+    class UButton* UseBtn;                                                            // 0x0348 (size: 0x8)
+    class UButton* UnloadBtn;                                                         // 0x0350 (size: 0x8)
+    class UButton* UnequipBtn;                                                        // 0x0358 (size: 0x8)
+    class UButton* SmokeBtn;                                                          // 0x0360 (size: 0x8)
     class UButton* ShowTacticalAttachmentsBtn;                                        // 0x0368 (size: 0x8)
-    class UButton* SmokeBtn;                                                          // 0x0370 (size: 0x8)
-    class UButton* UnequipBtn;                                                        // 0x0378 (size: 0x8)
-    class UButton* UnloadBtn;                                                         // 0x0380 (size: 0x8)
-    class UButton* UseBtn;                                                            // 0x0388 (size: 0x8)
-    class UUserWidget* ParentW;                                                       // 0x0390 (size: 0x8)
-    class UJigContextMenuComp_C* JigContextComp;                                      // 0x0398 (size: 0x8)
+    class UButton* ShowAttachmentsBtn;                                                // 0x0370 (size: 0x8)
+    class UButton* ScanLaptopBtn;                                                     // 0x0378 (size: 0x8)
+    class UButton* RipClothingBtn;                                                    // 0x0380 (size: 0x8)
+    class UButton* RepairWeaponBtn;                                                   // 0x0388 (size: 0x8)
+    class UButton* RepairAttachmentBtn;                                               // 0x0390 (size: 0x8)
+    class UButton* RepairArmorBtn;                                                    // 0x0398 (size: 0x8)
+    class UButton* ReadBtn;                                                           // 0x03A0 (size: 0x8)
+    class UButton* PlayMusicBtn;                                                      // 0x03A8 (size: 0x8)
+    class UButton* PlaceBtn;                                                          // 0x03B0 (size: 0x8)
+    class UVerticalBox* OptionsVB;                                                    // 0x03B8 (size: 0x8)
+    class UButton* OpenLootBoxBtn;                                                    // 0x03C0 (size: 0x8)
+    class UButton* OpenBtn;                                                           // 0x03C8 (size: 0x8)
+    class UButton* InspectBtn;                                                        // 0x03D0 (size: 0x8)
+    class UButton* FillBtn;                                                           // 0x03D8 (size: 0x8)
+    class UButton* EquipBtn;                                                          // 0x03E0 (size: 0x8)
+    class UButton* DropBtn;                                                           // 0x03E8 (size: 0x8)
+    class UButton* DrinkBtn;                                                          // 0x03F0 (size: 0x8)
+    class UButton* DestroyBtn;                                                        // 0x03F8 (size: 0x8)
+    class UButton* ConsumeCannedBtn;                                                  // 0x0400 (size: 0x8)
+    class UButton* ConsumeBtn;                                                        // 0x0408 (size: 0x8)
+    class UUserWidget* ParentW;                                                       // 0x0410 (size: 0x8)
+    class UJigContextMenuComp_C* JigContextComp;                                      // 0x0418 (size: 0x8)
 
     void GetWidgetByMenuOption(FGameplayTag Option, class UButton*& WidgetRef);
     void SetEnabledOptions(FGameplayTagContainer MenuOptions, bool& Result?);
@@ -61,6 +61,6 @@ class UJigContextMenuW_C : public UUserWidget
     void BndEvt__JigContextMenuW_SmokeBtn_K2Node_ComponentBoundEvent_5_OnButtonClickedEvent__DelegateSignature();
     void BndEvt__JigContextMenuW_RepairAttachmentBtn_K2Node_ComponentBoundEvent_6_OnButtonClickedEvent__DelegateSignature();
     void ExecuteUbergraph_JigContextMenuW(int32 EntryPoint);
-}; // Size: 0x3A0
+}; // Size: 0x420
 
 #endif

@@ -3,6 +3,6 @@
 
 class ABP_AIWeapon_ColonelsRevenge_C : public ABP_AIWeapon_Master_C
 {
-}; // Size: 0xD08
+}; // Size: 0xD30
 
 #endif

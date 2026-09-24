@@ -5,3 +5,16 @@ enum class EMediaPlayerOptionBooleanOverride {
     EMediaPlayerOptionBooleanOverride_MAX = 3,
 };
 
+enum class EMediaPlayerOptionSeekTimeType {
+    Ignored = 0,
+    RelativeToStartTime = 1,
+    EMediaPlayerOptionSeekTimeType_MAX = 2,
+};
+
+enum class EMediaPlayerOptionTrackSelectMode {
+    UseMediaPlayerDefaults = 0,
+    UseTrackOptionIndices = 1,
+    UseLanguageCodes = 2,
+    EMediaPlayerOptionTrackSelectMode_MAX = 3,
+};
+

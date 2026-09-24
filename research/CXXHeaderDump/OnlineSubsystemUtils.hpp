@@ -20,7 +20,7 @@ struct FInAppPurchaseProductInfo2
     FString DecimalSeparator;                                                         // 0x0078 (size: 0x10)
     FString GroupingSeparator;                                                        // 0x0088 (size: 0x10)
     FString ReceiptData;                                                              // 0x0098 (size: 0x10)
-    TMap<class FString, class FString> DynamicFields;                                 // 0x00A8 (size: 0x50)
+    TMap<FString, FString> DynamicFields;                                             // 0x00A8 (size: 0x50)
 
 }; // Size: 0xF8
 
@@ -48,25 +48,7 @@ struct FInAppPurchaseRestoreInfo2
 
 }; // Size: 0x30
 
-struct FOnlineProxyStoreOffer
-{
-    FString OfferId;                                                                  // 0x0000 (size: 0x10)
-    FText Title;                                                                      // 0x0010 (size: 0x18)
-    FText Description;                                                                // 0x0028 (size: 0x18)
-    FText LongDescription;                                                            // 0x0040 (size: 0x18)
-    FText RegularPriceText;                                                           // 0x0058 (size: 0x18)
-    int32 RegularPrice;                                                               // 0x0070 (size: 0x4)
-    FText PriceText;                                                                  // 0x0078 (size: 0x18)
-    int32 NumericPrice;                                                               // 0x0090 (size: 0x4)
-    FString CurrencyCode;                                                             // 0x0098 (size: 0x10)
-    FDateTime ReleaseDate;                                                            // 0x00A8 (size: 0x8)
-    FDateTime ExpirationDate;                                                         // 0x00B0 (size: 0x8)
-    EOnlineProxyStoreOfferDiscountType DiscountType;                                  // 0x00B8 (size: 0x1)
-    TMap<class FString, class FString> DynamicFields;                                 // 0x00C0 (size: 0x50)
-
-}; // Size: 0x110
-
-struct FPIELoginSettingsInternal
+struct FOnlineAccountStoredCredentials
 {
     FString ID;                                                                       // 0x0000 (size: 0x10)
     FString Token;                                                                    // 0x0010 (size: 0x10)
@@ -74,6 +56,24 @@ struct FPIELoginSettingsInternal
     TArray<uint8> TokenBytes;                                                         // 0x0030 (size: 0x10)
 
 }; // Size: 0x40
+
+struct FOnlineProxyStoreOffer
+{
+    FString OfferId;                                                                  // 0x0000 (size: 0x10)
+    FText Title;                                                                      // 0x0010 (size: 0x10)
+    FText Description;                                                                // 0x0020 (size: 0x10)
+    FText LongDescription;                                                            // 0x0030 (size: 0x10)
+    FText RegularPriceText;                                                           // 0x0040 (size: 0x10)
+    int32 RegularPrice;                                                               // 0x0050 (size: 0x4)
+    FText PriceText;                                                                  // 0x0058 (size: 0x10)
+    int32 NumericPrice;                                                               // 0x0068 (size: 0x4)
+    FString CurrencyCode;                                                             // 0x0070 (size: 0x10)
+    FDateTime ReleaseDate;                                                            // 0x0080 (size: 0x8)
+    FDateTime ExpirationDate;                                                         // 0x0088 (size: 0x8)
+    EOnlineProxyStoreOfferDiscountType DiscountType;                                  // 0x0090 (size: 0x1)
+    TMap<FString, FString> DynamicFields;                                             // 0x0098 (size: 0x50)
+
+}; // Size: 0xE8
 
 struct FPartyBeaconCrossplayPlatformMapping
 {
@@ -110,46 +110,58 @@ struct FSpectatorReservation
 
 class AOnlineBeacon : public AActor
 {
-    float BeaconConnectionInitialTimeout;                                             // 0x02A0 (size: 0x4)
-    float BeaconConnectionTimeout;                                                    // 0x02A4 (size: 0x4)
-    class UNetDriver* NetDriver;                                                      // 0x02A8 (size: 0x8)
+    float BeaconConnectionInitialTimeout;                                             // 0x02B0 (size: 0x4)
+    float BeaconConnectionTimeout;                                                    // 0x02B4 (size: 0x4)
+    class UNetDriver* NetDriver;                                                      // 0x02B8 (size: 0x8)
 
-}; // Size: 0x2C8
+}; // Size: 0x2D8
 
 class AOnlineBeaconClient : public AOnlineBeacon
 {
-    class AOnlineBeaconHostObject* BeaconOwner;                                       // 0x02C8 (size: 0x8)
-    class UNetConnection* BeaconConnection;                                           // 0x02D0 (size: 0x8)
-    EBeaconConnectionState ConnectionState;                                           // 0x02D8 (size: 0x1)
+    class AOnlineBeaconHostObject* BeaconOwner;                                       // 0x02D8 (size: 0x8)
+    class UNetConnection* BeaconConnection;                                           // 0x02E0 (size: 0x8)
+    EBeaconConnectionState ConnectionState;                                           // 0x02E8 (size: 0x1)
 
     void ClientOnConnected();
-}; // Size: 0x328
+}; // Size: 0x338
 
 class AOnlineBeaconHost : public AOnlineBeacon
 {
-    int32 ListenPort;                                                                 // 0x02C8 (size: 0x4)
-    bool bReuseAddressAndPort;                                                        // 0x02CC (size: 0x1)
-    bool bAuthRequired;                                                               // 0x02CD (size: 0x1)
-    uint32 MaxAuthTokenSize;                                                          // 0x02D0 (size: 0x4)
-    TArray<class AOnlineBeaconClient*> ClientActors;                                  // 0x0328 (size: 0x10)
+    int32 ListenPort;                                                                 // 0x02D8 (size: 0x4)
+    bool bReuseAddressAndPort;                                                        // 0x02DC (size: 0x1)
+    bool bAuthRequired;                                                               // 0x02DD (size: 0x1)
+    uint32 MaxAuthTokenSize;                                                          // 0x02E0 (size: 0x4)
+    TArray<AOnlineBeaconClient*> ClientActors;                                        // 0x0338 (size: 0x10)
 
-}; // Size: 0x3D8
+}; // Size: 0x3E8
 
 class AOnlineBeaconHostObject : public AActor
 {
-    FString BeaconTypeName;                                                           // 0x0298 (size: 0x10)
-    TSubclassOf<class AOnlineBeaconClient> ClientBeaconActorClass;                    // 0x02A8 (size: 0x8)
-    TArray<class AOnlineBeaconClient*> ClientActors;                                  // 0x02B0 (size: 0x10)
+    FString BeaconTypeName;                                                           // 0x02A8 (size: 0x10)
+    TSubclassOf<class AOnlineBeaconClient> ClientBeaconActorClass;                    // 0x02B8 (size: 0x8)
+    TArray<AOnlineBeaconClient*> ClientActors;                                        // 0x02C0 (size: 0x10)
 
-}; // Size: 0x2C0
+}; // Size: 0x2D0
+
+class AOnlineBeaconUnitTestClient : public AOnlineBeaconClient
+{
+}; // Size: 0x338
+
+class AOnlineBeaconUnitTestHost : public AOnlineBeaconHost
+{
+}; // Size: 0x3E8
+
+class AOnlineBeaconUnitTestHostObject : public AOnlineBeaconHostObject
+{
+}; // Size: 0x2D0
 
 class APartyBeaconClient : public AOnlineBeaconClient
 {
-    FString DestSessionId;                                                            // 0x0358 (size: 0x10)
-    FPartyReservation PendingReservation;                                             // 0x0368 (size: 0x58)
-    EClientRequestType RequestType;                                                   // 0x03C0 (size: 0x1)
-    bool bPendingReservationSent;                                                     // 0x03C1 (size: 0x1)
-    bool bCancelReservation;                                                          // 0x03C2 (size: 0x1)
+    FString DestSessionId;                                                            // 0x0368 (size: 0x10)
+    FPartyReservation PendingReservation;                                             // 0x0378 (size: 0x58)
+    EClientRequestType RequestType;                                                   // 0x03D0 (size: 0x1)
+    bool bPendingReservationSent;                                                     // 0x03D1 (size: 0x1)
+    bool bCancelReservation;                                                          // 0x03D2 (size: 0x1)
 
     void ServerUpdateReservationRequest(FString SessionID, const FPartyReservation& ReservationUpdate);
     void ServerReservationRequest(FString SessionID, const FPartyReservation& Reservation);
@@ -160,25 +172,25 @@ class APartyBeaconClient : public AOnlineBeaconClient
     void ClientSendReservationFull();
     void ClientReservationResponse(TEnumAsByte<EPartyReservationResult::Type> ReservationResponse);
     void ClientCancelReservationResponse(TEnumAsByte<EPartyReservationResult::Type> ReservationResponse);
-}; // Size: 0x3F0
+}; // Size: 0x400
 
 class APartyBeaconHost : public AOnlineBeaconHostObject
 {
-    class UPartyBeaconState* State;                                                   // 0x02C0 (size: 0x8)
-    bool bLogoutOnSessionTimeout;                                                     // 0x0328 (size: 0x1)
-    bool bIsValidationStrRequired;                                                    // 0x0329 (size: 0x1)
-    float SessionTimeoutSecs;                                                         // 0x032C (size: 0x4)
-    float TravelSessionTimeoutSecs;                                                   // 0x0330 (size: 0x4)
+    class UPartyBeaconState* State;                                                   // 0x02D0 (size: 0x8)
+    bool bLogoutOnSessionTimeout;                                                     // 0x0338 (size: 0x1)
+    bool bIsValidationStrRequired;                                                    // 0x0339 (size: 0x1)
+    float SessionTimeoutSecs;                                                         // 0x033C (size: 0x4)
+    float TravelSessionTimeoutSecs;                                                   // 0x0340 (size: 0x4)
 
-}; // Size: 0x338
+}; // Size: 0x348
 
 class ASpectatorBeaconClient : public AOnlineBeaconClient
 {
-    FString DestSessionId;                                                            // 0x0358 (size: 0x10)
-    FSpectatorReservation PendingReservation;                                         // 0x0368 (size: 0x88)
-    ESpectatorClientRequestType RequestType;                                          // 0x03F0 (size: 0x1)
-    bool bPendingReservationSent;                                                     // 0x03F1 (size: 0x1)
-    bool bCancelReservation;                                                          // 0x03F2 (size: 0x1)
+    FString DestSessionId;                                                            // 0x0368 (size: 0x10)
+    FSpectatorReservation PendingReservation;                                         // 0x0378 (size: 0x88)
+    ESpectatorClientRequestType RequestType;                                          // 0x0400 (size: 0x1)
+    bool bPendingReservationSent;                                                     // 0x0401 (size: 0x1)
+    bool bCancelReservation;                                                          // 0x0402 (size: 0x1)
 
     void ServerReservationRequest(FString SessionID, const FSpectatorReservation& Reservation);
     void ServerCancelReservationRequest(const FUniqueNetIdRepl& Spectator);
@@ -186,28 +198,28 @@ class ASpectatorBeaconClient : public AOnlineBeaconClient
     void ClientSendReservationFull();
     void ClientReservationResponse(TEnumAsByte<ESpectatorReservationResult::Type> ReservationResponse);
     void ClientCancelReservationResponse(TEnumAsByte<ESpectatorReservationResult::Type> ReservationResponse);
-}; // Size: 0x420
+}; // Size: 0x430
 
 class ASpectatorBeaconHost : public AOnlineBeaconHostObject
 {
-    class USpectatorBeaconState* State;                                               // 0x02C0 (size: 0x8)
-    bool bLogoutOnSessionTimeout;                                                     // 0x0328 (size: 0x1)
-    bool bIsValidationStrRequired;                                                    // 0x0329 (size: 0x1)
-    float SessionTimeoutSecs;                                                         // 0x032C (size: 0x4)
-    float TravelSessionTimeoutSecs;                                                   // 0x0330 (size: 0x4)
+    class USpectatorBeaconState* State;                                               // 0x02D0 (size: 0x8)
+    bool bLogoutOnSessionTimeout;                                                     // 0x0338 (size: 0x1)
+    bool bIsValidationStrRequired;                                                    // 0x0339 (size: 0x1)
+    float SessionTimeoutSecs;                                                         // 0x033C (size: 0x4)
+    float TravelSessionTimeoutSecs;                                                   // 0x0340 (size: 0x4)
 
-}; // Size: 0x338
+}; // Size: 0x348
 
 class ATestBeaconClient : public AOnlineBeaconClient
 {
 
     void ServerPong();
     void ClientPing();
-}; // Size: 0x328
+}; // Size: 0x338
 
 class ATestBeaconHost : public AOnlineBeaconHostObject
 {
-}; // Size: 0x2C0
+}; // Size: 0x2D0
 
 class UAchievementBlueprintLibrary : public UBlueprintFunctionLibrary
 {
@@ -229,13 +241,18 @@ class UAchievementQueryCallbackProxy : public UOnlineBlueprintCallProxyBase
 
 class UAchievementWriteCallbackProxy : public UOnlineBlueprintCallProxyBase
 {
-    FAchievementWriteCallbackProxyOnSuccess OnSuccess;                                // 0x0030 (size: 0x10)
+    FAchievementWriteCallbackProxyOnWriteSuccess OnWriteSuccess;                      // 0x0030 (size: 0x10)
+    void AchievementWriteCompleteDelegate(FString WrittenAchievementName, float WrittenProgress, int32 WrittenUserTag);
+    FAchievementWriteCallbackProxyOnWriteFailure OnWriteFailure;                      // 0x0040 (size: 0x10)
+    void AchievementWriteCompleteDelegate(FString WrittenAchievementName, float WrittenProgress, int32 WrittenUserTag);
+    FAchievementWriteCallbackProxyOnSuccess OnSuccess;                                // 0x0050 (size: 0x10)
     void AchievementWriteDelegate(FName WrittenAchievementName, float WrittenProgress, int32 WrittenUserTag);
-    FAchievementWriteCallbackProxyOnFailure OnFailure;                                // 0x0040 (size: 0x10)
+    FAchievementWriteCallbackProxyOnFailure OnFailure;                                // 0x0060 (size: 0x10)
     void AchievementWriteDelegate(FName WrittenAchievementName, float WrittenProgress, int32 WrittenUserTag);
 
+    class UAchievementWriteCallbackProxy* WriteProgress(class UObject* WorldContextObject, class APlayerController* PlayerController, FString AchievementName, float Progress, int32 UserTag);
     class UAchievementWriteCallbackProxy* WriteAchievementProgress(class UObject* WorldContextObject, class APlayerController* PlayerController, FName AchievementName, float Progress, int32 UserTag);
-}; // Size: 0x80
+}; // Size: 0xA8
 
 class UConnectionCallbackProxy : public UOnlineBlueprintCallProxyBase
 {
@@ -254,7 +271,7 @@ class UCreateSessionCallbackProxy : public UOnlineBlueprintCallProxyBase
     FCreateSessionCallbackProxyOnFailure OnFailure;                                   // 0x0040 (size: 0x10)
     void EmptyOnlineDelegate();
 
-    class UCreateSessionCallbackProxy* CreateSession(class UObject* WorldContextObject, class APlayerController* PlayerController, int32 PublicConnections, bool bUseLAN);
+    class UCreateSessionCallbackProxy* CreateSession(class UObject* WorldContextObject, class APlayerController* PlayerController, int32 PublicConnections, bool bUseLAN, bool bUseLobbiesIfAvailable);
 }; // Size: 0x98
 
 class UDestroySessionCallbackProxy : public UOnlineBlueprintCallProxyBase
@@ -298,7 +315,7 @@ class UFindSessionsCallbackProxy : public UOnlineBlueprintCallProxyBase
     int32 GetPingInMs(const FBlueprintSessionResult& Result);
     int32 GetMaxPlayers(const FBlueprintSessionResult& Result);
     int32 GetCurrentPlayers(const FBlueprintSessionResult& Result);
-    class UFindSessionsCallbackProxy* FindSessions(class UObject* WorldContextObject, class APlayerController* PlayerController, int32 MaxResults, bool bUseLAN);
+    class UFindSessionsCallbackProxy* FindSessions(class UObject* WorldContextObject, class APlayerController* PlayerController, int32 MaxResults, bool bUseLAN, bool bUseLobbies);
 }; // Size: 0x90
 
 class UFindTurnBasedMatchCallbackProxy : public UOnlineBlueprintCallProxyBase
@@ -373,25 +390,25 @@ class UInAppPurchaseRestoreCallbackProxy2 : public UObject
 
 class UIpConnection : public UNetConnection
 {
-    float SocketErrorDisconnectDelay;                                                 // 0x1E6C (size: 0x4)
+    float SocketErrorDisconnectDelay;                                                 // 0x1E94 (size: 0x4)
 
-}; // Size: 0x1E88
+}; // Size: 0x1EB0
 
 class UIpNetDriver : public UNetDriver
 {
-    uint8 LogPortUnreach;                                                             // 0x07F0 (size: 0x1)
-    uint8 AllowPlayerPortUnreach;                                                     // 0x07F0 (size: 0x1)
-    uint8 bExitOnBindFailure;                                                         // 0x07F0 (size: 0x1)
-    uint32 MaxPortCountToTry;                                                         // 0x07F4 (size: 0x4)
-    uint32 ServerDesiredSocketReceiveBufferBytes;                                     // 0x07FC (size: 0x4)
-    uint32 ServerDesiredSocketSendBufferBytes;                                        // 0x0800 (size: 0x4)
-    uint32 ClientDesiredSocketReceiveBufferBytes;                                     // 0x0804 (size: 0x4)
-    uint32 ClientDesiredSocketSendBufferBytes;                                        // 0x0808 (size: 0x4)
-    double MaxSecondsInReceive;                                                       // 0x0810 (size: 0x8)
-    int32 NbPacketsBetweenReceiveTimeTest;                                            // 0x0818 (size: 0x4)
-    float ResolutionConnectionTimeout;                                                // 0x081C (size: 0x4)
+    uint8 LogPortUnreach;                                                             // 0x08F0 (size: 0x1)
+    uint8 AllowPlayerPortUnreach;                                                     // 0x08F0 (size: 0x1)
+    uint8 bExitOnBindFailure;                                                         // 0x08F0 (size: 0x1)
+    uint32 MaxPortCountToTry;                                                         // 0x08F4 (size: 0x4)
+    uint32 ServerDesiredSocketReceiveBufferBytes;                                     // 0x08FC (size: 0x4)
+    uint32 ServerDesiredSocketSendBufferBytes;                                        // 0x0900 (size: 0x4)
+    uint32 ClientDesiredSocketReceiveBufferBytes;                                     // 0x0904 (size: 0x4)
+    uint32 ClientDesiredSocketSendBufferBytes;                                        // 0x0908 (size: 0x4)
+    double MaxSecondsInReceive;                                                       // 0x0910 (size: 0x8)
+    int32 NbPacketsBetweenReceiveTimeTest;                                            // 0x0918 (size: 0x4)
+    float ResolutionConnectionTimeout;                                                // 0x091C (size: 0x4)
 
-}; // Size: 0x8A0
+}; // Size: 0x9A0
 
 class UJoinSessionCallbackProxy : public UOnlineBlueprintCallProxyBase
 {
@@ -426,8 +443,8 @@ class ULeaderboardQueryCallbackProxy : public UObject
     FLeaderboardQueryCallbackProxyOnFailure OnFailure;                                // 0x0038 (size: 0x10)
     void LeaderboardQueryResult(int32 LeaderboardValue);
 
-    class ULeaderboardQueryCallbackProxy* CreateProxyObjectForIntQuery(class APlayerController* PlayerController, FName StatName);
-}; // Size: 0x98
+    class ULeaderboardQueryCallbackProxy* CreateProxyObjectForIntQuery(class APlayerController* PlayerController, FString StatName);
+}; // Size: 0xA0
 
 class ULogoutCallbackProxy : public UBlueprintAsyncActionBase
 {
@@ -439,18 +456,34 @@ class ULogoutCallbackProxy : public UBlueprintAsyncActionBase
     class ULogoutCallbackProxy* Logout(class UObject* WorldContextObject, class APlayerController* PlayerController);
 }; // Size: 0x68
 
+class UOnlineBeaconUnitTestNetConnection : public UIpConnection
+{
+}; // Size: 0x1EB0
+
+class UOnlineBeaconUnitTestNetDriver : public UIpNetDriver
+{
+}; // Size: 0x9A0
+
 class UOnlineEngineInterfaceImpl : public UOnlineEngineInterface
 {
-    TMap<class FName, class FName> MappedUniqueNetIdTypes;                            // 0x0028 (size: 0x50)
+    TMap<FName, FName> MappedUniqueNetIdTypes;                                        // 0x0028 (size: 0x50)
     TArray<FName> CompatibleUniqueNetIdTypes;                                         // 0x0078 (size: 0x10)
     FName VoiceSubsystemNameOverride;                                                 // 0x0088 (size: 0x8)
+    bool bOnlineServicesCompatibilityEnabled;                                         // 0x0188 (size: 0x1)
+    class UOnlineEngineInterface* OnlineServicesCompatibilityInterface;               // 0x0190 (size: 0x8)
 
-}; // Size: 0x188
+}; // Size: 0x198
+
+class UOnlinePIEConfig : public UObject
+{
+    TArray<FString> LoginTypesAllowingDuplicates;                                     // 0x0028 (size: 0x10)
+
+}; // Size: 0x38
 
 class UOnlinePIESettings : public UDeveloperSettings
 {
     bool bOnlinePIEEnabled;                                                           // 0x0038 (size: 0x1)
-    TArray<FPIELoginSettingsInternal> Logins;                                         // 0x0040 (size: 0x10)
+    TArray<FOnlineAccountStoredCredentials> Logins;                                   // 0x0040 (size: 0x10)
 
 }; // Size: 0x50
 
@@ -527,6 +560,6 @@ class UVoipListenerSynthComponent : public USynthComponent
 {
 
     bool IsIdling();
-}; // Size: 0x960
+}; // Size: 0x900
 
 #endif

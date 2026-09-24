@@ -3,28 +3,30 @@
 
 class UBP_InteractWidget_C : public UUserWidget
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02C0 (size: 0x8)
-    class UTextBlock* AdditionalTxt;                                                  // 0x02C8 (size: 0x8)
-    class UVerticalBox* InteractOptions;                                              // 0x02D0 (size: 0x8)
-    class UTextBlock* ObjectName;                                                     // 0x02D8 (size: 0x8)
-    class UVerticalBox* StatOptions;                                                  // 0x02E0 (size: 0x8)
-    class UTextBlock* TxtButton;                                                      // 0x02E8 (size: 0x8)
-    FLinearColor DefColor;                                                            // 0x02F0 (size: 0x10)
-    TArray<class UBP_InteractWidgetOption_C*> Options;                                // 0x0300 (size: 0x10)
-    TMap<class FGameplayTag, class FText> OptionMap;                                  // 0x0310 (size: 0x50)
-    TMap<class FGameplayTag, class UBP_InteractWidgetOption_C*> OptionW;              // 0x0360 (size: 0x50)
-    FText Name;                                                                       // 0x03B0 (size: 0x18)
-    TArray<class UBP_InteractWidgetStat_C*> Stats;                                    // 0x03C8 (size: 0x10)
-    TMap<class FName, class FText> StatMap;                                           // 0x03D8 (size: 0x50)
-    TMap<class FName, class UBP_InteractWidgetStat_C*> StatsW;                        // 0x0428 (size: 0x50)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0340 (size: 0x8)
+    class UTextBlock* TxtButton;                                                      // 0x0348 (size: 0x8)
+    class UVerticalBox* StatOptions;                                                  // 0x0350 (size: 0x8)
+    class UTextBlock* ObjectName;                                                     // 0x0358 (size: 0x8)
+    class UVerticalBox* InteractOptions;                                              // 0x0360 (size: 0x8)
+    class UTextBlock* AdditionalTxt;                                                  // 0x0368 (size: 0x8)
+    FLinearColor DefColor;                                                            // 0x0370 (size: 0x10)
+    TArray<UBP_InteractWidgetOption_C*> Options;                                      // 0x0380 (size: 0x10)
+    TMap<FGameplayTag, FText> OptionMap;                                              // 0x0390 (size: 0x50)
+    TMap<FGameplayTag, UBP_InteractWidgetOption_C*> OptionW;                          // 0x03E0 (size: 0x50)
+    FText Name;                                                                       // 0x0430 (size: 0x10)
+    TArray<UBP_InteractWidgetStat_C*> Stats;                                          // 0x0440 (size: 0x10)
+    TMap<FName, FText> StatMap;                                                       // 0x0450 (size: 0x50)
+    TMap<FName, UBP_InteractWidgetStat_C*> StatsW;                                    // 0x04A0 (size: 0x50)
 
+    void RemoveInteractOption(FGameplayTag Option);
+    void AddInteractOption(const TMap<FGameplayTag, FText>& Option, TMap<FGameplayTag, FText>& OptionAdded);
     void SetOption(FGameplayTag Option);
-    void SetupWidget(const TMap<class FGameplayTag, class FText> Options, TMap<class FName, class FText> Stats);
+    void SetupWidget(const TMap<FGameplayTag, FText> Options, TMap<FName, FText> Stats);
     void UpdateOptionText(FGameplayTag Option, FText NewText);
     void Construct();
     void Destruct();
     void ClearOptions();
     void ExecuteUbergraph_BP_InteractWidget(int32 EntryPoint);
-}; // Size: 0x478
+}; // Size: 0x4F0
 
 #endif

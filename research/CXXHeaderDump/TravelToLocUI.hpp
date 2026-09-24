@@ -3,13 +3,14 @@
 
 class UTravelToLocUI_C : public UUserWidget
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02C0 (size: 0x8)
-    class UWidgetAnimation* MoveLoc;                                                  // 0x02C8 (size: 0x8)
-    class UWidgetAnimation* Fade;                                                     // 0x02D0 (size: 0x8)
-    class UButton* NoButton;                                                          // 0x02D8 (size: 0x8)
-    class UTextBlock* Text;                                                           // 0x02E0 (size: 0x8)
-    class UButton* YesButton;                                                         // 0x02E8 (size: 0x8)
-    class ABP_SubwayTravelDoor_C* DoorRef;                                            // 0x02F0 (size: 0x8)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0340 (size: 0x8)
+    class UButton* YesButton;                                                         // 0x0348 (size: 0x8)
+    class UTextBlock* Text;                                                           // 0x0350 (size: 0x8)
+    class UButton* NoButton;                                                          // 0x0358 (size: 0x8)
+    class UWidgetAnimation* Fade;                                                     // 0x0360 (size: 0x8)
+    class UWidgetAnimation* MoveLoc;                                                  // 0x0368 (size: 0x8)
+    class ABP_SubwayTravelDoor_C* DoorRef;                                            // 0x0370 (size: 0x8)
+    class AActor* ActorRef;                                                           // 0x0378 (size: 0x8)
 
     void ClearUI();
     void BndEvt__Button_60_K2Node_ComponentBoundEvent_0_OnButtonClickedEvent__DelegateSignature();
@@ -19,6 +20,6 @@ class UTravelToLocUI_C : public UUserWidget
     void BndEvt__RespawnScreen_QuitToMainMenuButton_K2Node_ComponentBoundEvent_5_OnButtonHoverEvent__DelegateSignature();
     void Exit();
     void ExecuteUbergraph_TravelToLocUI(int32 EntryPoint);
-}; // Size: 0x2F8
+}; // Size: 0x380
 
 #endif

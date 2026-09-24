@@ -3,6 +3,6 @@
 
 class UButtonStyle_Narrative_C : public UCommonButtonStyle
 {
-}; // Size: 0x7B0
+}; // Size: 0x710
 
 #endif

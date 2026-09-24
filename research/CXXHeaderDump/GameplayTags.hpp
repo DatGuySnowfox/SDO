@@ -97,7 +97,7 @@ class IGameplayTagAssetInterface : public IInterface
     bool HasMatchingGameplayTag(FGameplayTag TagToCheck);
     bool HasAnyMatchingGameplayTags(const FGameplayTagContainer& TagContainer);
     bool HasAllMatchingGameplayTags(const FGameplayTagContainer& TagContainer);
-    void GetOwnedGameplayTags(FGameplayTagContainer& TagContainer);
+    FGameplayTagContainer BP_GetOwnedGameplayTags();
 }; // Size: 0x28
 
 class UBlueprintGameplayTagLibrary : public UBlueprintFunctionLibrary
@@ -125,14 +125,17 @@ class UBlueprintGameplayTagLibrary : public UBlueprintFunctionLibrary
     bool HasAllTags(const FGameplayTagContainer& TagContainer, const FGameplayTagContainer& OtherContainer, bool bExactMatch);
     bool HasAllMatchingGameplayTags(TScriptInterface<class IGameplayTagAssetInterface> TagContainerInterface, const FGameplayTagContainer& OtherContainer);
     FName GetTagName(const FGameplayTag& GameplayTag);
+    FGameplayTagContainer GetOwnedGameplayTags(TScriptInterface<class IGameplayTagAssetInterface> TagContainerInterface);
     int32 GetNumGameplayTagsInContainer(const FGameplayTagContainer& TagContainer);
     FString GetDebugStringFromGameplayTagContainer(const FGameplayTagContainer& TagContainer);
     FString GetDebugStringFromGameplayTag(FGameplayTag GameplayTag);
-    void GetAllActorsOfClassMatchingTagQuery(class UObject* WorldContextObject, TSubclassOf<class AActor> ActorClass, const FGameplayTagQuery& GameplayTagQuery, TArray<class AActor*>& OutActors);
+    void GetAllActorsOfClassMatchingTagQuery(class UObject* WorldContextObject, TSubclassOf<class AActor> ActorClass, const FGameplayTagQuery& GameplayTagQuery, TArray<AActor*>& OutActors);
+    FGameplayTagContainer Filter(const FGameplayTagContainer& TagContainer, const FGameplayTagContainer& OtherContainer, bool bExactMatch);
     bool EqualEqual_GameplayTagContainer(const FGameplayTagContainer& A, const FGameplayTagContainer& B);
     bool EqualEqual_GameplayTag(FGameplayTag A, FGameplayTag B);
     bool DoesTagAssetInterfaceHaveTag(TScriptInterface<class IGameplayTagAssetInterface> TagContainerInterface, FGameplayTag Tag);
     bool DoesContainerMatchTagQuery(const FGameplayTagContainer& TagContainer, const FGameplayTagQuery& TagQuery);
+    TScriptInterface<class IGameplayTagAssetInterface> Conv_ObjectToGameplayTagAssetInterface(class UObject* InObject);
     void BreakGameplayTagContainer(const FGameplayTagContainer& GameplayTagContainer, TArray<FGameplayTag>& GameplayTags);
     void AppendGameplayTagContainers(FGameplayTagContainer& InOutTagContainer, const FGameplayTagContainer& InTagContainer);
     void AddGameplayTag(FGameplayTagContainer& TagContainer, FGameplayTag Tag);
@@ -152,7 +155,7 @@ class UEditableGameplayTagQueryExpression : public UObject
 
 class UEditableGameplayTagQueryExpression_AllExprMatch : public UEditableGameplayTagQueryExpression
 {
-    TArray<class UEditableGameplayTagQueryExpression*> Expressions;                   // 0x0028 (size: 0x10)
+    TArray<UEditableGameplayTagQueryExpression*> Expressions;                         // 0x0028 (size: 0x10)
 
 }; // Size: 0x38
 
@@ -164,7 +167,7 @@ class UEditableGameplayTagQueryExpression_AllTagsMatch : public UEditableGamepla
 
 class UEditableGameplayTagQueryExpression_AnyExprMatch : public UEditableGameplayTagQueryExpression
 {
-    TArray<class UEditableGameplayTagQueryExpression*> Expressions;                   // 0x0028 (size: 0x10)
+    TArray<UEditableGameplayTagQueryExpression*> Expressions;                         // 0x0028 (size: 0x10)
 
 }; // Size: 0x38
 
@@ -176,7 +179,7 @@ class UEditableGameplayTagQueryExpression_AnyTagsMatch : public UEditableGamepla
 
 class UEditableGameplayTagQueryExpression_NoExprMatch : public UEditableGameplayTagQueryExpression
 {
-    TArray<class UEditableGameplayTagQueryExpression*> Expressions;                   // 0x0028 (size: 0x10)
+    TArray<UEditableGameplayTagQueryExpression*> Expressions;                         // 0x0028 (size: 0x10)
 
 }; // Size: 0x38
 
@@ -196,29 +199,30 @@ class UGameplayTagsDeveloperSettings : public UDeveloperSettings
 class UGameplayTagsList : public UObject
 {
     FString ConfigFileName;                                                           // 0x0028 (size: 0x10)
-    TArray<FGameplayTagTableRow> GameplayTagList;                                     // 0x0038 (size: 0x10)
+    TArray<FGameplayTagRedirect> GameplayTagRedirects;                                // 0x0038 (size: 0x10)
+    TArray<FGameplayTagTableRow> GameplayTagList;                                     // 0x0048 (size: 0x10)
 
-}; // Size: 0x48
+}; // Size: 0x58
 
 class UGameplayTagsManager : public UObject
 {
-    TMap<class FName, class FGameplayTagSource> TagSources;                           // 0x0188 (size: 0x50)
-    TArray<class UDataTable*> GameplayTagTables;                                      // 0x0288 (size: 0x10)
+    TMap<FName, FGameplayTagSource> TagSources;                                       // 0x0188 (size: 0x50)
+    TArray<UDataTable*> GameplayTagTables;                                            // 0x0290 (size: 0x10)
 
-}; // Size: 0x298
+}; // Size: 0x2A0
 
 class UGameplayTagsSettings : public UGameplayTagsList
 {
-    bool ImportTagsFromConfig;                                                        // 0x0048 (size: 0x1)
-    bool WarnOnInvalidTags;                                                           // 0x0049 (size: 0x1)
-    bool ClearInvalidTags;                                                            // 0x004A (size: 0x1)
-    bool AllowEditorTagUnloading;                                                     // 0x004B (size: 0x1)
-    bool AllowGameTagUnloading;                                                       // 0x004C (size: 0x1)
-    bool FastReplication;                                                             // 0x004D (size: 0x1)
-    FString InvalidTagCharacters;                                                     // 0x0050 (size: 0x10)
-    TArray<FGameplayTagCategoryRemap> CategoryRemapping;                              // 0x0060 (size: 0x10)
-    TArray<FSoftObjectPath> GameplayTagTableList;                                     // 0x0070 (size: 0x10)
-    TArray<FGameplayTagRedirect> GameplayTagRedirects;                                // 0x0080 (size: 0x10)
+    bool ImportTagsFromConfig;                                                        // 0x0058 (size: 0x1)
+    bool WarnOnInvalidTags;                                                           // 0x0059 (size: 0x1)
+    bool ClearInvalidTags;                                                            // 0x005A (size: 0x1)
+    bool AllowEditorTagUnloading;                                                     // 0x005B (size: 0x1)
+    bool AllowGameTagUnloading;                                                       // 0x005C (size: 0x1)
+    bool FastReplication;                                                             // 0x005D (size: 0x1)
+    bool bDynamicReplication;                                                         // 0x005E (size: 0x1)
+    FString InvalidTagCharacters;                                                     // 0x0060 (size: 0x10)
+    TArray<FGameplayTagCategoryRemap> CategoryRemapping;                              // 0x0070 (size: 0x10)
+    TArray<FSoftObjectPath> GameplayTagTableList;                                     // 0x0080 (size: 0x10)
     TArray<FName> CommonlyReplicatedTags;                                             // 0x0090 (size: 0x10)
     int32 NumBitsForContainerSize;                                                    // 0x00A0 (size: 0x4)
     int32 NetIndexFirstBitSegment;                                                    // 0x00A4 (size: 0x4)

@@ -8,6 +8,7 @@ enum class ETypedElementChildInclusionMethod {
 enum class ETypedElementSelectionMethod {
     Primary = 0,
     Secondary = 1,
-    ETypedElementSelectionMethod_MAX = 2,
+    FromSecondary = 2,
+    ETypedElementSelectionMethod_MAX = 3,
 };
 

@@ -3,6 +3,6 @@
 
 class UStyledComboBoxSetting_C : public UComboBoxSetting
 {
-}; // Size: 0x338
+}; // Size: 0x3B8
 
 #endif

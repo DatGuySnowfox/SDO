@@ -3,6 +3,6 @@
 
 class UDefaultCheckBoxSetting_C : public UCheckBoxSetting
 {
-}; // Size: 0x318
+}; // Size: 0x398
 
 #endif

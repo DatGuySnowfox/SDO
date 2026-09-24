@@ -3,6 +3,6 @@
 
 class ABP_Firepit_C : public ABP_Campfire_C
 {
-}; // Size: 0x2D0
+}; // Size: 0x2E0
 
 #endif

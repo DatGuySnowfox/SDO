@@ -4,7 +4,7 @@
 class IBP_WeaponAttachments_C : public IInterface
 {
 
-    void Jig_GetAttachmentArrayByType(FGameplayTag Type, TArray<class ABP_AMainLocalAttachment_C*>& Attachment, bool& Found);
+    void Jig_GetAttachmentArrayByType(FGameplayTag Type, TArray<ABP_AMainLocalAttachment_C*>& Attachment, bool& Found);
     void Jig_GetAvailableAttachmentStates(FGameplayTagContainer& States);
     void Jig_SetAttachmentState(const TArray<FGuid>& UID, FGameplayTag NewState, bool PreExecuteClientSide?);
     void Jig_ToggleAttachmentActiveState();

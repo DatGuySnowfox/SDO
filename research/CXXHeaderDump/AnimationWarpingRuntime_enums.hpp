@@ -16,9 +16,25 @@ enum class EFootPlacementLockType {
 enum class EOffsetRootBoneMode {
     Accumulate = 0,
     Interpolate = 1,
-    Hold = 2,
-    Release = 3,
-    EOffsetRootBoneMode_MAX = 4,
+    LockOffsetAndConsumeAnimation = 2,
+    LockOffsetIncreaseAndConsumeAnimation = 3,
+    LockOffsetAndIgnoreAnimation = 4,
+    Release = 5,
+    EOffsetRootBoneMode_MAX = 6,
+};
+
+enum class EOffsetRootBone_CollisionTestingMode {
+    Disabled = 0,
+    ShrinkMaxTranslation = 1,
+    PlanarCollision = 2,
+    EOffsetRootBone_MAX = 3,
+};
+
+enum class EOrientationWarpingSpace {
+    ComponentTransform = 0,
+    RootBoneTransform = 1,
+    CustomTransform = 2,
+    EOrientationWarpingSpace_MAX = 3,
 };
 
 enum class EPelvisHeightMode {

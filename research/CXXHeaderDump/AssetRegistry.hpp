@@ -1,6 +1,8 @@
 #ifndef UE4SS_SDK_AssetRegistry_HPP
 #define UE4SS_SDK_AssetRegistry_HPP
 
+#include "AssetRegistry_enums.hpp"
+
 struct FAssetRegistryDependencyOptions
 {
     bool bIncludeSoftPackageReferences;                                               // 0x0000 (size: 0x1)
@@ -38,6 +40,7 @@ class IAssetRegistry : public IInterface
     bool IsLoadingAssets();
     bool HasAssets(const FName PackagePath, const bool bRecursive);
     void GetSubPaths(FString InBasePath, TArray<FString>& OutPathList, bool bInRecurse);
+    bool GetInMemoryAssets(const FARFilter& Filter, TArray<FAssetData>& OutAssetData, bool bSkipARFilteredAssets);
     void GetDerivedClassNames(const TArray<FTopLevelAssetPath>& ClassNames, const TSet<FTopLevelAssetPath>& ExcludedClassNames, TSet<FTopLevelAssetPath>& OutDerivedClassNames);
     bool GetAssetsByPaths(TArray<FName> PackagePaths, TArray<FAssetData>& OutAssetData, bool bRecursive, bool bIncludeOnlyOnDiskAssets);
     bool GetAssetsByPath(FName PackagePath, TArray<FAssetData>& OutAssetData, bool bRecursive, bool bIncludeOnlyOnDiskAssets);
@@ -54,6 +57,9 @@ class UAssetRegistryHelpers : public UObject
 {
 
     FSoftObjectPath ToSoftObjectPath(const FAssetData& InAssetData);
+    bool SortingPredicate__DelegateSignature(const FAssetData& Left, const FAssetData& Right);
+    void SortByPredicate(TArray<FAssetData>& Assets, FSortByPredicateSortingPredicate SortingPredicate, EAssetRegistrySortOrder SortOrder);
+    void SortByAssetName(TArray<FAssetData>& Assets, EAssetRegistrySortOrder SortOrder);
     FARFilter SetFilterTagsAndValues(const FARFilter& InFilter, const TArray<FTagAndValue>& InTagsAndValues);
     bool IsValid(const FAssetData& InAssetData);
     bool IsUAsset(const FAssetData& InAssetData);
@@ -72,6 +78,6 @@ class UAssetRegistryHelpers : public UObject
 
 class UAssetRegistryImpl : public UObject
 {
-}; // Size: 0xD78
+}; // Size: 0x11A0
 
 #endif

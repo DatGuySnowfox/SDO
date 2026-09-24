@@ -3,14 +3,14 @@
 
 class USleepingUI_C : public UUserWidget
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02C0 (size: 0x8)
-    class UWidgetAnimation* BlurAnim;                                                 // 0x02C8 (size: 0x8)
-    class UVerticalBox* Choices;                                                      // 0x02D0 (size: 0x8)
-    class UButton* DontSleepButton;                                                   // 0x02D8 (size: 0x8)
-    class UButton* SleepButton;                                                       // 0x02E0 (size: 0x8)
-    class UTextBlock* SleepingText;                                                   // 0x02E8 (size: 0x8)
-    class UTextBlock* TextBlock;                                                      // 0x02F0 (size: 0x8)
-    class UTextBlock* TextBlock_1;                                                    // 0x02F8 (size: 0x8)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0340 (size: 0x8)
+    class UTextBlock* TextBlock_1;                                                    // 0x0348 (size: 0x8)
+    class UTextBlock* TextBlock;                                                      // 0x0350 (size: 0x8)
+    class UTextBlock* SleepingText;                                                   // 0x0358 (size: 0x8)
+    class UButton* SleepButton;                                                       // 0x0360 (size: 0x8)
+    class UButton* DontSleepButton;                                                   // 0x0368 (size: 0x8)
+    class UVerticalBox* Choices;                                                      // 0x0370 (size: 0x8)
+    class UWidgetAnimation* BlurAnim;                                                 // 0x0378 (size: 0x8)
 
     void ClearUI();
     void BndEvt__Button_60_K2Node_ComponentBoundEvent_0_OnButtonClickedEvent__DelegateSignature();
@@ -20,6 +20,6 @@ class USleepingUI_C : public UUserWidget
     void Exit();
     void Tick(FGeometry MyGeometry, float InDeltaTime);
     void ExecuteUbergraph_SleepingUI(int32 EntryPoint);
-}; // Size: 0x300
+}; // Size: 0x380
 
 #endif

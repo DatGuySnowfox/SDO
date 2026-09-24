@@ -3,6 +3,6 @@
 
 class ABP_QuestGiver_SettlementOfficer_C : public ABP_QuestGiver_C
 {
-}; // Size: 0x330
+}; // Size: 0x338
 
 #endif

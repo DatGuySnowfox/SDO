@@ -339,23 +339,46 @@ using FMemoryFreeFn   = void(*)(void* ptr);
 // call leaks.
 static std::string fname_to_string(uintptr_t fnamePtr)
 {
-    static auto* toString = reinterpret_cast<FNameToStringFn>(rebase(0x140C9D940));
-    static auto* memFree  = reinterpret_cast<FMemoryFreeFn>(rebase(0x140B27000));
+    // 2026-09-24: was two hardcoded absolute addresses rebased from the UE 5.3
+    // binary -- FName::ToString @0x140C9D940 and FMemory::Free @0x140B27000.
+    // The 5.6 build is a different image entirely (122MB -> 165MB), so those
+    // rebased into unrelated code and CALLING them corrupted the process: a
+    // null dereference inside ucrtbase, with no mod frames on the stack
+    // because control had already left our code.
+    //
+    // Replaced with reflection: KismetStringLibrary::Conv_NameToString is the
+    // engine's own FName -> FString conversion, resolved by name through the
+    // same Default__<Class> CDO pattern this file already uses elsewhere. It
+    // costs a ProcessEvent per call instead of a direct call, which is
+    // irrelevant on the paths this runs on, and it cannot silently rot the
+    // way a baked-in address does.
+    if (!fnamePtr) return {};
 
-    UnrealFString out{};
-    toString(reinterpret_cast<const void*>(fnamePtr), &out);
-    if (!out.data || out.num <= 0) return {};
-
-    int len = out.num;
-    if (out.data[len - 1] == L'\0') --len; // FString::Num includes the null terminator
-
-    std::string s;
-    if (len > 0) {
-        const int needed = WideCharToMultiByte(CP_UTF8, 0, out.data, len, nullptr, 0, nullptr, nullptr);
-        s.resize(static_cast<size_t>(needed));
-        WideCharToMultiByte(CP_UTF8, 0, out.data, len, s.data(), needed, nullptr, nullptr);
+    static UObject*   s_lib = nullptr;
+    static UFunction* s_fn  = nullptr;
+    static bool       s_tried = false;
+    if (!s_tried) {
+        s_tried = true;
+        s_lib = UObjectGlobals::FindObject(nullptr, reinterpret_cast<UObject*>(-1), STR("Default__KismetStringLibrary"));
+        if (s_lib) s_fn = s_lib->GetFunctionByNameInChain(STR("Conv_NameToString"));
+        debug_log(std::string("fname_to_string: Conv_NameToString lib=") +
+                  (s_lib ? "ok" : "NULL") + " fn=" + (s_fn ? "ok" : "NULL"));
     }
-    memFree(out.data);
+    if (!s_lib || !s_fn) return {};
+
+    struct Params { uint32_t ComparisonIndex; uint32_t Number; UnrealFString Out; } params{};
+    params.ComparisonIndex = *reinterpret_cast<const uint32_t*>(fnamePtr);
+    params.Number          = *reinterpret_cast<const uint32_t*>(fnamePtr + 4);
+    s_lib->ProcessEvent(s_fn, &params);
+
+    if (!params.Out.data || params.Out.num <= 0) return {};
+    int len = params.Out.num;
+    if (params.Out.data[len - 1] == L'\0') --len;
+    if (len <= 0) return {};
+
+    const int needed = WideCharToMultiByte(CP_UTF8, 0, params.Out.data, len, nullptr, 0, nullptr, nullptr);
+    std::string s(static_cast<size_t>(needed), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, params.Out.data, len, s.data(), needed, nullptr, nullptr);
     return s;
 }
 
@@ -363,10 +386,29 @@ static std::string fname_to_string(uintptr_t fnamePtr)
 // in place — unlike fname_to_string, this doesn't call into the engine or
 // allocate anything, so there's nothing to free; the engine owns that buffer
 // for as long as the containing object exists.
+// Returns false for pointers that cannot possibly be a valid user-space
+// heap address. Cheap arithmetic only -- no syscall, since this sits on a
+// per-tick path. Catches the common garbage patterns (null, the (UObject*)-1
+// ANY_PACKAGE sentinel, small integers reinterpreted as pointers, and
+// non-canonical x64 addresses) without pretending to be a real validity test.
+static bool plausible_ptr(const void* p)
+{
+    const auto a = reinterpret_cast<uintptr_t>(p);
+    if (a < 0x10000) return false;                 // null / small-int garbage
+    if (a == static_cast<uintptr_t>(-1)) return false;  // ANY_PACKAGE sentinel
+    if (a >= 0x0000800000000000ULL) return false;  // non-canonical / kernel half
+    return true;
+}
+
 static std::string read_fstring_field(uintptr_t addr)
 {
+    // 2026-09-24: hardened after a stale UE 5.3 offset survived the 5.6 bump
+    // and handed this function a wild pointer, taking the whole game down with
+    // an access violation on the first save load. A stale offset should cost a
+    // missing field, not the process.
+    if (!plausible_ptr(reinterpret_cast<const void*>(addr))) return {};
     const auto& fstr = *reinterpret_cast<const UnrealFString*>(addr);
-    if (!fstr.data || fstr.num <= 0) return {};
+    if (!plausible_ptr(fstr.data) || fstr.num <= 0 || fstr.num > (1 << 20)) return {};
 
     int len = fstr.num;
     if (fstr.data[len - 1] == L'\0') --len;
@@ -380,43 +422,52 @@ static std::string read_fstring_field(uintptr_t addr)
 
 } // namespace native
 
+// Resolves a UObject-typed property by name. Replaces the hardcoded pointer
+// chases this file used to do (pawn+0x700 for BP_JigHelperComp, +0x818 for
+// BP_JigMultiplayer, and so on): those offsets were captured against UE 5.3
+// and every one of them moved when the game shipped on UE 5.6, turning each
+// chase into a wild-pointer dereference. Names survived the bump.
+static UObject* obj_prop(UObject* owner, const wchar_t* name)
+{
+    if (!owner) return nullptr;
+    auto** slot = static_cast<UObject**>(owner->GetValuePtrByPropertyNameInChain(name));
+    return (slot && *slot) ? *slot : nullptr;
+}
+
 // ── Vitals reader ─────────────────────────────────────────────────────────
 
-// Reads live game state from UE5 components using IDA-confirmed offsets.
-// All pointer reads are null-guarded.
+// Reads live game state from UE5 components by property name.
+//
+// Was offset-based ("IDA-confirmed offsets") until 2026-09-24. Every one of
+// those offsets was captured against UE 5.3 and silently became a wild
+// pointer when the game shipped on UE 5.6, crashing the process on the first
+// profile tick after a save load. Reflection costs a name lookup per read and
+// survives engine bumps, which is the trade this path wants: it runs once per
+// 30s, not per frame.
 static sdb::LocalVitals read_local_progress(AActor* pawn)
 {
     sdb::LocalVitals v{};
-    const auto base = reinterpret_cast<uintptr_t>(pawn);
 
-    auto read_obj = [](uintptr_t addr) -> uintptr_t {
-        const auto ptr = *reinterpret_cast<uintptr_t*>(addr);
-        return ptr;
+    // Vitals components, resolved by property NAME (2026-09-24).
+    //
+    // These were pawn byte offsets (MedicalComponent +0x7D0, RadiationComponent
+    // +0x7F0, HungerThirstComponent +0x7F8, StaminaComponent +0x800) captured
+    // against UE 5.3. The game moved to UE 5.6 and they all shifted, so each
+    // read returned a garbage pointer that was then dereferenced -- an access
+    // violation on the first profile-revision tick after a save load. Property
+    // names survived the engine bump; offsets did not.
+    auto comp_double = [pawn](const wchar_t* compName, const wchar_t* fieldName, double& out) {
+        auto** slot = static_cast<UObject**>(pawn->GetValuePtrByPropertyNameInChain(compName));
+        if (!slot || !*slot) return;
+        if (auto* val = static_cast<double*>((*slot)->GetValuePtrByPropertyNameInChain(fieldName)))
+            out = *val;
     };
-    auto read_double = [](uintptr_t addr) -> double {
-        return *reinterpret_cast<double*>(addr);
-    };
-    auto read_int32 = [](uintptr_t addr) -> int32_t {
-        return *reinterpret_cast<int32_t*>(addr);
-    };
 
-    // MedicalComponent (pawn+0x7D0) → health at +0xD0
-    if (const uintptr_t med = read_obj(base + 0x7D0))
-        v.health = read_double(med + 0xD0);
-
-    // HungerThirstComponent (pawn+0x7F8) → hunger +0xC8, thirst +0xD8
-    if (const uintptr_t ht = read_obj(base + 0x7F8)) {
-        v.hunger = read_double(ht + 0xC8);
-        v.thirst = read_double(ht + 0xD8);
-    }
-
-    // StaminaComponent (pawn+0x800) → stamina at +0xC8
-    if (const uintptr_t stam = read_obj(base + 0x800))
-        v.stamina = read_double(stam + 0xC8);
-
-    // RadiationComponent (pawn+0x7F0) → radiation at +0xC8
-    if (const uintptr_t rad = read_obj(base + 0x7F0))
-        v.radiation = read_double(rad + 0xC8);
+    comp_double(STR("MedicalComponent"),      STR("Health"),           v.health);
+    comp_double(STR("Hunger&ThirstComponent"), STR("CurrentHunger"),  v.hunger);
+    comp_double(STR("Hunger&ThirstComponent"), STR("CurrentThirst"),  v.thirst);
+    comp_double(STR("StaminaComponent"),      STR("CurrentStamina"),   v.stamina);
+    comp_double(STR("RadiationComponent"),    STR("CurrentRadiation"), v.radiation);
 
     // LevellingComponent (ctrl+0x868) → level +0xC0, xp +0xC8
     //
@@ -429,23 +480,43 @@ static sdb::LocalVitals read_local_progress(AActor* pawn)
     // property resolved and live-verified, which hasn't been done yet.
     UObject* ctrl = UObjectGlobals::FindFirstOf(STR("BP_PlayerController_C"));
     if (ctrl) {
-        const uintptr_t ctrlBase = reinterpret_cast<uintptr_t>(ctrl);
-        if (const uintptr_t lvl = read_obj(ctrlBase + 0x868)) {
-            v.level = read_int32(lvl + 0xC0);
-            v.xp    = read_double(lvl + 0xC8);
+        // Resolved by property NAME, not by hardcoded offset (2026-09-24).
+        // These were byte offsets captured against UE 5.3 in research Session
+        // 32; the game moved to UE 5.6 and every one of them shifted, so
+        // Forename's old slot held a garbage pointer and read_fstring_field
+        // dereferenced it -- an access violation on the first save load.
+        // Names survived the engine bump where offsets did not, so read them
+        // reflectively and tolerate any single one being absent.
+        auto prop = [ctrl](const wchar_t* name) -> void* {
+            return ctrl->GetValuePtrByPropertyNameInChain(name);
+        };
+        auto read_i32_prop = [&](const wchar_t* name, int32_t& out) {
+            if (auto* p = static_cast<int32_t*>(prop(name))) out = *p;
+        };
+        auto read_dbl_prop = [&](const wchar_t* name, double& out) {
+            if (auto* p = static_cast<double*>(prop(name))) out = *p;
+        };
+
+        if (auto** lvlSlot = static_cast<UObject**>(prop(STR("LevellingComponent"))); lvlSlot && *lvlSlot) {
+            UObject* lvl = *lvlSlot;
+            if (auto* cur = static_cast<int32_t*>(lvl->GetValuePtrByPropertyNameInChain(STR("CurrentLevel"))))
+                v.level = *cur;
+            if (auto* xp = static_cast<double*>(lvl->GetValuePtrByPropertyNameInChain(STR("CurrentXP"))))
+                v.xp = *xp;
         }
 
-        // Extended PlayerController stats (gap 4/7, offsets from research
-        // Session 32).
-        v.forename              = native::read_fstring_field(ctrlBase + 0x8C8);
-        v.surname               = native::read_fstring_field(ctrlBase + 0x8D8);
-        v.zombieKills           = read_int32(ctrlBase + 0x90C);
-        v.daysSurvived          = read_int32(ctrlBase + 0x91C);
-        v.bossZombieKills       = read_int32(ctrlBase + 0x910);
-        v.animalKills           = read_int32(ctrlBase + 0x914);
-        v.humanKills            = read_int32(ctrlBase + 0x918);
-        v.distanceTravelled     = static_cast<float>(read_double(ctrlBase + 0x920));
-        v.infestationsDestroyed = read_int32(ctrlBase + 0x928);
+        // Extended PlayerController stats (gap 4/7).
+        if (void* f = prop(STR("Forename"))) v.forename = native::read_fstring_field(reinterpret_cast<uintptr_t>(f));
+        if (void* s = prop(STR("Surname")))  v.surname  = native::read_fstring_field(reinterpret_cast<uintptr_t>(s));
+        read_i32_prop(STR("ZombieKills"),           v.zombieKills);
+        read_i32_prop(STR("DaysSurvived"),          v.daysSurvived);
+        read_i32_prop(STR("BossZombieKills"),       v.bossZombieKills);
+        read_i32_prop(STR("AnimalKills"),           v.animalKills);
+        read_i32_prop(STR("HumanKills"),            v.humanKills);
+        read_i32_prop(STR("InfestationsDestroyed"), v.infestationsDestroyed);
+        double distance = 0.0;
+        read_dbl_prop(STR("DistanceTravelled"), distance);
+        v.distanceTravelled = static_cast<float>(distance);
     }
 
     return v;
@@ -464,9 +535,13 @@ static sdb::LocalVitals read_local_progress(AActor* pawn)
 // nothing past the MedicalComponent pointer chase, no controller lookup at all.
 static double read_local_health_only(AActor* pawn)
 {
-    const auto base = reinterpret_cast<uintptr_t>(pawn);
-    const uintptr_t med = *reinterpret_cast<uintptr_t*>(base + 0x7D0);
-    return med ? *reinterpret_cast<double*>(med + 0xD0) : 100.0;
+    // Name-resolved (2026-09-24). Was pawn+0x7D0 -> +0xD0, captured against
+    // UE 5.3; on UE 5.6 MedicalComponent sits at +0x7A8, so the old chase read
+    // an unrelated qword and dereferenced it every tick.
+    auto** slot = static_cast<UObject**>(pawn->GetValuePtrByPropertyNameInChain(STR("MedicalComponent")));
+    if (!slot || !*slot) return 100.0;
+    auto* health = static_cast<double*>((*slot)->GetValuePtrByPropertyNameInChain(STR("Health")));
+    return health ? *health : 100.0;
 }
 
 // ── Equipment reader ──────────────────────────────────────────────────────
@@ -511,64 +586,52 @@ static sdb::PawnAppearance read_local_pawn_appearance(AActor* pawn)
     sdb::PawnAppearance out;
     if (!pawn) return out;
 
-    out.isMale = *reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(pawn) + 0x15A0);
-
-    const uintptr_t hairMeshComp = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(pawn) + 0x7C0);
-    if (hairMeshComp) {
-        auto* hairMesh = *reinterpret_cast<UObject**>(hairMeshComp + 0x5B8);
-        out.hairMeshName = short_object_name(hairMesh);
-    }
-    auto* hairColor = *reinterpret_cast<UObject**>(reinterpret_cast<uintptr_t>(pawn) + 0x15C8);
-    out.hairColorName = short_object_name(hairColor);
-
-    const uintptr_t beardMeshComp = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(pawn) + 0x7C8);
-    if (beardMeshComp) {
-        auto* beardMesh = *reinterpret_cast<UObject**>(beardMeshComp + 0x5B8);
-        out.beardMeshName = short_object_name(beardMesh);
-    }
-    auto* beardColor = *reinterpret_cast<UObject**>(reinterpret_cast<uintptr_t>(pawn) + 0x15D0);
-    out.beardColorName = short_object_name(beardColor);
-
-    auto* skinColor = *reinterpret_cast<UObject**>(reinterpret_cast<uintptr_t>(pawn) + 0x15A8);
-    out.skinColorName = short_object_name(skinColor);
-
-    // Naked-body SkeletalMeshComponents (BP_PlayerCharacter.hpp) — order
-    // matches sdb::PawnAppearance::bodyPartMeshNames / proxy_manager.cpp's
-    // own copy of this table exactly. Reading the actual assigned mesh
-    // (SkinnedAsset @+0x5B8, same offset convention as HairMesh's
-    // StaticMesh) rather than computing it from isMale + a naming
-    // convention: the male variants aren't uniformly named (e.g. Biceps is
-    // "SK_Chr_Underwear_Male_01_Biceps", not "SK_Chr_Male_Biceps").
-    static constexpr uintptr_t kBodyPartOffsets[sdb::BODY_PART_COUNT] = {
-        0x06B8, // Torso
-        0x0710, // Biceps
-        0x0718, // LowerThighs
-        0x0778, // head
-        0x0788, // Arms
-        0x0798, // Feet
-        0x07A0, // LowerLegs
-        0x07A8, // Legs
-        0x07B0, // Hands
+    // Name-resolved (2026-09-24). Every offset here was captured against
+    // UE 5.3 and moved on UE 5.6 -- the component pointers shifted by ~0x28
+    // and USkinnedMeshComponent::SkinnedAsset went 0x5B8 -> 0x580. Two names
+    // also changed: the head component is now "Head" (was lowercase "head"),
+    // and note several properties in this class legitimately contain spaces
+    // and punctuation ("Hair Color", "IsPlayerMale?"), so these strings must
+    // be the exact FName, not a C++-ified version of it.
+    auto obj_prop = [](UObject* o, const wchar_t* name) -> UObject* {
+        if (!o) return nullptr;
+        auto** slot = static_cast<UObject**>(o->GetValuePtrByPropertyNameInChain(name));
+        return (slot && *slot) ? *slot : nullptr;
     };
-    for (int i = 0; i < sdb::BODY_PART_COUNT; ++i) {
-        const uintptr_t comp = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(pawn) + kBodyPartOffsets[i]);
-        if (!comp) continue;
-        auto* mesh = *reinterpret_cast<UObject**>(comp + 0x5B8);
-        out.bodyPartMeshNames[i] = short_object_name(mesh);
-    }
+    // Skeletal components expose the mesh as SkinnedAsset, static ones as
+    // StaticMesh; try both rather than tracking which is which per slot.
+    auto mesh_of = [&](UObject* comp) -> UObject* {
+        if (!comp) return nullptr;
+        if (UObject* m = obj_prop(comp, STR("SkinnedAsset"))) return m;
+        return obj_prop(comp, STR("StaticMesh"));
+    };
+    auto comp_mesh_name = [&](const wchar_t* compName) -> std::string {
+        return short_object_name(mesh_of(obj_prop(pawn, compName)));
+    };
 
-    const uintptr_t mouthComp = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(pawn) + 0x0740);
-    if (mouthComp) out.mouthMeshName = short_object_name(*reinterpret_cast<UObject**>(mouthComp + 0x5B8));
+    if (auto* male = static_cast<bool*>(pawn->GetValuePtrByPropertyNameInChain(STR("IsPlayerMale?"))))
+        out.isMale = *male;
 
-    const uintptr_t eyebrowsComp = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(pawn) + 0x0790);
-    if (eyebrowsComp) out.eyebrowsMeshName = short_object_name(*reinterpret_cast<UObject**>(eyebrowsComp + 0x5B8));
+    out.hairMeshName   = comp_mesh_name(STR("HairMesh"));
+    out.beardMeshName  = comp_mesh_name(STR("BeardMesh"));
+    out.hairColorName  = short_object_name(obj_prop(pawn, STR("Hair Color")));
+    out.beardColorName = short_object_name(obj_prop(pawn, STR("Beard Color")));
+    out.skinColorName  = short_object_name(obj_prop(pawn, STR("SkinColor")));
 
-    const uintptr_t acc1Comp = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(pawn) + 0x0758);
-    if (acc1Comp) out.accessory1MeshName = short_object_name(*reinterpret_cast<UObject**>(acc1Comp + 0x5B8));
-    const uintptr_t acc2Comp = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(pawn) + 0x0750);
-    if (acc2Comp) out.accessory2MeshName = short_object_name(*reinterpret_cast<UObject**>(acc2Comp + 0x5B8));
-    const uintptr_t acc3Comp = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(pawn) + 0x0748);
-    if (acc3Comp) out.accessory3MeshName = short_object_name(*reinterpret_cast<UObject**>(acc3Comp + 0x5B8));
+    // Order must match sdb::PawnAppearance::bodyPartMeshNames and
+    // proxy_manager.cpp's own copy of this table exactly.
+    static const wchar_t* const kBodyPartNames[sdb::BODY_PART_COUNT] = {
+        STR("Torso"), STR("Biceps"), STR("LowerThighs"), STR("Head"), STR("Arms"),
+        STR("Feet"),  STR("LowerLegs"), STR("Legs"),     STR("Hands"),
+    };
+    for (int i = 0; i < sdb::BODY_PART_COUNT; ++i)
+        out.bodyPartMeshNames[i] = comp_mesh_name(kBodyPartNames[i]);
+
+    out.mouthMeshName      = comp_mesh_name(STR("Mouth"));
+    out.eyebrowsMeshName   = comp_mesh_name(STR("EyebrowsMesh"));
+    out.accessory1MeshName = comp_mesh_name(STR("Accessory1"));
+    out.accessory2MeshName = comp_mesh_name(STR("Accessory2"));
+    out.accessory3MeshName = comp_mesh_name(STR("Accessory3"));
 
     return out;
 }
@@ -601,8 +664,7 @@ struct RawFGameplayTag { int32_t ComparisonIndex = 0; int32_t Number = 0; };
 static uint8_t read_local_active_weapon_slot(AActor* pawn)
 {
     if (!pawn) return 0xFF;
-    const uintptr_t helper = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(pawn) + 0x700);
+    const auto helper = reinterpret_cast<uintptr_t>(obj_prop(pawn, STR("BP_JigHelperComp")));
     if (!helper) return 0xFF;
 
     auto* helperObj = reinterpret_cast<UObject*>(helper);
@@ -819,11 +881,15 @@ static sdb::Equipment read_local_equipment(AActor* pawn)
     // rather than via FindFirstOf("BP_JigHelperComp_C"), which only happened
     // to return the right instance in solo testing; with more than one
     // player in the world it could just as easily return someone else's.
-    const uintptr_t helper = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(pawn) + 0x700);
+    const auto helper = reinterpret_cast<uintptr_t>(obj_prop(pawn, STR("BP_JigHelperComp")));
     if (!helper) return eq;
 
-    const auto equipped = helper + 0xF8;
+    // FS_ServerEquippedItems ServerEquippedItems, resolved by name
+    // (2026-09-24): was +0xF8 on UE 5.3, +0x110 on 5.6. The per-slot stride
+    // table below is unchanged -- FRepItemInfo's own layout did not move.
+    auto* equippedPtr = reinterpret_cast<UObject*>(helper)->GetValuePtrByPropertyNameInChain(STR("ServerEquippedItems"));
+    if (!equippedPtr) return eq;
+    const auto equipped = reinterpret_cast<uintptr_t>(equippedPtr);
 
     for (uint8_t i = 0; i < sdb::EQUIPMENT_SLOT_COUNT; ++i) {
         const uintptr_t slot   = equipped + kSlotOffsets[i];
@@ -1103,13 +1169,20 @@ static std::vector<sdb::InventoryContainer> read_local_inventory(AActor* pawn)
 {
     std::vector<sdb::InventoryContainer> out;
 
-    const uintptr_t jigMp = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(pawn) + 0x818);
+    const auto jigMp = reinterpret_cast<uintptr_t>(obj_prop(pawn, STR("BP_JigMultiplayer")));
     if (!jigMp) return out;
 
-    // TArray<FS_ReplicatedContainerInfo> MainJigContainers @ +0xA8
-    const uintptr_t containersData = *reinterpret_cast<uintptr_t*>(jigMp + 0xA8);
-    const int32_t   containerCount = *reinterpret_cast<int32_t*>(jigMp + 0xA8 + 0x08);
+    // TArray<FS_ReplicatedContainerInfo> MainJigContainers, resolved by name
+    // (2026-09-24). Was +0xA8 on UE 5.3; it sits at +0xC0 on 5.6, and the
+    // owning class was renamed UBP_JigMultiplayer_C -> UBP_JigComponent_C
+    // (the pawn's property is still called BP_JigMultiplayer, which is why
+    // the lookup above still succeeds). Reading the old offset walked an
+    // unrelated field as a container array and crashed on the first item.
+    // TArray's own {data, count} layout is stable, so that part stays.
+    auto* containersArr = reinterpret_cast<UObject*>(jigMp)->GetValuePtrByPropertyNameInChain(STR("MainJigContainers"));
+    if (!containersArr) return out;
+    const uintptr_t containersData = *reinterpret_cast<uintptr_t*>(containersArr);
+    const int32_t   containerCount = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(containersArr) + 0x08);
     if (!containersData || containerCount <= 0) return out;
 
     constexpr size_t kContainerStride = 0x50;
@@ -1424,7 +1497,7 @@ static void send_player_lights(AActor* pawn)
 static void check_weapon_fire_edge(AActor* pawn)
 {
     if (!pawn) return;
-    auto* current = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(pawn) + 0x0930);
+    auto* current = static_cast<void*>(obj_prop(pawn, STR("CurrentFiringWeapon")));
 
     static void* s_lastCurrentFiringWeapon = nullptr;
     const bool edge = current && !s_lastCurrentFiringWeapon;
@@ -4947,8 +5020,7 @@ static void check_component_drift(const std::string& label, AActor* actor,
     // proxies don't drive this investigation.
     if (label == "local") {
         UObject* helper = nullptr;
-        if (const auto helperAddr = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(actor) + 0x700))
-            helper = reinterpret_cast<UObject*>(helperAddr);
+        helper = obj_prop(actor, STR("BP_JigHelperComp"));
         set_recent_calls_watch(reinterpret_cast<UObject*>(actor), torsoComp, legsComp, feetComp, helper);
     }
 }
@@ -5526,7 +5598,7 @@ static void check_one_gloves_flicker_component(AActor* pawn, const wchar_t* prop
     const bool ok = seh_invoke([](void* raw) {
         auto* c = static_cast<ReadCtx*>(raw);
         c->visible = *reinterpret_cast<const uint8_t*>(reinterpret_cast<uintptr_t>(c->comp) + 0x188) != 0;
-        c->meshPtr = *reinterpret_cast<const uintptr_t*>(reinterpret_cast<uintptr_t>(c->comp) + 0x5B8);
+        c->meshPtr = reinterpret_cast<uintptr_t>(obj_prop(static_cast<UObject*>(c->comp), STR("SkinnedAsset")));
     }, &ctx);
     if (!ok) return;
 
@@ -6080,7 +6152,7 @@ struct EquipRestoreRetryCtx { AActor* pawn; std::string label; };
 static void do_equip_restore_retry(void* ctxRaw)
 {
     auto* ctx = static_cast<EquipRestoreRetryCtx*>(ctxRaw);
-    const auto helper = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(ctx->pawn) + 0x700);
+    const auto helper = reinterpret_cast<uintptr_t>(obj_prop(ctx->pawn, STR("BP_JigHelperComp")));
     if (!helper) {
         debug_log("equip_restore_retry: " + ctx->label + " pawn+0x700 BP_JigHelperComp is null");
         return;
@@ -6091,8 +6163,13 @@ static void do_equip_restore_retry(void* ctxRaw)
         return;
     }
 
-    const uintptr_t repDataPtr  = *reinterpret_cast<uintptr_t*>(helper + 0xAE0);
-    const int32_t   repCount    = *reinterpret_cast<int32_t*>(helper + 0xAE0 + 0x08);
+    // RepActorsData by name (2026-09-24): was +0xAE0 on UE 5.3, +0xAF8 on 5.6.
+    // Reading the stale offset produced counts like -841077808, which this
+    // function's own "implausible count" guard caught -- but any code that
+    // trusted such a count would have iterated wild memory.
+    auto* repArr = reinterpret_cast<UObject*>(helper)->GetValuePtrByPropertyNameInChain(STR("RepActorsData"));
+    const uintptr_t repDataPtr  = repArr ? *reinterpret_cast<uintptr_t*>(repArr) : 0;
+    const int32_t   repCount    = repArr ? *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(repArr) + 0x08) : 0;
     if (!repDataPtr || repCount <= 0 || repCount > 64) {
         debug_log("equip_restore_retry: " + ctx->label + " RepActorsData empty or implausible count=" + std::to_string(repCount));
         return;
@@ -6764,8 +6841,23 @@ static void do_game_tick(bool cleanContext)
             const uint64_t last = s_lastSuppressTryUs.load(std::memory_order_relaxed);
             if (last == 0 || now - last >= 5'000'000ULL) {
                 s_lastSuppressTryUs.store(now, std::memory_order_relaxed);
-                if (suppress_zombie_spawners())
+                // 2026-09-24 bisect hatch: KillSpawnedActors destroys ~900
+                // actors in one burst, and on UE 5.6 the first crash after a
+                // save load left no mod frames on the stack -- consistent
+                // with the game touching something we freed on a later frame.
+                // Set SDB_NO_SPAWNER_SUPPRESS=1 to skip it and see whether
+                // the crash follows.
+                static const bool s_skipSuppress = [] {
+                    wchar_t buf[8];
+                    return GetEnvironmentVariableW(L"SDB_NO_SPAWNER_SUPPRESS", buf, 8) > 0 && buf[0] == L'1';
+                }();
+                if (s_skipSuppress) {
+                    debug_log("suppress_zombie_spawners: SKIPPED (SDB_NO_SPAWNER_SUPPRESS=1)");
                     s_spawnersSuppressed.store(true, std::memory_order_relaxed);
+                } else if (suppress_zombie_spawners()) {
+                    s_spawnersSuppressed.store(true, std::memory_order_relaxed);
+                }
+                debug_log("tick: step 6a done (spawner suppression)");
             }
         }
     }
@@ -6775,6 +6867,7 @@ static void do_game_tick(bool cleanContext)
     // the hook doesn't cover (see check_inventory_pickup's comment).
     check_pending_pickup(pawn);
     check_inventory_pickup(pawn);
+    debug_log("tick: step 6b done (pickup resolve)");
 
     // 7. Periodic profile revision: push live vitals/position to server every 30 s.
     const uint64_t last_prof = g_last_profile_us.load(std::memory_order_relaxed);
@@ -7456,8 +7549,10 @@ static void check_load_data_requested_hook(UObject* obj, UFunction* func)
     if (func != s_loadDataRequestedFn) return;
 
     const auto objAddr = reinterpret_cast<uintptr_t>(obj);
-    const uintptr_t repDataPtr = *reinterpret_cast<uintptr_t*>(objAddr + 0xAE0);
-    const int32_t   repCount   = *reinterpret_cast<int32_t*>(objAddr + 0xAE0 + 0x08);
+    // RepActorsData by name -- see the equip_restore_retry copy above.
+    auto* repArr2 = reinterpret_cast<UObject*>(objAddr)->GetValuePtrByPropertyNameInChain(STR("RepActorsData"));
+    const uintptr_t repDataPtr = repArr2 ? *reinterpret_cast<uintptr_t*>(repArr2) : 0;
+    const int32_t   repCount   = repArr2 ? *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(repArr2) + 0x08) : 0;
     debug_log("load_data_requested: PRE-call obj=0x" + std::to_string(objAddr) +
               " RepActorsData count=" + std::to_string(repCount) +
               " (data_ptr=" + (repDataPtr ? "set" : "NULL") + ")");
@@ -7690,15 +7785,14 @@ static void on_process_event_pre(UObject* obj, UFunction* func, void* params)
         if (last == 0 || now - last >= 1'000'000ULL) {
             s_last_drop_fn_try_us.store(now, std::memory_order_relaxed);
             if (AActor* pawn = find_local_pawn()) {
-                const uintptr_t jigMp = *reinterpret_cast<uintptr_t*>(
-                    reinterpret_cast<uintptr_t>(pawn) + 0x818);
+                const auto jigMp = reinterpret_cast<uintptr_t>(obj_prop(pawn, STR("BP_JigMultiplayer")));
                 if (jigMp) {
                     s_drop_fn = reinterpret_cast<UObject*>(jigMp)
                         ->GetFunctionByNameInChain(L"ItemDropRequest_Event_0");
                     debug_log(s_drop_fn ? "on_process_event_pre: ItemDropRequest_Event_0 resolved"
                                         : "on_process_event_pre: ItemDropRequest_Event_0 NOT FOUND on BP_JigMultiplayer");
                 } else {
-                    debug_log("on_process_event_pre: pawn+0x818 BP_JigMultiplayer is null");
+                    debug_log("on_process_event_pre: BP_JigMultiplayer property not resolved");
                 }
             } else {
                 debug_log("on_process_event_pre: find_local_pawn() returned null (drop-fn resolve)");
@@ -8785,7 +8879,10 @@ public:
         debug_log("on_unreal_init: complete, hooks registered");
     }
 
-    void on_uninstall() override
+    // Was on_uninstall(), which current UE4SS no longer declares. Teardown
+    // moves to the destructor, which UE4SS still calls through the imported
+    // virtual destructor when unloading the mod.
+    ~SDBMod() override
     {
         g_tcp.shutdown();
         g_tcp_started.store(false, std::memory_order_relaxed);

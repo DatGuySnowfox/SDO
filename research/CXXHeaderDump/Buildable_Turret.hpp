@@ -3,11 +3,11 @@
 
 class ABuildable_Turret_C : public ABuildable_TurretMASTER_C
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0480 (size: 0x8)
-    class USphereComponent* Sphere;                                                   // 0x0488 (size: 0x8)
-    float Timeline_Rotate_Alpha_AFE5B1D24D7F05708878F0A1F04778DD;                     // 0x0490 (size: 0x4)
-    TEnumAsByte<ETimelineDirection::Type> Timeline__Direction_AFE5B1D24D7F05708878F0A1F04778DD; // 0x0494 (size: 0x1)
-    class UTimelineComponent* Timeline;                                               // 0x0498 (size: 0x8)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0490 (size: 0x8)
+    class USphereComponent* Sphere;                                                   // 0x0498 (size: 0x8)
+    float Timeline_Rotate_Alpha_AFE5B1D24D7F05708878F0A1F04778DD;                     // 0x04A0 (size: 0x4)
+    TEnumAsByte<ETimelineDirection::Type> Timeline__Direction_AFE5B1D24D7F05708878F0A1F04778DD; // 0x04A4 (size: 0x1)
+    class UTimelineComponent* Timeline;                                               // 0x04A8 (size: 0x8)
 
     void Timeline__FinishedFunc();
     void Timeline__UpdateFunc();
@@ -25,6 +25,6 @@ class ABuildable_Turret_C : public ABuildable_TurretMASTER_C
     void Off();
     void BndEvt__BP_CookingStation_AIOSubject_K2Node_ComponentBoundEvent_0_OnOptimizationUpdate__DelegateSignature(bool bIsBeyondLastLayer, int32 LayerIndex, bool bIsSeen);
     void ExecuteUbergraph_Buildable_Turret(int32 EntryPoint);
-}; // Size: 0x4A0
+}; // Size: 0x4B0
 
 #endif

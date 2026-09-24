@@ -3,20 +3,20 @@
 
 class UUDS_PlayerOcclusion_C : public USceneComponent
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02A0 (size: 0x8)
-    class UUDS_OcclusionSettings_C* Occlusion Settings;                               // 0x02A8 (size: 0x8)
-    bool Force Full Occlusion;                                                        // 0x02B0 (size: 0x1)
-    bool Calculate Directional Occlusion;                                             // 0x02B1 (size: 0x1)
-    TArray<class AActor*> Ignored Actors;                                             // 0x02B8 (size: 0x10)
-    bool Hard Update;                                                                 // 0x02C8 (size: 0x1)
-    double Tick Period;                                                               // 0x02D0 (size: 0x8)
-    FVector Sample Location;                                                          // 0x02D8 (size: 0x18)
-    FUDS_PlayerOcclusion_CHard Occlusion Change Hard Occlusion Change;                // 0x02F0 (size: 0x10)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0240 (size: 0x8)
+    class UUDS_OcclusionSettings_C* Occlusion Settings;                               // 0x0248 (size: 0x8)
+    bool Force Full Occlusion;                                                        // 0x0250 (size: 0x1)
+    bool Calculate Directional Occlusion;                                             // 0x0251 (size: 0x1)
+    TArray<AActor*> Ignored Actors;                                                   // 0x0258 (size: 0x10)
+    bool Hard Update;                                                                 // 0x0268 (size: 0x1)
+    double Tick Period;                                                               // 0x0270 (size: 0x8)
+    FVector Sample Location;                                                          // 0x0278 (size: 0x18)
+    FUDS_PlayerOcclusion_CHard Occlusion Change Hard Occlusion Change;                // 0x0290 (size: 0x10)
     void Hard Occlusion Change();
-    class UUDS_OcclusionState_C* State;                                               // 0x0300 (size: 0x8)
-    TArray<class UUDS_Occlusion_Portal_C*> Portal Components;                         // 0x0308 (size: 0x10)
-    class UNiagaraComponent* DF Occlusion System;                                     // 0x0318 (size: 0x8)
-    TSoftObjectPtr<UNiagaraSystem> DF Occlusion System Asset;                         // 0x0320 (size: 0x28)
+    class UUDS_OcclusionState_C* State;                                               // 0x02A0 (size: 0x8)
+    TArray<UUDS_Occlusion_Portal_C*> Portal Components;                               // 0x02A8 (size: 0x10)
+    class UNiagaraComponent* DF Occlusion System;                                     // 0x02B8 (size: 0x8)
+    TSoftObjectPtr<class UNiagaraSystem> DF Occlusion System Asset;                   // 0x02C0 (size: 0x28)
 
     void Apply Directional Occlusion Modifiers(FLinearColor In, FLinearColor& Out);
     void Start Up GPU Distance Field System();
@@ -38,6 +38,6 @@ class UUDS_PlayerOcclusion_C : public USceneComponent
     void ReceiveEndPlay(TEnumAsByte<EEndPlayReason::Type> EndPlayReason);
     void ExecuteUbergraph_UDS_PlayerOcclusion(int32 EntryPoint);
     void Hard Occlusion Change__DelegateSignature();
-}; // Size: 0x348
+}; // Size: 0x2E8
 
 #endif

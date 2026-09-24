@@ -3,76 +3,71 @@
 
 class ABP_MasterZombie_C : public ABP_Zombie_C
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0690 (size: 0x8)
-    class UDamageComponent_C* DamageComponent;                                        // 0x0698 (size: 0x8)
-    class USD_AIComponent_C* SD_AIComponent;                                          // 0x06A0 (size: 0x8)
-    class UStaticMeshComponent* EyeRightMesh;                                         // 0x06A8 (size: 0x8)
-    class UStaticMeshComponent* EyeLeftMesh;                                          // 0x06B0 (size: 0x8)
-    class UAudioComponent* Zombie_Cue;                                                // 0x06B8 (size: 0x8)
-    class UAIOSubjectComponent* AIOSubject;                                           // 0x06C0 (size: 0x8)
-    class UCCCollisionHandlerComponent* CCCollisionHandler;                           // 0x06C8 (size: 0x8)
-    class UNavigationInvokerComponent* NavigationInvoker;                             // 0x06D0 (size: 0x8)
-    class UBP_JigMultiplayer_C* BP_JigMultiplayer;                                    // 0x06D8 (size: 0x8)
-    FName AttackSocketName;                                                           // 0x06E0 (size: 0x8)
-    TArray<class UAnimMontage*> AttackMontage;                                        // 0x06E8 (size: 0x10)
-    class USoundBase* AttackSound;                                                    // 0x06F8 (size: 0x8)
-    bool Start_Attacking;                                                             // 0x0700 (size: 0x1)
-    class USoundBase* DeathSound;                                                     // 0x0708 (size: 0x8)
-    double DamageToDo;                                                                // 0x0710 (size: 0x8)
-    bool IsDead?;                                                                     // 0x0718 (size: 0x1)
-    TEnumAsByte<Enum_AILootTables::Type> LootTable;                                   // 0x0719 (size: 0x1)
-    FText Name;                                                                       // 0x0720 (size: 0x18)
-    class AActor* CurrentActor;                                                       // 0x0738 (size: 0x8)
-    FVector InteractingActorLoc;                                                      // 0x0740 (size: 0x18)
-    double Chance for Rad Damage;                                                     // 0x0758 (size: 0x8)
-    double Radiation Damage;                                                          // 0x0760 (size: 0x8)
-    class UMaterialInstance* EyeMaterial;                                             // 0x0768 (size: 0x8)
-    TArray<class USkeletalMesh*> Meshes;                                              // 0x0770 (size: 0x10)
-    TArray<class UMaterialInstance*> Materials;                                       // 0x0780 (size: 0x10)
-    class UAnimMontage* HitAnimation;                                                 // 0x0790 (size: 0x8)
-    class UAnimMontage* ShovedAnimation;                                              // 0x0798 (size: 0x8)
-    double DamageToDo_Default;                                                        // 0x07A0 (size: 0x8)
-    double Roaming Speed;                                                             // 0x07A8 (size: 0x8)
-    double Alert Speed;                                                               // 0x07B0 (size: 0x8)
-    double Alert Speed_Default;                                                       // 0x07B8 (size: 0x8)
-    double Attack Speed;                                                              // 0x07C0 (size: 0x8)
-    bool CanCauseRadDamage?;                                                          // 0x07C8 (size: 0x1)
-    bool XpPopUpEnabled?;                                                             // 0x07C9 (size: 0x1)
-    bool OutlineEnabled;                                                              // 0x07CA (size: 0x1)
-    float DamageMultiplier;                                                           // 0x07CC (size: 0x4)
-    float SpeedMultiplier;                                                            // 0x07D0 (size: 0x4)
-    TArray<FName> Medical Effects;                                                    // 0x07D8 (size: 0x10)
-    double Chance for Bleed;                                                          // 0x07E8 (size: 0x8)
-    double Chance for Heavy Bleed;                                                    // 0x07F0 (size: 0x8)
-    double Chance for Broken Bone;                                                    // 0x07F8 (size: 0x8)
-    bool CanAttack?;                                                                  // 0x0800 (size: 0x1)
-    double HealthDeviation;                                                           // 0x0808 (size: 0x8)
-    FBP_MasterZombie_CDeathEvent DeathEvent;                                          // 0x0810 (size: 0x10)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0660 (size: 0x8)
+    class UDamageComponent_C* DamageComponent;                                        // 0x0668 (size: 0x8)
+    class USD_AIComponent_C* SD_AIComponent;                                          // 0x0670 (size: 0x8)
+    class UStaticMeshComponent* EyeRightMesh;                                         // 0x0678 (size: 0x8)
+    class UStaticMeshComponent* EyeLeftMesh;                                          // 0x0680 (size: 0x8)
+    class UAudioComponent* Zombie_Cue;                                                // 0x0688 (size: 0x8)
+    class UAIOSubjectComponent* AIOSubject;                                           // 0x0690 (size: 0x8)
+    class UNavigationInvokerComponent* NavigationInvoker;                             // 0x0698 (size: 0x8)
+    class UBP_JigComponent_C* BP_JigMultiplayer;                                      // 0x06A0 (size: 0x8)
+    double AttackDamage;                                                              // 0x06A8 (size: 0x8)
+    double Default_AttackDamage;                                                      // 0x06B0 (size: 0x8)
+    float TimeBetweenAttacksMin;                                                      // 0x06B8 (size: 0x4)
+    float TimeBetweenAttacksMax;                                                      // 0x06BC (size: 0x4)
+    double Chance for Rad Damage;                                                     // 0x06C0 (size: 0x8)
+    FName AttackSocketName;                                                           // 0x06C8 (size: 0x8)
+    TArray<FStruct_AnimPossibility> AttackMontages;                                   // 0x06D0 (size: 0x10)
+    class USoundBase* AttackSound;                                                    // 0x06E0 (size: 0x8)
+    bool StartAttacking;                                                              // 0x06E8 (size: 0x1)
+    class USoundBase* DeathSound;                                                     // 0x06F0 (size: 0x8)
+    bool CanAttack?;                                                                  // 0x06F8 (size: 0x1)
+    bool IsDead?;                                                                     // 0x06F9 (size: 0x1)
+    FText Name;                                                                       // 0x0700 (size: 0x10)
+    TEnumAsByte<Enum_AILootTables::Type> LootTable;                                   // 0x0710 (size: 0x1)
+    class AActor* CurrentActor;                                                       // 0x0718 (size: 0x8)
+    FVector InteractingActorLoc;                                                      // 0x0720 (size: 0x18)
+    double Radiation Damage;                                                          // 0x0738 (size: 0x8)
+    class UMaterialInstance* EyeMaterial;                                             // 0x0740 (size: 0x8)
+    TArray<USkeletalMesh*> Meshes;                                                    // 0x0748 (size: 0x10)
+    TArray<UMaterialInstance*> Materials;                                             // 0x0758 (size: 0x10)
+    class UAnimMontage* HitAnimation;                                                 // 0x0768 (size: 0x8)
+    class UAnimMontage* ShovedAnimation;                                              // 0x0770 (size: 0x8)
+    double RoamingMovementSpeed;                                                      // 0x0778 (size: 0x8)
+    double AlertMovementSpeed;                                                        // 0x0780 (size: 0x8)
+    double Default_AlertMovementSpeed;                                                // 0x0788 (size: 0x8)
+    double AttackMovementSpeed;                                                       // 0x0790 (size: 0x8)
+    TArray<FName> Medical Effects;                                                    // 0x0798 (size: 0x10)
+    double Chance for Bleed;                                                          // 0x07A8 (size: 0x8)
+    double Chance for Heavy Bleed;                                                    // 0x07B0 (size: 0x8)
+    double Chance for Broken Bone;                                                    // 0x07B8 (size: 0x8)
+    FBP_MasterZombie_CDeathEvent DeathEvent;                                          // 0x07C0 (size: 0x10)
     void DeathEvent(bool Headshot);
-    FString ArgumentForQuest;                                                         // 0x0820 (size: 0x10)
-    bool CanAddMarker?;                                                               // 0x0830 (size: 0x1)
-    class UWidgetComponent* Marker;                                                   // 0x0838 (size: 0x8)
-    FTimerHandle MarkerTimer;                                                         // 0x0840 (size: 0x8)
-    TArray<class TSubclassOf<AActor>> ClassesToIgnore;                                // 0x0848 (size: 0x10)
-    float TimeBetweenAttacksMin;                                                      // 0x0858 (size: 0x4)
-    float TimeBetweenAttacksMax;                                                      // 0x085C (size: 0x4)
-    double Attack Speed_Default;                                                      // 0x0860 (size: 0x8)
-    double XPMultiplier_Min;                                                          // 0x0868 (size: 0x8)
-    double XPMultiplier_Max;                                                          // 0x0870 (size: 0x8)
-    bool Is Burning?;                                                                 // 0x0878 (size: 0x1)
-    class UParticleSystemComponent* BurningEffect;                                    // 0x0880 (size: 0x8)
-    FTimerHandle BurningTimer;                                                        // 0x0888 (size: 0x8)
-    class UParticleSystemComponent* MouthFX;                                          // 0x0890 (size: 0x8)
-    class UParticleSystemComponent* ZombieMist;                                       // 0x0898 (size: 0x8)
-    FTimerHandle RadTimer;                                                            // 0x08A0 (size: 0x8)
-    bool Looted;                                                                      // 0x08A8 (size: 0x1)
+    class UWidgetComponent* Marker;                                                   // 0x07D0 (size: 0x8)
+    FTimerHandle MarkerTimer;                                                         // 0x07D8 (size: 0x8)
+    TArray<TSubclassOf<class AActor>> ClassesToIgnore;                                // 0x07E0 (size: 0x10)
+    double Default_AttackMovementSpeed;                                               // 0x07F0 (size: 0x8)
+    bool Crawler?;                                                                    // 0x07F8 (size: 0x1)
+    bool IsBurning;                                                                   // 0x07F9 (size: 0x1)
+    class UParticleSystemComponent* BurningEffect;                                    // 0x0800 (size: 0x8)
+    FTimerHandle BurningTimer;                                                        // 0x0808 (size: 0x8)
+    class UParticleSystemComponent* MouthFX;                                          // 0x0810 (size: 0x8)
+    class UParticleSystemComponent* ZombieMist;                                       // 0x0818 (size: 0x8)
+    bool Looted?;                                                                     // 0x0820 (size: 0x1)
+    double ChanceForInfection;                                                        // 0x0828 (size: 0x8)
+    FTimerHandle ArchetypeTimer;                                                      // 0x0830 (size: 0x8)
+    double TotalWeight;                                                               // 0x0838 (size: 0x8)
+    bool CanThisZombieBeACrawler;                                                     // 0x0840 (size: 0x1)
 
+    void CanAIAttack?(bool& CanAttack?);
+    void CallAttackEvent(bool& Attack?);
+    void GetMovementSpeed(TEnumAsByte<Enum_ZombieMovementType::Type> MovementType, double& Speed);
     void IsAIBurning?(bool& IsBurning?);
     void GetMarker(class UTexture2D*& Texture, FLinearColor& Color, double& MarkerOffset);
     void CanAddMarkerToAI?(bool& CanAdd?);
     void GetMesh(class USkeletalMeshComponent*& Mesh);
     void CanStompAI?(bool& Stomp?);
-    void GetMovementSpeeds(double& RoamingSpeed, double& AlertSpeed, double& AttackSpeed);
     void AIHealthBarInfo(bool& Visible?, FString& Name, bool& Boss?);
     void IsObjectDamageable?(bool& Damageable?);
     void JigMP_OnMainContainerItemRemoved(FGuid FromContainerUID, FGuid ItemUID, FName ContainerName, FRepItemInfo ItemRemovedInfo, bool& Result);
@@ -94,14 +89,17 @@ class ABP_MasterZombie_C : public ABP_Zombie_C
     void Actor Attack Target(class AActor*& Attack Target);
     void ActorDead?(bool& Dead?);
     void GetMainSceneComp(class USceneComponent*& Comp);
-    void GetInteractOptions(TMap<class FGameplayTag, class FText>& Options);
+    void GetInteractOptions(TMap<FGameplayTag, FText>& Options);
     void OnRequestServerInteract(class AActor* Actor, FGameplayTag Option, FS_JigPayload Payload, bool& Result);
     void SetPickupCount(int32 NewCount, bool& Result);
     void GetJigMultiplayerComponent(class UActorComponent*& JigComp);
-    void GetItemInfo(class UJigsawItem_DataAsset_C*& Info, int32& Count, FS_RandomStatsConfig& RandomStatsConfig, TMap<class FString, class FString>& CustomData);
+    void GetItemInfo(class UJigsawItem_DataAsset_C*& Info, int32& Count, FS_RandomStatsConfig& RandomStatsConfig, TMap<FString, FString>& CustomData);
     void JigCanInteract(bool& Result);
     void JigSetCanInteract(bool CanInteract, bool EnablePhysics, bool& Result);
+    void GetSumOfAnimWeights();
+    void PlayAttackMontage();
     void AttackTrace();
+    void BiteTrace();
     void RightArmTrace();
     void LeftArmTrace();
     void Death(class AActor* Actor, bool Headshot);
@@ -117,6 +115,16 @@ class ABP_MasterZombie_C : public ABP_Zombie_C
     void OnInterrupted_CC0DAA454A9DD390ABC0838BEAEB95EC(FName NotifyName);
     void OnBlendOut_CC0DAA454A9DD390ABC0838BEAEB95EC(FName NotifyName);
     void OnCompleted_CC0DAA454A9DD390ABC0838BEAEB95EC(FName NotifyName);
+    void OnNotifyEnd_F5C61B7B48D7DC03F0E218A660E5C22E(FName NotifyName);
+    void OnNotifyBegin_F5C61B7B48D7DC03F0E218A660E5C22E(FName NotifyName);
+    void OnInterrupted_F5C61B7B48D7DC03F0E218A660E5C22E(FName NotifyName);
+    void OnBlendOut_F5C61B7B48D7DC03F0E218A660E5C22E(FName NotifyName);
+    void OnCompleted_F5C61B7B48D7DC03F0E218A660E5C22E(FName NotifyName);
+    void OnNotifyEnd_FCD781E9449B6E7521D6089F91C00CBD(FName NotifyName);
+    void OnNotifyBegin_FCD781E9449B6E7521D6089F91C00CBD(FName NotifyName);
+    void OnInterrupted_FCD781E9449B6E7521D6089F91C00CBD(FName NotifyName);
+    void OnBlendOut_FCD781E9449B6E7521D6089F91C00CBD(FName NotifyName);
+    void OnCompleted_FCD781E9449B6E7521D6089F91C00CBD(FName NotifyName);
     void OverrideName(FString Name);
     void Damage_Object(double Damage, class AActor* Damage Causer, class AController* Event Instigator);
     void AI Dead();
@@ -138,22 +146,19 @@ class ABP_MasterZombie_C : public ABP_Zombie_C
     void SetInteractOption(FGameplayTag Option);
     void PickupBuildFromGround();
     void ReceiveBeginPlay();
-    void GetQuestArgument(FString Argument);
     void AddMarker(class UWidgetComponent* Marker);
     void Event_Marker();
     void SetBurning(bool Burning?, double Dmg, class AActor* Actor);
     void Event_Fire();
     void StopBurning();
     void HitByVehicle(double Speed, FVector Direction);
+    void ChangeMovementSpeed(TEnumAsByte<Enum_ZombieMovementType::Type> MovementType);
     void OnExecuteInteractEnded();
     void OnExecuteInteract(class AActor* InteractingActor, FGameplayTag Option);
-    void OnBeginInteract(class AActor* InteractingActor, const TMap<class FGameplayTag, class FText> Options);
+    void OnBeginInteract(class AActor* InteractingActor, const TMap<FGameplayTag, FText> Options);
     void OnEndInteract();
+    void Event_EyesCallback(bool NewValue);
     void Event_HealthMultiplier(float NewValue);
-    void Event_SpeedMultiplier(float NewValue);
-    void Event_DamageMultiplier(float NewValue);
-    void Outline(bool NewValue);
-    void Event_XP(bool NewValue);
     void BndEvt__BP_Zombie_Master_AIOSubject_K2Node_ComponentBoundEvent_2_OnOptimizationUpdate__DelegateSignature(bool bIsBeyondLastLayer, int32 LayerIndex, bool bIsSeen);
     void Event_Despawn();
     void BndEvt__BP_MasterZombie_DamageComponent_K2Node_ComponentBoundEvent_1_Death__DelegateSignature(class AActor* DmgCauser, bool Headshot);
@@ -169,9 +174,13 @@ class ABP_MasterZombie_C : public ABP_Zombie_C
     void Event_Rad();
     void Archetype_UltraRadiated();
     void Archetype_ToughenedCrawler();
-    void Archetype_Bomber();
+    void GrenadierDeath(bool Headshot);
+    void Event_Grenadier();
+    void Archetype_Grenadier();
+    void Event_Screamer();
+    void Archetype_Screamer();
     void ExecuteUbergraph_BP_MasterZombie(int32 EntryPoint);
     void DeathEvent__DelegateSignature(bool Headshot);
-}; // Size: 0x8A9
+}; // Size: 0x841
 
 #endif

@@ -88,6 +88,14 @@ enum class EFontLoadingPolicy {
     EFontLoadingPolicy_MAX = 3,
 };
 
+enum class EFontRasterizationMode {
+    Bitmap = 0,
+    Msdf = 1,
+    Sdf = 2,
+    SdfApproximation = 3,
+    EFontRasterizationMode_MAX = 4,
+};
+
 enum EHorizontalAlignment {
     HAlign_Fill = 0,
     HAlign_Left = 1,
@@ -273,6 +281,18 @@ enum class ESlateParentWindowSearchMethod {
     ESlateParentWindowSearchMethod_MAX = 2,
 };
 
+enum class ESlatePostRT {
+    None = 0,
+    ESlatePostRT_0 = 1,
+    ESlatePostRT_1 = 2,
+    ESlatePostRT_2 = 4,
+    ESlatePostRT_3 = 8,
+    ESlatePostRT_4 = 16,
+    All = 31,
+    Num = 5,
+    ESlatePostRT_MAX = 32,
+};
+
 enum class EStyleColor {
     Black = 0,
     Background = 1,
@@ -351,7 +371,9 @@ namespace ETextCommit {
 enum class ETextOverflowPolicy {
     Clip = 0,
     Ellipsis = 1,
-    ETextOverflowPolicy_MAX = 2,
+    MultilineEllipsis = 2,
+    MiddleEllipsis = 3,
+    ETextOverflowPolicy_MAX = 4,
 };
 
 enum class ETextShapingMethod {

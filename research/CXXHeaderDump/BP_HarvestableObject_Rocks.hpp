@@ -3,7 +3,7 @@
 
 class ABP_HarvestableObject_Rocks_C : public ABP_HarvestableObject_C
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02D8 (size: 0x8)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02E8 (size: 0x8)
 
     void SetMaxHits();
     void UserConstructionScript();
@@ -12,6 +12,6 @@ class ABP_HarvestableObject_Rocks_C : public ABP_HarvestableObject_C
     void Svr_PlaySound(FVector Location);
     void Svr_SetMaxHits();
     void ExecuteUbergraph_BP_HarvestableObject_Rocks(int32 EntryPoint);
-}; // Size: 0x2E0
+}; // Size: 0x2F0
 
 #endif

@@ -3,13 +3,13 @@
 
 class ABP_PoliceStationGarageDoor_C : public ABP_MasterDoor_C
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02A0 (size: 0x8)
-    class USkeletalMeshComponent* Door;                                               // 0x02A8 (size: 0x8)
-    class UAIOSubjectComponent* AIOSubject;                                           // 0x02B0 (size: 0x8)
-    class UArrowComponent* Arrow;                                                     // 0x02B8 (size: 0x8)
-    bool Open?;                                                                       // 0x02C0 (size: 0x1)
-    bool DoorOpening?;                                                                // 0x02C1 (size: 0x1)
-    bool Powered?;                                                                    // 0x02C2 (size: 0x1)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02B0 (size: 0x8)
+    class USkeletalMeshComponent* Door;                                               // 0x02B8 (size: 0x8)
+    class UAIOSubjectComponent* AIOSubject;                                           // 0x02C0 (size: 0x8)
+    class UArrowComponent* Arrow;                                                     // 0x02C8 (size: 0x8)
+    bool Open?;                                                                       // 0x02D0 (size: 0x1)
+    bool DoorOpening?;                                                                // 0x02D1 (size: 0x1)
+    bool Powered?;                                                                    // 0x02D2 (size: 0x1)
 
     void OnNotifyEnd_2203FE894E82A21CC5DE86828FE291C5(FName NotifyName);
     void OnNotifyBegin_2203FE894E82A21CC5DE86828FE291C5(FName NotifyName);
@@ -28,6 +28,6 @@ class ABP_PoliceStationGarageDoor_C : public ABP_MasterDoor_C
     void Event_OpenDoor();
     void BndEvt__BP_CookingStation_AIOSubject_K2Node_ComponentBoundEvent_0_OnOptimizationUpdate__DelegateSignature(bool bIsBeyondLastLayer, int32 LayerIndex, bool bIsSeen);
     void ExecuteUbergraph_BP_PoliceStationGarageDoor(int32 EntryPoint);
-}; // Size: 0x2C3
+}; // Size: 0x2D3
 
 #endif

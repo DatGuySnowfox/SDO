@@ -182,14 +182,17 @@ $lines = @($lines | ForEach-Object {
     $_
 })
 
-# Enable ours.
+# Ours is enabled via enabled.txt (created above), NOT via mods.txt.
+#
+# UE4SS runs both mechanisms in sequence: mods.txt load order first, then a
+# sweep for enabled.txt in any mod folder not already started. Listing the mod
+# in mods.txt as `: 1` *and* giving it an enabled.txt means it can be started
+# twice, which is not something a C++ mod's global state survives. Force the
+# mods.txt entry to 0 so exactly one mechanism is live.
 $ourMod = 'SurrounDeadBridge'
-$matched = $false
 $lines = @($lines | ForEach-Object {
-    if ($_ -match "^\s*$([regex]::Escape($ourMod))\s*:") { $matched = $true; "$ourMod : 1" }
-    else { $_ }
+    if ($_ -match "^\s*$([regex]::Escape($ourMod))\s*:") { "$ourMod : 0" } else { $_ }
 })
-if (-not $matched) { $lines += "$ourMod : 1" }
 
 $lines | Set-Content -LiteralPath $modsTxt -Encoding ASCII
 Write-Host "`nMods.txt updated:"

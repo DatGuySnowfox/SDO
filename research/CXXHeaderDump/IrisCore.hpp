@@ -28,6 +28,7 @@ struct FDataStreamDefinition
     UClass* Class;                                                                    // 0x0010 (size: 0x8)
     EDataStreamSendStatus DefaultSendStatus;                                          // 0x0018 (size: 0x1)
     bool bAutoCreate;                                                                 // 0x0019 (size: 0x1)
+    bool bDynamicCreate;                                                              // 0x001A (size: 0x1)
 
 }; // Size: 0x20
 
@@ -124,6 +125,12 @@ struct FGuidNetSerializerConfig : public FNetSerializerConfig
 {
 }; // Size: 0x10
 
+struct FInstancedStructNetSerializerConfig : public FNetSerializerConfig
+{
+    TArray<TSoftObjectPtr<class UScriptStruct>> SupportedTypes;                       // 0x0010 (size: 0x10)
+
+}; // Size: 0x168
+
 struct FInt16RangeNetSerializerConfig : public FNetSerializerConfig
 {
     int16 LowerBound;                                                                 // 0x0010 (size: 0x2)
@@ -171,9 +178,13 @@ struct FIrisFastArraySerializer : public FFastArraySerializer
 struct FLastResortPropertyNetSerializerConfig : public FNetSerializerConfig
 {
     TFieldPath<FProperty> Property;                                                   // 0x0010 (size: 0x20)
-    uint32 MaxAllowedObjectReferences;                                                // 0x0030 (size: 0x4)
+    bool bExcludeFromDefaultStateHash;                                                // 0x0030 (size: 0x1)
 
 }; // Size: 0x38
+
+struct FNameAsNetTokenNetSerializerConfig : public FNetSerializerConfig
+{
+}; // Size: 0x10
 
 struct FNameNetSerializerConfig : public FNetSerializerConfig
 {
@@ -192,6 +203,13 @@ struct FNetObjectFilterDefinition
     FName ConfigClassName;                                                            // 0x0010 (size: 0x8)
 
 }; // Size: 0x18
+
+struct FNetObjectGridFilterProfile
+{
+    FName FilterProfileName;                                                          // 0x0000 (size: 0x8)
+    uint16 FrameCountBeforeCulling;                                                   // 0x0008 (size: 0x2)
+
+}; // Size: 0xC
 
 struct FNetObjectPrioritizerDefinition
 {
@@ -219,6 +237,13 @@ struct FNetSerializerConfig
 {
 }; // Size: 0x10
 
+struct FNetTokenStoreTypeIdPair
+{
+    FString StoreTypeName;                                                            // 0x0000 (size: 0x10)
+    uint32 TypeID;                                                                    // 0x0010 (size: 0x4)
+
+}; // Size: 0x18
+
 struct FNopNetSerializerConfig : public FNetSerializerConfig
 {
 }; // Size: 0x10
@@ -226,6 +251,13 @@ struct FNopNetSerializerConfig : public FNetSerializerConfig
 struct FObjectNetSerializerConfig : public FNetSerializerConfig
 {
 }; // Size: 0x10
+
+struct FObjectReplicatedBridgeCriticalClassConfig
+{
+    FName ClassName;                                                                  // 0x0000 (size: 0x8)
+    bool bDisconnectOnProtocolMismatch;                                               // 0x0008 (size: 0x1)
+
+}; // Size: 0xC
 
 struct FObjectReplicationBridgeDeltaCompressionConfig
 {
@@ -238,8 +270,10 @@ struct FObjectReplicationBridgeFilterConfig
 {
     FName ClassName;                                                                  // 0x0000 (size: 0x8)
     FName DynamicFilterName;                                                          // 0x0008 (size: 0x8)
+    FName FilterProfile;                                                              // 0x0010 (size: 0x8)
+    bool bForceEnableOnAllInstances;                                                  // 0x0018 (size: 0x1)
 
-}; // Size: 0x10
+}; // Size: 0x1C
 
 struct FObjectReplicationBridgePollConfig
 {
@@ -256,6 +290,21 @@ struct FObjectReplicationBridgePrioritizerConfig
     bool bForceEnableOnAllInstances;                                                  // 0x0010 (size: 0x1)
 
 }; // Size: 0x14
+
+struct FObjectReplicationBridgeTypeStatsConfig
+{
+    FName ClassName;                                                                  // 0x0000 (size: 0x8)
+    FName TypeStatsName;                                                              // 0x0008 (size: 0x8)
+    bool bIncludeInMinimalCSVStats;                                                   // 0x0010 (size: 0x1)
+
+}; // Size: 0x14
+
+struct FObjectScopeHysteresisProfile
+{
+    FName FilterProfileName;                                                          // 0x0000 (size: 0x8)
+    uint8 HysteresisFrameCount;                                                       // 0x0008 (size: 0x1)
+
+}; // Size: 0xC
 
 struct FPackedInt32NetSerializerConfig : public FNetSerializerConfig
 {
@@ -280,6 +329,32 @@ struct FPolymorphicArrayStructNetSerializerConfig : public FPolymorphicStructNet
 struct FPolymorphicStructNetSerializerConfig : public FNetSerializerConfig
 {
 }; // Size: 0x28
+
+struct FRemoteObjectReferenceNetSerializationHelper
+{
+    FRemoteObjectId ObjectId;                                                         // 0x0000 (size: 0x8)
+    FRemoteServerId ServerId;                                                         // 0x0008 (size: 0x4)
+    FRemoteObjectPathName Path;                                                       // 0x0010 (size: 0x20)
+
+}; // Size: 0x30
+
+struct FRemoteObjectReferenceNetSerializerConfig : public FNetSerializerConfig
+{
+}; // Size: 0x10
+
+struct FReplicationStateDescriptorClassPushModelConfig
+{
+    FName ClassName;                                                                  // 0x0000 (size: 0x8)
+
+}; // Size: 0x8
+
+struct FRotator3dNetSerializerConfig : public FNetSerializerConfig
+{
+}; // Size: 0x10
+
+struct FRotator3fNetSerializerConfig : public FNetSerializerConfig
+{
+}; // Size: 0x10
 
 struct FRotatorAsByteNetSerializerConfig : public FNetSerializerConfig
 {
@@ -408,9 +483,23 @@ struct FWeakObjectNetSerializerConfig : public FNetSerializerConfig
 {
 }; // Size: 0x10
 
-class UDataStream : public UObject
+class UAlwaysRelevantNetObjectFilter : public UNetObjectFilter
+{
+}; // Size: 0x60
+
+class UAlwaysRelevantNetObjectFilterConfig : public UNetObjectFilterConfig
 {
 }; // Size: 0x28
+
+class UChunkedDataStream : public UDataStream
+{
+    class UIrisObjectReferencePackageMap* PackageMap;                                 // 0x0060 (size: 0x8)
+
+}; // Size: 0x68
+
+class UDataStream : public UObject
+{
+}; // Size: 0x50
 
 class UDataStreamDefinitions : public UObject
 {
@@ -420,19 +509,40 @@ class UDataStreamDefinitions : public UObject
 
 class UDataStreamManager : public UDataStream
 {
-}; // Size: 0x30
+}; // Size: 0x58
+
+class UFieldOfViewNetObjectPrioritizer : public ULocationBasedNetObjectPrioritizer
+{
+}; // Size: 0x68
+
+class UFieldOfViewNetObjectPrioritizerConfig : public UNetObjectPrioritizerConfig
+{
+    float InnerSphereRadius;                                                          // 0x0028 (size: 0x4)
+    float InnerSpherePriority;                                                        // 0x002C (size: 0x4)
+    float OuterSphereRadius;                                                          // 0x0030 (size: 0x4)
+    float OuterSpherePriority;                                                        // 0x0034 (size: 0x4)
+    float ConeFieldOfViewDegrees;                                                     // 0x0038 (size: 0x4)
+    float InnerConeLength;                                                            // 0x003C (size: 0x4)
+    float ConeLength;                                                                 // 0x0040 (size: 0x4)
+    float MinConePriority;                                                            // 0x0044 (size: 0x4)
+    float MaxConePriority;                                                            // 0x0048 (size: 0x4)
+    float LineOfSightWidth;                                                           // 0x004C (size: 0x4)
+    float LineOfSightPriority;                                                        // 0x0050 (size: 0x4)
+    float OutsidePriority;                                                            // 0x0054 (size: 0x4)
+
+}; // Size: 0x58
 
 class UFilterOutNetObjectFilter : public UNetObjectFilter
 {
-}; // Size: 0x50
+}; // Size: 0x60
 
 class UFilterOutNetObjectFilterConfig : public UNetObjectFilterConfig
 {
-}; // Size: 0x30
+}; // Size: 0x28
 
 class UIrisObjectReferencePackageMap : public UPackageMap
 {
-}; // Size: 0xE8
+}; // Size: 0x100
 
 class ULocationBasedNetObjectPrioritizer : public UNetObjectPrioritizer
 {
@@ -454,13 +564,13 @@ class UNetObjectBlobHandler : public UNetBlobHandler
 
 class UNetObjectConnectionFilter : public UNetObjectFilter
 {
-}; // Size: 0xA0
+}; // Size: 0xA8
 
 class UNetObjectConnectionFilterConfig : public UNetObjectFilterConfig
 {
-    uint16 MaxObjectCount;                                                            // 0x0030 (size: 0x2)
+    uint16 MaxObjectCount;                                                            // 0x0028 (size: 0x2)
 
-}; // Size: 0x38
+}; // Size: 0x30
 
 class UNetObjectCountLimiter : public UNetObjectPrioritizer
 {
@@ -476,15 +586,17 @@ class UNetObjectCountLimiterConfig : public UNetObjectPrioritizerConfig
 
 }; // Size: 0x40
 
+class UNetObjectFactory : public UObject
+{
+}; // Size: 0x38
+
 class UNetObjectFilter : public UObject
 {
-}; // Size: 0x50
+}; // Size: 0x60
 
 class UNetObjectFilterConfig : public UObject
 {
-    ENetFilterType FilterType;                                                        // 0x0028 (size: 0x1)
-
-}; // Size: 0x30
+}; // Size: 0x28
 
 class UNetObjectFilterDefinitions : public UObject
 {
@@ -494,27 +606,23 @@ class UNetObjectFilterDefinitions : public UObject
 
 class UNetObjectGridFilter : public UNetObjectFilter
 {
-}; // Size: 0xF8
+}; // Size: 0x188
 
 class UNetObjectGridFilterConfig : public UNetObjectFilterConfig
 {
-    uint32 ViewPosRelevancyFrameCount;                                                // 0x0030 (size: 0x4)
-    float CellSizeX;                                                                  // 0x0034 (size: 0x4)
-    float CellSizeY;                                                                  // 0x0038 (size: 0x4)
-    float MaxCullDistance;                                                            // 0x003C (size: 0x4)
-    float DefaultCullDistance;                                                        // 0x0040 (size: 0x4)
-    FVector MinPos;                                                                   // 0x0048 (size: 0x18)
-    FVector MaxPos;                                                                   // 0x0060 (size: 0x18)
+    uint32 ViewPosRelevancyFrameCount;                                                // 0x0028 (size: 0x4)
+    uint16 DefaultFrameCountBeforeCulling;                                            // 0x002C (size: 0x2)
+    float CellSizeX;                                                                  // 0x0030 (size: 0x4)
+    float CellSizeY;                                                                  // 0x0034 (size: 0x4)
+    float DefaultCullDistance;                                                        // 0x0038 (size: 0x4)
+    bool bUseExactCullDistance;                                                       // 0x003C (size: 0x1)
+    TArray<FNetObjectGridFilterProfile> FilterProfiles;                               // 0x0040 (size: 0x10)
 
-}; // Size: 0x78
-
-class UNetObjectGridFragmentLocFilter : public UNetObjectGridFilter
-{
-}; // Size: 0x148
+}; // Size: 0x50
 
 class UNetObjectGridWorldLocFilter : public UNetObjectGridFilter
 {
-}; // Size: 0x100
+}; // Size: 0x190
 
 class UNetObjectPrioritizer : public UObject
 {
@@ -536,19 +644,27 @@ class UNetRPCHandler : public UNetBlobHandler
 
 class UNetTokenDataStream : public UDataStream
 {
-}; // Size: 0x78
+}; // Size: 0xA0
+
+class UNetTokenTypeIdConfig : public UObject
+{
+    TArray<FNetTokenStoreTypeIdPair> ReservedTypeIds;                                 // 0x0028 (size: 0x10)
+
+}; // Size: 0x38
 
 class UNopNetObjectFilter : public UNetObjectFilter
 {
-}; // Size: 0x50
+}; // Size: 0x60
 
 class UNopNetObjectFilterConfig : public UNetObjectFilterConfig
 {
-}; // Size: 0x30
+}; // Size: 0x28
 
 class UObjectReplicationBridge : public UReplicationBridge
 {
-}; // Size: 0x4B0
+    TArray<UNetObjectFactory*> NetObjectFactories;                                    // 0x0580 (size: 0x10)
+
+}; // Size: 0x640
 
 class UObjectReplicationBridgeConfig : public UObject
 {
@@ -556,34 +672,51 @@ class UObjectReplicationBridgeConfig : public UObject
     TArray<FObjectReplicationBridgeFilterConfig> FilterConfigs;                       // 0x0038 (size: 0x10)
     TArray<FObjectReplicationBridgePrioritizerConfig> PrioritizerConfigs;             // 0x0048 (size: 0x10)
     TArray<FObjectReplicationBridgeDeltaCompressionConfig> DeltaCompressionConfigs;   // 0x0058 (size: 0x10)
-    FName DefaultSpatialFilterName;                                                   // 0x0068 (size: 0x8)
-    FName RequiredNetDriverChannelClassName;                                          // 0x0070 (size: 0x8)
+    TArray<FObjectReplicatedBridgeCriticalClassConfig> CriticalClassConfigs;          // 0x0068 (size: 0x10)
+    bool bAllClassesCritical;                                                         // 0x0078 (size: 0x1)
+    TArray<FObjectReplicationBridgeTypeStatsConfig> TypeStatsConfigs;                 // 0x0080 (size: 0x10)
+    FName DefaultSpatialFilterName;                                                   // 0x0090 (size: 0x8)
+    FName RequiredNetDriverChannelClassName;                                          // 0x0098 (size: 0x8)
+    TArray<FName> CriticalActorClasses;                                               // 0x00A0 (size: 0x10)
 
-}; // Size: 0x78
+}; // Size: 0xB0
 
 class UPartialNetObjectAttachmentHandler : public USequentialPartialNetBlobHandler
 {
-}; // Size: 0x48
+}; // Size: 0x150
 
 class UPartialNetObjectAttachmentHandlerConfig : public USequentialPartialNetBlobHandlerConfig
 {
     uint32 BitCountSplitThreshold;                                                    // 0x0030 (size: 0x4)
+    uint32 ClientUnreliableBitCountSplitThreshold;                                    // 0x0034 (size: 0x4)
+    uint32 ServerUnreliableBitCountSplitThreshold;                                    // 0x0038 (size: 0x4)
 
-}; // Size: 0x38
+}; // Size: 0x40
 
 class UReplicationBridge : public UObject
 {
-}; // Size: 0x110
+}; // Size: 0x168
 
 class UReplicationDataStream : public UDataStream
 {
-}; // Size: 0x38
+}; // Size: 0x60
+
+class UReplicationFilteringConfig : public UObject
+{
+    bool bEnableObjectScopeHysteresis;                                                // 0x0028 (size: 0x1)
+    uint8 DefaultHysteresisFrameCount;                                                // 0x0029 (size: 0x1)
+    uint8 HysteresisUpdateConnectionThrottling;                                       // 0x002A (size: 0x1)
+    TArray<FObjectScopeHysteresisProfile> HysteresisProfiles;                         // 0x0030 (size: 0x10)
+
+}; // Size: 0x40
 
 class UReplicationStateDescriptorConfig : public UObject
 {
     TArray<FSupportsStructNetSerializerConfig> SupportsStructNetSerializerList;       // 0x0028 (size: 0x10)
+    TArray<FReplicationStateDescriptorClassPushModelConfig> EnsureFullyPushModelClassNames; // 0x0038 (size: 0x10)
+    bool bEnsureAllClassesAreFullyPushModel;                                          // 0x0048 (size: 0x1)
 
-}; // Size: 0x38
+}; // Size: 0x50
 
 class UReplicationSystem : public UObject
 {
@@ -625,5 +758,13 @@ class USphereWithOwnerBoostNetObjectPrioritizerConfig : public USphereNetObjectP
     float OwnerPriorityBoost;                                                         // 0x0040 (size: 0x4)
 
 }; // Size: 0x48
+
+class UWorldLocationsConfig : public UObject
+{
+    FVector MinPos;                                                                   // 0x0028 (size: 0x18)
+    FVector MaxPos;                                                                   // 0x0040 (size: 0x18)
+    float MaxNetCullDistance;                                                         // 0x0058 (size: 0x4)
+
+}; // Size: 0x60
 
 #endif

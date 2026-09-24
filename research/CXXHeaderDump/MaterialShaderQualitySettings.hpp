@@ -18,7 +18,7 @@ struct FMaterialQualityOverrides
 
 class UMaterialShaderQualitySettings : public UObject
 {
-    TMap<class FName, class UShaderPlatformQualitySettings*> ForwardSettingMap;       // 0x0028 (size: 0x50)
+    TMap<FName, UShaderPlatformQualitySettings*> ForwardSettingMap;                   // 0x0028 (size: 0x50)
 
 }; // Size: 0x78
 

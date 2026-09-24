@@ -66,7 +66,16 @@ enum class EMusicalNoteName {
     EMusicalNoteName_MAX = 12,
 };
 
-enum ESourceManagerRenderThreadPhase {
+enum class ERequiredSubmixes {
+    Main = 0,
+    BaseDefault = 1,
+    Reverb = 2,
+    EQ = 3,
+    Count = 4,
+    ERequiredSubmixes_MAX = 5,
+};
+
+enum class ESourceManagerRenderThreadPhase {
     Begin = 0,
     PumpMpscCmds = 1,
     PumpCmds = 2,

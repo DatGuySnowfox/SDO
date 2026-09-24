@@ -5,6 +5,7 @@ struct FRepItemInfo
 {
     class UJigsawItem_DataAsset_C* ItemID_28_01CA27D84AF7D1014D9E2E83894C1848;        // 0x0000 (size: 0x8)
     int32 Count_8_DD79AF2A46126A338C8DCCB4616D91CD;                                   // 0x0008 (size: 0x4)
+    bool DoNotConsumeItemOnCraft?_42_6F1124D84CBF144157D75BAE1F7DB685;                // 0x000C (size: 0x1)
     FVector2D ItemVec_13_4DB12E4E4F80730BD25ACFA6FA51AD0A;                            // 0x0010 (size: 0x10)
     double Weight_16_C6B7568A4E062D2AE81209916A32B4EB;                                // 0x0020 (size: 0x8)
     double Price_19_FEFE0D2A4561BAF04CE37D9BAE1D6EF7;                                 // 0x0028 (size: 0x8)

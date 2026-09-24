@@ -22,8 +22,9 @@ enum class ELoudnessCurveTypeEnum {
     B = 1,
     C = 2,
     D = 3,
-    None = 4,
-    ELoudnessCurveTypeEnum_MAX = 5,
+    K = 4,
+    None = 5,
+    ELoudnessCurveTypeEnum_MAX = 6,
 };
 
 enum class ELoudnessNRTCurveTypeEnum {
@@ -31,8 +32,9 @@ enum class ELoudnessNRTCurveTypeEnum {
     B = 1,
     C = 2,
     D = 3,
-    None = 4,
-    ELoudnessNRTCurveTypeEnum_MAX = 5,
+    K = 4,
+    None = 5,
+    ELoudnessNRTCurveTypeEnum_MAX = 6,
 };
 
 enum class EMeterPeakType {

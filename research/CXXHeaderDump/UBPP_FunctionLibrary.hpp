@@ -4,13 +4,13 @@
 class UUBPP_FunctionLibrary_C : public UBlueprintFunctionLibrary
 {
 
-    void Server Travel(const TSoftObjectPtr<UWorld> Level, class UObject* __WorldContext);
+    void Server Travel(const TSoftObjectPtr<class UWorld> Level, class UObject* __WorldContext);
     void Random Point In Hollow Sphere(FVector Origin Vector, double Outer Radius, double Inner Radius, class UObject* __WorldContext, FVector& Random Point);
     void Get Nearest Sphere Point(FVector Point, FVector Sphere Origin, double Sphere Radius, class UObject* __WorldContext, FVector& Return value);
     void Is Sphere Completely In Sphere(FVector Point (Sphere), double Point Radius, FVector Sphere Origin, double Sphere Radius, class UObject* __WorldContext, bool& Return value);
     void Is Sphere Touching Sphere(FVector Sphere 1, double Radius 1, FVector Sphere 2, double Radius 2, class UObject* __WorldContext, bool& Return value);
     void Is Point In Sphere(FVector Point, FVector Sphere Origin, double Sphere Radius, class UObject* __WorldContext, bool& Return value);
-    void Object Array To Display Name Array(TArray<class UObject*>& Input Object, class UObject* __WorldContext, TArray<FString>& Output Display Name);
+    void Object Array To Display Name Array(TArray<UObject*>& Input Object, class UObject* __WorldContext, TArray<FString>& Output Display Name);
     void Get Trace End (Hit)(FHitResult In Hit Result, class UObject* __WorldContext, FVector& TraceEnd);
     void Get Trace Start (Hit)(FHitResult In Hit Result, class UObject* __WorldContext, FVector& TraceStart);
     void Get Face Index (Hit)(FHitResult In Hit Result, class UObject* __WorldContext, int32& FaceIndex);
@@ -28,9 +28,9 @@ class UUBPP_FunctionLibrary_C : public UBlueprintFunctionLibrary
     void Get Time (Hit)(FHitResult In Hit Result, class UObject* __WorldContext, double& Time);
     void Get Initial Overlap (Hit)(FHitResult In Hit Result, class UObject* __WorldContext, bool& Initial Overlap);
     void Get Is Blocking Hit (Hit)(FHitResult In Hit Result, class UObject* __WorldContext, bool& Blocking Hit);
-    void Actor Array To Scale Array(TArray<class AActor*>& Input Actor, class UObject* __WorldContext, TArray<FVector>& Output Scales);
-    void Actor Array To Transform Array(TArray<class AActor*>& Input Actor, class UObject* __WorldContext, TArray<FTransform>& Output Transform);
-    void Actor Array To Rotator Array(TArray<class AActor*>& Input Actor, class UObject* __WorldContext, TArray<FRotator>& Output Rotator);
+    void Actor Array To Scale Array(TArray<AActor*>& Input Actor, class UObject* __WorldContext, TArray<FVector>& Output Scales);
+    void Actor Array To Transform Array(TArray<AActor*>& Input Actor, class UObject* __WorldContext, TArray<FTransform>& Output Transform);
+    void Actor Array To Rotator Array(TArray<AActor*>& Input Actor, class UObject* __WorldContext, TArray<FRotator>& Output Rotator);
     void Multi Weapon Line Trace By Channel(FVector Start, double Length, int32 Player Camera Manager Index, FUBPP_Struct_Noise Noise, TEnumAsByte<ETraceTypeQuery> TraceC hannel, bool Trace Complex, FUBPP_Struct_Trace Trace Options, class UObject* __WorldContext, TArray<FHitResult>& OutHits, bool& Return value);
     void Multi Weapon Line Trace By Profile(FVector Start, double Length, int32 Player Camera Manager Index, FUBPP_Struct_Noise Noise, FName ProfileName, bool Trace Complex, FUBPP_Struct_Trace Trace Options, class UObject* __WorldContext, TArray<FHitResult>& OutHits, bool& Return value);
     void Weapon Line Trace By Profile(FVector Start, double Length, int32 Player Camera Manager Index, FUBPP_Struct_Noise Noise, FName ProfileName, bool Trace Complex, FUBPP_Struct_Trace Trace Options, class UObject* __WorldContext, FHitResult& Out Hit, bool& Return value);
@@ -103,16 +103,16 @@ class UUBPP_FunctionLibrary_C : public UBlueprintFunctionLibrary
     bool Meele Capsule Trace By Channel (Third Person / Top Down)(class USkeletalMeshComponent* Skeletal Mesh, FName Head Socket Name, bool Head Location?  (No Head Socket / Skeletal Mesh), FVector Head Location, double Hitbox Forward Offset, double Hitbox Radius, double Hitbox Half Height, bool bTraceComplex, TEnumAsByte<ETraceTypeQuery> TraceChannel, FUBPP_Struct_Trace Trace Options, class UObject* __WorldContext, FHitResult& OutHit);
     void Generate Random Byte Array From Stream(int32 Array Length, uint8 Range Max, FRandomStream Stream, class UObject* __WorldContext, TArray<uint8>& Random Array);
     void Generate Random Byte Array(int32 Array Length, uint8 Range Max, class UObject* __WorldContext, TArray<uint8>& Random Array);
-    void Random Vector In Range from Stream(FVector Min, FVector Max, FRandomStream Stream, class UObject* __WorldContext, FVector& Return value);
-    void Random Vector In Range(FVector Min, FVector Max, class UObject* __WorldContext, FVector& Return value);
+    void Random Vector In Range from Stream(FVector min, FVector max, FRandomStream Stream, class UObject* __WorldContext, FVector& Return value);
+    void Random Vector In Range(FVector min, FVector max, class UObject* __WorldContext, FVector& Return value);
     void Random Point on Spline(class USplineComponent* Spline Component, class UObject* __WorldContext, FVector& Random Point);
     void Byte Array to String Array(TArray<uint8>& Input Array, class UObject* __WorldContext, TArray<FString>& Return Array);
     bool Noise Line Trace By Channel(const FVector Start, const FVector End, FUBPP_Struct_Noise Noise, TEnumAsByte<ETraceTypeQuery> TraceChannel, bool TraceComplex, FUBPP_Struct_Trace Trace Options, class UObject* __WorldContext, FHitResult& OutHit);
     void Equal (Stream)(FRandomStream A, FRandomStream B, class UObject* __WorldContext, bool& Return value);
     void Equal (Color)(FColor A, FColor B, class UObject* __WorldContext, bool& Return value);
     void Equal (Slate Color)(FSlateColor A, FSlateColor B, class UObject* __WorldContext, bool& Return value);
-    void Random Byte From Stream(uint8 Max, FRandomStream Stream, class UObject* __WorldContext, uint8& Return value);
-    void Random Byte In Range From Stream(uint8 Min, uint8 Max, FRandomStream Stream, class UObject* __WorldContext, uint8& Return value);
+    void Random Byte From Stream(uint8 max, FRandomStream Stream, class UObject* __WorldContext, uint8& Return value);
+    void Random Byte In Range From Stream(uint8 min, uint8 max, FRandomStream Stream, class UObject* __WorldContext, uint8& Return value);
     uint8 Random Byte Max From Stream(FRandomStream Stream, class UObject* __WorldContext);
     void Byte Array to Int64 Array(TArray<uint8>& Input Array, class UObject* __WorldContext, TArray<int64>& Return Array);
     void Byte Array to Int Array(TArray<uint8>& Input Array, class UObject* __WorldContext, TArray<int32>& Return Array);
@@ -126,11 +126,11 @@ class UUBPP_FunctionLibrary_C : public UBlueprintFunctionLibrary
     void Equals Not Zero (Int64)(int64 Input Value, class UObject* __WorldContext, bool& Return value);
     void Equals Zero (Int64)(int64 Input Value, class UObject* __WorldContext, bool& Return value);
     void Reverse Boolean Array(TArray<bool>& Input, class UObject* __WorldContext, TArray<bool>& Return Array);
-    void Reverse Actor Array(TArray<class AActor*>& Input, class UObject* __WorldContext, TArray<class AActor*>& Return Array);
+    void Reverse Actor Array(TArray<AActor*>& Input, class UObject* __WorldContext, TArray<AActor*>& Return Array);
     void Reverse String Array(TArray<FString>& Input, class UObject* __WorldContext, TArray<FString>& Return Array);
     void Equals Not Max (Byte)(uint8 Input Value, class UObject* __WorldContext, bool& Return value);
     bool Equals Max (Byte)(uint8 Input Value, class UObject* __WorldContext);
-    void Actor Array Add(TArray<class AActor*>& Input Array, class AActor* New Item, class UObject* __WorldContext, TArray<class AActor*>& Return Array, int32& New Length);
+    void Actor Array Add(TArray<AActor*>& Input Array, class AActor* New Item, class UObject* __WorldContext, TArray<AActor*>& Return Array, int32& New Length);
     void String Array Add(TArray<FString>& Input Array, FString New Item, class UObject* __WorldContext, TArray<FString>& Return Array, int32& New Length);
     void Vector Array Add(TArray<FVector>& Input Array, FVector New Item, class UObject* __WorldContext, TArray<FVector>& Return Array, int32& New Length);
     void Sort Vectors By Distance (Low To High)(FVector Origin Location, TArray<FVector>& All Other Locations, class UObject* __WorldContext, TArray<FVector>& Sorted Array, TArray<double>& Distances);
@@ -147,20 +147,20 @@ class UUBPP_FunctionLibrary_C : public UBlueprintFunctionLibrary
     void Minus One (Byte)(uint8 Value, class UObject* __WorldContext, uint8& Return value);
     void Plus One (Byte)(uint8 Value, class UObject* __WorldContext, uint8& Return value);
     void Reverse Int64 Array(TArray<int64>& Input, class UObject* __WorldContext, TArray<int64>& Return Array);
-    void Remove All Ints64 Not In Range(TArray<int64>& Input Array, int64 Min, int64 Max, class UObject* __WorldContext, TArray<int64>& Return value);
+    void Remove All Ints64 Not In Range(TArray<int64>& Input Array, int64 min, int64 max, class UObject* __WorldContext, TArray<int64>& Return value);
     void Minus Absolute (Int64)(int64 Value, class UObject* __WorldContext, int64& Return value);
     void Byte Array Add(TArray<uint8>& Input Array, uint8 New Item, class UObject* __WorldContext, TArray<uint8>& Return Array, int32& New Length);
     void Reverse Byte Array(TArray<uint8>& Input, class UObject* __WorldContext, TArray<uint8>& Return Array);
     void Remove Not Unique Integers64(TArray<int64>& Input Array, class UObject* __WorldContext, TArray<int64>& Return value);
-    void InRange (Byte)(uint8 Value, uint8 Min, uint8 Max, bool Inclusive Min, bool Inclusive Max, class UObject* __WorldContext, bool& Return value);
-    void Remove All Bytes Not In Range(TArray<uint8>& Input Array, uint8 Min, uint8 Max, class UObject* __WorldContext, TArray<uint8>& Return value);
+    void InRange (Byte)(uint8 Value, uint8 min, uint8 max, bool Inclusive Min, bool Inclusive Max, class UObject* __WorldContext, bool& Return value);
+    void Remove All Bytes Not In Range(TArray<uint8>& Input Array, uint8 min, uint8 max, class UObject* __WorldContext, TArray<uint8>& Return value);
     void Remove Not Unique Bytes(TArray<uint8>& Input Array, class UObject* __WorldContext, TArray<uint8>& Return value);
     void Append Integer64 Arrays(TArray<int64>& Int Array A, TArray<int64>& Int Array B, class UObject* __WorldContext, TArray<int64>& Return Array, int32& Length);
     void Append Byte Arrays(TArray<uint8>& Int Array A, TArray<uint8>& Int Array B, class UObject* __WorldContext, TArray<uint8>& Return Array, int32& Length);
-    void Random Byte In Range(uint8 Min, uint8 Max, class UObject* __WorldContext, uint8& Return value);
+    void Random Byte In Range(uint8 min, uint8 max, class UObject* __WorldContext, uint8& Return value);
     void Reverse Vector Array(TArray<FVector>& Input, class UObject* __WorldContext, TArray<FVector>& Return Array);
     void Remove Not Unique Vectors(TArray<FVector>& Input Vector Array, class UObject* __WorldContext, TArray<FVector>& Return value);
-    void Remove All Vectors Not In Range(TArray<FVector>& Input Array, FVector Min, FVector Max, class UObject* __WorldContext, TArray<FVector>& Return value);
+    void Remove All Vectors Not In Range(TArray<FVector>& Input Array, FVector min, FVector max, class UObject* __WorldContext, TArray<FVector>& Return value);
     void Int Array Add(TArray<int32>& Input Array, int32 New Item, class UObject* __WorldContext, TArray<int32>& Return Array, int32& New Length);
     void Byte To Integer(uint8 Value, class UObject* __WorldContext, int32& Return value);
     void Byte To Integer64(uint8 Value, class UObject* __WorldContext, int64& Return value);
@@ -172,7 +172,7 @@ class UUBPP_FunctionLibrary_C : public UBlueprintFunctionLibrary
     double Random Float Max(bool And Min?, class UObject* __WorldContext);
     int32 Random Integer Max(bool And Min?, class UObject* __WorldContext);
     void Random Byte Max(class UObject* __WorldContext, uint8& Return value);
-    void Random Byte(uint8 Max, class UObject* __WorldContext, uint8& Return value);
+    void Random Byte(uint8 max, class UObject* __WorldContext, uint8& Return value);
     void Random Color(bool Static Opacity, uint8 Opacity (If Static), class UObject* __WorldContext, FColor& Random Color);
     void Find Look At Rotation (Crosshair)(const FVector& Start, int32 PlayerIndex, double Length Range, class UObject* __WorldContext, FRotator& Return value);
     FVector2D Mouse Position on Viewport(class UObject* __WorldContext);
@@ -207,8 +207,8 @@ class UUBPP_FunctionLibrary_C : public UBlueprintFunctionLibrary
     void Float Array To Vector Array(TArray<double>& Input Float Array, class UObject* __WorldContext, TArray<FVector>& Return Array);
     void Remove Not Unique Strings(TArray<FString>& Input Array, class UObject* __WorldContext, TArray<FString>& Return Array);
     void Print String Array(TArray<FString>& Input Array, TEnumAsByte<UBPP_E_PrintMode::Type> Print Mode, bool Print To Screen, bool Print To Log, FLinearColor Text Color, double Duration, FString Separator, class UObject* __WorldContext);
-    void Generate Random Float Array In Range From Stream(int32 Array Length, double Min, double Max, const FRandomStream& Stream, class UObject* __WorldContext, TArray<double>& Random Array);
-    void Generate Random Float Array In Range(int32 Array Length, double Min, double Max, class UObject* __WorldContext, TArray<double>& Random Array);
+    void Generate Random Float Array In Range From Stream(int32 Array Length, double min, double max, const FRandomStream& Stream, class UObject* __WorldContext, TArray<double>& Random Array);
+    void Generate Random Float Array In Range(int32 Array Length, double min, double max, class UObject* __WorldContext, TArray<double>& Random Array);
     void Generate Random Float Array from Stream(int32 Array Length, const FRandomStream& Stream, class UObject* __WorldContext, TArray<double>& Random Array);
     void Generate Random Float Array(int32 Array Length, class UObject* __WorldContext, TArray<double>& Random Array);
     void Generate Random Int Array in Range From Stream(int32 Array Length, int32 Range Min, int32 Range Max, const FRandomStream& Stream, class UObject* __WorldContext, TArray<int32>& Random Array);
@@ -250,7 +250,7 @@ class UUBPP_FunctionLibrary_C : public UBlueprintFunctionLibrary
     void Minus Absolute (Float)(double Value, class UObject* __WorldContext, double& Return value);
     void Invert Float(double Value, class UObject* __WorldContext, double& Return value);
     void Reverse Float Array(TArray<double>& Input, class UObject* __WorldContext, TArray<double>& Return Array);
-    void Remove All Floats Not in Range(TArray<double>& Input Array, double Min, double Max, class UObject* __WorldContext, TArray<double>& Return Array);
+    void Remove All Floats Not in Range(TArray<double>& Input Array, double min, double max, class UObject* __WorldContext, TArray<double>& Return Array);
     void Remove Not Unique Floats(TArray<double>& Input Array, class UObject* __WorldContext, TArray<double>& Return value);
     void Append Float Arrays(TArray<double>& Float Array A, TArray<double>& Float Array B, class UObject* __WorldContext, TArray<double>& Return Array, int32& Length);
     void Int Array to Float Array(TArray<int32>& Integer Array, class UObject* __WorldContext, TArray<double>& Return Array);
@@ -261,7 +261,7 @@ class UUBPP_FunctionLibrary_C : public UBlueprintFunctionLibrary
     void Minus Absolute (Int)(int32 Value, class UObject* __WorldContext, int32& Return value);
     void Invert Integer(int32 Value, class UObject* __WorldContext, int32& Return value);
     void Reverse Int Array(TArray<int32>& Input, class UObject* __WorldContext, TArray<int32>& Return Array);
-    void Remove All Ints Not In Range(TArray<int32>& Input Array, int32 Min, int32 Max, class UObject* __WorldContext, TArray<int32>& Return value);
+    void Remove All Ints Not In Range(TArray<int32>& Input Array, int32 min, int32 max, class UObject* __WorldContext, TArray<int32>& Return value);
     void Remove Not Unique Ints(TArray<int32>& Input Array, class UObject* __WorldContext, TArray<int32>& Return value);
     void Append Int Arrays(TArray<int32>& Int Array A, TArray<int32>& Int Array B, class UObject* __WorldContext, TArray<int32>& Return Array, int32& Length);
     void Float Array To Int Array(TArray<double>& Float Array, class UObject* __WorldContext, TArray<int32>& Return Array);
@@ -290,14 +290,14 @@ class UUBPP_FunctionLibrary_C : public UBlueprintFunctionLibrary
     void Random Point In Donut(FVector Origin Vector, double Donut Radius, double Thickness Radius, class UObject* __WorldContext, FVector& Random Point);
     void Random Point In Cylinder(FVector Origin Vector, double Radius, double Height, class UObject* __WorldContext, FVector& Random Point);
     void Random Point In Capsule(FVector Origin Vector, double Radius, double Half Height, class UObject* __WorldContext, FVector& Random Point);
-    void Get Smallest Distance Between Actors(TArray<class AActor*>& AllActors, class UObject* __WorldContext, double& Distance, class AActor*& ActorA, class AActor*& ActorB, int32& ActorIndexA, int32& ActorIndexB);
-    void Get Highest Distance Between Actors(TArray<class AActor*>& AllActors, class UObject* __WorldContext, double& Distance, class AActor*& ActorA, class AActor*& ActorB, int32& ActorIndexA, int32& ActorIndexB);
+    void Get Smallest Distance Between Actors(TArray<AActor*>& AllActors, class UObject* __WorldContext, double& Distance, class AActor*& ActorA, class AActor*& ActorB, int32& ActorIndexA, int32& ActorIndexB);
+    void Get Highest Distance Between Actors(TArray<AActor*>& AllActors, class UObject* __WorldContext, double& Distance, class AActor*& ActorA, class AActor*& ActorB, int32& ActorIndexA, int32& ActorIndexB);
     void Snap Actor To Grid(class AActor* Actor, double Grid Size, bool Teleport, bool Specific Z Location, double Z Location, class UObject* __WorldContext, FHitResult& Sweep Hit Result, bool& Return value);
-    void Remove Not Unique Actors(TArray<class AActor*>& Input Array, class UObject* __WorldContext, TArray<class AActor*>& Return Array);
-    void Append Actor Arrays(TArray<class AActor*>& Actor Array A, TArray<class AActor*>& Actor Array B, class UObject* __WorldContext, TArray<class AActor*>& Return Array, int32& Length);
+    void Remove Not Unique Actors(TArray<AActor*>& Input Array, class UObject* __WorldContext, TArray<AActor*>& Return Array);
+    void Append Actor Arrays(TArray<AActor*>& Actor Array A, TArray<AActor*>& Actor Array B, class UObject* __WorldContext, TArray<AActor*>& Return Array, int32& Length);
     void IsVectorInBoxExtent(FVector Input Vector, FVector Box Origin, FVector Box Extent, class UObject* __WorldContext, bool& Return value);
     void Invert Vector(FVector Value, class UObject* __WorldContext, FVector& Return value);
-    void InRange (Vector)(FVector Value, FVector Min, FVector Max, bool Inclusive Min, bool Inclusive Max, class UObject* __WorldContext, bool& Return value);
+    void InRange (Vector)(FVector Value, FVector min, FVector max, bool Inclusive Min, bool Inclusive Max, class UObject* __WorldContext, bool& Return value);
     void Get Vector Difference(FVector Vector A, FVector Vector B, class UObject* __WorldContext, FVector& Return value);
     void Get Nearest Vector On Line(FVector Input Vector, FVector Line Start, FVector Line End, double Precision 1-500, class UObject* __WorldContext, FVector& NearestVector, double& Distance, int32& Index);
     void Get Nearest Vector(FVector Origin Vector, TArray<FVector>& All Other Vectors, class UObject* __WorldContext, FVector& NearestVector, double& Distance, int32& Index);
@@ -308,7 +308,7 @@ class UUBPP_FunctionLibrary_C : public UBlueprintFunctionLibrary
     void Combine Vectors (Max)(FVector Vector A, FVector Vector B, class UObject* __WorldContext, FVector& Return value);
     void Append Vector Arrays(TArray<FVector>& Vector Array A, TArray<FVector>& Vector Array B, class UObject* __WorldContext, TArray<FVector>& Return Array, int32& Length);
     void Byte To Vector(uint8 Input Byte, class UObject* __WorldContext, FVector& Return Vector);
-    void Actor Array to Location Array(TArray<class AActor*>& Input Actor, class UObject* __WorldContext, TArray<FVector>& Output Locations);
+    void Actor Array to Location Array(TArray<AActor*>& Input Actor, class UObject* __WorldContext, TArray<FVector>& Output Locations);
 }; // Size: 0x28
 
 #endif

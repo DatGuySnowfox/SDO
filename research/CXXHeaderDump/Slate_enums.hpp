@@ -13,6 +13,18 @@ enum class EDescendantScrollDestination {
     EDescendantScrollDestination_MAX = 4,
 };
 
+enum class EInputPreProcessorType {
+    Overlay = 0,
+    PreEngine = 1,
+    Engine = 2,
+    PreEditor = 3,
+    Editor = 4,
+    PreGame = 5,
+    Game = 6,
+    Count = 7,
+    EInputPreProcessorType_MAX = 8,
+};
+
 enum class EListItemAlignment {
     EvenlyDistributed = 0,
     EvenlySize = 1,
@@ -46,7 +58,8 @@ enum class EMultiBoxType {
     Menu = 5,
     ButtonRow = 6,
     SlimHorizontalUniformToolBar = 7,
-    EMultiBoxType_MAX = 8,
+    SlimWrappingToolBar = 8,
+    EMultiBoxType_MAX = 9,
 };
 
 enum class EMultipleKeyBindingIndex {
@@ -54,6 +67,12 @@ enum class EMultipleKeyBindingIndex {
     Secondary = 1,
     NumChords = 2,
     EMultipleKeyBindingIndex_MAX = 3,
+};
+
+enum class EPopupLayoutMode {
+    Menu = 0,
+    ToolTip = 1,
+    EPopupLayoutMode_MAX = 2,
 };
 
 namespace EProgressBarFillStyle {
@@ -76,6 +95,14 @@ namespace EProgressBarFillType {
         EProgressBarFillType_MAX = 7,
     };
 }
+
+enum class EScrollIntoViewAlignment {
+    IntoView = 0,
+    TopOrLeft = 1,
+    CenterAligned = 2,
+    BottomOrRight = 3,
+    EScrollIntoViewAlignment_MAX = 4,
+};
 
 enum class EScrollWhenFocusChanges {
     NoScroll = 0,

@@ -5,6 +5,6 @@ class AVehicle_PickupUtilityTruck_C : public ABP_VehicleMaster_C
 {
 
     void UserConstructionScript();
-}; // Size: 0x530
+}; // Size: 0x538
 
 #endif

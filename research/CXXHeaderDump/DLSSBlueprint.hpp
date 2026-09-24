@@ -6,10 +6,10 @@
 class UDLSSLibrary : public UBlueprintFunctionLibrary
 {
 
-    void SetDLSSSharpness(float Sharpness);
     void SetDLSSMode(class UObject* WorldContextObject, UDLSSMode DLSSMode);
     UDLSSSupport QueryDLSSSupport();
     UDLSSSupport QueryDLSSRRSupport();
+    bool IsRayTracingAvailable();
     bool IsDLSSSupported();
     bool IsDLSSRRSupported();
     bool IsDLSSRREnabled();
@@ -17,7 +17,6 @@ class UDLSSLibrary : public UBlueprintFunctionLibrary
     bool IsDLSSEnabled();
     bool IsDLAAEnabled();
     TArray<UDLSSMode> GetSupportedDLSSModes();
-    float GetDLSSSharpness();
     void GetDLSSScreenPercentageRange(float& MinScreenPercentage, float& MaxScreenPercentage);
     void GetDLSSRRMinimumDriverVersion(int32& MinDriverVersionMajor, int32& MinDriverVersionMinor);
     void GetDLSSModeInformation(UDLSSMode DLSSMode, FVector2D ScreenResolution, bool& bIsSupported, float& OptimalScreenPercentage, bool& bIsFixedScreenPercentage, float& MinScreenPercentage, float& MaxScreenPercentage, float& OptimalSharpness);

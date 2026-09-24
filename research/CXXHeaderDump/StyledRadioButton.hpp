@@ -3,13 +3,13 @@
 
 class UStyledRadioButton_C : public URadioButton
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0300 (size: 0x8)
-    class UTextBlock* LabelText;                                                      // 0x0308 (size: 0x8)
-    class UButton* MainButton;                                                        // 0x0310 (size: 0x8)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0378 (size: 0x8)
+    class UButton* MainButton;                                                        // 0x0380 (size: 0x8)
+    class UTextBlock* LabelText;                                                      // 0x0388 (size: 0x8)
 
     FSlateColor GetColour();
     void BndEvt__MainButton_K2Node_ComponentBoundEvent_0_OnButtonClickedEvent__DelegateSignature();
     void ExecuteUbergraph_StyledRadioButton(int32 EntryPoint);
-}; // Size: 0x318
+}; // Size: 0x390
 
 #endif

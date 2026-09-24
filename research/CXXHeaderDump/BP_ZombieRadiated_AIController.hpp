@@ -3,6 +3,6 @@
 
 class ABP_ZombieRadiated_AIController_C : public ABP_ZombieAIController_C
 {
-}; // Size: 0x3EA
+}; // Size: 0x3F2
 
 #endif

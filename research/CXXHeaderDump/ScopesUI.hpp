@@ -3,10 +3,10 @@
 
 class UScopesUI_C : public UUserWidget
 {
-    class UAcogScope_C* Acog;                                                         // 0x02C0 (size: 0x8)
-    class UNormalScope_C* LongScope;                                                  // 0x02C8 (size: 0x8)
-    class UMosinSniperScope_C* PUScope;                                               // 0x02D0 (size: 0x8)
+    class UMosinSniperScope_C* PUScope;                                               // 0x0340 (size: 0x8)
+    class UNormalScope_C* LongScope;                                                  // 0x0348 (size: 0x8)
+    class UAcogScope_C* Acog;                                                         // 0x0350 (size: 0x8)
 
-}; // Size: 0x2D8
+}; // Size: 0x358
 
 #endif

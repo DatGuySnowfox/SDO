@@ -3,6 +3,6 @@
 
 class ABuildable_SmallGenerator_C : public ABuildable_GeneratorMaster_C
 {
-}; // Size: 0x498
+}; // Size: 0x4A8
 
 #endif

@@ -14,6 +14,13 @@ struct FTimedDataInputEvaluationData
 
 }; // Size: 0x8
 
+class UCatchupFixedRateCustomTimeStep : public UFixedFrameRateCustomTimeStep
+{
+    FFrameRate FrameRate;                                                             // 0x0028 (size: 0x8)
+    double MaxCatchupSeconds;                                                         // 0x0030 (size: 0x8)
+
+}; // Size: 0x40
+
 class UFixedFrameRateCustomTimeStep : public UEngineCustomTimeStep
 {
 }; // Size: 0x28
@@ -21,6 +28,7 @@ class UFixedFrameRateCustomTimeStep : public UEngineCustomTimeStep
 class UGenlockedCustomTimeStep : public UFixedFrameRateCustomTimeStep
 {
     bool bAutoDetectFormat;                                                           // 0x0028 (size: 0x1)
+    bool bWaitForBothFields;                                                          // 0x0029 (size: 0x1)
 
 }; // Size: 0x30
 

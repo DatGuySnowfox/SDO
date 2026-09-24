@@ -4,6 +4,7 @@
 class UTraceUtilLibrary : public UBlueprintFunctionLibrary
 {
 
+    void TraceScreenshot(FString Name, bool bShowUI);
     void TraceMarkRegionStart(FString Name);
     void TraceMarkRegionEnd(FString Name);
     void TraceBookmark(FString Name);

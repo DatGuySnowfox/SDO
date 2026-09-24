@@ -1,3 +1,9 @@
+enum class EMetaSoundFrontendGraphCommentMoveMode {
+    GroupMovement = 0,
+    NoGroupMovement = 1,
+    EMetaSoundFrontendGraphCommentMoveMode_MAX = 2,
+};
+
 enum class EMetasoundFrontendClassType {
     External = 0,
     Graph = 1,

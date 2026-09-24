@@ -3,6 +3,6 @@
 
 class ABP_MaterialsTrader_C : public ABP_TraderMaster_C
 {
-}; // Size: 0x350
+}; // Size: 0x388
 
 #endif

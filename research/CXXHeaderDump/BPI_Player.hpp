@@ -4,6 +4,9 @@
 class IBPI_Player_C : public IInterface
 {
 
+    void PlayUsingItemMontage(class UJigsawItem_DataAsset_C* Asset, class UAnimMontage* Montage, class UStaticMesh* OverrideMesh);
+    void GetInteractionDistances(double& InteractDistance);
+    void SendInfectionToClient(double NewInfection);
     void IsPlayerInVehicle?(bool& InVehicle);
     void VehicleInteraction(bool Enter?, const class ABP_VehicleMaster_C*& VehicleRef);
     void IsGPSEquipped?(bool& GPS?);
@@ -13,7 +16,7 @@ class IBPI_Player_C : public IInterface
     void GetInGameUI(class UBP_Ingame_C*& UI);
     void SendOxygenToClient(double NewOxygen);
     void CreateNotificationUI(FText Text, class UTexture2D* Image, FLinearColor Color, double UI Delay);
-    void StopMontage(class UAnimMontage* Montage);
+    void StopMontage(class UAnimMontage* Montage, bool IncludeLocal?);
     void PlayMontage(class UAnimMontage* Montage, double Play Rate);
     void PlayerDeath();
     void SendRadiationToClient(double NewRadiation);

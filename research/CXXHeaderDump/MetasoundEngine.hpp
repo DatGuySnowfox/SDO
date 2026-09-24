@@ -5,7 +5,7 @@
 
 struct FDefaultMetaSoundAssetAutoUpdateSettings
 {
-    FSoftObjectPath Metasound;                                                        // 0x0000 (size: 0x20)
+    FSoftObjectPath MetaSound;                                                        // 0x0000 (size: 0x20)
 
 }; // Size: 0x20
 
@@ -17,7 +17,7 @@ struct FMetaSoundAssetDirectory
 
 struct FMetaSoundAsyncAssetDependencies
 {
-    class UObject* Metasound;                                                         // 0x0008 (size: 0x8)
+    class UObject* MetaSound;                                                         // 0x0008 (size: 0x8)
 
 }; // Size: 0x30
 
@@ -40,7 +40,7 @@ struct FMetaSoundBuilderOptions
 
 struct FMetaSoundNodeHandle
 {
-    FGuid NodeId;                                                                     // 0x0000 (size: 0x10)
+    FGuid NodeID;                                                                     // 0x0000 (size: 0x10)
 
 }; // Size: 0x10
 
@@ -48,24 +48,46 @@ struct FMetaSoundOutput : public FSoundGeneratorOutput
 {
 }; // Size: 0x10
 
+struct FMetaSoundPageSettings
+{
+    FGuid UniqueID;                                                                   // 0x0000 (size: 0x10)
+    FName Name;                                                                       // 0x0010 (size: 0x8)
+
+}; // Size: 0x18
+
+struct FMetaSoundQualitySettings
+{
+    FGuid UniqueID;                                                                   // 0x0000 (size: 0x10)
+    FName Name;                                                                       // 0x0010 (size: 0x8)
+    FPerPlatformInt SampleRate;                                                       // 0x0018 (size: 0x4)
+    FPerPlatformFloat BlockRate;                                                      // 0x001C (size: 0x4)
+
+}; // Size: 0x20
+
 class UMetaSoundAssetSubsystem : public UEngineSubsystem
 {
-    TArray<FMetaSoundAsyncAssetDependencies> LoadingDependencies;                     // 0x0038 (size: 0x10)
 
     void UnregisterAssetClassesInDirectories(const TArray<FMetaSoundAssetDirectory>& Directories);
     void RegisterAssetClassesInDirectories(const TArray<FMetaSoundAssetDirectory>& Directories);
-}; // Size: 0x1E0
+}; // Size: 0x30
 
 class UMetaSoundBuilderBase : public UObject
 {
-    FMetaSoundFrontendDocumentBuilder Builder;                                        // 0x0028 (size: 0x30)
-    bool bIsAttached;                                                                 // 0x0058 (size: 0x1)
+    FMetaSoundFrontendDocumentBuilder Builder;                                        // 0x0028 (size: 0x58)
 
     void SetNodeInputDefault(const FMetaSoundBuilderNodeInputHandle& NodeInputHandle, const FMetasoundFrontendLiteral& Literal, EMetaSoundBuilderResult& OutResult);
+    void SetGraphOutputName(FName OutputName, FName NewName, EMetaSoundBuilderResult& OutResult);
+    void SetGraphOutputDataType(FName OutputName, FName DataType, EMetaSoundBuilderResult& OutResult);
+    void SetGraphOutputAccessType(FName OutputName, EMetasoundFrontendVertexAccessType AccessType, EMetaSoundBuilderResult& OutResult);
+    void SetGraphInputName(FName InputName, FName NewName, EMetaSoundBuilderResult& OutResult);
     void SetGraphInputDefault(FName InputName, const FMetasoundFrontendLiteral& Literal, EMetaSoundBuilderResult& OutResult);
+    void SetGraphInputDataType(FName InputName, FName DataType, EMetaSoundBuilderResult& OutResult);
+    void SetGraphInputAccessType(FName InputName, EMetasoundFrontendVertexAccessType AccessType, EMetaSoundBuilderResult& OutResult);
+    void RemoveUnusedDependencies();
     void RemoveNodeInputDefault(const FMetaSoundBuilderNodeInputHandle& InputHandle, EMetaSoundBuilderResult& OutResult);
-    void RemoveNode(const FMetaSoundNodeHandle& NodeHandle, EMetaSoundBuilderResult& OutResult);
+    void RemoveNode(const FMetaSoundNodeHandle& NodeHandle, EMetaSoundBuilderResult& OutResult, bool bRemoveUnusedDependencies);
     void RemoveInterface(FName InterfaceName, EMetaSoundBuilderResult& OutResult);
+    void RemoveGraphVariable(FName Name, EMetaSoundBuilderResult& OutResult);
     void RemoveGraphOutput(FName Name, EMetaSoundBuilderResult& OutResult);
     void RemoveGraphInput(FName Name, EMetaSoundBuilderResult& OutResult);
     bool NodesAreConnected(const FMetaSoundBuilderNodeOutputHandle& OutputHandle, const FMetaSoundBuilderNodeInputHandle& InputHandle);
@@ -73,11 +95,18 @@ class UMetaSoundBuilderBase : public UObject
     bool NodeInputIsConnected(const FMetaSoundBuilderNodeInputHandle& InputHandle);
     bool IsPreset();
     bool InterfaceIsDeclared(FName InterfaceName);
+    FMetasoundFrontendClassName GetRootGraphClassName();
     class UObject* GetReferencedPresetAsset();
+    bool GetNodeOutputIsConstructorPin(const FMetaSoundBuilderNodeOutputHandle& OutputHandle);
     void GetNodeOutputData(const FMetaSoundBuilderNodeOutputHandle& OutputHandle, FName& Name, FName& DataType, EMetaSoundBuilderResult& OutResult);
+    bool GetNodeInputIsConstructorPin(const FMetaSoundBuilderNodeInputHandle& InputHandle);
     FMetasoundFrontendLiteral GetNodeInputDefault(const FMetaSoundBuilderNodeInputHandle& InputHandle, EMetaSoundBuilderResult& OutResult);
     void GetNodeInputData(const FMetaSoundBuilderNodeInputHandle& InputHandle, FName& Name, FName& DataType, EMetaSoundBuilderResult& OutResult);
     FMetasoundFrontendLiteral GetNodeInputClassDefault(const FMetaSoundBuilderNodeInputHandle& InputHandle, EMetaSoundBuilderResult& OutResult);
+    FMetasoundFrontendLiteral GetGraphVariableDefault(FName VariableName, EMetaSoundBuilderResult& OutResult);
+    TArray<FName> GetGraphOutputNames(EMetaSoundBuilderResult& OutResult);
+    TArray<FName> GetGraphInputNames(EMetaSoundBuilderResult& OutResult);
+    FMetasoundFrontendLiteral GetGraphInputDefault(FName InputName, EMetaSoundBuilderResult& OutResult);
     TArray<FMetaSoundBuilderNodeOutputHandle> FindNodeOutputsByDataType(const FMetaSoundNodeHandle& NodeHandle, EMetaSoundBuilderResult& OutResult, FName DataType);
     TArray<FMetaSoundBuilderNodeOutputHandle> FindNodeOutputs(const FMetaSoundNodeHandle& NodeHandle, EMetaSoundBuilderResult& OutResult);
     FMetaSoundNodeHandle FindNodeOutputParent(const FMetaSoundBuilderNodeOutputHandle& OutputHandle, EMetaSoundBuilderResult& OutResult);
@@ -89,8 +118,8 @@ class UMetaSoundBuilderBase : public UObject
     FMetasoundFrontendVersion FindNodeClassVersion(const FMetaSoundNodeHandle& NodeHandle, EMetaSoundBuilderResult& OutResult);
     TArray<FMetaSoundNodeHandle> FindInterfaceOutputNodes(FName InterfaceName, EMetaSoundBuilderResult& OutResult);
     TArray<FMetaSoundNodeHandle> FindInterfaceInputNodes(FName InterfaceName, EMetaSoundBuilderResult& OutResult);
-    FMetaSoundNodeHandle FindGraphOutputNode(FName OutputName, EMetaSoundBuilderResult& OutResult);
-    FMetaSoundNodeHandle FindGraphInputNode(FName InputName, EMetaSoundBuilderResult& OutResult);
+    FMetaSoundNodeHandle FindGraphOutputNode(FName OutputName, FName& OutDataType, FMetaSoundBuilderNodeInputHandle& NodeInputHandle, EMetaSoundBuilderResult& OutResult);
+    FMetaSoundNodeHandle FindGraphInputNode(FName InputName, FName& OutDataType, FMetaSoundBuilderNodeOutputHandle& NodeOutputHandle, EMetaSoundBuilderResult& OutResult);
     void DisconnectNodesByInterfaceBindings(const FMetaSoundNodeHandle& FromNodeHandle, const FMetaSoundNodeHandle& ToNodeHandle, EMetaSoundBuilderResult& OutResult);
     void DisconnectNodes(const FMetaSoundBuilderNodeOutputHandle& NodeOutputHandle, const FMetaSoundBuilderNodeInputHandle& NodeInputHandle, EMetaSoundBuilderResult& OutResult);
     void DisconnectNodeOutput(const FMetaSoundBuilderNodeOutputHandle& NodeOutputHandle, EMetaSoundBuilderResult& OutResult);
@@ -106,27 +135,35 @@ class UMetaSoundBuilderBase : public UObject
     TArray<FMetaSoundBuilderNodeInputHandle> ConnectNodeOutputsToMatchingGraphInterfaceOutputs(const FMetaSoundNodeHandle& NodeHandle, EMetaSoundBuilderResult& OutResult);
     void ConnectNodeInputToGraphInput(FName GraphInputName, const FMetaSoundBuilderNodeInputHandle& NodeInputHandle, EMetaSoundBuilderResult& OutResult);
     TArray<FMetaSoundBuilderNodeOutputHandle> ConnectNodeInputsToMatchingGraphInterfaceInputs(const FMetaSoundNodeHandle& NodeHandle, EMetaSoundBuilderResult& OutResult);
-    FMetaSoundNodeHandle AddNodeByClassName(const FMetasoundFrontendClassName& ClassName, int32 MajorVersion, EMetaSoundBuilderResult& OutResult);
+    TScriptInterface<class IMetaSoundDocumentInterface> BuildNewMetaSound(FName NameBase);
+    void BuildAndOverwriteMetaSound(TScriptInterface<class IMetaSoundDocumentInterface> ExistingMetaSound, bool bForceUniqueClassName);
+    TScriptInterface<class IMetaSoundDocumentInterface> Build(class UObject* Parent, const FMetaSoundBuilderOptions& Options);
+    FMetaSoundNodeHandle AddNodeByClassName(const FMetasoundFrontendClassName& ClassName, EMetaSoundBuilderResult& OutResult, int32 MajorVersion);
     FMetaSoundNodeHandle AddNode(const TScriptInterface<class IMetaSoundDocumentInterface>& NodeClass, EMetaSoundBuilderResult& OutResult);
     void AddInterface(FName InterfaceName, EMetaSoundBuilderResult& OutResult);
+    FMetaSoundNodeHandle AddGraphVariableSetNode(FName Name, EMetaSoundBuilderResult& OutResult);
+    FMetaSoundNodeHandle AddGraphVariableGetNode(FName Name, EMetaSoundBuilderResult& OutResult);
+    FMetaSoundNodeHandle AddGraphVariableGetDelayedNode(FName Name, EMetaSoundBuilderResult& OutResult);
+    void AddGraphVariable(FName Name, FName DataType, FMetasoundFrontendLiteral DefaultValue, EMetaSoundBuilderResult& OutResult);
     FMetaSoundBuilderNodeInputHandle AddGraphOutputNode(FName Name, FName DataType, FMetasoundFrontendLiteral DefaultValue, EMetaSoundBuilderResult& OutResult, bool bIsConstructorOutput);
     FMetaSoundBuilderNodeOutputHandle AddGraphInputNode(FName Name, FName DataType, FMetasoundFrontendLiteral DefaultValue, EMetaSoundBuilderResult& OutResult, bool bIsConstructorInput);
-}; // Size: 0x60
+}; // Size: 0xA0
 
 class UMetaSoundBuilderSubsystem : public UEngineSubsystem
 {
-    TMap<class FName, class UMetaSoundBuilderBase*> NamedBuilders;                    // 0x0038 (size: 0x50)
-    TMap<class FName, class TWeakObjectPtr<UMetaSoundBuilderBase>> AssetBuilders;     // 0x0088 (size: 0x50)
+    TMap<FName, UMetaSoundBuilderBase*> NamedBuilders;                                // 0x0030 (size: 0x50)
 
     bool UnregisterSourceBuilder(FName BuilderName);
     bool UnregisterPatchBuilder(FName BuilderName);
     bool UnregisterBuilder(FName BuilderName);
+    bool SetTargetPage(FName PageName);
     void RegisterSourceBuilder(FName BuilderName, class UMetaSoundSourceBuilder* Builder);
     void RegisterPatchBuilder(FName BuilderName, class UMetaSoundPatchBuilder* Builder);
     void RegisterBuilder(FName BuilderName, class UMetaSoundBuilderBase* Builder);
     bool IsInterfaceRegistered(FName InInterfaceName);
     class UMetaSoundSourceBuilder* FindSourceBuilder(FName BuilderName);
     class UMetaSoundPatchBuilder* FindPatchBuilder(FName BuilderName);
+    class UMetaSoundBuilderBase* FindBuilderOfDocument(TScriptInterface<class IMetaSoundDocumentInterface> InMetaSound);
     class UMetaSoundBuilderBase* FindBuilder(FName BuilderName);
     FMetasoundFrontendLiteral CreateStringMetaSoundLiteral(FString Value, FName& DataType);
     FMetasoundFrontendLiteral CreateStringArrayMetaSoundLiteral(const TArray<FString>& Value, FName& DataType);
@@ -135,7 +172,7 @@ class UMetaSoundBuilderSubsystem : public UEngineSubsystem
     class UMetaSoundPatchBuilder* CreatePatchPresetBuilder(FName BuilderName, const TScriptInterface<class IMetaSoundDocumentInterface>& ReferencedPatchClass, EMetaSoundBuilderResult& OutResult);
     class UMetaSoundPatchBuilder* CreatePatchBuilder(FName BuilderName, EMetaSoundBuilderResult& OutResult);
     FMetasoundFrontendLiteral CreateObjectMetaSoundLiteral(class UObject* Value);
-    FMetasoundFrontendLiteral CreateObjectArrayMetaSoundLiteral(const TArray<class UObject*>& Value);
+    FMetasoundFrontendLiteral CreateObjectArrayMetaSoundLiteral(const TArray<UObject*>& Value);
     FMetasoundFrontendLiteral CreateMetaSoundLiteralFromParam(const FAudioParameter& Param);
     FMetasoundFrontendLiteral CreateIntMetaSoundLiteral(int32 Value, FName& DataType);
     FMetasoundFrontendLiteral CreateIntArrayMetaSoundLiteral(const TArray<int32>& Value, FName& DataType);
@@ -143,30 +180,41 @@ class UMetaSoundBuilderSubsystem : public UEngineSubsystem
     FMetasoundFrontendLiteral CreateFloatArrayMetaSoundLiteral(const TArray<float>& Value, FName& DataType);
     FMetasoundFrontendLiteral CreateBoolMetaSoundLiteral(bool Value, FName& DataType);
     FMetasoundFrontendLiteral CreateBoolArrayMetaSoundLiteral(const TArray<bool>& Value, FName& DataType);
-}; // Size: 0xD8
+}; // Size: 0x80
 
-class UMetaSoundOutputSubsystem : public UTickableWorldSubsystem
+class UMetaSoundCacheSubsystem : public UAudioEngineSubsystem
 {
-    TArray<class UMetasoundGeneratorHandle*> TrackedGenerators;                       // 0x0040 (size: 0x10)
+
+    void TouchOrPrecacheMetaSound(class UMetaSoundSource* InMetaSound, int32 InNumInstances);
+    void RemoveCachedOperatorsForMetaSound(class UMetaSoundSource* InMetaSound);
+    void PrecacheMetaSound(class UMetaSoundSource* InMetaSound, int32 InNumInstances);
+}; // Size: 0x78
+
+class UMetaSoundOutputSubsystem : public UWorldSubsystem
+{
 
     bool WatchOutput(class UAudioComponent* AudioComponent, FName OutputName, const FWatchOutputOnOutputValueChanged& OnOutputValueChanged, FName AnalyzerName, FName AnalyzerOutputName);
-}; // Size: 0x50
+    bool UnwatchOutput(class UAudioComponent* AudioComponent, FName OutputName, const FUnwatchOutputOnOutputValueChanged& OnOutputValueChanged, FName AnalyzerName, FName AnalyzerOutputName);
+}; // Size: 0x40
 
 class UMetaSoundPatch : public UObject
 {
-    FMetasoundFrontendDocument RootMetaSoundDocument;                                 // 0x0098 (size: 0x1C8)
-    TSet<FString> ReferencedAssetClassKeys;                                           // 0x0260 (size: 0x50)
-    TSet<UObject*> ReferencedAssetClassObjects;                                       // 0x02B0 (size: 0x50)
-    TSet<FSoftObjectPath> ReferenceAssetClassCache;                                   // 0x0300 (size: 0x50)
-    FGuid AssetClassID;                                                               // 0x0350 (size: 0x10)
+    FMetasoundFrontendDocument RootMetaSoundDocument;                                 // 0x0070 (size: 0x190)
+    TSet<FString> ReferencedAssetClassKeys;                                           // 0x0200 (size: 0x50)
+    TSet<UObject*> ReferencedAssetClassObjects;                                       // 0x0250 (size: 0x50)
+    TSet<FSoftObjectPath> ReferenceAssetClassCache;                                   // 0x02A0 (size: 0x50)
 
-}; // Size: 0x360
+}; // Size: 0x2F8
 
 class UMetaSoundPatchBuilder : public UMetaSoundBuilderBase
 {
+}; // Size: 0xA0
 
-    TScriptInterface<class IMetaSoundDocumentInterface> Build(class UObject* Parent, const FMetaSoundBuilderOptions& Options);
-}; // Size: 0x60
+class UMetaSoundQualityHelper : public UObject
+{
+
+    TArray<FName> GetQualityNames();
+}; // Size: 0x28
 
 class UMetaSoundSettings : public UDeveloperSettings
 {
@@ -176,41 +224,76 @@ class UMetaSoundSettings : public UDeveloperSettings
     bool bAutoUpdateLogWarningOnDroppedConnection;                                    // 0x0060 (size: 0x1)
     TArray<FDirectoryPath> DirectoriesToRegister;                                     // 0x0068 (size: 0x10)
     int32 DenyListCacheChangeID;                                                      // 0x0078 (size: 0x4)
+    FName TargetPageName;                                                             // 0x007C (size: 0x8)
+    FMetaSoundPageSettings DefaultPageSettings;                                       // 0x0084 (size: 0x18)
+    TArray<FMetaSoundPageSettings> PageSettings;                                      // 0x00A0 (size: 0x10)
+    TArray<FMetaSoundQualitySettings> QualitySettings;                                // 0x00B0 (size: 0x10)
 
-}; // Size: 0x80
+}; // Size: 0xC8
 
 class UMetaSoundSource : public USoundWaveProcedural
 {
-    FMetasoundFrontendDocument RootMetaSoundDocument;                                 // 0x04F0 (size: 0x1C8)
-    TSet<FString> ReferencedAssetClassKeys;                                           // 0x06B8 (size: 0x50)
-    TSet<UObject*> ReferencedAssetClassObjects;                                       // 0x0708 (size: 0x50)
-    TSet<FSoftObjectPath> ReferenceAssetClassCache;                                   // 0x0758 (size: 0x50)
-    EMetaSoundOutputAudioFormat OutputFormat;                                         // 0x07A8 (size: 0x1)
-    FGuid AssetClassID;                                                               // 0x07AC (size: 0x10)
+    FMetasoundFrontendDocument RootMetaSoundDocument;                                 // 0x0498 (size: 0x190)
+    TSet<FString> ReferencedAssetClassKeys;                                           // 0x0628 (size: 0x50)
+    TSet<UObject*> ReferencedAssetClassObjects;                                       // 0x0678 (size: 0x50)
+    TSet<FSoftObjectPath> ReferenceAssetClassCache;                                   // 0x06C8 (size: 0x50)
+    EMetaSoundOutputAudioFormat OutputFormat;                                         // 0x0718 (size: 0x1)
 
 }; // Size: 0x890
 
 class UMetaSoundSourceBuilder : public UMetaSoundBuilderBase
 {
 
+    void SetSampleRateOverride(int32 SampleRate);
+    void SetQuality(FName Quality);
     void SetFormat(EMetaSoundOutputAudioFormat OutputFormat, EMetaSoundBuilderResult& OutResult);
+    void SetBlockRateOverride(float BlockRate);
     bool GetLiveUpdatesEnabled();
-    TScriptInterface<class IMetaSoundDocumentInterface> Build(class UObject* Parent, const FMetaSoundBuilderOptions& Options);
     void Audition(class UObject* Parent, class UAudioComponent* AudioComponent, FAuditionOnCreateGenerator OnCreateGenerator, bool bLiveUpdatesEnabled);
-}; // Size: 0x68
+}; // Size: 0xC8
 
 class UMetasoundEditorGraphBase : public UEdGraph
 {
 }; // Size: 0x60
 
+class UMetasoundFrontendLiteralBlueprintAccess : public UBlueprintFunctionLibrary
+{
+
+    EMetasoundFrontendLiteralType GetType(const FMetasoundFrontendLiteral& Literal);
+    FString GetStringValueFromLiteral(const FMetasoundFrontendLiteral& Literal, EMetaSoundBuilderResult& OutResult);
+    TArray<FString> GetStringArrayValueFromLiteral(const FMetasoundFrontendLiteral& Literal, EMetaSoundBuilderResult& OutResult);
+    class UObject* GetObjectValueFromLiteral(const FMetasoundFrontendLiteral& Literal, EMetaSoundBuilderResult& OutResult);
+    TArray<UObject*> GetObjectArrayValueFromLiteral(const FMetasoundFrontendLiteral& Literal, EMetaSoundBuilderResult& OutResult);
+    int32 GetIntValueFromLiteral(const FMetasoundFrontendLiteral& Literal, EMetaSoundBuilderResult& OutResult);
+    TArray<int32> GetIntArrayValueFromLiteral(const FMetasoundFrontendLiteral& Literal, EMetaSoundBuilderResult& OutResult);
+    float GetFloatValueFromLiteral(const FMetasoundFrontendLiteral& Literal, EMetaSoundBuilderResult& OutResult);
+    TArray<float> GetFloatArrayValueFromLiteral(const FMetasoundFrontendLiteral& Literal, EMetaSoundBuilderResult& OutResult);
+    bool GetBoolValueFromLiteral(const FMetasoundFrontendLiteral& Literal, EMetaSoundBuilderResult& OutResult);
+    TArray<bool> GetBoolArrayValueFromLiteral(const FMetasoundFrontendLiteral& Literal, EMetaSoundBuilderResult& OutResult);
+    FMetasoundFrontendLiteral CreateStringMetaSoundLiteral(FString Value);
+    FMetasoundFrontendLiteral CreateStringArrayMetaSoundLiteral(const TArray<FString>& Value);
+    FMetasoundFrontendLiteral CreateObjectMetaSoundLiteral(class UObject* Value);
+    FMetasoundFrontendLiteral CreateObjectArrayMetaSoundLiteral(const TArray<UObject*>& Value);
+    FMetasoundFrontendLiteral CreateMetaSoundLiteralFromParam(const FAudioParameter& Param);
+    FMetasoundFrontendLiteral CreateIntMetaSoundLiteral(int32 Value);
+    FMetasoundFrontendLiteral CreateIntArrayMetaSoundLiteral(const TArray<int32>& Value);
+    FMetasoundFrontendLiteral CreateFloatMetaSoundLiteral(float Value);
+    FMetasoundFrontendLiteral CreateFloatArrayMetaSoundLiteral(const TArray<float>& Value);
+    FMetasoundFrontendLiteral CreateBoolMetaSoundLiteral(bool Value);
+    FMetasoundFrontendLiteral CreateBoolArrayMetaSoundLiteral(const TArray<bool>& Value);
+    FString Conv_MetaSoundLiteralToString(const FMetasoundFrontendLiteral& Literal);
+}; // Size: 0x28
+
 class UMetasoundGeneratorHandle : public UObject
 {
 
     bool WatchOutput(FName OutputName, const FWatchOutputOnOutputValueChanged& OnOutputValueChanged, FName AnalyzerName, FName AnalyzerOutputName);
-    void OnOutputValueChangedMulticast__DelegateSignature(FName Name, const FMetaSoundOutput& Output);
+    void UpdateWatchers();
+    double GetCPUCoreUtilization();
+    void EnableRuntimeRenderTiming(bool Enable);
     class UMetasoundGeneratorHandle* CreateMetaSoundGeneratorHandle(class UAudioComponent* OnComponent);
     bool ApplyParameterPack(class UMetasoundParameterPack* Pack);
-}; // Size: 0xE0
+}; // Size: 0xB0
 
 class UMetasoundOutputBlueprintAccess : public UBlueprintFunctionLibrary
 {
@@ -220,7 +303,7 @@ class UMetasoundOutputBlueprintAccess : public UBlueprintFunctionLibrary
     bool IsInt32(const FMetaSoundOutput& Output);
     bool IsFloat(const FMetaSoundOutput& Output);
     bool IsBool(const FMetaSoundOutput& Output);
-    float GetTimeSeconds(const FMetaSoundOutput& Output, bool& Success);
+    double GetTimeSeconds(const FMetaSoundOutput& Output, bool& Success);
     FString GetString(const FMetaSoundOutput& Output, bool& Success);
     int32 GetInt32(const FMetaSoundOutput& Output, bool& Success);
     float GetFloat(const FMetaSoundOutput& Output, bool& Success);

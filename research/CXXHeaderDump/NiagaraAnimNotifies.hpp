@@ -14,19 +14,22 @@ class UAnimNotifyState_TimedNiagaraEffect : public UAnimNotifyState
     FName SocketName;                                                                 // 0x0038 (size: 0x8)
     FVector LocationOffset;                                                           // 0x0040 (size: 0x18)
     FRotator RotationOffset;                                                          // 0x0058 (size: 0x18)
-    bool bDestroyAtEnd;                                                               // 0x0070 (size: 0x1)
+    FVector Scale;                                                                    // 0x0070 (size: 0x18)
+    bool bApplyRateScaleAsTimeDilation;                                               // 0x0088 (size: 0x1)
+    bool bDestroyAtEnd;                                                               // 0x0089 (size: 0x1)
 
     class UFXSystemComponent* GetSpawnedEffect(class UMeshComponent* MeshComp);
-}; // Size: 0x78
+}; // Size: 0x90
 
 class UAnimNotifyState_TimedNiagaraEffectAdvanced : public UAnimNotifyState_TimedNiagaraEffect
 {
-    bool bEnableNormalizedNotifyProgress;                                             // 0x0078 (size: 0x1)
-    FName NotifyProgressUserParameter;                                                // 0x007C (size: 0x8)
-    TArray<FCurveParameterPair> AnimCurves;                                           // 0x0088 (size: 0x10)
+    bool bEnableNormalizedNotifyProgress;                                             // 0x0090 (size: 0x1)
+    bool bApplyRateScaleToProgress;                                                   // 0x0091 (size: 0x1)
+    FName NotifyProgressUserParameter;                                                // 0x0094 (size: 0x8)
+    TArray<FCurveParameterPair> AnimCurves;                                           // 0x00A0 (size: 0x10)
 
     float GetNotifyProgress(class UMeshComponent* MeshComp);
-}; // Size: 0xE8
+}; // Size: 0x100
 
 class UAnimNotify_PlayNiagaraEffect : public UAnimNotify
 {

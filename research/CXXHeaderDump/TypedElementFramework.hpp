@@ -1,6 +1,120 @@
 #ifndef UE4SS_SDK_TypedElementFramework_HPP
 #define UE4SS_SDK_TypedElementFramework_HPP
 
+#include "TypedElementFramework_enums.hpp"
+
+struct FDescriptionColumn : public FEditorDataStorageColumn
+{
+    FText Description;                                                                // 0x0000 (size: 0x10)
+
+}; // Size: 0x10
+
+struct FDisplayNameColumn : public FEditorDataStorageColumn
+{
+    FText DisplayName;                                                                // 0x0000 (size: 0x10)
+
+}; // Size: 0x10
+
+struct FEditorDataStorageColumn
+{
+}; // Size: 0x1
+
+struct FEditorDataStorageTag
+{
+}; // Size: 0x1
+
+struct FEditorDataStorageUrlColumn : public FEditorDataStorageColumn
+{
+    FString UrlString;                                                                // 0x0000 (size: 0x10)
+
+}; // Size: 0x10
+
+struct FEditorDataStorageWebImageColumn : public FEditorDataStorageColumn
+{
+    FString UrlString;                                                                // 0x0000 (size: 0x10)
+    uint16 Width;                                                                     // 0x0010 (size: 0x2)
+    uint16 Height;                                                                    // 0x0012 (size: 0x2)
+
+}; // Size: 0x18
+
+struct FFolderTag : public FEditorDataStorageTag
+{
+}; // Size: 0x1
+
+struct FHideRowFromUITag : public FEditorDataStorageTag
+{
+}; // Size: 0x1
+
+struct FIsInEditingModeTag : public FEditorDataStorageTag
+{
+}; // Size: 0x1
+
+struct FNameColumn : public FEditorDataStorageColumn
+{
+    FName Name;                                                                       // 0x0000 (size: 0x8)
+
+}; // Size: 0x8
+
+struct FObjectOverrideColumn : public FEditorDataStorageColumn
+{
+}; // Size: 0x1
+
+struct FSCCExternalRevisionIdColumn : public FEditorDataStorageColumn
+{
+    FSCCRevisionId RevisionId;                                                        // 0x0000 (size: 0x14)
+
+}; // Size: 0x14
+
+struct FSCCExternallyEditedTag : public FEditorDataStorageTag
+{
+}; // Size: 0x1
+
+struct FSCCExternallyLockedColumn : public FEditorDataStorageColumn
+{
+    FSCCUserInfo LockedBy;                                                            // 0x0000 (size: 0x10)
+
+}; // Size: 0x10
+
+struct FSCCInChangelistTag : public FEditorDataStorageTag
+{
+}; // Size: 0x1
+
+struct FSCCLockedTag : public FEditorDataStorageTag
+{
+}; // Size: 0x1
+
+struct FSCCNotCurrentTag : public FEditorDataStorageTag
+{
+}; // Size: 0x1
+
+struct FSCCRevisionId
+{
+    uint32 ID;                                                                        // 0x0000 (size: 0x14)
+
+}; // Size: 0x14
+
+struct FSCCRevisionIdColumn : public FEditorDataStorageColumn
+{
+    FSCCRevisionId RevisionId;                                                        // 0x0000 (size: 0x14)
+
+}; // Size: 0x14
+
+struct FSCCStagedTag : public FEditorDataStorageTag
+{
+}; // Size: 0x1
+
+struct FSCCStatusColumn : public FEditorDataStorageColumn
+{
+    ESCCModification Modification;                                                    // 0x0000 (size: 0x4)
+
+}; // Size: 0x4
+
+struct FSCCUserInfo
+{
+    FString Name;                                                                     // 0x0000 (size: 0x10)
+
+}; // Size: 0x10
+
 struct FScriptTypedElementHandle
 {
 }; // Size: 0x8
@@ -9,121 +123,330 @@ struct FScriptTypedElementListProxy
 {
 }; // Size: 0x10
 
-struct FTypedElementClassTypeInfoColumn : public FTypedElementDataStorageColumn
+struct FSimpleWidgetConstructor : public FTypedElementWidgetConstructor
 {
-}; // Size: 0x8
+}; // Size: 0x80
 
-struct FTypedElementDataStorageColumn
+struct FSlateColorColumn : public FEditorDataStorageColumn
 {
-}; // Size: 0x1
+    FSlateColor Color;                                                                // 0x0000 (size: 0x14)
 
-struct FTypedElementDataStorageTag
-{
-}; // Size: 0x1
+}; // Size: 0x14
 
-struct FTypedElementExternalObjectColumn : public FTypedElementDataStorageColumn
-{
-}; // Size: 0x8
-
-struct FTypedElementFloatValueCacheColumn : public FTypedElementDataStorageColumn
-{
-    float Value;                                                                      // 0x0000 (size: 0x4)
-
-}; // Size: 0x4
-
-struct FTypedElementI32IntValueCacheColumn : public FTypedElementDataStorageColumn
-{
-    int32 Value;                                                                      // 0x0000 (size: 0x4)
-
-}; // Size: 0x4
-
-struct FTypedElementI64IntValueCacheColumn : public FTypedElementDataStorageColumn
-{
-    int64 Value;                                                                      // 0x0000 (size: 0x8)
-
-}; // Size: 0x8
-
-struct FTypedElementLabelColumn : public FTypedElementDataStorageColumn
-{
-    FString Label;                                                                    // 0x0000 (size: 0x10)
-
-}; // Size: 0x10
-
-struct FTypedElementLabelHashColumn : public FTypedElementDataStorageColumn
-{
-    uint64 LabelHash;                                                                 // 0x0000 (size: 0x8)
-
-}; // Size: 0x8
-
-struct FTypedElementLocalTransformColumn : public FTypedElementDataStorageColumn
-{
-    FTransform Transform;                                                             // 0x0000 (size: 0x60)
-
-}; // Size: 0x60
-
-struct FTypedElementPackageLoadedPathColumn : public FTypedElementDataStorageColumn
-{
-}; // Size: 0xC
-
-struct FTypedElementPackagePathColumn : public FTypedElementDataStorageColumn
-{
-    FString Path;                                                                     // 0x0000 (size: 0x10)
-
-}; // Size: 0x10
-
-struct FTypedElementRowReferenceColumn : public FTypedElementDataStorageColumn
-{
-}; // Size: 0x8
-
-struct FTypedElementScriptStructTypeInfoColumn : public FTypedElementDataStorageColumn
-{
-}; // Size: 0x8
-
-struct FTypedElementSelectionColumn : public FTypedElementDataStorageColumn
-{
-}; // Size: 0x1
-
-struct FTypedElementSlateWidgetReferenceColumn : public FTypedElementDataStorageColumn
+struct FTEDSProcessorTestsReferenceColumn : public FEditorDataStorageColumn
 {
 }; // Size: 0x10
 
-struct FTypedElementSlateWidgetReferenceDeletesRowTag : public FTypedElementDataStorageTag
+struct FTEDSProcessorTests_Linked : public FEditorDataStorageTag
 {
 }; // Size: 0x1
 
-struct FTypedElementSyncBackToWorldTag : public FTypedElementDataStorageTag
+struct FTEDSProcessorTests_PrimaryTag : public FEditorDataStorageTag
 {
 }; // Size: 0x1
 
-struct FTypedElementSyncFromWorldTag : public FTypedElementDataStorageTag
+struct FTEDSProcessorTests_SecondaryTag : public FEditorDataStorageTag
 {
 }; // Size: 0x1
 
-struct FTypedElementU32IntValueCacheColumn : public FTypedElementDataStorageColumn
+struct FTableRowParentColumn : public FEditorDataStorageColumn
 {
-    uint32 Value;                                                                     // 0x0000 (size: 0x4)
+}; // Size: 0x8
+
+struct FTedsRowHandle
+{
+    uint64 RowHandle;                                                                 // 0x0000 (size: 0x8)
+
+}; // Size: 0x8
+
+struct FTestColumnA : public FEditorDataStorageColumn
+{
+}; // Size: 0x1
+
+struct FTestColumnB : public FEditorDataStorageColumn
+{
+}; // Size: 0x1
+
+struct FTestColumnC : public FEditorDataStorageColumn
+{
+}; // Size: 0x1
+
+struct FTestColumnD : public FEditorDataStorageColumn
+{
+}; // Size: 0x1
+
+struct FTestColumnDynamic : public FEditorDataStorageColumn
+{
+}; // Size: 0x1
+
+struct FTestColumnE : public FEditorDataStorageColumn
+{
+}; // Size: 0x1
+
+struct FTestColumnF : public FEditorDataStorageColumn
+{
+}; // Size: 0x1
+
+struct FTestColumnG : public FEditorDataStorageColumn
+{
+}; // Size: 0x1
+
+struct FTestColumnInt : public FEditorDataStorageColumn
+{
+    int32 TestInt;                                                                    // 0x0000 (size: 0x4)
 
 }; // Size: 0x4
 
-struct FTypedElementU64IntValueCacheColumn : public FTypedElementDataStorageColumn
+struct FTestColumnString : public FEditorDataStorageColumn
+{
+    FString TestString;                                                               // 0x0000 (size: 0x10)
+
+}; // Size: 0x10
+
+struct FTestTagColumnA : public FEditorDataStorageTag
+{
+}; // Size: 0x1
+
+struct FTestTagColumnB : public FEditorDataStorageTag
+{
+}; // Size: 0x1
+
+struct FTestTagColumnC : public FEditorDataStorageTag
+{
+}; // Size: 0x1
+
+struct FTestTagColumnD : public FEditorDataStorageTag
+{
+}; // Size: 0x1
+
+struct FTest_PingPongDurPhys : public FEditorDataStorageColumn
 {
     uint64 Value;                                                                     // 0x0000 (size: 0x8)
 
 }; // Size: 0x8
 
-struct FTypedElementUObjectColumn : public FTypedElementDataStorageColumn
+struct FTest_PingPongPostPhys : public FEditorDataStorageColumn
+{
+    uint64 Value;                                                                     // 0x0000 (size: 0x8)
+
+}; // Size: 0x8
+
+struct FTest_PingPongPrePhys : public FEditorDataStorageColumn
+{
+    uint64 Value;                                                                     // 0x0000 (size: 0x8)
+
+}; // Size: 0x8
+
+struct FTypedElementActorTag : public FEditorDataStorageTag
+{
+}; // Size: 0x1
+
+struct FTypedElementClassDefaultObjectTag : public FEditorDataStorageTag
+{
+}; // Size: 0x1
+
+struct FTypedElementClassTypeInfoColumn : public FEditorDataStorageColumn
 {
 }; // Size: 0x8
 
-struct FTypedElementViewportColorColumn : public FTypedElementDataStorageColumn
+struct FTypedElementExternalObjectColumn : public FEditorDataStorageColumn
+{
+}; // Size: 0x8
+
+struct FTypedElementFloatValueCacheColumn : public FEditorDataStorageColumn
+{
+    float Value;                                                                      // 0x0000 (size: 0x4)
+
+}; // Size: 0x4
+
+struct FTypedElementI32IntValueCacheColumn : public FEditorDataStorageColumn
+{
+    int32 Value;                                                                      // 0x0000 (size: 0x4)
+
+}; // Size: 0x4
+
+struct FTypedElementI64IntValueCacheColumn : public FEditorDataStorageColumn
+{
+    int64 Value;                                                                      // 0x0000 (size: 0x8)
+
+}; // Size: 0x8
+
+struct FTypedElementIconOverrideColumn : public FEditorDataStorageColumn
+{
+    FName IconName;                                                                   // 0x0000 (size: 0x8)
+
+}; // Size: 0x8
+
+struct FTypedElementLabelColumn : public FEditorDataStorageColumn
+{
+    FString Label;                                                                    // 0x0000 (size: 0x10)
+
+}; // Size: 0x10
+
+struct FTypedElementLabelHashColumn : public FEditorDataStorageColumn
+{
+    uint64 LabelHash;                                                                 // 0x0000 (size: 0x8)
+
+}; // Size: 0x8
+
+struct FTypedElementLocalTransformColumn : public FEditorDataStorageColumn
+{
+    FTransform Transform;                                                             // 0x0000 (size: 0x60)
+
+}; // Size: 0x60
+
+struct FTypedElementLoosePropertyTag : public FEditorDataStorageTag
+{
+}; // Size: 0x1
+
+struct FTypedElementPackageLoadedPathColumn : public FEditorDataStorageColumn
+{
+}; // Size: 0xC
+
+struct FTypedElementPackagePathColumn : public FEditorDataStorageColumn
+{
+    FString Path;                                                                     // 0x0000 (size: 0x10)
+
+}; // Size: 0x10
+
+struct FTypedElementPackageReference : public FEditorDataStorageColumn
+{
+}; // Size: 0x8
+
+struct FTypedElementPackageUnresolvedReference : public FEditorDataStorageColumn
+{
+}; // Size: 0x10
+
+struct FTypedElementPackageUpdatedTag : public FEditorDataStorageTag
+{
+}; // Size: 0x1
+
+struct FTypedElementPivotOffset : public FEditorDataStorageColumn
+{
+    FVector Offset;                                                                   // 0x0000 (size: 0x18)
+
+}; // Size: 0x18
+
+struct FTypedElementPropertyBagPlaceholderTag : public FEditorDataStorageTag
+{
+}; // Size: 0x1
+
+struct FTypedElementPropertyBagPlaceholderTypeInfoColumn : public FEditorDataStorageColumn
+{
+}; // Size: 0x8
+
+struct FTypedElementRowReferenceColumn : public FEditorDataStorageColumn
+{
+}; // Size: 0x8
+
+struct FTypedElementScriptStructTypeInfoColumn : public FEditorDataStorageColumn
+{
+}; // Size: 0x8
+
+struct FTypedElementSelectionColumn : public FEditorDataStorageColumn
+{
+    FName SelectionSet;                                                               // 0x0000 (size: 0x8)
+
+}; // Size: 0x8
+
+struct FTypedElementSlateWidgetReferenceColumn : public FEditorDataStorageColumn
+{
+}; // Size: 0x30
+
+struct FTypedElementSlateWidgetReferenceDeletesRowTag : public FEditorDataStorageTag
+{
+}; // Size: 0x1
+
+struct FTypedElementSyncBackToWorldTag : public FEditorDataStorageTag
+{
+}; // Size: 0x1
+
+struct FTypedElementSyncFromWorldInteractiveTag : public FEditorDataStorageTag
+{
+}; // Size: 0x1
+
+struct FTypedElementSyncFromWorldTag : public FEditorDataStorageTag
+{
+}; // Size: 0x1
+
+struct FTypedElementU32IntValueCacheColumn : public FEditorDataStorageColumn
+{
+    uint32 Value;                                                                     // 0x0000 (size: 0x4)
+
+}; // Size: 0x4
+
+struct FTypedElementU64IntValueCacheColumn : public FEditorDataStorageColumn
+{
+    uint64 Value;                                                                     // 0x0000 (size: 0x8)
+
+}; // Size: 0x8
+
+struct FTypedElementUObjectColumn : public FEditorDataStorageColumn
+{
+}; // Size: 0x8
+
+struct FTypedElementUObjectIdColumn : public FEditorDataStorageColumn
+{
+    uint32 ID;                                                                        // 0x0000 (size: 0x4)
+    int32 SerialNumber;                                                               // 0x0004 (size: 0x4)
+
+}; // Size: 0x8
+
+struct FTypedElementViewportOutlineColorColumn : public FEditorDataStorageColumn
 {
     uint8 SelectionOutlineColorIndex;                                                 // 0x0000 (size: 0x1)
 
 }; // Size: 0x1
 
+struct FTypedElementViewportOverlayColorColumn : public FEditorDataStorageColumn
+{
+    FColor OverlayColor;                                                              // 0x0000 (size: 0x4)
+
+}; // Size: 0x4
+
 struct FTypedElementWidgetConstructor
 {
-}; // Size: 0x10
+}; // Size: 0x80
+
+struct FTypedElementWorldColumn : public FEditorDataStorageColumn
+{
+}; // Size: 0x8
+
+struct FUnresolvedTableRowParentColumn : public FEditorDataStorageColumn
+{
+}; // Size: 0x18
+
+struct FVisibleInEditorColumn : public FEditorDataStorageColumn
+{
+}; // Size: 0x1
+
+struct FWidgetFactoryColumn : public FEditorDataStorageColumn
+{
+}; // Size: 0x8
+
+struct FWidgetFactoryConditionsColumn : public FEditorDataStorageColumn
+{
+}; // Size: 0x288
+
+struct FWidgetFactoryConstructorColumn : public FEditorDataStorageColumn
+{
+}; // Size: 0x8
+
+struct FWidgetFactoryConstructorTypeInfoColumn : public FEditorDataStorageColumn
+{
+}; // Size: 0x8
+
+struct FWidgetPurposeColumn : public FEditorDataStorageColumn
+{
+}; // Size: 0x20
+
+struct FWidgetPurposeNameColumn : public FEditorDataStorageColumn
+{
+    FName Namespace;                                                                  // 0x0000 (size: 0x8)
+    FName Name;                                                                       // 0x0008 (size: 0x8)
+    FName Frame;                                                                      // 0x0010 (size: 0x8)
+
+}; // Size: 0x18
 
 class ITestTypedElementInterfaceA : public IInterface
 {
@@ -148,15 +471,7 @@ class ITypedElementCounterInterface : public IInterface
 {
 }; // Size: 0x28
 
-class ITypedElementDataStorageCompatibilityInterface : public IInterface
-{
-}; // Size: 0x28
-
-class ITypedElementDataStorageInterface : public IInterface
-{
-}; // Size: 0x28
-
-class ITypedElementDataStorageUiInterface : public IInterface
+class UEditorDataStorageFactory : public UObject
 {
 }; // Size: 0x28
 
@@ -172,7 +487,7 @@ class UTestTypedElementInterfaceBAndC_Typed : public UObject
 {
 }; // Size: 0x38
 
-class UTypedElementDataStorageFactory : public UObject
+class UTest_PingPongBetweenPhaseFactory : public UEditorDataStorageFactory
 {
 }; // Size: 0x28
 
@@ -215,6 +530,6 @@ class UTypedElementRegistry : public UObject
 
     class UTypedElementRegistry* GetInstance();
     class UObject* GetElementInterface(const FScriptTypedElementHandle& InElementHandle, const TSubclassOf<class UInterface> InBaseInterfaceType);
-}; // Size: 0x978
+}; // Size: 0x948
 
 #endif

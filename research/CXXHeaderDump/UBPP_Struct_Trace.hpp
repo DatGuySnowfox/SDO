@@ -3,7 +3,7 @@
 
 struct FUBPP_Struct_Trace
 {
-    TArray<class AActor*> ActorstoIgnore_11_59C868654E8EA627D004178C0BDB17CC;         // 0x0000 (size: 0x10)
+    TArray<AActor*> ActorstoIgnore_11_59C868654E8EA627D004178C0BDB17CC;               // 0x0000 (size: 0x10)
     TEnumAsByte<EDrawDebugTrace::Type> DrawDebugType_18_2DF5AFE84B80E0506192068839BAE11A; // 0x0010 (size: 0x1)
     bool IgnoreSelf_17_39A7384449C24B2F0E0AC791E8C53C0D;                              // 0x0011 (size: 0x1)
     FLinearColor TraceColor_2_39F0CF91492D0BC525B3FDA56C286A0F;                       // 0x0014 (size: 0x10)

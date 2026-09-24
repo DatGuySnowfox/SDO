@@ -3,6 +3,6 @@
 
 class ABP_AICivilian_C : public ABP_MasterAICharacter_C
 {
-}; // Size: 0x869
+}; // Size: 0x829
 
 #endif

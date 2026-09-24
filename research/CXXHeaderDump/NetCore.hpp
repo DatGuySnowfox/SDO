@@ -16,6 +16,7 @@ struct FEscalationState : public FStateStruct
 
 struct FFastArraySerializer
 {
+    int32 IDCounter;                                                                  // 0x0050 (size: 0x4)
     int32 ArrayReplicationKey;                                                        // 0x0054 (size: 0x4)
     EFastArraySerializerDeltaFlags DeltaFlags;                                        // 0x0100 (size: 0x1)
 

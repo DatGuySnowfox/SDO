@@ -7,7 +7,7 @@ struct FGeometryCacheMeshBatchInfo
 
 struct FGeometryCacheMeshData
 {
-}; // Size: 0xC8
+}; // Size: 0xD8
 
 struct FGeometryCacheVertexInfo
 {
@@ -24,7 +24,7 @@ struct FNiagaraGeometryCacheReference
 {
     class UGeometryCache* GeometryCache;                                              // 0x0000 (size: 0x8)
     FNiagaraUserParameterBinding GeometryCacheUserParamBinding;                       // 0x0008 (size: 0x20)
-    TArray<class UMaterialInterface*> OverrideMaterials;                              // 0x0028 (size: 0x10)
+    TArray<UMaterialInterface*> OverrideMaterials;                                    // 0x0028 (size: 0x10)
     TArray<FNiagaraGeometryCacheMICOverride> MICOverrideMaterials;                    // 0x0038 (size: 0x10)
 
 }; // Size: 0x48
@@ -35,10 +35,10 @@ struct FTrackRenderData
 
 class AGeometryCacheActor : public AActor
 {
-    class UGeometryCacheComponent* GeometryCacheComponent;                            // 0x0298 (size: 0x8)
+    class UGeometryCacheComponent* GeometryCacheComponent;                            // 0x02A8 (size: 0x8)
 
     class UGeometryCacheComponent* GetGeometryCacheComponent();
-}; // Size: 0x2A0
+}; // Size: 0x2B0
 
 class UDEPRECATED_GeometryCacheTrack_FlipbookAnimation : public UGeometryCacheTrack
 {
@@ -51,25 +51,25 @@ class UDEPRECATED_GeometryCacheTrack_TransformAnimation : public UGeometryCacheT
 {
 
     void SetMesh(const FGeometryCacheMeshData& NewMeshData);
-}; // Size: 0x120
+}; // Size: 0x130
 
 class UDEPRECATED_GeometryCacheTrack_TransformGroupAnimation : public UGeometryCacheTrack
 {
 
     void SetMesh(const FGeometryCacheMeshData& NewMeshData);
-}; // Size: 0x120
+}; // Size: 0x130
 
 class UGeometryCache : public UObject
 {
-    TArray<class UMaterialInterface*> Materials;                                      // 0x0030 (size: 0x10)
+    TArray<UMaterialInterface*> Materials;                                            // 0x0030 (size: 0x10)
     TArray<FName> MaterialSlotNames;                                                  // 0x0040 (size: 0x10)
-    TArray<class UGeometryCacheTrack*> Tracks;                                        // 0x0050 (size: 0x10)
-    TArray<class UAssetUserData*> AssetUserData;                                      // 0x0060 (size: 0x10)
-    int32 StartFrame;                                                                 // 0x0080 (size: 0x4)
-    int32 EndFrame;                                                                   // 0x0084 (size: 0x4)
-    uint64 Hash;                                                                      // 0x0088 (size: 0x8)
+    TArray<UGeometryCacheTrack*> Tracks;                                              // 0x0050 (size: 0x10)
+    TArray<UAssetUserData*> AssetUserData;                                            // 0x0060 (size: 0x10)
+    int32 StartFrame;                                                                 // 0x0088 (size: 0x4)
+    int32 EndFrame;                                                                   // 0x008C (size: 0x4)
+    uint64 Hash;                                                                      // 0x0090 (size: 0x8)
 
-}; // Size: 0x90
+}; // Size: 0x98
 
 class UGeometryCacheCodecBase : public UObject
 {
@@ -89,19 +89,19 @@ class UGeometryCacheCodecV1 : public UGeometryCacheCodecBase
 
 class UGeometryCacheComponent : public UMeshComponent
 {
-    class UGeometryCache* GeometryCache;                                              // 0x05A8 (size: 0x8)
-    bool bRunning;                                                                    // 0x05B0 (size: 0x1)
-    bool bLooping;                                                                    // 0x05B1 (size: 0x1)
-    bool bExtrapolateFrames;                                                          // 0x05B2 (size: 0x1)
-    float StartTimeOffset;                                                            // 0x05B4 (size: 0x4)
-    float PlaybackSpeed;                                                              // 0x05B8 (size: 0x4)
-    float MotionVectorScale;                                                          // 0x05BC (size: 0x4)
-    int32 NumTracks;                                                                  // 0x05C0 (size: 0x4)
-    float ElapsedTime;                                                                // 0x05C4 (size: 0x4)
-    float Duration;                                                                   // 0x0614 (size: 0x4)
-    bool bManualTick;                                                                 // 0x0618 (size: 0x1)
-    bool bOverrideWireframeColor;                                                     // 0x0619 (size: 0x1)
-    FLinearColor WireframeOverrideColor;                                              // 0x061C (size: 0x10)
+    class UGeometryCache* GeometryCache;                                              // 0x0568 (size: 0x8)
+    bool bRunning;                                                                    // 0x0570 (size: 0x1)
+    bool bLooping;                                                                    // 0x0571 (size: 0x1)
+    bool bExtrapolateFrames;                                                          // 0x0572 (size: 0x1)
+    float StartTimeOffset;                                                            // 0x0574 (size: 0x4)
+    float PlaybackSpeed;                                                              // 0x0578 (size: 0x4)
+    float MotionVectorScale;                                                          // 0x057C (size: 0x4)
+    int32 NumTracks;                                                                  // 0x0580 (size: 0x4)
+    float ElapsedTime;                                                                // 0x0584 (size: 0x4)
+    float Duration;                                                                   // 0x05D4 (size: 0x4)
+    bool bManualTick;                                                                 // 0x05D8 (size: 0x1)
+    bool bOverrideWireframeColor;                                                     // 0x05D9 (size: 0x1)
+    FLinearColor WireframeOverrideColor;                                              // 0x05DC (size: 0x10)
 
     void TickAtThisTime(const float Time, bool bInIsRunning, bool bInBackwards, bool bInIsLooping);
     void Stop();
@@ -127,11 +127,13 @@ class UGeometryCacheComponent : public UMeshComponent
     float GetPlaybackSpeed();
     float GetPlaybackDirection();
     bool GetOverrideWireframeColor();
+    int32 GetNumberOfTracks();
     int32 GetNumberOfFrames();
     float GetMotionVectorScale();
+    float GetElapsedTime();
     float GetDuration();
     float GetAnimationTime();
-}; // Size: 0x630
+}; // Size: 0x5F0
 
 class UGeometryCacheTrack : public UObject
 {
@@ -142,27 +144,27 @@ class UGeometryCacheTrack : public UObject
 class UGeometryCacheTrackStreamable : public UGeometryCacheTrack
 {
     class UGeometryCacheCodecBase* Codec;                                             // 0x0058 (size: 0x8)
-    float StartSampleTime;                                                            // 0x00C8 (size: 0x4)
+    float StartSampleTime;                                                            // 0x00C0 (size: 0x4)
 
-}; // Size: 0xD8
+}; // Size: 0xD0
 
 class UNiagaraGeometryCacheRendererProperties : public UNiagaraRendererProperties
 {
-    TArray<FNiagaraGeometryCacheReference> GeometryCaches;                            // 0x00C0 (size: 0x10)
-    ENiagaraRendererSourceDataMode SourceMode;                                        // 0x00D0 (size: 0x1)
-    bool bIsLooping;                                                                  // 0x00D1 (size: 0x1)
-    uint32 ComponentCountLimit;                                                       // 0x00D4 (size: 0x4)
-    FNiagaraVariableAttributeBinding PositionBinding;                                 // 0x00D8 (size: 0x38)
-    FNiagaraVariableAttributeBinding RotationBinding;                                 // 0x0110 (size: 0x38)
-    FNiagaraVariableAttributeBinding ScaleBinding;                                    // 0x0148 (size: 0x38)
-    FNiagaraVariableAttributeBinding ElapsedTimeBinding;                              // 0x0180 (size: 0x38)
-    FNiagaraVariableAttributeBinding EnabledBinding;                                  // 0x01B8 (size: 0x38)
-    FNiagaraVariableAttributeBinding ArrayIndexBinding;                               // 0x01F0 (size: 0x38)
-    FNiagaraVariableAttributeBinding RendererVisibilityTagBinding;                    // 0x0228 (size: 0x38)
-    int32 RendererVisibility;                                                         // 0x0260 (size: 0x4)
-    bool bAssignComponentsOnParticleID;                                               // 0x0264 (size: 0x1)
-    FNiagaraRendererMaterialParameters MaterialParameters;                            // 0x0268 (size: 0x50)
+    TArray<FNiagaraGeometryCacheReference> GeometryCaches;                            // 0x00B8 (size: 0x10)
+    ENiagaraRendererSourceDataMode SourceMode;                                        // 0x00C8 (size: 0x1)
+    bool bIsLooping;                                                                  // 0x00C9 (size: 0x1)
+    uint32 ComponentCountLimit;                                                       // 0x00CC (size: 0x4)
+    FNiagaraVariableAttributeBinding PositionBinding;                                 // 0x00D0 (size: 0x38)
+    FNiagaraVariableAttributeBinding RotationBinding;                                 // 0x0108 (size: 0x38)
+    FNiagaraVariableAttributeBinding ScaleBinding;                                    // 0x0140 (size: 0x38)
+    FNiagaraVariableAttributeBinding ElapsedTimeBinding;                              // 0x0178 (size: 0x38)
+    FNiagaraVariableAttributeBinding EnabledBinding;                                  // 0x01B0 (size: 0x38)
+    FNiagaraVariableAttributeBinding ArrayIndexBinding;                               // 0x01E8 (size: 0x38)
+    FNiagaraVariableAttributeBinding RendererVisibilityTagBinding;                    // 0x0220 (size: 0x38)
+    int32 RendererVisibility;                                                         // 0x0258 (size: 0x4)
+    bool bAssignComponentsOnParticleID;                                               // 0x025C (size: 0x1)
+    FNiagaraRendererMaterialParameters MaterialParameters;                            // 0x0260 (size: 0x50)
 
-}; // Size: 0x2E8
+}; // Size: 0x2E0
 
 #endif

@@ -3,6 +3,6 @@
 
 class UWBP_NarrativeCommonActionWidget_C : public UCommonActionWidget
 {
-}; // Size: 0x490
+}; // Size: 0x430
 
 #endif

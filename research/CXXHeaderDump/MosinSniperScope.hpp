@@ -3,9 +3,9 @@
 
 class UMosinSniperScope_C : public UUserWidget
 {
-    class UWidgetAnimation* Fade;                                                     // 0x02C0 (size: 0x8)
-    class UImage* SniperScope;                                                        // 0x02C8 (size: 0x8)
+    class UImage* SniperScope;                                                        // 0x0340 (size: 0x8)
+    class UWidgetAnimation* Fade;                                                     // 0x0348 (size: 0x8)
 
-}; // Size: 0x2D0
+}; // Size: 0x350
 
 #endif

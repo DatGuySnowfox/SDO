@@ -16,6 +16,12 @@ enum class EInterchangeNodeContainerType {
     EInterchangeNodeContainerType_MAX = 4,
 };
 
+enum class EInterchangeNodeUserInterfaceContext {
+    None = 0,
+    Preview = 1,
+    EInterchangeNodeUserInterfaceContext_MAX = 2,
+};
+
 enum class EInterchangePipelineContext {
     None = 0,
     AssetImport = 1,
@@ -26,7 +32,9 @@ enum class EInterchangePipelineContext {
     AssetCustomLODReimport = 6,
     AssetAlternateSkinningImport = 7,
     AssetAlternateSkinningReimport = 8,
-    EInterchangePipelineContext_MAX = 9,
+    AssetCustomMorphTargetImport = 9,
+    AssetCustomMorphTargetReImport = 10,
+    EInterchangePipelineContext_MAX = 11,
 };
 
 enum class EInterchangePipelineTask {

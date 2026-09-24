@@ -3,14 +3,14 @@
 
 class ABP_SurroundeadGameState_C : public AGameStateBase
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02F0 (size: 0x8)
-    class USceneComponent* DefaultSceneRoot;                                          // 0x02F8 (size: 0x8)
-    class ABP_ItemSnapCaptor_C* SnapActorRef;                                         // 0x0300 (size: 0x8)
-    bool FirstCaptureDone;                                                            // 0x0308 (size: 0x1)
-    TArray<class UJSI_Slot_C*> ItemsQueue;                                            // 0x0310 (size: 0x10)
-    double SnapDelay;                                                                 // 0x0320 (size: 0x8)
-    TArray<FName> AllInspectedIDs;                                                    // 0x0328 (size: 0x10)
-    TArray<int32> AllUIDs;                                                            // 0x0338 (size: 0x10)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0300 (size: 0x8)
+    class USceneComponent* DefaultSceneRoot;                                          // 0x0308 (size: 0x8)
+    class ABP_ItemSnapCaptor_C* SnapActorRef;                                         // 0x0310 (size: 0x8)
+    bool FirstCaptureDone;                                                            // 0x0318 (size: 0x1)
+    TArray<UJSI_Slot_C*> ItemsQueue;                                                  // 0x0320 (size: 0x10)
+    double SnapDelay;                                                                 // 0x0330 (size: 0x8)
+    TArray<FName> AllInspectedIDs;                                                    // 0x0338 (size: 0x10)
+    TArray<int32> AllUIDs;                                                            // 0x0348 (size: 0x10)
 
     void InspectorGetPrimitiveComponent(class AActor* Actor, class UPrimitiveComponent*& Comp);
     void GetLocalAttachmentByID(class UJigsawItem_DataAsset_C* ItemId, bool& Found, FName& Socket, FGameplayTag& Type, TSubclassOf<class AActor>& Class);
@@ -26,6 +26,6 @@ class ABP_SurroundeadGameState_C : public AGameStateBase
     void OnSnapTaken();
     void HandleNext();
     void ExecuteUbergraph_BP_SurroundeadGameState(int32 EntryPoint);
-}; // Size: 0x348
+}; // Size: 0x358
 
 #endif

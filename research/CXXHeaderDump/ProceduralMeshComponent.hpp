@@ -50,13 +50,13 @@ class UKismetProceduralMeshLibrary : public UBlueprintFunctionLibrary
 
 class UProceduralMeshComponent : public UMeshComponent
 {
-    bool bUseComplexAsSimpleCollision;                                                // 0x05B0 (size: 0x1)
-    bool bUseAsyncCooking;                                                            // 0x05B1 (size: 0x1)
-    class UBodySetup* ProcMeshBodySetup;                                              // 0x05B8 (size: 0x8)
-    TArray<FProcMeshSection> ProcMeshSections;                                        // 0x05C0 (size: 0x10)
-    TArray<FKConvexElem> CollisionConvexElems;                                        // 0x05D0 (size: 0x10)
-    FBoxSphereBounds LocalBounds;                                                     // 0x05E0 (size: 0x38)
-    TArray<class UBodySetup*> AsyncBodySetupQueue;                                    // 0x0618 (size: 0x10)
+    bool bUseComplexAsSimpleCollision;                                                // 0x0570 (size: 0x1)
+    bool bUseAsyncCooking;                                                            // 0x0571 (size: 0x1)
+    class UBodySetup* ProcMeshBodySetup;                                              // 0x0578 (size: 0x8)
+    TArray<FProcMeshSection> ProcMeshSections;                                        // 0x0580 (size: 0x10)
+    TArray<FKConvexElem> CollisionConvexElems;                                        // 0x0590 (size: 0x10)
+    FBoxSphereBounds LocalBounds;                                                     // 0x05A0 (size: 0x38)
+    TArray<UBodySetup*> AsyncBodySetupQueue;                                          // 0x05D8 (size: 0x10)
 
     void UpdateMeshSection_LinearColor(int32 SectionIndex, const TArray<FVector>& Vertices, const TArray<FVector>& Normals, const TArray<FVector2D>& UV0, const TArray<FVector2D>& UV1, const TArray<FVector2D>& UV2, const TArray<FVector2D>& UV3, const TArray<FLinearColor>& VertexColors, const TArray<FProcMeshTangent>& Tangents, bool bSRGBConversion);
     void UpdateMeshSection(int32 SectionIndex, const TArray<FVector>& Vertices, const TArray<FVector>& Normals, const TArray<FVector2D>& UV0, const TArray<FColor>& VertexColors, const TArray<FProcMeshTangent>& Tangents);
@@ -69,6 +69,6 @@ class UProceduralMeshComponent : public UMeshComponent
     void ClearCollisionConvexMeshes();
     void ClearAllMeshSections();
     void AddCollisionConvexMesh(TArray<FVector> ConvexVerts);
-}; // Size: 0x630
+}; // Size: 0x5F0
 
 #endif

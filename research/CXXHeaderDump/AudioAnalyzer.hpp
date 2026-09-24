@@ -8,7 +8,7 @@ class UAudioAnalyzer : public UObject
 
     void StopAnalyzing(const class UObject* WorldContextObject);
     void StartAnalyzing(const class UObject* WorldContextObject, class UAudioBus* AudioBusToAnalyze);
-}; // Size: 0x90
+}; // Size: 0xA0
 
 class UAudioAnalyzerAssetBase : public UObject
 {
@@ -31,7 +31,7 @@ class UAudioAnalyzerSettings : public UAudioAnalyzerAssetBase
 
 class UAudioAnalyzerSubsystem : public UEngineSubsystem
 {
-    TArray<class UAudioAnalyzer*> AudioAnalyzers;                                     // 0x0030 (size: 0x10)
+    TArray<UAudioAnalyzer*> AudioAnalyzers;                                           // 0x0030 (size: 0x10)
 
 }; // Size: 0x50
 

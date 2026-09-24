@@ -3,6 +3,6 @@
 
 class UBorderStyle_Vignette_C : public UBorderStyle_Narrative_C
 {
-}; // Size: 0x100
+}; // Size: 0xE0
 
 #endif

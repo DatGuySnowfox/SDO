@@ -1,9 +1,11 @@
 namespace EHMDTrackingOrigin {
     enum Type {
-        Floor = 0,
-        Eye = 1,
-        Stage = 2,
-        EHMDTrackingOrigin_MAX = 3,
+        View = 0,
+        LocalFloor = 1,
+        Local = 2,
+        Stage = 3,
+        CustomOpenXR = 4,
+        EHMDTrackingOrigin_MAX = 5,
     };
 }
 
@@ -55,14 +57,6 @@ namespace EOrientPositionSelector {
     };
 }
 
-enum class ESpatialInputGestureAxis {
-    None = 0,
-    Manipulation = 1,
-    Navigation = 2,
-    NavigationRails = 3,
-    ESpatialInputGestureAxis_MAX = 4,
-};
-
 enum class ESpectatorScreenMode {
     Disabled = 0,
     SingleEyeLetterboxed = 1,
@@ -82,6 +76,13 @@ enum class ETrackingStatus {
     ETrackingStatus_MAX = 3,
 };
 
+enum class EXRControllerPoseType {
+    Aim = 0,
+    Grip = 1,
+    Palm = 2,
+    EXRControllerPoseType_MAX = 3,
+};
+
 namespace EXRDeviceConnectionResult {
     enum Type {
         NoTrackingSystem = 0,
@@ -92,6 +93,12 @@ namespace EXRDeviceConnectionResult {
         EXRDeviceConnectionResult_MAX = 5,
     };
 }
+
+enum class EXRSpaceType {
+    UnrealWorldSpace = 0,
+    XRTrackingSpace = 1,
+    EXRSpaceType_MAX = 2,
+};
 
 namespace EXRSystemFlags {
     enum Type {

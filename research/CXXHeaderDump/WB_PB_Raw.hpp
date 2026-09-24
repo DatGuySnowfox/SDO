@@ -3,8 +3,8 @@
 
 class UWB_PB_Raw_C : public UUserWidget
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02C0 (size: 0x8)
-    class UWB_BaseProgressBar_C* WB_BaseProgressBar;                                  // 0x02C8 (size: 0x8)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0340 (size: 0x8)
+    class UWB_BaseProgressBar_C* WB_BaseProgressBar;                                  // 0x0348 (size: 0x8)
 
     void SetMarqueeTiling(TEnumAsByte<ESlateBrushTileType::Type> Tiling);
     void SetMarqueeDrawAs(TEnumAsByte<ESlateBrushDrawType::Type> DrawAs);
@@ -23,6 +23,6 @@ class UWB_PB_Raw_C : public UUserWidget
     void SetFillImageMargin(double Margin);
     void SetFillImageDrawAs(TEnumAsByte<ESlateBrushDrawType::Type> Draw As);
     void ExecuteUbergraph_WB_PB_Raw(int32 EntryPoint);
-}; // Size: 0x2D0
+}; // Size: 0x350
 
 #endif

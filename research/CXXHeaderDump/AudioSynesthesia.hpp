@@ -3,6 +3,13 @@
 
 #include "AudioSynesthesia_enums.hpp"
 
+struct FConstantQResults
+{
+    float TimeSeconds;                                                                // 0x0000 (size: 0x4)
+    TArray<float> SpectrumValues;                                                     // 0x0008 (size: 0x10)
+
+}; // Size: 0x18
+
 struct FLoudnessResults
 {
     float Loudness;                                                                   // 0x0000 (size: 0x4)
@@ -41,6 +48,18 @@ class UAudioSynesthesiaSettings : public UAudioAnalyzerSettings
 {
 }; // Size: 0x28
 
+class UConstantQAnalyzer : public UAudioAnalyzer
+{
+    class UConstantQSettings* Settings;                                               // 0x00A0 (size: 0x8)
+    FConstantQAnalyzerOnConstantQResults OnConstantQResults;                          // 0x00A8 (size: 0x10)
+    void OnConstantQResults(int32 ChannelIndex, const TArray<FConstantQResults>& ConstantQResults);
+    FConstantQAnalyzerOnLatestConstantQResults OnLatestConstantQResults;              // 0x00D0 (size: 0x10)
+    void OnLatestConstantQResults(int32 ChannelIndex, const FConstantQResults& LatestConstantQResults);
+
+    int32 GetNumCenterFrequencies();
+    void GetCenterFrequencies(TArray<float>& OutCenterFrequencies);
+}; // Size: 0xF8
+
 class UConstantQNRT : public UAudioSynesthesiaNRT
 {
     class UConstantQNRTSettings* Settings;                                            // 0x0078 (size: 0x8)
@@ -65,19 +84,35 @@ class UConstantQNRTSettings : public UAudioSynesthesiaNRTSettings
 
 }; // Size: 0x48
 
+class UConstantQSettings : public UAudioSynesthesiaSettings
+{
+    float StartingFrequencyHz;                                                        // 0x0028 (size: 0x4)
+    int32 NumBands;                                                                   // 0x002C (size: 0x4)
+    float NumBandsPerOctave;                                                          // 0x0030 (size: 0x4)
+    float AnalysisPeriodInSeconds;                                                    // 0x0034 (size: 0x4)
+    bool bDownmixToMono;                                                              // 0x0038 (size: 0x1)
+    EConstantQFFTSizeEnum FFTSize;                                                    // 0x0039 (size: 0x1)
+    EFFTWindowType WindowType;                                                        // 0x003A (size: 0x1)
+    EAudioSpectrumType SpectrumType;                                                  // 0x003B (size: 0x1)
+    float BandWidthStretch;                                                           // 0x003C (size: 0x4)
+    EConstantQNormalizationEnum CQTNormalization;                                     // 0x0040 (size: 0x1)
+    float NoiseFloorDb;                                                               // 0x0044 (size: 0x4)
+
+}; // Size: 0x48
+
 class ULoudnessAnalyzer : public UAudioAnalyzer
 {
-    class ULoudnessSettings* Settings;                                                // 0x0090 (size: 0x8)
-    FLoudnessAnalyzerOnOverallLoudnessResults OnOverallLoudnessResults;               // 0x0098 (size: 0x10)
+    class ULoudnessSettings* Settings;                                                // 0x00A0 (size: 0x8)
+    FLoudnessAnalyzerOnOverallLoudnessResults OnOverallLoudnessResults;               // 0x00A8 (size: 0x10)
     void OnOverallLoudnessResults(const TArray<FLoudnessResults>& OverallLoudnessResults);
-    FLoudnessAnalyzerOnPerChannelLoudnessResults OnPerChannelLoudnessResults;         // 0x00A8 (size: 0x10)
+    FLoudnessAnalyzerOnPerChannelLoudnessResults OnPerChannelLoudnessResults;         // 0x00B8 (size: 0x10)
     void OnPerChannelLoudnessResults(int32 ChannelIndex, const TArray<FLoudnessResults>& LoudnessResults);
-    FLoudnessAnalyzerOnLatestOverallLoudnessResults OnLatestOverallLoudnessResults;   // 0x00B8 (size: 0x10)
+    FLoudnessAnalyzerOnLatestOverallLoudnessResults OnLatestOverallLoudnessResults;   // 0x00C8 (size: 0x10)
     void OnLatestOverallLoudnessResults(const FLoudnessResults& LatestOverallLoudnessResults);
-    FLoudnessAnalyzerOnLatestPerChannelLoudnessResults OnLatestPerChannelLoudnessResults; // 0x00C8 (size: 0x10)
+    FLoudnessAnalyzerOnLatestPerChannelLoudnessResults OnLatestPerChannelLoudnessResults; // 0x00D8 (size: 0x10)
     void OnLatestPerChannelLoudnessResults(int32 ChannelIndex, const FLoudnessResults& LatestLoudnessResults);
 
-}; // Size: 0xD8
+}; // Size: 0xE8
 
 class ULoudnessNRT : public UAudioSynesthesiaNRT
 {
@@ -112,17 +147,17 @@ class ULoudnessSettings : public UAudioSynesthesiaSettings
 
 class UMeterAnalyzer : public UAudioAnalyzer
 {
-    class UMeterSettings* Settings;                                                   // 0x0090 (size: 0x8)
-    FMeterAnalyzerOnOverallMeterResults OnOverallMeterResults;                        // 0x0098 (size: 0x10)
+    class UMeterSettings* Settings;                                                   // 0x00A0 (size: 0x8)
+    FMeterAnalyzerOnOverallMeterResults OnOverallMeterResults;                        // 0x00A8 (size: 0x10)
     void OnOverallMeterResults(const TArray<FMeterResults>& MeterResults);
-    FMeterAnalyzerOnPerChannelMeterResults OnPerChannelMeterResults;                  // 0x00C0 (size: 0x10)
+    FMeterAnalyzerOnPerChannelMeterResults OnPerChannelMeterResults;                  // 0x00D0 (size: 0x10)
     void OnPerChannelMeterResults(int32 ChannelIndex, const TArray<FMeterResults>& MeterResults);
-    FMeterAnalyzerOnLatestOverallMeterResults OnLatestOverallMeterResults;            // 0x00E8 (size: 0x10)
+    FMeterAnalyzerOnLatestOverallMeterResults OnLatestOverallMeterResults;            // 0x00F8 (size: 0x10)
     void OnLatestOverallMeterResults(const FMeterResults& LatestOverallMeterResults);
-    FMeterAnalyzerOnLatestPerChannelMeterResults OnLatestPerChannelMeterResults;      // 0x0110 (size: 0x10)
+    FMeterAnalyzerOnLatestPerChannelMeterResults OnLatestPerChannelMeterResults;      // 0x0120 (size: 0x10)
     void OnLatestPerChannelMeterResults(int32 ChannelIndex, const FMeterResults& LatestMeterResults);
 
-}; // Size: 0x138
+}; // Size: 0x148
 
 class UMeterSettings : public UAudioSynesthesiaSettings
 {
@@ -165,14 +200,14 @@ class USynesthesiaSpectrumAnalysisSettings : public UAudioSynesthesiaSettings
 
 class USynesthesiaSpectrumAnalyzer : public UAudioAnalyzer
 {
-    class USynesthesiaSpectrumAnalysisSettings* Settings;                             // 0x0090 (size: 0x8)
-    FSynesthesiaSpectrumAnalyzerOnSpectrumResults OnSpectrumResults;                  // 0x0098 (size: 0x10)
+    class USynesthesiaSpectrumAnalysisSettings* Settings;                             // 0x00A0 (size: 0x8)
+    FSynesthesiaSpectrumAnalyzerOnSpectrumResults OnSpectrumResults;                  // 0x00A8 (size: 0x10)
     void OnSpectrumResults(int32 ChannelIndex, const TArray<FSynesthesiaSpectrumResults>& SpectrumResults);
-    FSynesthesiaSpectrumAnalyzerOnLatestSpectrumResults OnLatestSpectrumResults;      // 0x00C0 (size: 0x10)
+    FSynesthesiaSpectrumAnalyzerOnLatestSpectrumResults OnLatestSpectrumResults;      // 0x00D0 (size: 0x10)
     void OnLatestSpectrumResults(int32 ChannelIndex, const FSynesthesiaSpectrumResults& LatestSpectrumResults);
 
     int32 GetNumCenterFrequencies();
     void GetCenterFrequencies(const float InSampleRate, TArray<float>& OutCenterFrequencies);
-}; // Size: 0xE8
+}; // Size: 0xF8
 
 #endif

@@ -19,9 +19,9 @@ class UBTT_RangeMoveTo_C : public UBTTask_BlueprintBase
     void OnMoveFinished_751C6ACC423B5631FA126CBB0CF58B1C(TEnumAsByte<EPathFollowingResult::Type> Result, class AAIController* AIController);
     void OnRequestFailed_751C6ACC423B5631FA126CBB0CF58B1C();
     void Run Range Move EQS();
-    void Range Move EQS Done(class UEnvQueryInstanceBlueprintWrapper* QueryInstance, TEnumAsByte<EEnvQueryStatus::Type> QueryStatus);
     void Run Cover Move EQS();
     void Cover Move EQS Done(class UEnvQueryInstanceBlueprintWrapper* QueryInstance, TEnumAsByte<EEnvQueryStatus::Type> QueryStatus);
+    void Range Move EQS Done(class UEnvQueryInstanceBlueprintWrapper* QueryInstance, TEnumAsByte<EEnvQueryStatus::Type> QueryStatus);
     void ReceiveExecuteAI(class AAIController* OwnerController, class APawn* ControlledPawn);
     void ExecuteUbergraph_BTT_RangeMoveTo(int32 EntryPoint);
 }; // Size: 0x108

@@ -3,9 +3,9 @@
 
 class UJSIActivable_C : public UUserWidget
 {
-    class UOverlay* MainOverlay;                                                      // 0x02C0 (size: 0x8)
-    class UJSIContainer_C* ContainerParent;                                           // 0x02C8 (size: 0x8)
+    class UOverlay* MainOverlay;                                                      // 0x0340 (size: 0x8)
+    class UJSIContainer_C* ContainerParent;                                           // 0x0348 (size: 0x8)
 
-}; // Size: 0x2D0
+}; // Size: 0x350
 
 #endif

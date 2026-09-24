@@ -19,7 +19,7 @@ class UBasicOverlays : public UOverlays
 class ULocalizedOverlays : public UOverlays
 {
     class UBasicOverlays* DefaultOverlays;                                            // 0x0028 (size: 0x8)
-    TMap<class FString, class UBasicOverlays*> LocaleToOverlaysMap;                   // 0x0030 (size: 0x50)
+    TMap<FString, UBasicOverlays*> LocaleToOverlaysMap;                               // 0x0030 (size: 0x50)
 
 }; // Size: 0x80
 

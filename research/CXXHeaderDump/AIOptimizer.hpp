@@ -120,28 +120,28 @@ class UAIODeveloperSettings : public UDeveloperSettings
 
 class UAIOInvokerComponent : public UActorComponent
 {
-    class UUserWidget* DebugWidget;                                                   // 0x00A0 (size: 0x8)
+    class UUserWidget* DebugWidget;                                                   // 0x00B8 (size: 0x8)
 
     void DebugAIOptimizer(bool bDebug);
-}; // Size: 0xA8
+}; // Size: 0xC0
 
 class UAIOSubjectComponent : public UActorComponent
 {
-    FAIOSubjectHandle Handle;                                                         // 0x00C8 (size: 0x4)
-    FAIOSubjectComponentOnOptimizationUpdate OnOptimizationUpdate;                    // 0x00D0 (size: 0x10)
+    FAIOSubjectHandle Handle;                                                         // 0x00E0 (size: 0x4)
+    FAIOSubjectComponentOnOptimizationUpdate OnOptimizationUpdate;                    // 0x00E8 (size: 0x10)
     void OnOptimizationUpdate(bool bIsBeyondLastLayer, int32 LayerIndex, bool bIsSeen);
-    FAIOSubjectComponentOnPreDespawn OnPreDespawn;                                    // 0x00E0 (size: 0x10)
+    FAIOSubjectComponentOnPreDespawn OnPreDespawn;                                    // 0x00F8 (size: 0x10)
     void OnPreDespawn(class UAIOData_Base* Data);
-    FAIOSubjectComponentOnPostSpawned OnPostSpawned;                                  // 0x00F0 (size: 0x10)
+    FAIOSubjectComponentOnPostSpawned OnPostSpawned;                                  // 0x0108 (size: 0x10)
     void OnPostSpawned(class UAIOData_Base* Data);
-    class AActor* Spawner;                                                            // 0x0100 (size: 0x8)
-    uint8 bCanBeUpdatedBySubsystem;                                                   // 0x0108 (size: 0x1)
-    uint8 bAllowSubsystemToAutoDespawn;                                               // 0x0108 (size: 0x1)
-    float OverrideSubsystemDespawnRadius;                                             // 0x010C (size: 0x4)
-    uint8 Priority;                                                                   // 0x0110 (size: 0x1)
-    TSubclassOf<class UAIOData_Base> DataClass;                                       // 0x0118 (size: 0x8)
-    TArray<FAIOptimizationLayer> OptimizationLayers;                                  // 0x0120 (size: 0x10)
-    uint8 bShouldCalculateIsSeen;                                                     // 0x0130 (size: 0x1)
+    class AActor* Spawner;                                                            // 0x0118 (size: 0x8)
+    uint8 bCanBeUpdatedBySubsystem;                                                   // 0x0120 (size: 0x1)
+    uint8 bAllowSubsystemToAutoDespawn;                                               // 0x0120 (size: 0x1)
+    float OverrideSubsystemDespawnRadius;                                             // 0x0124 (size: 0x4)
+    uint8 Priority;                                                                   // 0x0128 (size: 0x1)
+    TSubclassOf<class UAIOData_Base> DataClass;                                       // 0x0130 (size: 0x8)
+    TArray<FAIOptimizationLayer> OptimizationLayers;                                  // 0x0138 (size: 0x10)
+    uint8 bShouldCalculateIsSeen;                                                     // 0x0148 (size: 0x1)
 
     void UnregisterSubject();
     bool ShouldBeDespawned(class UAIOptimizerSubsystem* Subsystem, bool bForceUpdateDataToInvokers);
@@ -159,7 +159,7 @@ class UAIOSubjectComponent : public UActorComponent
     int32 GetCurrentOptimizationLayer();
     FVector GetClosestInvokerLocation();
     bool CanBeUpdatedBySubsystem();
-}; // Size: 0x140
+}; // Size: 0x158
 
 class UAIOptimizerSubsystem : public UWorldSubsystem
 {

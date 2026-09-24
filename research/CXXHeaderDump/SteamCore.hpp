@@ -1211,7 +1211,7 @@ struct FVolumeHasChanged
 
 class ASteamCoreGameMode : public AGameMode
 {
-}; // Size: 0x380
+}; // Size: 0x388
 
 class UAppList : public USteamCoreSubsystem
 {
@@ -1704,7 +1704,7 @@ class UScreenshots : public USteamCoreSubsystem
 class UServerFilter : public UObject
 {
 
-    TMap<class FString, class FString> GetFilters();
+    TMap<FString, FString> GetFilters();
     void AddFilterWhitelisted();
     void AddFilterVersion(FString Value);
     void AddFilterSecure();
@@ -1765,7 +1765,7 @@ class USteamCoreCreateSession : public USteamCoreAsyncAction
     FSteamCoreCreateSessionOnFailure OnFailure;                                       // 0x0048 (size: 0x10)
     void EmptyOnlineDelegate();
 
-    class USteamCoreCreateSession* CreateSteamCoreSession(class UObject* WorldContextObject, TMap<class FString, class FSteamSessionSetting> SessionSettings, FString SessionName, int32 MaxPlayers, bool bUseLAN, bool bAllowInvites, bool bUsesPresence, bool bAllowJoinViaPresence, bool bAllowJoinViaPresenceFriendsOnly, bool bAntiCheatProtected, bool bUsesStats, bool bShouldAdvertise, bool bUseLobbiesVoiceChatIfAvailable, float Timeout);
+    class USteamCoreCreateSession* CreateSteamCoreSession(class UObject* WorldContextObject, TMap<FString, FSteamSessionSetting> SessionSettings, FString SessionName, int32 MaxPlayers, bool bUseLAN, bool bAllowInvites, bool bUsesPresence, bool bAllowJoinViaPresence, bool bAllowJoinViaPresenceFriendsOnly, bool bAntiCheatProtected, bool bUsesStats, bool bShouldAdvertise, bool bUseLobbiesVoiceChatIfAvailable, float Timeout);
 }; // Size: 0x158
 
 class USteamCoreDestroySession : public USteamCoreAsyncAction
@@ -1785,7 +1785,7 @@ class USteamCoreFindSession : public USteamCoreAsyncAction
     void FindSteamSessionsResultDelegate(const TArray<FSteamSessionResult>& Results);
 
     void OnCompleted(bool bSuccessful);
-    class USteamCoreFindSession* FindSteamCoreSessions(class UObject* WorldContextObject, TMap<class FString, class FSteamSessionSearchSetting> SearchSettings, int32 MaxResults, bool bUseLAN, ESteamSessionFindType ServerType, bool bEmptyServersOnly, bool bSecureServersOnly, float Timeout);
+    class USteamCoreFindSession* FindSteamCoreSessions(class UObject* WorldContextObject, TMap<FString, FSteamSessionSearchSetting> SearchSettings, int32 MaxResults, bool bUseLAN, ESteamSessionFindType ServerType, bool bEmptyServersOnly, bool bSecureServersOnly, float Timeout);
 }; // Size: 0xD8
 
 class USteamCoreFriendsAsyncActionDownloadClanActivityCounts : public USteamCoreAsyncAction
@@ -2174,7 +2174,7 @@ class USteamCoreUpdateSession : public USteamCoreAsyncAction
     FSteamCoreUpdateSessionOnCallback OnCallback;                                     // 0x0038 (size: 0x10)
     void EmptyOnlineDelegate();
 
-    class USteamCoreUpdateSession* UpdateSteamCoreSession(class UObject* WorldContextObject, TMap<class FString, class FSteamSessionSetting> Settings, FString SessionName, int32 MaxPlayers);
+    class USteamCoreUpdateSession* UpdateSteamCoreSession(class UObject* WorldContextObject, TMap<FString, FSteamSessionSetting> Settings, FString SessionName, int32 MaxPlayers);
     void OnCompleted(FName SessionName, bool bWasSuccessful);
 }; // Size: 0x68
 
@@ -2292,7 +2292,7 @@ class USteamCoreVoice : public USoundWaveProcedural
     void DestroySteamCoreVoice(class USteamCoreVoice* Obj);
     class USteamCoreVoice* ConstructSteamCoreVoice(int32 AudioSampleRate);
     void AddAudioBuffer(const TArray<uint8>& Buffer);
-}; // Size: 0x480
+}; // Size: 0x450
 
 class USteamGameSearch : public USteamCoreSubsystem
 {
@@ -2622,7 +2622,7 @@ class UUser : public USteamCoreSubsystem
     bool BIsBehindNAT();
     ESteamBeginAuthSessionResult BeginAuthSession(TArray<uint8> Ticket, FSteamID SteamID);
     void AdvertiseGame(FSteamID SteamIDGameServer, FString ServerIP, int32 ServerPort);
-}; // Size: 0x288
+}; // Size: 0x2A8
 
 class UUserStats : public USteamCoreSubsystem
 {

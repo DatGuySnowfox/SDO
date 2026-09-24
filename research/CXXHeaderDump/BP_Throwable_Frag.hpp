@@ -3,13 +3,15 @@
 
 class ABP_Throwable_Frag_C : public ABP_MasterThrowable_C
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02D0 (size: 0x8)
-    double MinDamage;                                                                 // 0x02D8 (size: 0x8)
-    double MaxDamage;                                                                 // 0x02E0 (size: 0x8)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02E8 (size: 0x8)
+    double MinDamage;                                                                 // 0x02F0 (size: 0x8)
+    double MaxDamage;                                                                 // 0x02F8 (size: 0x8)
+    double DmgToDo;                                                                   // 0x0300 (size: 0x8)
 
+    void CalculateDmg(double& Dmg);
     void ReceiveBeginPlay();
     void Frag();
     void ExecuteUbergraph_BP_Throwable_Frag(int32 EntryPoint);
-}; // Size: 0x2E8
+}; // Size: 0x308
 
 #endif

@@ -3,11 +3,80 @@
 
 #include "MetasoundFrontend_enums.hpp"
 
+struct FMetaSoundAssetKey
+{
+    FMetasoundFrontendClassName ClassName;                                            // 0x0000 (size: 0x18)
+    FMetasoundFrontendVersionNumber Version;                                          // 0x0018 (size: 0x8)
+
+}; // Size: 0x20
+
+struct FMetaSoundAssetTagClassCollections
+{
+}; // Size: 0x1
+
+struct FMetaSoundAssetTagCollections
+{
+}; // Size: 0x1
+
+struct FMetaSoundClassInterfaceInfo
+{
+    TArray<FMetasoundFrontendInterfaceMetadata> DefinedInterfaces;                    // 0x0000 (size: 0x10)
+    FMetaSoundClassSearchInfo SearchInfo;                                             // 0x0010 (size: 0x40)
+    TArray<FMetaSoundClassVertexInfo> Inputs;                                         // 0x0050 (size: 0x10)
+    TArray<FMetaSoundClassVertexInfo> Outputs;                                        // 0x0060 (size: 0x10)
+    TArray<FMetasoundFrontendVersion> InheritedInterfaces;                            // 0x0070 (size: 0x10)
+
+}; // Size: 0x80
+
+struct FMetaSoundClassSearchInfo
+{
+    FText ClassDisplayName;                                                           // 0x0000 (size: 0x10)
+    FText ClassDescription;                                                           // 0x0010 (size: 0x10)
+    TArray<FText> Hierarchy;                                                          // 0x0020 (size: 0x10)
+    TArray<FText> Keywords;                                                           // 0x0030 (size: 0x10)
+
+}; // Size: 0x40
+
+struct FMetaSoundClassVertexCollectionInfo
+{
+    TArray<FMetaSoundClassVertexInfo> ClassVertexInfo;                                // 0x0000 (size: 0x10)
+
+}; // Size: 0x10
+
+struct FMetaSoundClassVertexInfo
+{
+    FName Name;                                                                       // 0x0000 (size: 0x8)
+    FName TypeName;                                                                   // 0x0008 (size: 0x8)
+    EMetasoundFrontendVertexAccessType AccessType;                                    // 0x0010 (size: 0x4)
+
+}; // Size: 0x14
+
+struct FMetaSoundDocumentInfo
+{
+    FMetasoundFrontendVersionNumber DocumentVersion;                                  // 0x0000 (size: 0x8)
+    TArray<FMetaSoundAssetKey> ReferencedAssetKeys;                                   // 0x0008 (size: 0x10)
+    uint8 bIsPreset;                                                                  // 0x0018 (size: 0x1)
+
+}; // Size: 0x20
+
 struct FMetaSoundFrontendDocumentBuilder
 {
-    TScriptInterface<class IMetaSoundDocumentInterface> DocumentInterface;            // 0x0000 (size: 0x10)
+    TScriptInterface<class IMetaSoundDocumentInterface> DocumentInterface;            // 0x0008 (size: 0x10)
+    FGuid BuildPageID;                                                                // 0x0018 (size: 0x10)
 
-}; // Size: 0x30
+}; // Size: 0x58
+
+struct FMetaSoundFrontendGraphComment
+{
+}; // Size: 0x1
+
+struct FMetaSoundFrontendNodeConfiguration
+{
+}; // Size: 0x8
+
+struct FMetasoundCommentNodeIntVector : public FIntVector2
+{
+}; // Size: 0x8
 
 struct FMetasoundFrontendClass
 {
@@ -27,9 +96,16 @@ struct FMetasoundFrontendClassEnvironmentVariable
 
 struct FMetasoundFrontendClassInput : public FMetasoundFrontendClassVertex
 {
-    FMetasoundFrontendLiteral DefaultLiteral;                                         // 0x0038 (size: 0x58)
+    TArray<FMetasoundFrontendClassInputDefault> Defaults;                             // 0x0038 (size: 0x10)
 
-}; // Size: 0x90
+}; // Size: 0x48
+
+struct FMetasoundFrontendClassInputDefault
+{
+    FMetasoundFrontendLiteral Literal;                                                // 0x0000 (size: 0x58)
+    FGuid PageID;                                                                     // 0x0058 (size: 0x10)
+
+}; // Size: 0x68
 
 struct FMetasoundFrontendClassInterface
 {
@@ -46,7 +122,6 @@ struct FMetasoundFrontendClassMetadata
     FMetasoundFrontendVersionNumber Version;                                          // 0x0018 (size: 0x8)
     EMetasoundFrontendClassType Type;                                                 // 0x0020 (size: 0x1)
     bool bIsDeprecated;                                                               // 0x0021 (size: 0x1)
-    bool bAutoUpdateManagesInterface;                                                 // 0x0022 (size: 0x1)
     FGuid ChangeID;                                                                   // 0x0024 (size: 0x10)
 
 }; // Size: 0x34
@@ -79,7 +154,7 @@ struct FMetasoundFrontendClassVariable : public FMetasoundFrontendClassVertex
 
 struct FMetasoundFrontendClassVertex : public FMetasoundFrontendVertex
 {
-    FGuid NodeId;                                                                     // 0x0020 (size: 0x10)
+    FGuid NodeID;                                                                     // 0x0020 (size: 0x10)
     EMetasoundFrontendVertexAccessType AccessType;                                    // 0x0030 (size: 0x4)
 
 }; // Size: 0x34
@@ -88,13 +163,12 @@ struct FMetasoundFrontendDocument
 {
     FMetasoundFrontendDocumentMetadata MetaData;                                      // 0x0010 (size: 0x10)
     TSet<FMetasoundFrontendVersion> Interfaces;                                       // 0x0020 (size: 0x50)
-    FMetasoundFrontendGraphClass RootGraph;                                           // 0x0070 (size: 0x118)
-    TArray<FMetasoundFrontendGraphClass> Subgraphs;                                   // 0x0188 (size: 0x10)
-    TArray<FMetasoundFrontendClass> Dependencies;                                     // 0x0198 (size: 0x10)
-    FMetasoundFrontendVersion ArchetypeVersion;                                       // 0x01A8 (size: 0x10)
-    TArray<FMetasoundFrontendVersion> InterfaceVersions;                              // 0x01B8 (size: 0x10)
+    FMetasoundFrontendGraphClass RootGraph;                                           // 0x0070 (size: 0xF8)
+    TArray<FMetasoundFrontendGraphClass> Subgraphs;                                   // 0x0168 (size: 0x10)
+    TArray<FMetasoundFrontendClass> Dependencies;                                     // 0x0178 (size: 0x10)
+    uint32 IDCounter;                                                                 // 0x0188 (size: 0x4)
 
-}; // Size: 0x1C8
+}; // Size: 0x190
 
 struct FMetasoundFrontendDocumentMetadata
 {
@@ -113,7 +187,7 @@ struct FMetasoundFrontendEdge
 
 struct FMetasoundFrontendEdgeStyle
 {
-    FGuid NodeId;                                                                     // 0x0000 (size: 0x10)
+    FGuid NodeID;                                                                     // 0x0000 (size: 0x10)
     FName OutputName;                                                                 // 0x0010 (size: 0x8)
     TArray<FMetasoundFrontendEdgeStyleLiteralColorPair> LiteralColorPairs;            // 0x0018 (size: 0x10)
 
@@ -131,15 +205,16 @@ struct FMetasoundFrontendGraph
     TArray<FMetasoundFrontendNode> Nodes;                                             // 0x0000 (size: 0x10)
     TArray<FMetasoundFrontendEdge> Edges;                                             // 0x0010 (size: 0x10)
     TArray<FMetasoundFrontendVariable> Variables;                                     // 0x0020 (size: 0x10)
+    FGuid PageID;                                                                     // 0x0030 (size: 0x10)
 
-}; // Size: 0x30
+}; // Size: 0x40
 
 struct FMetasoundFrontendGraphClass : public FMetasoundFrontendClass
 {
-    FMetasoundFrontendGraph Graph;                                                    // 0x0090 (size: 0x30)
-    FMetasoundFrontendGraphClassPresetOptions PresetOptions;                          // 0x00C0 (size: 0x58)
+    TArray<FMetasoundFrontendGraph> PagedGraphs;                                      // 0x0090 (size: 0x10)
+    FMetasoundFrontendGraphClassPresetOptions PresetOptions;                          // 0x00A0 (size: 0x58)
 
-}; // Size: 0x118
+}; // Size: 0xF8
 
 struct FMetasoundFrontendGraphClassPresetOptions
 {
@@ -150,15 +225,11 @@ struct FMetasoundFrontendGraphClassPresetOptions
 
 struct FMetasoundFrontendGraphStyle
 {
-    bool bIsGraphEditable;                                                            // 0x0000 (size: 0x1)
-    TArray<FMetasoundFrontendEdgeStyle> EdgeStyles;                                   // 0x0008 (size: 0x10)
-
-}; // Size: 0x18
+}; // Size: 0x1
 
 struct FMetasoundFrontendInterface : public FMetasoundFrontendClassInterface
 {
-    FMetasoundFrontendVersion Version;                                                // 0x0040 (size: 0x10)
-    TArray<FMetasoundFrontendInterfaceUClassOptions> UClassOptions;                   // 0x0050 (size: 0x10)
+    FMetasoundFrontendInterfaceMetadata MetaData;                                     // 0x0040 (size: 0x20)
 
 }; // Size: 0x60
 
@@ -170,6 +241,13 @@ struct FMetasoundFrontendInterfaceBinding
     TArray<FMetasoundFrontendInterfaceVertexBinding> VertexBindings;                  // 0x0028 (size: 0x10)
 
 }; // Size: 0x38
+
+struct FMetasoundFrontendInterfaceMetadata
+{
+    FMetasoundFrontendVersion Version;                                                // 0x0000 (size: 0x10)
+    TArray<FMetasoundFrontendInterfaceUClassOptions> UClassOptions;                   // 0x0010 (size: 0x10)
+
+}; // Size: 0x20
 
 struct FMetasoundFrontendInterfaceStyle
 {
@@ -198,7 +276,7 @@ struct FMetasoundFrontendLiteral
     TArray<int32> AsInteger;                                                          // 0x0018 (size: 0x10)
     TArray<float> AsFloat;                                                            // 0x0028 (size: 0x10)
     TArray<FString> AsString;                                                         // 0x0038 (size: 0x10)
-    TArray<class UObject*> AsUObject;                                                 // 0x0048 (size: 0x10)
+    TArray<UObject*> AsUObject;                                                       // 0x0048 (size: 0x10)
 
 }; // Size: 0x58
 
@@ -209,8 +287,10 @@ struct FMetasoundFrontendNode
     FName Name;                                                                       // 0x0020 (size: 0x8)
     FMetasoundFrontendNodeInterface Interface;                                        // 0x0028 (size: 0x30)
     TArray<FMetasoundFrontendVertexLiteral> InputLiterals;                            // 0x0058 (size: 0x10)
+    FInstancedStruct Configuration;                                                   // 0x0068 (size: 0x10)
+    FInstancedStruct ClassInterfaceOverride;                                          // 0x0078 (size: 0x10)
 
-}; // Size: 0x68
+}; // Size: 0x88
 
 struct FMetasoundFrontendNodeInterface
 {
@@ -265,7 +345,7 @@ struct FMetasoundFrontendVertex
 
 struct FMetasoundFrontendVertexHandle
 {
-    FGuid NodeId;                                                                     // 0x0000 (size: 0x10)
+    FGuid NodeID;                                                                     // 0x0000 (size: 0x10)
     FGuid VertexID;                                                                   // 0x0010 (size: 0x10)
 
 }; // Size: 0x20
@@ -281,16 +361,28 @@ struct FMetasoundFrontendVertexMetadata
 {
 }; // Size: 0x1
 
+struct FNodeTemplateGenerateInterfaceParams
+{
+    TArray<FName> InputsToConnect;                                                    // 0x0000 (size: 0x10)
+    TArray<FName> OutputsToConnect;                                                   // 0x0010 (size: 0x10)
+
+}; // Size: 0x20
+
 class IMetaSoundDocumentInterface : public IInterface
 {
 }; // Size: 0x28
 
 class UMetaSoundBuilderDocument : public UObject
 {
-    FMetasoundFrontendDocument Document;                                              // 0x0030 (size: 0x1C8)
-    UClass* MetaSoundUClass;                                                          // 0x01F8 (size: 0x8)
+    FMetasoundFrontendDocument Document;                                              // 0x0030 (size: 0x190)
+    UClass* MetaSoundUClass;                                                          // 0x01C0 (size: 0x8)
+    UClass* BuilderUClass;                                                            // 0x01C8 (size: 0x8)
 
-}; // Size: 0x200
+}; // Size: 0x1D0
+
+class UMetaSoundFrontendMemberMetadata : public UObject
+{
+}; // Size: 0x28
 
 class UMetasoundParameterPack : public UObject
 {

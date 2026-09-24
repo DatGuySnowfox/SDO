@@ -3,6 +3,6 @@
 
 class ABP_StorageCrate4Pickup_C : public ABP_BuildablePickup_C
 {
-}; // Size: 0x318
+}; // Size: 0x328
 
 #endif

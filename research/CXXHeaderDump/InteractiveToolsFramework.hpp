@@ -17,7 +17,17 @@ struct FBehaviorInfo
 
 struct FBrushStampData
 {
-}; // Size: 0x128
+}; // Size: 0x140
+
+struct FDeviceButtonState
+{
+    FKey Button;                                                                      // 0x0000 (size: 0x18)
+    bool bPressed;                                                                    // 0x0018 (size: 0x1)
+    bool bDown;                                                                       // 0x0019 (size: 0x1)
+    bool bReleased;                                                                   // 0x001A (size: 0x1)
+    bool bDoubleClicked;                                                              // 0x001B (size: 0x1)
+
+}; // Size: 0x20
 
 struct FGizmoElementColorAttribute
 {
@@ -75,6 +85,18 @@ struct FInputDeviceRay
 
 }; // Size: 0x48
 
+struct FInputDeviceState
+{
+    EInputDevices InputDevice;                                                        // 0x0000 (size: 0x4)
+    bool bShiftKeyDown;                                                               // 0x0004 (size: 0x1)
+    bool bAltKeyDown;                                                                 // 0x0005 (size: 0x1)
+    bool bCtrlKeyDown;                                                                // 0x0006 (size: 0x1)
+    bool bCmdKeyDown;                                                                 // 0x0007 (size: 0x1)
+    FKeyboardInputDeviceState Keyboard;                                               // 0x0008 (size: 0x20)
+    FMouseInputDeviceState Mouse;                                                     // 0x0028 (size: 0xB8)
+
+}; // Size: 0xE0
+
 struct FInputRayHit
 {
     bool bHit;                                                                        // 0x0000 (size: 0x1)
@@ -86,45 +108,71 @@ struct FInputRayHit
 
 }; // Size: 0x40
 
+struct FKeyboardInputDeviceState
+{
+    FDeviceButtonState ActiveKey;                                                     // 0x0000 (size: 0x20)
+
+}; // Size: 0x20
+
+struct FMouseInputDeviceState
+{
+    FDeviceButtonState Left;                                                          // 0x0000 (size: 0x20)
+    FDeviceButtonState Middle;                                                        // 0x0020 (size: 0x20)
+    FDeviceButtonState Right;                                                         // 0x0040 (size: 0x20)
+    float WheelDelta;                                                                 // 0x0060 (size: 0x4)
+    FVector2D Position2D;                                                             // 0x0068 (size: 0x10)
+    FVector2D Delta2D;                                                                // 0x0078 (size: 0x10)
+    FRay WorldRay;                                                                    // 0x0088 (size: 0x30)
+
+}; // Size: 0xB8
+
 class ACombinedTransformGizmoActor : public AGizmoActor
 {
-    class UPrimitiveComponent* TranslateX;                                            // 0x02A0 (size: 0x8)
-    class UPrimitiveComponent* TranslateY;                                            // 0x02A8 (size: 0x8)
-    class UPrimitiveComponent* TranslateZ;                                            // 0x02B0 (size: 0x8)
-    class UPrimitiveComponent* TranslateYZ;                                           // 0x02B8 (size: 0x8)
-    class UPrimitiveComponent* TranslateXZ;                                           // 0x02C0 (size: 0x8)
-    class UPrimitiveComponent* TranslateXY;                                           // 0x02C8 (size: 0x8)
-    class UPrimitiveComponent* RotateX;                                               // 0x02D0 (size: 0x8)
-    class UPrimitiveComponent* RotateY;                                               // 0x02D8 (size: 0x8)
-    class UPrimitiveComponent* RotateZ;                                               // 0x02E0 (size: 0x8)
-    class UPrimitiveComponent* RotationSphere;                                        // 0x02E8 (size: 0x8)
-    class UPrimitiveComponent* UniformScale;                                          // 0x02F0 (size: 0x8)
-    class UPrimitiveComponent* AxisScaleX;                                            // 0x02F8 (size: 0x8)
-    class UPrimitiveComponent* AxisScaleY;                                            // 0x0300 (size: 0x8)
-    class UPrimitiveComponent* AxisScaleZ;                                            // 0x0308 (size: 0x8)
-    class UPrimitiveComponent* PlaneScaleYZ;                                          // 0x0310 (size: 0x8)
-    class UPrimitiveComponent* PlaneScaleXZ;                                          // 0x0318 (size: 0x8)
-    class UPrimitiveComponent* PlaneScaleXY;                                          // 0x0320 (size: 0x8)
+    class UPrimitiveComponent* TranslateX;                                            // 0x02B0 (size: 0x8)
+    class UPrimitiveComponent* TranslateY;                                            // 0x02B8 (size: 0x8)
+    class UPrimitiveComponent* TranslateZ;                                            // 0x02C0 (size: 0x8)
+    class UPrimitiveComponent* TranslateYZ;                                           // 0x02C8 (size: 0x8)
+    class UPrimitiveComponent* TranslateXZ;                                           // 0x02D0 (size: 0x8)
+    class UPrimitiveComponent* TranslateXY;                                           // 0x02D8 (size: 0x8)
+    class UPrimitiveComponent* RotateX;                                               // 0x02E0 (size: 0x8)
+    class UPrimitiveComponent* RotateY;                                               // 0x02E8 (size: 0x8)
+    class UPrimitiveComponent* RotateZ;                                               // 0x02F0 (size: 0x8)
+    class UPrimitiveComponent* RotationSphere;                                        // 0x02F8 (size: 0x8)
+    class UPrimitiveComponent* FreeRotateHandle;                                      // 0x0300 (size: 0x8)
+    class UPrimitiveComponent* FreeTranslateHandle;                                   // 0x0308 (size: 0x8)
+    class UPrimitiveComponent* UniformScale;                                          // 0x0310 (size: 0x8)
+    class UPrimitiveComponent* AxisScaleX;                                            // 0x0318 (size: 0x8)
+    class UPrimitiveComponent* AxisScaleY;                                            // 0x0320 (size: 0x8)
+    class UPrimitiveComponent* AxisScaleZ;                                            // 0x0328 (size: 0x8)
+    class UPrimitiveComponent* PlaneScaleYZ;                                          // 0x0330 (size: 0x8)
+    class UPrimitiveComponent* PlaneScaleXZ;                                          // 0x0338 (size: 0x8)
+    class UPrimitiveComponent* PlaneScaleXY;                                          // 0x0340 (size: 0x8)
+    class UPrimitiveComponent* FullAxisScaleX;                                        // 0x0358 (size: 0x8)
+    class UPrimitiveComponent* FullAxisScaleY;                                        // 0x0360 (size: 0x8)
+    class UPrimitiveComponent* FullAxisScaleZ;                                        // 0x0368 (size: 0x8)
 
-}; // Size: 0x328
+}; // Size: 0x370
 
 class AGizmoActor : public AInternalToolFrameworkActor
 {
-}; // Size: 0x2A0
+}; // Size: 0x2B0
 
 class AInternalToolFrameworkActor : public AActor
 {
-    bool bIsSelectableInEditor;                                                       // 0x0298 (size: 0x1)
+    bool bIsSelectableInEditor;                                                       // 0x02A8 (size: 0x1)
 
-}; // Size: 0x2A0
+}; // Size: 0x2B0
 
 class AIntervalGizmoActor : public AGizmoActor
 {
-    class UGizmoLineHandleComponent* UpIntervalComponent;                             // 0x02A0 (size: 0x8)
-    class UGizmoLineHandleComponent* DownIntervalComponent;                           // 0x02A8 (size: 0x8)
-    class UGizmoLineHandleComponent* ForwardIntervalComponent;                        // 0x02B0 (size: 0x8)
+    class UGizmoLineHandleComponent* UpIntervalComponent;                             // 0x02B0 (size: 0x8)
+    class UGizmoLineHandleComponent* DownIntervalComponent;                           // 0x02B8 (size: 0x8)
+    class UGizmoLineHandleComponent* ForwardIntervalComponent;                        // 0x02C0 (size: 0x8)
+    class UGizmoLineHandleComponent* BackwardIntervalComponent;                       // 0x02C8 (size: 0x8)
+    class UGizmoLineHandleComponent* RightIntervalComponent;                          // 0x02D0 (size: 0x8)
+    class UGizmoLineHandleComponent* LeftIntervalComponent;                           // 0x02D8 (size: 0x8)
 
-}; // Size: 0x2B8
+}; // Size: 0x2E0
 
 class IAssetBackedTarget : public IInterface
 {
@@ -137,6 +185,10 @@ class IGizmoAxisSource : public IInterface
     void GetTangentVectors(FVector& TangentXOut, FVector& TangentYOut);
     FVector GetOrigin();
     FVector GetDirection();
+}; // Size: 0x28
+
+class IGizmoBaseComponentInterface : public IInterface
+{
 }; // Size: 0x28
 
 class IGizmoClickMultiTarget : public IInterface
@@ -212,7 +264,15 @@ class IInteractiveToolExclusiveToolAPI : public IInterface
 {
 }; // Size: 0x28
 
+class IInteractiveToolManageGeometrySelectionAPI : public IInterface
+{
+}; // Size: 0x28
+
 class IInteractiveToolNestedAcceptCancelAPI : public IInterface
+{
+}; // Size: 0x28
+
+class IInteractiveToolShutdownQueryAPI : public IInterface
 {
 }; // Size: 0x28
 
@@ -232,7 +292,11 @@ class IPhysicsDataSource : public IInterface
 {
 }; // Size: 0x28
 
-class IPrimitiveComponentBackedTarget : public IInterface
+class IPrimitiveComponentBackedTarget : public ISceneComponentBackedTarget
+{
+}; // Size: 0x28
+
+class ISceneComponentBackedTarget : public IInterface
 {
 }; // Size: 0x28
 
@@ -258,7 +322,7 @@ class IWidgetBaseBehavior : public IInterface
 
 class UAnyButtonInputBehavior : public UInputBehavior
 {
-}; // Size: 0x80
+}; // Size: 0x70
 
 class UAxisAngleGizmo : public UInteractiveGizmo
 {
@@ -267,17 +331,17 @@ class UAxisAngleGizmo : public UInteractiveGizmo
     TScriptInterface<class IGizmoClickTarget> HitTarget;                              // 0x0068 (size: 0x10)
     TScriptInterface<class IGizmoStateTarget> StateTarget;                            // 0x0078 (size: 0x10)
     class UClickDragInputBehavior* MouseBehavior;                                     // 0x0088 (size: 0x8)
-    bool bInInteraction;                                                              // 0x0110 (size: 0x1)
-    FVector RotationOrigin;                                                           // 0x0118 (size: 0x18)
-    FVector RotationAxis;                                                             // 0x0130 (size: 0x18)
-    FVector RotationPlaneX;                                                           // 0x0148 (size: 0x18)
-    FVector RotationPlaneY;                                                           // 0x0160 (size: 0x18)
-    FVector InteractionStartPoint;                                                    // 0x0178 (size: 0x18)
-    FVector InteractionCurPoint;                                                      // 0x0190 (size: 0x18)
-    float InteractionStartAngle;                                                      // 0x01A8 (size: 0x4)
-    float InteractionCurAngle;                                                        // 0x01AC (size: 0x4)
+    bool bInInteraction;                                                              // 0x00F0 (size: 0x1)
+    FVector RotationOrigin;                                                           // 0x00F8 (size: 0x18)
+    FVector RotationAxis;                                                             // 0x0110 (size: 0x18)
+    FVector RotationPlaneX;                                                           // 0x0128 (size: 0x18)
+    FVector RotationPlaneY;                                                           // 0x0140 (size: 0x18)
+    FVector InteractionStartPoint;                                                    // 0x0158 (size: 0x18)
+    FVector InteractionCurPoint;                                                      // 0x0170 (size: 0x18)
+    float InteractionStartAngle;                                                      // 0x0188 (size: 0x4)
+    float InteractionCurAngle;                                                        // 0x018C (size: 0x4)
 
-}; // Size: 0x1D0
+}; // Size: 0x1B0
 
 class UAxisAngleGizmoBuilder : public UInteractiveGizmoBuilder
 {
@@ -292,16 +356,16 @@ class UAxisPositionGizmo : public UInteractiveGizmo
     TScriptInterface<class IGizmoStateTarget> StateTarget;                            // 0x0080 (size: 0x10)
     class UClickDragInputBehavior* MouseBehavior;                                     // 0x0090 (size: 0x8)
     bool bEnableSignedAxis;                                                           // 0x0098 (size: 0x1)
-    bool bInInteraction;                                                              // 0x0121 (size: 0x1)
-    FVector InteractionOrigin;                                                        // 0x0128 (size: 0x18)
-    FVector InteractionAxis;                                                          // 0x0140 (size: 0x18)
-    FVector InteractionStartPoint;                                                    // 0x0158 (size: 0x18)
-    FVector InteractionCurPoint;                                                      // 0x0170 (size: 0x18)
-    float InteractionStartParameter;                                                  // 0x0188 (size: 0x4)
-    float InteractionCurParameter;                                                    // 0x018C (size: 0x4)
-    float ParameterSign;                                                              // 0x0190 (size: 0x4)
+    bool bInInteraction;                                                              // 0x0101 (size: 0x1)
+    FVector InteractionOrigin;                                                        // 0x0108 (size: 0x18)
+    FVector InteractionAxis;                                                          // 0x0120 (size: 0x18)
+    FVector InteractionStartPoint;                                                    // 0x0138 (size: 0x18)
+    FVector InteractionCurPoint;                                                      // 0x0150 (size: 0x18)
+    float InteractionStartParameter;                                                  // 0x0168 (size: 0x4)
+    float InteractionCurParameter;                                                    // 0x016C (size: 0x4)
+    float ParameterSign;                                                              // 0x0170 (size: 0x4)
 
-}; // Size: 0x1C0
+}; // Size: 0x1A0
 
 class UAxisPositionGizmoBuilder : public UInteractiveGizmoBuilder
 {
@@ -309,18 +373,18 @@ class UAxisPositionGizmoBuilder : public UInteractiveGizmoBuilder
 
 class UBaseBrushTool : public UMeshSurfacePointTool
 {
-    class UBrushBaseProperties* BrushProperties;                                      // 0x0108 (size: 0x8)
-    bool bInBrushStroke;                                                              // 0x0110 (size: 0x1)
-    float WorldToLocalScale;                                                          // 0x0114 (size: 0x4)
-    FBrushStampData LastBrushStamp;                                                   // 0x0118 (size: 0x128)
-    TSoftClassPtr<UBrushBaseProperties> PropertyClass;                                // 0x0250 (size: 0x28)
-    class UBrushStampIndicator* BrushStampIndicator;                                  // 0x0278 (size: 0x8)
+    class UBrushBaseProperties* BrushProperties;                                      // 0x0100 (size: 0x8)
+    bool bInBrushStroke;                                                              // 0x0108 (size: 0x1)
+    float WorldToLocalScale;                                                          // 0x010C (size: 0x4)
+    FBrushStampData LastBrushStamp;                                                   // 0x0110 (size: 0x140)
+    TSoftClassPtr<UBrushBaseProperties> PropertyClass;                                // 0x0260 (size: 0x28)
+    class UBrushStampIndicator* BrushStampIndicator;                                  // 0x0288 (size: 0x8)
 
-}; // Size: 0x290
+}; // Size: 0x2A8
 
 class UBrushAdjusterInputBehavior : public UAnyButtonInputBehavior
 {
-}; // Size: 0xD0
+}; // Size: 0xC0
 
 class UBrushBaseProperties : public UInteractiveToolPropertySet
 {
@@ -339,10 +403,12 @@ class UBrushStampIndicator : public UInteractiveGizmo
     bool bVisible;                                                                    // 0x0038 (size: 0x1)
     float BrushRadius;                                                                // 0x003C (size: 0x4)
     float BrushFalloff;                                                               // 0x0040 (size: 0x4)
+    float BrushStrength;                                                              // 0x0044 (size: 0x4)
     FVector BrushPosition;                                                            // 0x0048 (size: 0x18)
     FVector BrushNormal;                                                              // 0x0060 (size: 0x18)
     bool bDrawIndicatorLines;                                                         // 0x0078 (size: 0x1)
     bool bDrawRadiusCircle;                                                           // 0x0079 (size: 0x1)
+    bool bScaleNormalByStrength;                                                      // 0x007A (size: 0x1)
     int32 SampleStepCount;                                                            // 0x007C (size: 0x4)
     FLinearColor LineColor;                                                           // 0x0080 (size: 0x10)
     float LineThickness;                                                              // 0x0090 (size: 0x4)
@@ -360,13 +426,13 @@ class UBrushStampIndicatorBuilder : public UInteractiveGizmoBuilder
 
 class UClickDragInputBehavior : public UAnyButtonInputBehavior
 {
-    bool bUpdateModifiersDuringDrag;                                                  // 0x0120 (size: 0x1)
+    bool bUpdateModifiersDuringDrag;                                                  // 0x0100 (size: 0x1)
 
-}; // Size: 0x140
+}; // Size: 0x120
 
 class UClickDragTool : public UInteractiveTool
 {
-}; // Size: 0xA8
+}; // Size: 0xA0
 
 class UClickDragToolBuilder : public UInteractiveToolBuilder
 {
@@ -381,45 +447,71 @@ class UCombinedTransformGizmo : public UInteractiveGizmo
     bool bRotationGridSizeIsExplicit;                                                 // 0x0060 (size: 0x1)
     FRotator ExplicitRotationGridSize;                                                // 0x0068 (size: 0x18)
     bool bSnapToWorldRotGrid;                                                         // 0x0080 (size: 0x1)
-    bool bUseContextCoordinateSystem;                                                 // 0x0081 (size: 0x1)
-    EToolContextCoordinateSystem CurrentCoordinateSystem;                             // 0x0084 (size: 0x4)
-    bool bUseContextGizmoMode;                                                        // 0x0088 (size: 0x1)
-    EToolContextTransformGizmoMode ActiveGizmoMode;                                   // 0x0089 (size: 0x1)
-    TArray<class UPrimitiveComponent*> ActiveComponents;                              // 0x01B0 (size: 0x10)
-    TArray<class UInteractiveGizmo*> ActiveGizmos;                                    // 0x01C0 (size: 0x10)
-    class UGizmoConstantFrameAxisSource* CameraAxisSource;                            // 0x0220 (size: 0x8)
-    class UGizmoComponentAxisSource* AxisXSource;                                     // 0x0228 (size: 0x8)
-    class UGizmoComponentAxisSource* AxisYSource;                                     // 0x0230 (size: 0x8)
-    class UGizmoComponentAxisSource* AxisZSource;                                     // 0x0238 (size: 0x8)
-    class UGizmoComponentAxisSource* UnitAxisXSource;                                 // 0x0240 (size: 0x8)
-    class UGizmoComponentAxisSource* UnitAxisYSource;                                 // 0x0248 (size: 0x8)
-    class UGizmoComponentAxisSource* UnitAxisZSource;                                 // 0x0250 (size: 0x8)
-    class UGizmoTransformChangeStateTarget* StateTarget;                              // 0x0258 (size: 0x8)
+    bool bSnapToScaleGrid;                                                            // 0x0081 (size: 0x1)
+    bool bUseContextCoordinateSystem;                                                 // 0x0082 (size: 0x1)
+    EToolContextCoordinateSystem CurrentCoordinateSystem;                             // 0x0083 (size: 0x1)
+    bool bUseContextGizmoMode;                                                        // 0x0084 (size: 0x1)
+    EToolContextTransformGizmoMode ActiveGizmoMode;                                   // 0x0085 (size: 0x1)
+    TArray<UPrimitiveComponent*> ActiveComponents;                                    // 0x0190 (size: 0x10)
+    TArray<UInteractiveGizmo*> ActiveGizmos;                                          // 0x01A0 (size: 0x10)
+    class UGizmoConstantFrameAxisSource* CameraAxisSource;                            // 0x03D0 (size: 0x8)
+    class UGizmoComponentAxisSource* AxisXSource;                                     // 0x03D8 (size: 0x8)
+    class UGizmoComponentAxisSource* AxisYSource;                                     // 0x03E0 (size: 0x8)
+    class UGizmoComponentAxisSource* AxisZSource;                                     // 0x03E8 (size: 0x8)
+    class UGizmoComponentAxisSource* UnitAxisXSource;                                 // 0x03F0 (size: 0x8)
+    class UGizmoComponentAxisSource* UnitAxisYSource;                                 // 0x03F8 (size: 0x8)
+    class UGizmoComponentAxisSource* UnitAxisZSource;                                 // 0x0400 (size: 0x8)
+    class UGizmoTransformChangeStateTarget* StateTarget;                              // 0x0408 (size: 0x8)
 
-}; // Size: 0x3A0
+}; // Size: 0x540
 
 class UCombinedTransformGizmoBuilder : public UInteractiveGizmoBuilder
 {
-}; // Size: 0xF0
+}; // Size: 0xD0
 
 class UCombinedTransformGizmoContextObject : public UObject
 {
 }; // Size: 0x58
 
+class UComponentBoundTransformProxy : public UTransformProxy
+{
+}; // Size: 0x1C0
+
 class UContextObjectStore : public UObject
 {
-    TArray<class UObject*> ContextObjects;                                            // 0x0028 (size: 0x10)
+    TArray<UObject*> ContextObjects;                                                  // 0x0028 (size: 0x10)
 
 }; // Size: 0x38
 
+class UDoubleClickInputBehavior : public USingleClickInputBehavior
+{
+}; // Size: 0x110
+
+class UFreePositionSubGizmo : public UPlanePositionGizmo
+{
+    TScriptInterface<class IGizmoTransformSource> TransformSource;                    // 0x0280 (size: 0x10)
+
+}; // Size: 0x290
+
+class UFreeRotationSubGizmo : public UInteractiveGizmo
+{
+    TScriptInterface<class IGizmoAxisSource> AxisSource;                              // 0x0048 (size: 0x10)
+    TScriptInterface<class IGizmoClickTarget> HitTarget;                              // 0x0058 (size: 0x10)
+    TScriptInterface<class IGizmoStateTarget> StateTarget;                            // 0x0068 (size: 0x10)
+    TScriptInterface<class IGizmoTransformSource> TransformSource;                    // 0x0078 (size: 0x10)
+    class UGizmoViewContext* GizmoViewContext;                                        // 0x0088 (size: 0x8)
+    class UClickDragInputBehavior* MouseBehavior;                                     // 0x0090 (size: 0x8)
+
+}; // Size: 0x100
+
 class UGizmoArrowComponent : public UGizmoBaseComponent
 {
-    FVector Direction;                                                                // 0x05A0 (size: 0x18)
-    float Gap;                                                                        // 0x05B8 (size: 0x4)
-    float Length;                                                                     // 0x05BC (size: 0x4)
-    float Thickness;                                                                  // 0x05C0 (size: 0x4)
+    FVector Direction;                                                                // 0x0558 (size: 0x18)
+    float Gap;                                                                        // 0x0570 (size: 0x4)
+    float Length;                                                                     // 0x0574 (size: 0x4)
+    float Thickness;                                                                  // 0x0578 (size: 0x4)
 
-}; // Size: 0x5D0
+}; // Size: 0x580
 
 class UGizmoAxisIntervalParameterSource : public UGizmoBaseFloatParameterSource
 {
@@ -431,52 +523,52 @@ class UGizmoAxisIntervalParameterSource : public UGizmoBaseFloatParameterSource
 
 class UGizmoAxisRotationParameterSource : public UGizmoBaseFloatParameterSource
 {
-    TScriptInterface<class IGizmoAxisSource> AxisSource;                              // 0x00D0 (size: 0x10)
-    TScriptInterface<class IGizmoTransformSource> TransformSource;                    // 0x00E0 (size: 0x10)
-    float Angle;                                                                      // 0x00F0 (size: 0x4)
-    FGizmoFloatParameterChange LastChange;                                            // 0x00F4 (size: 0x8)
-    FVector CurRotationAxis;                                                          // 0x0100 (size: 0x18)
-    FVector CurRotationOrigin;                                                        // 0x0118 (size: 0x18)
-    FTransform InitialTransform;                                                      // 0x0130 (size: 0x60)
+    TScriptInterface<class IGizmoAxisSource> AxisSource;                              // 0x00B0 (size: 0x10)
+    TScriptInterface<class IGizmoTransformSource> TransformSource;                    // 0x00C0 (size: 0x10)
+    float Angle;                                                                      // 0x00D0 (size: 0x4)
+    FGizmoFloatParameterChange LastChange;                                            // 0x00D4 (size: 0x8)
+    FVector CurRotationAxis;                                                          // 0x00E0 (size: 0x18)
+    FVector CurRotationOrigin;                                                        // 0x00F8 (size: 0x18)
+    FTransform InitialTransform;                                                      // 0x0110 (size: 0x60)
 
-}; // Size: 0x190
+}; // Size: 0x170
 
 class UGizmoAxisScaleParameterSource : public UGizmoBaseFloatParameterSource
 {
-    TScriptInterface<class IGizmoAxisSource> AxisSource;                              // 0x0048 (size: 0x10)
-    TScriptInterface<class IGizmoTransformSource> TransformSource;                    // 0x0058 (size: 0x10)
-    float ScaleMultiplier;                                                            // 0x0068 (size: 0x4)
-    bool bClampToZero;                                                                // 0x006C (size: 0x1)
-    float Parameter;                                                                  // 0x0070 (size: 0x4)
-    FGizmoFloatParameterChange LastChange;                                            // 0x0074 (size: 0x8)
-    FVector CurScaleAxis;                                                             // 0x0080 (size: 0x18)
-    FVector CurScaleOrigin;                                                           // 0x0098 (size: 0x18)
-    FTransform InitialTransform;                                                      // 0x00B0 (size: 0x60)
+    TScriptInterface<class IGizmoAxisSource> AxisSource;                              // 0x00B0 (size: 0x10)
+    TScriptInterface<class IGizmoTransformSource> TransformSource;                    // 0x00C0 (size: 0x10)
+    float ScaleMultiplier;                                                            // 0x00D0 (size: 0x4)
+    bool bClampToZero;                                                                // 0x00D4 (size: 0x1)
+    float Parameter;                                                                  // 0x00D8 (size: 0x4)
+    FGizmoFloatParameterChange LastChange;                                            // 0x00DC (size: 0x8)
+    FVector CurScaleAxis;                                                             // 0x00E8 (size: 0x18)
+    FVector CurScaleOrigin;                                                           // 0x0100 (size: 0x18)
+    FTransform InitialTransform;                                                      // 0x0120 (size: 0x60)
 
-}; // Size: 0x110
+}; // Size: 0x180
 
 class UGizmoAxisTranslationParameterSource : public UGizmoBaseFloatParameterSource
 {
-    TScriptInterface<class IGizmoAxisSource> AxisSource;                              // 0x00D0 (size: 0x10)
-    TScriptInterface<class IGizmoTransformSource> TransformSource;                    // 0x00E0 (size: 0x10)
-    float Parameter;                                                                  // 0x00F0 (size: 0x4)
-    FGizmoFloatParameterChange LastChange;                                            // 0x00F4 (size: 0x8)
-    FVector CurTranslationAxis;                                                       // 0x0100 (size: 0x18)
-    FVector CurTranslationOrigin;                                                     // 0x0118 (size: 0x18)
-    FTransform InitialTransform;                                                      // 0x0130 (size: 0x60)
+    TScriptInterface<class IGizmoAxisSource> AxisSource;                              // 0x00B0 (size: 0x10)
+    TScriptInterface<class IGizmoTransformSource> TransformSource;                    // 0x00C0 (size: 0x10)
+    float Parameter;                                                                  // 0x00D0 (size: 0x4)
+    FGizmoFloatParameterChange LastChange;                                            // 0x00D4 (size: 0x8)
+    FVector CurTranslationAxis;                                                       // 0x00E0 (size: 0x18)
+    FVector CurTranslationOrigin;                                                     // 0x00F8 (size: 0x18)
+    FTransform InitialTransform;                                                      // 0x0110 (size: 0x60)
 
-}; // Size: 0x190
+}; // Size: 0x170
 
 class UGizmoBaseComponent : public UPrimitiveComponent
 {
-    FLinearColor Color;                                                               // 0x0570 (size: 0x10)
-    float HoverSizeMultiplier;                                                        // 0x0580 (size: 0x4)
-    float PixelHitDistanceThreshold;                                                  // 0x0584 (size: 0x4)
-    class UGizmoViewContext* GizmoViewContext;                                        // 0x0590 (size: 0x8)
+    FLinearColor Color;                                                               // 0x0528 (size: 0x10)
+    float HoverSizeMultiplier;                                                        // 0x0538 (size: 0x4)
+    float PixelHitDistanceThreshold;                                                  // 0x053C (size: 0x4)
+    class UGizmoViewContext* GizmoViewContext;                                        // 0x0548 (size: 0x8)
 
     void UpdateWorldLocalState(bool bWorldIn);
     void UpdateHoverState(bool bHoveringIn);
-}; // Size: 0x5A0
+}; // Size: 0x560
 
 class UGizmoBaseFloatParameterSource : public UObject
 {
@@ -492,26 +584,26 @@ class UGizmoBaseVec2ParameterSource : public UObject
 
 class UGizmoBoxComponent : public UGizmoBaseComponent
 {
-    FVector Origin;                                                                   // 0x05A0 (size: 0x18)
-    FQuat Rotation;                                                                   // 0x05C0 (size: 0x20)
-    FVector Dimensions;                                                               // 0x05E0 (size: 0x18)
-    float LineThickness;                                                              // 0x05F8 (size: 0x4)
-    bool bRemoveHiddenLines;                                                          // 0x05FC (size: 0x1)
-    bool bEnableAxisFlip;                                                             // 0x05FD (size: 0x1)
+    FVector Origin;                                                                   // 0x0558 (size: 0x18)
+    FQuat Rotation;                                                                   // 0x0570 (size: 0x20)
+    FVector Dimensions;                                                               // 0x0590 (size: 0x18)
+    float LineThickness;                                                              // 0x05A8 (size: 0x4)
+    bool bRemoveHiddenLines;                                                          // 0x05AC (size: 0x1)
+    bool bEnableAxisFlip;                                                             // 0x05AD (size: 0x1)
 
-}; // Size: 0x600
+}; // Size: 0x5B0
 
 class UGizmoCircleComponent : public UGizmoBaseComponent
 {
-    FVector Normal;                                                                   // 0x05A0 (size: 0x18)
-    float Radius;                                                                     // 0x05B8 (size: 0x4)
-    float Thickness;                                                                  // 0x05BC (size: 0x4)
-    int32 NumSides;                                                                   // 0x05C0 (size: 0x4)
-    bool bViewAligned;                                                                // 0x05C4 (size: 0x1)
-    bool bDrawFullCircle;                                                             // 0x05C5 (size: 0x1)
-    bool bOnlyAllowFrontFacingHits;                                                   // 0x05C6 (size: 0x1)
+    FVector Normal;                                                                   // 0x0558 (size: 0x18)
+    float Radius;                                                                     // 0x0570 (size: 0x4)
+    float Thickness;                                                                  // 0x0574 (size: 0x4)
+    int32 NumSides;                                                                   // 0x0578 (size: 0x4)
+    bool bViewAligned;                                                                // 0x057C (size: 0x1)
+    bool bDrawFullCircle;                                                             // 0x057D (size: 0x1)
+    bool bOnlyAllowFrontFacingHits;                                                   // 0x057E (size: 0x1)
 
-}; // Size: 0x5D0
+}; // Size: 0x580
 
 class UGizmoComponentAxisSource : public UObject
 {
@@ -525,7 +617,7 @@ class UGizmoComponentHitTarget : public UObject
 {
     class UPrimitiveComponent* Component;                                             // 0x0030 (size: 0x8)
 
-}; // Size: 0x100
+}; // Size: 0xD0
 
 class UGizmoComponentWorldTransformSource : public UGizmoBaseTransformSource
 {
@@ -569,9 +661,11 @@ class UGizmoElementArrow : public UGizmoElementBase
     float HeadLength;                                                                 // 0x0178 (size: 0x4)
     float HeadRadius;                                                                 // 0x017C (size: 0x4)
     int32 NumSides;                                                                   // 0x0180 (size: 0x4)
-    EGizmoElementArrowHeadType HeadType;                                              // 0x0184 (size: 0x4)
+    bool bEndCaps;                                                                    // 0x0184 (size: 0x1)
+    EGizmoElementArrowHeadType HeadType;                                              // 0x0188 (size: 0x4)
+    TWeakObjectPtr<class UGizmoElementBase> HitMask;                                  // 0x018C (size: 0x8)
 
-}; // Size: 0x188
+}; // Size: 0x198
 
 class UGizmoElementBase : public UObject
 {
@@ -638,6 +732,7 @@ class UGizmoElementCone : public UGizmoElementBase
     float Height;                                                                     // 0x0138 (size: 0x4)
     float Radius;                                                                     // 0x013C (size: 0x4)
     int32 NumSides;                                                                   // 0x0140 (size: 0x4)
+    bool bEndCaps;                                                                    // 0x0144 (size: 0x1)
 
 }; // Size: 0x148
 
@@ -655,7 +750,7 @@ class UGizmoElementGroup : public UGizmoElementLineBase
 {
     bool bConstantScale;                                                              // 0x0158 (size: 0x1)
     bool bHitOwner;                                                                   // 0x0159 (size: 0x1)
-    TArray<class UGizmoElementBase*> Elements;                                        // 0x0160 (size: 0x10)
+    TArray<UGizmoElementBase*> Elements;                                              // 0x0160 (size: 0x10)
 
 }; // Size: 0x170
 
@@ -665,7 +760,7 @@ class UGizmoElementHitMultiTarget : public UObject
     class UGizmoViewContext* GizmoViewContext;                                        // 0x0038 (size: 0x8)
     class UTransformProxy* GizmoTransformProxy;                                       // 0x0040 (size: 0x8)
 
-}; // Size: 0x90
+}; // Size: 0x80
 
 class UGizmoElementHitTarget : public UObject
 {
@@ -673,7 +768,7 @@ class UGizmoElementHitTarget : public UObject
     class UGizmoViewContext* GizmoViewContext;                                        // 0x0038 (size: 0x8)
     class UTransformProxy* GizmoTransformProxy;                                       // 0x0040 (size: 0x8)
 
-}; // Size: 0x90
+}; // Size: 0x80
 
 class UGizmoElementLineBase : public UGizmoElementBase
 {
@@ -684,6 +779,16 @@ class UGizmoElementLineBase : public UGizmoElementBase
     float InteractLineThicknessMultiplier;                                            // 0x0150 (size: 0x4)
 
 }; // Size: 0x158
+
+class UGizmoElementLineStrip : public UGizmoElementLineBase
+{
+    TArray<FVector> Vertices;                                                         // 0x0158 (size: 0x10)
+    FVector base;                                                                     // 0x0168 (size: 0x18)
+    FVector upDirection;                                                              // 0x0180 (size: 0x18)
+    FVector SideDirection;                                                            // 0x0198 (size: 0x18)
+    bool bDrawLineStrip;                                                              // 0x01B0 (size: 0x1)
+
+}; // Size: 0x1C8
 
 class UGizmoElementRectangle : public UGizmoElementLineBase
 {
@@ -699,6 +804,14 @@ class UGizmoElementRectangle : public UGizmoElementLineBase
 
 }; // Size: 0x1B0
 
+class UGizmoElementSphere : public UGizmoElementBase
+{
+    FVector Center;                                                                   // 0x0108 (size: 0x18)
+    float Radius;                                                                     // 0x0120 (size: 0x4)
+    int32 NumSides;                                                                   // 0x0124 (size: 0x4)
+
+}; // Size: 0x128
+
 class UGizmoElementTorus : public UGizmoElementCircleBase
 {
     double InnerRadius;                                                               // 0x01C8 (size: 0x8)
@@ -707,24 +820,33 @@ class UGizmoElementTorus : public UGizmoElementCircleBase
 
 }; // Size: 0x1D8
 
+class UGizmoElementTriangleList : public UGizmoElementBase
+{
+    TArray<FVector> Vertices;                                                         // 0x0108 (size: 0x10)
+    FVector base;                                                                     // 0x0118 (size: 0x18)
+    FVector upDirection;                                                              // 0x0130 (size: 0x18)
+    FVector SideDirection;                                                            // 0x0148 (size: 0x18)
+
+}; // Size: 0x170
+
 class UGizmoLambdaHitTarget : public UObject
 {
-}; // Size: 0xF0
+}; // Size: 0xC0
 
 class UGizmoLambdaStateTarget : public UObject
 {
-}; // Size: 0xB0
+}; // Size: 0x90
 
 class UGizmoLineHandleComponent : public UGizmoBaseComponent
 {
-    FVector Normal;                                                                   // 0x05A0 (size: 0x18)
-    float HandleSize;                                                                 // 0x05B8 (size: 0x4)
-    float Thickness;                                                                  // 0x05BC (size: 0x4)
-    FVector Direction;                                                                // 0x05C0 (size: 0x18)
-    float Length;                                                                     // 0x05D8 (size: 0x4)
-    bool bImageScale;                                                                 // 0x05DC (size: 0x1)
+    FVector Normal;                                                                   // 0x0558 (size: 0x18)
+    float HandleSize;                                                                 // 0x0570 (size: 0x4)
+    float Thickness;                                                                  // 0x0574 (size: 0x4)
+    FVector Direction;                                                                // 0x0578 (size: 0x18)
+    float Length;                                                                     // 0x0590 (size: 0x4)
+    bool bImageScale;                                                                 // 0x0594 (size: 0x1)
 
-}; // Size: 0x5E0
+}; // Size: 0x5A0
 
 class UGizmoLocalFloatParameterSource : public UGizmoBaseFloatParameterSource
 {
@@ -746,54 +868,54 @@ class UGizmoNilStateTarget : public UObject
 
 class UGizmoObjectModifyStateTarget : public UObject
 {
-    TScriptInterface<class IToolContextTransactionProvider> TransactionManager;       // 0x0050 (size: 0x10)
+    TScriptInterface<class IToolContextTransactionProvider> TransactionManager;       // 0x0048 (size: 0x10)
 
-}; // Size: 0x60
+}; // Size: 0x58
 
 class UGizmoPlaneScaleParameterSource : public UGizmoBaseVec2ParameterSource
 {
-    TScriptInterface<class IGizmoAxisSource> AxisSource;                              // 0x0090 (size: 0x10)
-    TScriptInterface<class IGizmoTransformSource> TransformSource;                    // 0x00A0 (size: 0x10)
-    float ScaleMultiplier;                                                            // 0x00B0 (size: 0x4)
-    bool bUseEqualScaling;                                                            // 0x00B4 (size: 0x1)
-    bool bClampToZero;                                                                // 0x00B5 (size: 0x1)
-    FVector2D Parameter;                                                              // 0x00B8 (size: 0x10)
-    FGizmoVec2ParameterChange LastChange;                                             // 0x00C8 (size: 0x20)
-    FVector CurScaleOrigin;                                                           // 0x00E8 (size: 0x18)
-    FVector CurScaleNormal;                                                           // 0x0100 (size: 0x18)
-    FVector CurScaleAxisX;                                                            // 0x0118 (size: 0x18)
-    FVector CurScaleAxisY;                                                            // 0x0130 (size: 0x18)
-    FTransform InitialTransform;                                                      // 0x0150 (size: 0x60)
+    TScriptInterface<class IGizmoAxisSource> AxisSource;                              // 0x0110 (size: 0x10)
+    TScriptInterface<class IGizmoTransformSource> TransformSource;                    // 0x0120 (size: 0x10)
+    float ScaleMultiplier;                                                            // 0x0130 (size: 0x4)
+    bool bUseEqualScaling;                                                            // 0x0134 (size: 0x1)
+    bool bClampToZero;                                                                // 0x0135 (size: 0x1)
+    FVector2D Parameter;                                                              // 0x0138 (size: 0x10)
+    FGizmoVec2ParameterChange LastChange;                                             // 0x0148 (size: 0x20)
+    FVector CurScaleOrigin;                                                           // 0x0168 (size: 0x18)
+    FVector CurScaleNormal;                                                           // 0x0180 (size: 0x18)
+    FVector CurScaleAxisX;                                                            // 0x0198 (size: 0x18)
+    FVector CurScaleAxisY;                                                            // 0x01B0 (size: 0x18)
+    FTransform InitialTransform;                                                      // 0x01D0 (size: 0x60)
 
-}; // Size: 0x1B0
+}; // Size: 0x230
 
 class UGizmoPlaneTranslationParameterSource : public UGizmoBaseVec2ParameterSource
 {
-    TScriptInterface<class IGizmoAxisSource> AxisSource;                              // 0x0110 (size: 0x10)
-    TScriptInterface<class IGizmoTransformSource> TransformSource;                    // 0x0120 (size: 0x10)
-    FVector2D Parameter;                                                              // 0x0130 (size: 0x10)
-    FGizmoVec2ParameterChange LastChange;                                             // 0x0140 (size: 0x20)
-    FVector CurTranslationOrigin;                                                     // 0x0160 (size: 0x18)
-    FVector CurTranslationNormal;                                                     // 0x0178 (size: 0x18)
-    FVector CurTranslationAxisX;                                                      // 0x0190 (size: 0x18)
-    FVector CurTranslationAxisY;                                                      // 0x01A8 (size: 0x18)
-    FTransform InitialTransform;                                                      // 0x01C0 (size: 0x60)
+    TScriptInterface<class IGizmoAxisSource> AxisSource;                              // 0x00E0 (size: 0x10)
+    TScriptInterface<class IGizmoTransformSource> TransformSource;                    // 0x00F0 (size: 0x10)
+    FVector2D Parameter;                                                              // 0x0100 (size: 0x10)
+    FGizmoVec2ParameterChange LastChange;                                             // 0x0110 (size: 0x20)
+    FVector CurTranslationOrigin;                                                     // 0x0130 (size: 0x18)
+    FVector CurTranslationNormal;                                                     // 0x0148 (size: 0x18)
+    FVector CurTranslationAxisX;                                                      // 0x0160 (size: 0x18)
+    FVector CurTranslationAxisY;                                                      // 0x0178 (size: 0x18)
+    FTransform InitialTransform;                                                      // 0x0190 (size: 0x60)
 
-}; // Size: 0x220
+}; // Size: 0x1F0
 
 class UGizmoRectangleComponent : public UGizmoBaseComponent
 {
-    FVector DirectionX;                                                               // 0x05A0 (size: 0x18)
-    FVector DirectionY;                                                               // 0x05B8 (size: 0x18)
-    bool bOrientYAccordingToCamera;                                                   // 0x05D0 (size: 0x1)
-    float OffsetX;                                                                    // 0x05D4 (size: 0x4)
-    float OffsetY;                                                                    // 0x05D8 (size: 0x4)
-    float LengthX;                                                                    // 0x05DC (size: 0x4)
-    float LengthY;                                                                    // 0x05E0 (size: 0x4)
-    float Thickness;                                                                  // 0x05E4 (size: 0x4)
-    uint8 SegmentFlags;                                                               // 0x05E8 (size: 0x1)
+    FVector DirectionX;                                                               // 0x0558 (size: 0x18)
+    FVector DirectionY;                                                               // 0x0570 (size: 0x18)
+    bool bOrientYAccordingToCamera;                                                   // 0x0588 (size: 0x1)
+    float OffsetX;                                                                    // 0x058C (size: 0x4)
+    float OffsetY;                                                                    // 0x0590 (size: 0x4)
+    float LengthX;                                                                    // 0x0594 (size: 0x4)
+    float LengthY;                                                                    // 0x0598 (size: 0x4)
+    float Thickness;                                                                  // 0x059C (size: 0x4)
+    uint8 SegmentFlags;                                                               // 0x05A0 (size: 0x1)
 
-}; // Size: 0x5F0
+}; // Size: 0x5B0
 
 class UGizmoScaledAndUnscaledTransformSources : public UGizmoBaseTransformSource
 {
@@ -806,11 +928,11 @@ class UGizmoScaledTransformSource : public UGizmoBaseTransformSource
 {
     TScriptInterface<class IGizmoTransformSource> ChildTransformSource;               // 0x0048 (size: 0x10)
 
-}; // Size: 0xE0
+}; // Size: 0xC0
 
 class UGizmoTransformChangeStateTarget : public UObject
 {
-    TScriptInterface<class IToolContextTransactionProvider> TransactionManager;       // 0x0050 (size: 0x10)
+    TScriptInterface<class IToolContextTransactionProvider> TransactionManager;       // 0x0048 (size: 0x10)
 
 }; // Size: 0x140
 
@@ -822,22 +944,22 @@ class UGizmoTransformProxyTransformSource : public UGizmoBaseTransformSource
 
 class UGizmoUniformScaleParameterSource : public UGizmoBaseVec2ParameterSource
 {
-    TScriptInterface<class IGizmoAxisSource> AxisSource;                              // 0x0048 (size: 0x10)
-    TScriptInterface<class IGizmoTransformSource> TransformSource;                    // 0x0058 (size: 0x10)
-    float ScaleMultiplier;                                                            // 0x0068 (size: 0x4)
-    FVector2D Parameter;                                                              // 0x0070 (size: 0x10)
-    FGizmoVec2ParameterChange LastChange;                                             // 0x0080 (size: 0x20)
-    FVector CurScaleOrigin;                                                           // 0x00A0 (size: 0x18)
-    FVector CurScaleNormal;                                                           // 0x00B8 (size: 0x18)
-    FVector CurScaleAxisX;                                                            // 0x00D0 (size: 0x18)
-    FVector CurScaleAxisY;                                                            // 0x00E8 (size: 0x18)
-    FTransform InitialTransform;                                                      // 0x0100 (size: 0x60)
+    TScriptInterface<class IGizmoAxisSource> AxisSource;                              // 0x00B0 (size: 0x10)
+    TScriptInterface<class IGizmoTransformSource> TransformSource;                    // 0x00C0 (size: 0x10)
+    float ScaleMultiplier;                                                            // 0x00D0 (size: 0x4)
+    FVector2D Parameter;                                                              // 0x00D8 (size: 0x10)
+    FGizmoVec2ParameterChange LastChange;                                             // 0x00E8 (size: 0x20)
+    FVector CurScaleOrigin;                                                           // 0x0108 (size: 0x18)
+    FVector CurScaleNormal;                                                           // 0x0120 (size: 0x18)
+    FVector CurScaleAxisX;                                                            // 0x0138 (size: 0x18)
+    FVector CurScaleAxisY;                                                            // 0x0150 (size: 0x18)
+    FTransform InitialTransform;                                                      // 0x0170 (size: 0x60)
 
-}; // Size: 0x160
+}; // Size: 0x1D0
 
 class UGizmoViewContext : public UObject
 {
-}; // Size: 0x1E0
+}; // Size: 0x260
 
 class UGizmoWorldAxisSource : public UObject
 {
@@ -893,16 +1015,16 @@ class UInteractiveGizmoBuilder : public UObject
 class UInteractiveGizmoManager : public UObject
 {
     TArray<FActiveGizmo> ActiveGizmos;                                                // 0x0030 (size: 0x10)
-    TMap<class FString, class UInteractiveGizmoBuilder*> GizmoBuilders;               // 0x0058 (size: 0x50)
+    TMap<FString, UInteractiveGizmoBuilder*> GizmoBuilders;                           // 0x0058 (size: 0x50)
 
 }; // Size: 0xC0
 
 class UInteractiveTool : public UObject
 {
     class UInputBehaviorSet* InputBehaviors;                                          // 0x0060 (size: 0x8)
-    TArray<class UObject*> ToolPropertyObjects;                                       // 0x0068 (size: 0x10)
+    TArray<UObject*> ToolPropertyObjects;                                             // 0x0068 (size: 0x10)
 
-}; // Size: 0xA0
+}; // Size: 0x98
 
 class UInteractiveToolBuilder : public UObject
 {
@@ -912,13 +1034,13 @@ class UInteractiveToolManager : public UObject
 {
     class UInteractiveTool* ActiveLeftTool;                                           // 0x0058 (size: 0x8)
     class UInteractiveTool* ActiveRightTool;                                          // 0x0060 (size: 0x8)
-    TMap<class FString, class UInteractiveToolBuilder*> ToolBuilders;                 // 0x00E8 (size: 0x50)
+    TMap<FString, UInteractiveToolBuilder*> ToolBuilders;                             // 0x0100 (size: 0x50)
 
-}; // Size: 0x198
+}; // Size: 0x1B0
 
 class UInteractiveToolPropertySet : public UObject
 {
-    TMap<class FString, class UInteractiveToolPropertySet*> CachedPropertiesMap;      // 0x0038 (size: 0x50)
+    TMap<FString, UInteractiveToolPropertySet*> CachedPropertiesMap;                  // 0x0038 (size: 0x50)
     bool bIsPropertySetEnabled;                                                       // 0x0088 (size: 0x1)
 
 }; // Size: 0xA8
@@ -934,44 +1056,65 @@ class UInteractiveToolsContext : public UObject
     class UInteractiveToolManager* ToolManager;                                       // 0x0068 (size: 0x8)
     class UInteractiveGizmoManager* GizmoManager;                                     // 0x0070 (size: 0x8)
     class UContextObjectStore* ContextObjectStore;                                    // 0x0078 (size: 0x8)
-    TSoftClassPtr<UInteractiveToolManager> ToolManagerClass;                          // 0x0300 (size: 0x28)
+    TSoftClassPtr<UInteractiveToolManager> ToolManagerClass;                          // 0x0260 (size: 0x28)
 
-}; // Size: 0x330
+}; // Size: 0x290
 
 class UIntervalGizmo : public UInteractiveGizmo
 {
     class UGizmoTransformChangeStateTarget* StateTarget;                              // 0x0038 (size: 0x8)
+    class UWorld* World;                                                              // 0x0088 (size: 0x8)
+    class AIntervalGizmoActor* GizmoActor;                                            // 0x0090 (size: 0x8)
     class UTransformProxy* TransformProxy;                                            // 0x0098 (size: 0x8)
-    TArray<class UPrimitiveComponent*> ActiveComponents;                              // 0x00A0 (size: 0x10)
-    TArray<class UInteractiveGizmo*> ActiveGizmos;                                    // 0x00B0 (size: 0x10)
-    class UGizmoComponentAxisSource* AxisYSource;                                     // 0x00D8 (size: 0x8)
-    class UGizmoComponentAxisSource* AxisZSource;                                     // 0x00E0 (size: 0x8)
+    TArray<UPrimitiveComponent*> ActiveComponents;                                    // 0x00A0 (size: 0x10)
+    TArray<UInteractiveGizmo*> ActiveGizmos;                                          // 0x00B0 (size: 0x10)
+    class UGizmoLocalFloatParameterSource* UpIntervalSource;                          // 0x00C0 (size: 0x8)
+    class UGizmoLocalFloatParameterSource* DownIntervalSource;                        // 0x00C8 (size: 0x8)
+    class UGizmoLocalFloatParameterSource* ForwardIntervalSource;                     // 0x00D0 (size: 0x8)
+    class UGizmoLocalFloatParameterSource* BackwardIntervalSource;                    // 0x00D8 (size: 0x8)
+    class UGizmoLocalFloatParameterSource* RightIntervalSource;                       // 0x00E0 (size: 0x8)
+    class UGizmoLocalFloatParameterSource* LeftIntervalSource;                        // 0x00E8 (size: 0x8)
+    class UGizmoComponentAxisSource* AxisXSource;                                     // 0x00F0 (size: 0x8)
+    class UGizmoComponentAxisSource* AxisYSource;                                     // 0x00F8 (size: 0x8)
+    class UGizmoComponentAxisSource* AxisZSource;                                     // 0x0100 (size: 0x8)
 
-}; // Size: 0x200
+}; // Size: 0x210
 
 class UIntervalGizmoBuilder : public UInteractiveGizmoBuilder
 {
-}; // Size: 0xC0
+}; // Size: 0xA0
 
 class UKeyAsModifierInputBehavior : public UInputBehavior
 {
 }; // Size: 0x98
 
+class UKeyInputBehavior : public UInputBehavior
+{
+}; // Size: 0x100
+
 class ULocalClickDragInputBehavior : public UClickDragInputBehavior
 {
-}; // Size: 0x280
+}; // Size: 0x210
+
+class ULocalDoubleClickInputBehavior : public UDoubleClickInputBehavior
+{
+}; // Size: 0x1B0
 
 class ULocalInputBehaviorSource : public UObject
 {
-}; // Size: 0x70
+}; // Size: 0x60
 
 class ULocalMouseHoverBehavior : public UMouseHoverBehavior
 {
-}; // Size: 0x1E0
+}; // Size: 0x1C0
 
 class ULocalSingleClickInputBehavior : public USingleClickInputBehavior
 {
-}; // Size: 0x200
+}; // Size: 0x1B0
+
+class ULocalTwoAxisPropertyEditInputBehavior : public UTwoAxisPropertyEditInputBehavior
+{
+}; // Size: 0x250
 
 class UMeshSelectionSet : public USelectionSet
 {
@@ -984,9 +1127,9 @@ class UMeshSelectionSet : public USelectionSet
 
 class UMeshSurfacePointTool : public USingleSelectionTool
 {
-    TWeakObjectPtr<class UWorld> TargetWorld;                                         // 0x0100 (size: 0x8)
+    TWeakObjectPtr<class UWorld> TargetWorld;                                         // 0x00F8 (size: 0x8)
 
-}; // Size: 0x108
+}; // Size: 0x100
 
 class UMeshSurfacePointToolBuilder : public UInteractiveToolWithToolTargetsBuilder
 {
@@ -994,21 +1137,21 @@ class UMeshSurfacePointToolBuilder : public UInteractiveToolWithToolTargetsBuild
 
 class UMouseHoverBehavior : public UInputBehavior
 {
-}; // Size: 0x98
+}; // Size: 0xD0
 
 class UMouseWheelInputBehavior : public UAnyButtonInputBehavior
 {
-}; // Size: 0x130
+}; // Size: 0x110
 
 class UMultiClickSequenceInputBehavior : public UAnyButtonInputBehavior
 {
-}; // Size: 0x130
+}; // Size: 0x140
 
 class UMultiSelectionTool : public UInteractiveTool
 {
-    TArray<class UToolTarget*> Targets;                                               // 0x00A8 (size: 0x10)
+    TArray<UToolTarget*> Targets;                                                     // 0x00A0 (size: 0x10)
 
-}; // Size: 0xB8
+}; // Size: 0xB0
 
 class UPlanePositionGizmo : public UInteractiveGizmo
 {
@@ -1020,18 +1163,18 @@ class UPlanePositionGizmo : public UInteractiveGizmo
     bool bEnableSignedAxis;                                                           // 0x0090 (size: 0x1)
     bool bFlipX;                                                                      // 0x0091 (size: 0x1)
     bool bFlipY;                                                                      // 0x0092 (size: 0x1)
-    bool bInInteraction;                                                              // 0x0120 (size: 0x1)
-    FVector InteractionOrigin;                                                        // 0x0128 (size: 0x18)
-    FVector InteractionNormal;                                                        // 0x0140 (size: 0x18)
-    FVector InteractionAxisX;                                                         // 0x0158 (size: 0x18)
-    FVector InteractionAxisY;                                                         // 0x0170 (size: 0x18)
-    FVector InteractionStartPoint;                                                    // 0x0188 (size: 0x18)
-    FVector InteractionCurPoint;                                                      // 0x01A0 (size: 0x18)
-    FVector2D InteractionStartParameter;                                              // 0x01B8 (size: 0x10)
-    FVector2D InteractionCurParameter;                                                // 0x01C8 (size: 0x10)
-    FVector2D ParameterSigns;                                                         // 0x01D8 (size: 0x10)
+    bool bInInteraction;                                                              // 0x0100 (size: 0x1)
+    FVector InteractionOrigin;                                                        // 0x0108 (size: 0x18)
+    FVector InteractionNormal;                                                        // 0x0120 (size: 0x18)
+    FVector InteractionAxisX;                                                         // 0x0138 (size: 0x18)
+    FVector InteractionAxisY;                                                         // 0x0150 (size: 0x18)
+    FVector InteractionStartPoint;                                                    // 0x0168 (size: 0x18)
+    FVector InteractionCurPoint;                                                      // 0x0180 (size: 0x18)
+    FVector2D InteractionStartParameter;                                              // 0x0198 (size: 0x10)
+    FVector2D InteractionCurParameter;                                                // 0x01A8 (size: 0x10)
+    FVector2D ParameterSigns;                                                         // 0x01B8 (size: 0x10)
 
-}; // Size: 0x270
+}; // Size: 0x280
 
 class UPlanePositionGizmoBuilder : public UInteractiveGizmoBuilder
 {
@@ -1047,28 +1190,28 @@ class UPrimitiveComponentToolTargetFactory : public UToolTargetFactory
 
 class URepositionableTransformGizmo : public UCombinedTransformGizmo
 {
-    class UGizmoTransformChangeStateTarget* RepositionStateTarget;                    // 0x0430 (size: 0x8)
+    class UGizmoTransformChangeStateTarget* RepositionStateTarget;                    // 0x05B0 (size: 0x8)
 
-}; // Size: 0x440
+}; // Size: 0x5C0
 
 class URepositionableTransformGizmoBuilder : public UCombinedTransformGizmoBuilder
 {
-}; // Size: 0xF0
+}; // Size: 0xD0
 
 class UScalableSphereGizmo : public UInteractiveGizmo
 {
-    float HitErrorThreshold;                                                          // 0x0080 (size: 0x4)
-    FText TransactionDescription;                                                     // 0x0088 (size: 0x18)
-    float Radius;                                                                     // 0x00A0 (size: 0x4)
-    bool bIsHovering;                                                                 // 0x00A4 (size: 0x1)
-    bool bIsDragging;                                                                 // 0x00A5 (size: 0x1)
-    class UTransformProxy* ActiveTarget;                                              // 0x00A8 (size: 0x8)
-    FVector ActiveAxis;                                                               // 0x00B0 (size: 0x18)
-    FVector DragStartWorldPosition;                                                   // 0x00C8 (size: 0x18)
-    FVector DragCurrentPositionProjected;                                             // 0x00E0 (size: 0x18)
-    float InteractionStartParameter;                                                  // 0x00F8 (size: 0x4)
+    float HitErrorThreshold;                                                          // 0x0070 (size: 0x4)
+    FText TransactionDescription;                                                     // 0x0078 (size: 0x10)
+    float Radius;                                                                     // 0x0088 (size: 0x4)
+    bool bIsHovering;                                                                 // 0x008C (size: 0x1)
+    bool bIsDragging;                                                                 // 0x008D (size: 0x1)
+    class UTransformProxy* ActiveTarget;                                              // 0x0090 (size: 0x8)
+    FVector ActiveAxis;                                                               // 0x0098 (size: 0x18)
+    FVector DragStartWorldPosition;                                                   // 0x00B0 (size: 0x18)
+    FVector DragCurrentPositionProjected;                                             // 0x00C8 (size: 0x18)
+    float InteractionStartParameter;                                                  // 0x00E0 (size: 0x4)
 
-}; // Size: 0x100
+}; // Size: 0xF0
 
 class UScalableSphereGizmoBuilder : public UInteractiveGizmoBuilder
 {
@@ -1076,7 +1219,15 @@ class UScalableSphereGizmoBuilder : public UInteractiveGizmoBuilder
 
 class UScalableSphereGizmoInputBehavior : public UAnyButtonInputBehavior
 {
-}; // Size: 0xD0
+}; // Size: 0xC0
+
+class USceneComponentToolTarget : public UToolTarget
+{
+}; // Size: 0x38
+
+class USceneComponentToolTargetFactory : public UToolTargetFactory
+{
+}; // Size: 0x28
 
 class USceneSnappingManager : public UObject
 {
@@ -1086,22 +1237,33 @@ class USelectionSet : public UObject
 {
 }; // Size: 0x40
 
+class USimpleLambdaInteractiveGizmoBuilder : public UInteractiveGizmoBuilder
+{
+}; // Size: 0x60
+
+class USimpleSingleClickGizmo : public UInteractiveGizmo
+{
+    TScriptInterface<class IGizmoClickTarget> HitTarget;                              // 0x0060 (size: 0x10)
+    class USingleClickInputBehavior* ClickBehavior;                                   // 0x0070 (size: 0x8)
+
+}; // Size: 0x78
+
 class USingleClickInputBehavior : public UAnyButtonInputBehavior
 {
-    bool HitTestOnRelease;                                                            // 0x00C0 (size: 0x1)
+    bool HitTestOnRelease;                                                            // 0x00A0 (size: 0x1)
 
-}; // Size: 0x130
+}; // Size: 0x110
 
 class USingleClickOrDragInputBehavior : public UAnyButtonInputBehavior
 {
-    bool bBeginDragIfClickTargetNotHit;                                               // 0x0120 (size: 0x1)
-    float ClickDistanceThreshold;                                                     // 0x0124 (size: 0x4)
+    bool bBeginDragIfClickTargetNotHit;                                               // 0x0100 (size: 0x1)
+    float ClickDistanceThreshold;                                                     // 0x0104 (size: 0x4)
 
-}; // Size: 0x180
+}; // Size: 0x160
 
 class USingleClickTool : public UInteractiveTool
 {
-}; // Size: 0xA8
+}; // Size: 0xA0
 
 class USingleClickToolBuilder : public UInteractiveToolBuilder
 {
@@ -1109,13 +1271,13 @@ class USingleClickToolBuilder : public UInteractiveToolBuilder
 
 class USingleKeyCaptureBehavior : public UInputBehavior
 {
-}; // Size: 0x110
+}; // Size: 0x100
 
 class USingleSelectionTool : public UInteractiveTool
 {
-    class UToolTarget* Target;                                                        // 0x00A8 (size: 0x8)
+    class UToolTarget* Target;                                                        // 0x00A0 (size: 0x8)
 
-}; // Size: 0xB0
+}; // Size: 0xA8
 
 class UToolTarget : public UObject
 {
@@ -1127,9 +1289,13 @@ class UToolTargetFactory : public UObject
 
 class UToolTargetManager : public UObject
 {
-    TArray<class UToolTargetFactory*> Factories;                                      // 0x0030 (size: 0x10)
+    TArray<UToolTargetFactory*> Factories;                                            // 0x0030 (size: 0x10)
 
 }; // Size: 0x40
+
+class UToolsContextCursorAPI : public UObject
+{
+}; // Size: 0x30
 
 class UTransformProxy : public UObject
 {
@@ -1139,5 +1305,17 @@ class UTransformProxy : public UObject
     FTransform InitialSharedTransform;                                                // 0x0150 (size: 0x60)
 
 }; // Size: 0x1B0
+
+class UTwoAxisPropertyEditInputBehavior : public UInputBehavior
+{
+}; // Size: 0x70
+
+class UViewAdjustedStaticMeshGizmoComponent : public UStaticMeshComponent
+{
+    class UGizmoViewContext* GizmoViewContext;                                        // 0x0618 (size: 0x8)
+    class UPrimitiveComponent* SubstituteInteractionComponent;                        // 0x0620 (size: 0x8)
+    class UMaterialInterface* HoverOverrideMaterial;                                  // 0x0628 (size: 0x8)
+
+}; // Size: 0x680
 
 #endif

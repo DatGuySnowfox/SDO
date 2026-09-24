@@ -52,6 +52,13 @@ enum ELinearConstraintMotion {
     LCM_MAX = 3,
 };
 
+enum class EPhysicalMaterialSoftCollisionMode {
+    None = 0,
+    RelativeThickness = 1,
+    AbsoluteThickess = 2,
+    EPhysicalMaterialSoftCollisionMode_MAX = 3,
+};
+
 enum EPhysicalSurface {
     SurfaceType_Default = 0,
     SurfaceType1 = 1,

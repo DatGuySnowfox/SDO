@@ -4,6 +4,13 @@ enum class EAnchorStateEnum {
     Dataflow_Max = 2,
 };
 
+enum class EBooleanOperationEnum {
+    Dataflow_And = 0,
+    Dataflow_Or = 1,
+    Dataflow_Not = 2,
+    Dataflow_Max = 3,
+};
+
 enum class EBoxLengthMeasurementMethod {
     XAxis = 0,
     YAxis = 1,
@@ -14,12 +21,32 @@ enum class EBoxLengthMeasurementMethod {
     EBoxLengthMeasurementMethod_MAX = 6,
 };
 
+enum class EClusterNeighborSelectionMethodEnum {
+    Dataflow_ClusterNeighborSelectionMethod_LargestNeighbor = 0,
+    Dataflow_ClusterNeighborSelectionMethod_NearestCenter = 1,
+    Dataflow_ClusterNeighborSelectionMethod_MAX = 2,
+};
+
 enum class EClusterSizeMethodEnum {
     Dataflow_ClusterSizeMethod_ByNumber = 0,
     Dataflow_ClusterSizeMethod_ByFractionOfInput = 1,
     Dataflow_ClusterSizeMethod_BySize = 2,
     Dataflow_ClusterSizeMethod_ByGrid = 3,
     Dataflow_Max = 4,
+};
+
+enum class ECollectionBakeTextureAttribute {
+    None = 0,
+    DistanceToExternal = 1,
+    AmbientOcclusion = 2,
+    Curvature = 3,
+    NormalX = 4,
+    NormalY = 5,
+    NormalZ = 6,
+    PositionX = 7,
+    PositionY = 8,
+    PositionZ = 9,
+    ECollectionBakeTextureAttribute_MAX = 10,
 };
 
 enum class ECompareOperation1Enum {
@@ -37,7 +64,8 @@ enum class ECompareOperationEnum {
     Dataflow_Compare_SmallerOrEqual = 2,
     Dataflow_Compare_Greater = 3,
     Dataflow_Compare_GreaterOrEqual = 4,
-    Dataflow_Max = 5,
+    Dataflow_Compare_NotEqual = 5,
+    Dataflow_Max = 6,
 };
 
 enum class EConnectionContactAreaMethodEnum {
@@ -101,11 +129,72 @@ enum class EDataflowFloatFieldOperationType {
     Dataflow_Max = 6,
 };
 
+enum class EDataflowGeometryCollectionDynamicState {
+    None = 0,
+    Dynamic = 1,
+    Kinematic = 2,
+    Static = 3,
+    EDataflowGeometryCollectionDynamicState_MAX = 4,
+};
+
+enum class EDataflowMeshSplitIslandsMethod {
+    NoSplit = 0,
+    ByMeshTopology = 1,
+    ByVertexOverlap = 2,
+    EDataflowMeshSplitIslandsMethod_MAX = 3,
+};
+
+enum class EDataflowSetFloatArrayMethod {
+    Random = 0,
+    Noise = 1,
+    ByBoundingBox = 2,
+    EDataflowSetFloatArrayMethod_MAX = 3,
+};
+
 enum class EDataflowSetMaskConditionType {
     Dataflow_SetMaskConditionType_Always = 0,
     Dataflow_SetMaskConditionType_IFF_NOT_Interior = 1,
     Dataflow_SetMaskConditionType_IFF_NOT_Exterior = 2,
     Dataflow_Max = 3,
+};
+
+enum class EDataflowStairTypeEnum {
+    Linear = 0,
+    Floating = 1,
+    Curved = 2,
+    Spiral = 3,
+    EDataflowStairTypeEnum_MAX = 4,
+};
+
+enum class EDataflowTransferVertexAttributeNodeBoundingVolume {
+    Vertex = 0,
+    Triangle = 1,
+    Dataflow_Max = 2,
+    EDataflowTransferVertexAttributeNodeBoundingVolume_MAX = 3,
+};
+
+enum class EDataflowTransferVertexAttributeNodeFalloff {
+    Squared = 0,
+    Linear = 1,
+    None = 2,
+    Dataflow_Max = 3,
+    EDataflowTransferVertexAttributeNodeFalloff_MAX = 4,
+};
+
+enum class EDataflowTransferVertexAttributeNodeSourceScale {
+    Component_Edge = 0,
+    Asset_Edge = 1,
+    Asset_Bound = 2,
+    Dataflow_Max = 3,
+    EDataflowTransferVertexAttributeNodeSourceScale_MAX = 4,
+};
+
+enum class EDataflowTransferVertexAttributeNodeTransferMethod {
+    Component = 0,
+    Global = 1,
+    None = 2,
+    Dataflow_Max = 3,
+    EDataflowTransferVertexAttributeNodeTransferMethod_MAX = 4,
 };
 
 enum class EDataflowVectorFieldOperationType {
@@ -115,6 +204,16 @@ enum class EDataflowVectorFieldOperationType {
     Dataflow_VectorFieldFalloffType_Substract = 3,
     Dataflow_VectorFieldFalloffType_CrossProduct = 4,
     Dataflow_Max = 5,
+};
+
+enum class EDataflowVisualizeFractureColoringType {
+    ColorByParent = 0,
+    ColorByLevel = 1,
+    ColorByCluster = 2,
+    ColorByLeafLevel = 3,
+    ColorByLeaf = 4,
+    ColorByAttr = 5,
+    EDataflowVisualizeFractureColoringType_MAX = 6,
 };
 
 enum class EDataflowWaveFunctionType {
@@ -149,6 +248,13 @@ enum class EMakeBoxDataTypeEnum {
     Dataflow_Max = 2,
 };
 
+enum class EMakeMeshTypeEnum {
+    Sphere = 0,
+    Capsule = 1,
+    Cylinder = 2,
+    EMakeMeshTypeEnum_MAX = 3,
+};
+
 enum class EMathConstantsEnum {
     Dataflow_MathConstants_Pi = 0,
     Dataflow_MathConstants_HalfPi = 1,
@@ -167,11 +273,11 @@ enum class EMathConstantsEnum {
     Dataflow_Max = 14,
 };
 
-enum class EMeshBooleanOperationEnum {
-    Dataflow_MeshBoolean_Union = 0,
-    Dataflow_MeshBoolean_Intersect = 1,
-    Dataflow_MeshBoolean_Difference = 2,
-    Dataflow_Max = 3,
+enum class ENegativeSpaceSampleMethodDataflowEnum {
+    Uniform = 0,
+    VoxelSearch = 1,
+    NavigableVoxelSearch = 2,
+    ENegativeSpaceSampleMethodDataflowEnum_MAX = 3,
 };
 
 enum class EProximityContactFilteringMethodEnum {
@@ -210,6 +316,33 @@ enum class ESelectSubjectTypeEnum {
     Dataflow_Max = 3,
 };
 
+enum class ESelectionByAttrGroup {
+    Vertices = 0,
+    Faces = 1,
+    Transform = 2,
+    Geometry = 3,
+    Material = 4,
+    ESelectionByAttrGroup_MAX = 5,
+};
+
+enum class ESelectionByAttrOperation {
+    Equal = 0,
+    NotEqual = 1,
+    Greater = 2,
+    GreaterOrEqual = 3,
+    Smaller = 4,
+    SmallerOrEqual = 5,
+    Maximum = 6,
+    Minimum = 7,
+    ESelectionByAttrOperation_MAX = 8,
+};
+
+enum class ESetKinematicVertexSelectionKinematicValue {
+    SetKinematic = 0,
+    SetNonKinematic = 1,
+    ESetKinematicVertexSelectionKinematicValue_MAX = 2,
+};
+
 enum class ESetMaterialOperationTypeEnum {
     Dataflow_SetMaterialOperationType_Add = 0,
     Dataflow_SetMaterialOperationType_Insert = 1,
@@ -220,7 +353,8 @@ enum class ESetOperationEnum {
     Dataflow_SetOperation_AND = 0,
     Dataflow_SetOperation_OR = 1,
     Dataflow_SetOperation_XOR = 2,
-    Dataflow_Max = 3,
+    Dataflow_SetOperation_Subtract = 3,
+    Dataflow_Max = 4,
 };
 
 enum class EStandardGroupNameEnum {

@@ -3,17 +3,17 @@
 
 class UQuestBranchUI_C : public UUserWidget
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02C0 (size: 0x8)
-    class URichTextBlock* StepDescription;                                            // 0x02C8 (size: 0x8)
-    class UVerticalBox* TasksBox;                                                     // 0x02D0 (size: 0x8)
-    class UHorizontalBox* TitleBox;                                                   // 0x02D8 (size: 0x8)
-    class UQuestBranch* QuestBranch;                                                  // 0x02E0 (size: 0x8)
-    bool Completed?;                                                                  // 0x02E8 (size: 0x1)
-    bool Failed?;                                                                     // 0x02E9 (size: 0x1)
-    FText MessageOverride;                                                            // 0x02F0 (size: 0x18)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0340 (size: 0x8)
+    class UHorizontalBox* TitleBox;                                                   // 0x0348 (size: 0x8)
+    class UVerticalBox* TasksBox;                                                     // 0x0350 (size: 0x8)
+    class URichTextBlock* StepDescription;                                            // 0x0358 (size: 0x8)
+    class UQuestBranch* QuestBranch;                                                  // 0x0360 (size: 0x8)
+    bool Completed?;                                                                  // 0x0368 (size: 0x1)
+    bool Failed?;                                                                     // 0x0369 (size: 0x1)
+    FText MessageOverride;                                                            // 0x0370 (size: 0x10)
 
     void Construct();
     void ExecuteUbergraph_QuestBranchUI(int32 EntryPoint);
-}; // Size: 0x308
+}; // Size: 0x380
 
 #endif

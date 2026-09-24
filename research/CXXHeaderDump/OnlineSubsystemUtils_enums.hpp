@@ -54,7 +54,8 @@ namespace EPartyReservationResult {
         ReservationInvalid = 13,
         BadSessionId = 14,
         ReservationDenied_ContainsExistingPlayers = 15,
-        EPartyReservationResult_MAX = 16,
+        ReservationDenied_ValidationFailed = 16,
+        EPartyReservationResult_MAX = 17,
     };
 }
 

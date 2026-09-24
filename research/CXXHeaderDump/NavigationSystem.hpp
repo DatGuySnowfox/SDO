@@ -35,6 +35,26 @@ struct FNavLinkCustomInstanceData : public FActorComponentInstanceData
 
 }; // Size: 0x78
 
+struct FNavLinkGenerationJumpDownConfig
+{
+    bool bEnabled;                                                                    // 0x0000 (size: 0x1)
+    float JumpLength;                                                                 // 0x0004 (size: 0x4)
+    float JumpDistanceFromEdge;                                                       // 0x0008 (size: 0x4)
+    float JumpMaxDepth;                                                               // 0x000C (size: 0x4)
+    float JumpHeight;                                                                 // 0x0010 (size: 0x4)
+    float JumpEndsHeightTolerance;                                                    // 0x0014 (size: 0x4)
+    float SamplingSeparationFactor;                                                   // 0x0018 (size: 0x4)
+    float FilterDistanceThreshold;                                                    // 0x001C (size: 0x4)
+    uint16 LinkBuilderFlags;                                                          // 0x0020 (size: 0x2)
+    TSubclassOf<class UNavAreaBase> DownDirectionAreaClass;                           // 0x0028 (size: 0x8)
+    TSubclassOf<class UNavAreaBase> UpDirectionAreaClass;                             // 0x0030 (size: 0x8)
+    TSubclassOf<class UBaseGeneratedNavLinksProxy> LinkProxyClass;                    // 0x0038 (size: 0x8)
+    FNavLinkId LinkProxyId;                                                           // 0x0040 (size: 0x8)
+    class UBaseGeneratedNavLinksProxy* LinkProxy;                                     // 0x0048 (size: 0x8)
+    bool bLinkProxyRegistered;                                                        // 0x0050 (size: 0x1)
+
+}; // Size: 0x58
+
 struct FNavMeshResolutionParam
 {
     float CellSize;                                                                   // 0x0000 (size: 0x4)
@@ -75,57 +95,34 @@ struct FNavigationFilterFlags
 
 }; // Size: 0x4
 
-struct FRecastNavMeshGenerationProperties
-{
-    int32 TilePoolSize;                                                               // 0x0000 (size: 0x4)
-    float TileSizeUU;                                                                 // 0x0004 (size: 0x4)
-    float CellSize;                                                                   // 0x0008 (size: 0x4)
-    float CellHeight;                                                                 // 0x000C (size: 0x4)
-    float AgentRadius;                                                                // 0x0010 (size: 0x4)
-    float AgentHeight;                                                                // 0x0014 (size: 0x4)
-    float AgentMaxSlope;                                                              // 0x0018 (size: 0x4)
-    float AgentMaxStepHeight;                                                         // 0x001C (size: 0x4)
-    float MinRegionArea;                                                              // 0x0020 (size: 0x4)
-    float MergeRegionSize;                                                            // 0x0024 (size: 0x4)
-    float MaxSimplificationError;                                                     // 0x0028 (size: 0x4)
-    int32 TileNumberHardLimit;                                                        // 0x002C (size: 0x4)
-    TEnumAsByte<ERecastPartitioning::Type> RegionPartitioning;                        // 0x0030 (size: 0x1)
-    TEnumAsByte<ERecastPartitioning::Type> LayerPartitioning;                         // 0x0031 (size: 0x1)
-    int32 RegionChunkSplits;                                                          // 0x0034 (size: 0x4)
-    int32 LayerChunkSplits;                                                           // 0x0038 (size: 0x4)
-    uint8 bSortNavigationAreasByCost;                                                 // 0x003C (size: 0x1)
-    uint8 bPerformVoxelFiltering;                                                     // 0x003C (size: 0x1)
-    uint8 bMarkLowHeightAreas;                                                        // 0x003C (size: 0x1)
-    uint8 bUseExtraTopCellWhenMarkingAreas;                                           // 0x003C (size: 0x1)
-    uint8 bFilterLowSpanSequences;                                                    // 0x003C (size: 0x1)
-    uint8 bFilterLowSpanFromTileCache;                                                // 0x003C (size: 0x1)
-    uint8 bFixedTilePoolSize;                                                         // 0x003C (size: 0x1)
-    uint8 bIsWorldPartitioned;                                                        // 0x003C (size: 0x1)
-
-}; // Size: 0x40
-
 struct FRecastNavMeshTileGenerationDebug
 {
     uint8 bEnabled;                                                                   // 0x0000 (size: 0x1)
     FIntVector TileCoordinate;                                                        // 0x0004 (size: 0xC)
-    uint8 bGenerateDebugTileOnly;                                                     // 0x0010 (size: 0x1)
-    uint8 bCollisionGeometry;                                                         // 0x0010 (size: 0x1)
-    EHeightFieldRenderMode HeightFieldRenderMode;                                     // 0x0014 (size: 0x1)
-    uint8 bHeightfieldFromRasterization;                                              // 0x0018 (size: 0x1)
-    uint8 bHeightfieldPostInclusionBoundsFiltering;                                   // 0x0018 (size: 0x1)
-    uint8 bHeightfieldPostHeightFiltering;                                            // 0x0018 (size: 0x1)
-    uint8 bHeightfieldBounds;                                                         // 0x0018 (size: 0x1)
-    uint8 bCompactHeightfield;                                                        // 0x0018 (size: 0x1)
-    uint8 bCompactHeightfieldEroded;                                                  // 0x0018 (size: 0x1)
-    uint8 bCompactHeightfieldRegions;                                                 // 0x0018 (size: 0x1)
-    uint8 bCompactHeightfieldDistances;                                               // 0x0018 (size: 0x1)
-    uint8 bTileCacheLayerAreas;                                                       // 0x0019 (size: 0x1)
-    uint8 bTileCacheLayerRegions;                                                     // 0x0019 (size: 0x1)
-    uint8 bTileCacheContours;                                                         // 0x0019 (size: 0x1)
-    uint8 bTileCachePolyMesh;                                                         // 0x0019 (size: 0x1)
-    uint8 bTileCacheDetailMesh;                                                       // 0x0019 (size: 0x1)
+    FIntVector MaxTileCoordinate;                                                     // 0x0010 (size: 0xC)
+    uint8 bGenerateDebugTileOnly;                                                     // 0x001C (size: 0x1)
+    uint8 bCollisionGeometry;                                                         // 0x001C (size: 0x1)
+    EHeightFieldRenderMode HeightFieldRenderMode;                                     // 0x0020 (size: 0x1)
+    uint8 bHeightfieldFromRasterization;                                              // 0x0024 (size: 0x1)
+    uint8 bHeightfieldPostInclusionBoundsFiltering;                                   // 0x0024 (size: 0x1)
+    uint8 bHeightfieldPostHeightFiltering;                                            // 0x0024 (size: 0x1)
+    uint8 bHeightfieldBounds;                                                         // 0x0024 (size: 0x1)
+    uint8 bCompactHeightfield;                                                        // 0x0024 (size: 0x1)
+    uint8 bCompactHeightfieldEroded;                                                  // 0x0024 (size: 0x1)
+    uint8 bHeightFieldLayers;                                                         // 0x0024 (size: 0x1)
+    uint8 bCompactHeightfieldRegions;                                                 // 0x0024 (size: 0x1)
+    uint8 bCompactHeightfieldDistances;                                               // 0x0025 (size: 0x1)
+    uint8 bTileCacheLayerAreas;                                                       // 0x0025 (size: 0x1)
+    uint8 bTileCacheLayerRegions;                                                     // 0x0025 (size: 0x1)
+    uint8 bSkipContourSimplification;                                                 // 0x0025 (size: 0x1)
+    uint8 bTileCacheContours;                                                         // 0x0025 (size: 0x1)
+    uint8 bTileCachePolyMesh;                                                         // 0x0025 (size: 0x1)
+    uint8 bTileCacheDetailMesh;                                                       // 0x0025 (size: 0x1)
+    uint8 bUseMaxTileCoordinate;                                                      // 0x0025 (size: 0x1)
+    uint16 LinkGenerationDebugFlags;                                                  // 0x0028 (size: 0x2)
+    int32 LinkGenerationSelectedEdge;                                                 // 0x002C (size: 0x4)
 
-}; // Size: 0x1C
+}; // Size: 0x30
 
 struct FSupportedAreaData
 {
@@ -137,168 +134,181 @@ struct FSupportedAreaData
 
 class AAbstractNavData : public ANavigationData
 {
-}; // Size: 0x4B0
+}; // Size: 0x500
 
 class ANavMeshBoundsVolume : public AVolume
 {
-    FNavAgentSelector SupportedAgents;                                                // 0x02D0 (size: 0x4)
+    FNavAgentSelector SupportedAgents;                                                // 0x02E0 (size: 0x4)
 
-}; // Size: 0x2D8
+}; // Size: 0x2E8
 
 class ANavModifierVolume : public AVolume
 {
-    TSubclassOf<class UNavArea> AreaClass;                                            // 0x02D8 (size: 0x8)
-    bool bMaskFillCollisionUnderneathForNavmesh;                                      // 0x02E0 (size: 0x1)
-    ENavigationDataResolution NavMeshResolution;                                      // 0x02E1 (size: 0x1)
+    TSubclassOf<class UNavArea> AreaClass;                                            // 0x02E8 (size: 0x8)
+    TSubclassOf<class UNavArea> AreaClassToReplace;                                   // 0x02F0 (size: 0x8)
+    bool bMaskFillCollisionUnderneathForNavmesh;                                      // 0x02F8 (size: 0x1)
+    ENavigationDataResolution NavMeshResolution;                                      // 0x02F9 (size: 0x1)
 
+    void SetAreaClassToReplace(TSubclassOf<class UNavArea> NewAreaClassToReplace);
     void SetAreaClass(TSubclassOf<class UNavArea> NewAreaClass);
-}; // Size: 0x2E8
+}; // Size: 0x300
 
 class ANavSystemConfigOverride : public AActor
 {
-    class UNavigationSystemConfig* NavigationSystemConfig;                            // 0x0298 (size: 0x8)
-    ENavSystemOverridePolicy OverridePolicy;                                          // 0x02A0 (size: 0x1)
-    uint8 bLoadOnClient;                                                              // 0x02A1 (size: 0x1)
+    class UNavigationSystemConfig* NavigationSystemConfig;                            // 0x02A8 (size: 0x8)
+    ENavSystemOverridePolicy OverridePolicy;                                          // 0x02B0 (size: 0x1)
+    uint8 bLoadOnClient;                                                              // 0x02B1 (size: 0x1)
 
-}; // Size: 0x2A8
+}; // Size: 0x2B8
 
 class ANavigationData : public AActor
 {
-    class UPrimitiveComponent* RenderingComp;                                         // 0x02A0 (size: 0x8)
-    FNavDataConfig NavDataConfig;                                                     // 0x02A8 (size: 0x88)
-    uint8 bEnableDrawing;                                                             // 0x0330 (size: 0x1)
-    uint8 bForceRebuildOnLoad;                                                        // 0x0330 (size: 0x1)
-    uint8 bAutoDestroyWhenNoNavigation;                                               // 0x0330 (size: 0x1)
-    uint8 bCanBeMainNavData;                                                          // 0x0330 (size: 0x1)
-    uint8 bCanSpawnOnRebuild;                                                         // 0x0330 (size: 0x1)
-    uint8 bRebuildAtRuntime;                                                          // 0x0330 (size: 0x1)
-    ERuntimeGenerationType RuntimeGeneration;                                         // 0x0334 (size: 0x1)
-    float ObservedPathsTickInterval;                                                  // 0x0338 (size: 0x4)
-    uint32 DataVersion;                                                               // 0x033C (size: 0x4)
-    TArray<FSupportedAreaData> SupportedAreas;                                        // 0x0448 (size: 0x10)
+    class UPrimitiveComponent* RenderingComp;                                         // 0x02B0 (size: 0x8)
+    FNavDataConfig NavDataConfig;                                                     // 0x02B8 (size: 0x88)
+    uint8 bEnableDrawing;                                                             // 0x0340 (size: 0x1)
+    uint8 bForceRebuildOnLoad;                                                        // 0x0340 (size: 0x1)
+    uint8 bAutoDestroyWhenNoNavigation;                                               // 0x0340 (size: 0x1)
+    uint8 bCanBeMainNavData;                                                          // 0x0340 (size: 0x1)
+    uint8 bCanSpawnOnRebuild;                                                         // 0x0340 (size: 0x1)
+    uint8 bRebuildAtRuntime;                                                          // 0x0340 (size: 0x1)
+    ERuntimeGenerationType RuntimeGeneration;                                         // 0x0344 (size: 0x1)
+    float ObservedPathsTickInterval;                                                  // 0x0348 (size: 0x4)
+    uint32 DataVersion;                                                               // 0x034C (size: 0x4)
+    TArray<FSupportedAreaData> SupportedAreas;                                        // 0x0460 (size: 0x10)
 
-}; // Size: 0x4B0
+}; // Size: 0x500
 
 class ANavigationGraph : public ANavigationData
 {
-}; // Size: 0x4B0
+}; // Size: 0x500
 
 class ANavigationGraphNode : public AActor
 {
-}; // Size: 0x298
+}; // Size: 0x2A8
 
 class ANavigationTestingActor : public AActor
 {
-    class UCapsuleComponent* CapsuleComponent;                                        // 0x02A8 (size: 0x8)
-    class UNavigationInvokerComponent* InvokerComponent;                              // 0x02B0 (size: 0x8)
-    uint8 bActAsNavigationInvoker;                                                    // 0x02B8 (size: 0x1)
-    FNavAgentProperties NavAgentProps;                                                // 0x02C0 (size: 0x38)
-    FVector QueryingExtent;                                                           // 0x02F8 (size: 0x18)
-    class ANavigationData* MyNavData;                                                 // 0x0310 (size: 0x8)
-    FVector ProjectedLocation;                                                        // 0x0318 (size: 0x18)
-    uint8 bProjectedLocationValid;                                                    // 0x0330 (size: 0x1)
-    uint8 bSearchStart;                                                               // 0x0330 (size: 0x1)
-    float CostLimitFactor;                                                            // 0x0334 (size: 0x4)
-    float MinimumCostLimit;                                                           // 0x0338 (size: 0x4)
-    uint8 bBacktracking;                                                              // 0x033C (size: 0x1)
-    uint8 bUseHierarchicalPathfinding;                                                // 0x033C (size: 0x1)
-    uint8 bGatherDetailedInfo;                                                        // 0x033C (size: 0x1)
-    uint8 bRequireNavigableEndLocation;                                               // 0x033C (size: 0x1)
-    uint8 bDrawDistanceToWall;                                                        // 0x033C (size: 0x1)
-    uint8 bShowNodePool;                                                              // 0x033C (size: 0x1)
-    uint8 bShowBestPath;                                                              // 0x033C (size: 0x1)
-    uint8 bShowDiffWithPreviousStep;                                                  // 0x033C (size: 0x1)
-    uint8 bShouldBeVisibleInGame;                                                     // 0x033D (size: 0x1)
-    TEnumAsByte<ENavCostDisplay::Type> CostDisplayMode;                               // 0x0340 (size: 0x1)
-    FVector2D TextCanvasOffset;                                                       // 0x0348 (size: 0x10)
-    uint8 bPathExist;                                                                 // 0x0358 (size: 0x1)
-    uint8 bPathIsPartial;                                                             // 0x0358 (size: 0x1)
-    uint8 bPathSearchOutOfNodes;                                                      // 0x0358 (size: 0x1)
-    float PathfindingTime;                                                            // 0x035C (size: 0x4)
-    double PathCost;                                                                  // 0x0360 (size: 0x8)
-    int32 PathfindingSteps;                                                           // 0x0368 (size: 0x4)
-    class ANavigationTestingActor* OtherActor;                                        // 0x0370 (size: 0x8)
-    TSubclassOf<class UNavigationQueryFilter> FilterClass;                            // 0x0378 (size: 0x8)
-    int32 ShowStepIndex;                                                              // 0x0380 (size: 0x4)
-    float OffsetFromCornersDistance;                                                  // 0x0384 (size: 0x4)
+    class UCapsuleComponent* CapsuleComponent;                                        // 0x02B8 (size: 0x8)
+    class UNavigationInvokerComponent* InvokerComponent;                              // 0x02C0 (size: 0x8)
+    uint8 bActAsNavigationInvoker;                                                    // 0x02C8 (size: 0x1)
+    FNavAgentProperties NavAgentProps;                                                // 0x02D0 (size: 0x38)
+    FVector QueryingExtent;                                                           // 0x0308 (size: 0x18)
+    class ANavigationData* MyNavData;                                                 // 0x0320 (size: 0x8)
+    FVector ProjectedLocation;                                                        // 0x0328 (size: 0x18)
+    uint8 bProjectedLocationValid;                                                    // 0x0340 (size: 0x1)
+    uint8 bSearchStart;                                                               // 0x0340 (size: 0x1)
+    float CostLimitFactor;                                                            // 0x0344 (size: 0x4)
+    float MinimumCostLimit;                                                           // 0x0348 (size: 0x4)
+    uint8 bBacktracking;                                                              // 0x034C (size: 0x1)
+    uint8 bUseHierarchicalPathfinding;                                                // 0x034C (size: 0x1)
+    uint8 bGatherDetailedInfo;                                                        // 0x034C (size: 0x1)
+    uint8 bRequireNavigableEndLocation;                                               // 0x034C (size: 0x1)
+    uint8 bDrawDistanceToWall;                                                        // 0x034C (size: 0x1)
+    uint8 bDrawIfNavDataIsReadyInRadius;                                              // 0x034C (size: 0x1)
+    uint8 bDrawIfNavDataIsReadyToQueryTargetActor;                                    // 0x034C (size: 0x1)
+    uint8 bDrawRaycastToQueryTargetActor;                                             // 0x034C (size: 0x1)
+    class AActor* QueryTargetActor;                                                   // 0x0350 (size: 0x8)
+    uint8 bShowNodePool;                                                              // 0x0358 (size: 0x1)
+    uint8 bShowBestPath;                                                              // 0x0358 (size: 0x1)
+    uint8 bShowDiffWithPreviousStep;                                                  // 0x0358 (size: 0x1)
+    uint8 bShouldBeVisibleInGame;                                                     // 0x0358 (size: 0x1)
+    float RadiusUsedToValidateNavData;                                                // 0x035C (size: 0x4)
+    TEnumAsByte<ENavCostDisplay::Type> CostDisplayMode;                               // 0x0360 (size: 0x1)
+    FVector2D TextCanvasOffset;                                                       // 0x0368 (size: 0x10)
+    uint8 bPathExist;                                                                 // 0x0378 (size: 0x1)
+    uint8 bPathIsPartial;                                                             // 0x0378 (size: 0x1)
+    uint8 bPathSearchOutOfNodes;                                                      // 0x0378 (size: 0x1)
+    float PathfindingTime;                                                            // 0x037C (size: 0x4)
+    double PathCost;                                                                  // 0x0380 (size: 0x8)
+    int32 PathfindingSteps;                                                           // 0x0388 (size: 0x4)
+    class ANavigationTestingActor* OtherActor;                                        // 0x0390 (size: 0x8)
+    TSubclassOf<class UNavigationQueryFilter> FilterClass;                            // 0x0398 (size: 0x8)
+    int32 ShowStepIndex;                                                              // 0x03A0 (size: 0x4)
+    float OffsetFromCornersDistance;                                                  // 0x03A4 (size: 0x4)
 
-}; // Size: 0x3C0
+}; // Size: 0x400
 
 class ARecastNavMesh : public ANavigationData
 {
-    uint8 bDrawTriangleEdges;                                                         // 0x04B0 (size: 0x1)
-    uint8 bDrawPolyEdges;                                                             // 0x04B0 (size: 0x1)
-    uint8 bDrawFilledPolys;                                                           // 0x04B0 (size: 0x1)
-    uint8 bDrawNavMeshEdges;                                                          // 0x04B0 (size: 0x1)
-    uint8 bDrawTileBounds;                                                            // 0x04B0 (size: 0x1)
-    uint8 bDrawTileResolutions;                                                       // 0x04B0 (size: 0x1)
-    uint8 bDrawPathCollidingGeometry;                                                 // 0x04B0 (size: 0x1)
-    uint8 bDrawTileLabels;                                                            // 0x04B0 (size: 0x1)
-    uint8 bDrawTileBuildTimes;                                                        // 0x04B1 (size: 0x1)
-    uint8 bDrawTileBuildTimesHeatMap;                                                 // 0x04B1 (size: 0x1)
-    uint8 bDrawPolygonLabels;                                                         // 0x04B1 (size: 0x1)
-    uint8 bDrawDefaultPolygonCost;                                                    // 0x04B1 (size: 0x1)
-    uint8 bDrawPolygonFlags;                                                          // 0x04B1 (size: 0x1)
-    uint8 bDrawLabelsOnPathNodes;                                                     // 0x04B1 (size: 0x1)
-    uint8 bDrawNavLinks;                                                              // 0x04B1 (size: 0x1)
-    uint8 bDrawFailedNavLinks;                                                        // 0x04B1 (size: 0x1)
-    uint8 bDrawClusters;                                                              // 0x04B2 (size: 0x1)
-    uint8 bDrawOctree;                                                                // 0x04B2 (size: 0x1)
-    uint8 bDrawOctreeDetails;                                                         // 0x04B2 (size: 0x1)
-    uint8 bDrawMarkedForbiddenPolys;                                                  // 0x04B2 (size: 0x1)
-    uint8 bDistinctlyDrawTilesBeingBuilt;                                             // 0x04B2 (size: 0x1)
-    float DrawOffset;                                                                 // 0x04B4 (size: 0x4)
-    FRecastNavMeshTileGenerationDebug TileGenerationDebug;                            // 0x04B8 (size: 0x1C)
-    uint8 bFixedTilePoolSize;                                                         // 0x04D4 (size: 0x1)
-    int32 TilePoolSize;                                                               // 0x04D8 (size: 0x4)
-    float TileSizeUU;                                                                 // 0x04DC (size: 0x4)
-    float CellSize;                                                                   // 0x04E0 (size: 0x4)
-    float CellHeight;                                                                 // 0x04E4 (size: 0x4)
-    FNavMeshResolutionParam NavMeshResolutionParams;                                  // 0x04E8 (size: 0x24)
-    float AgentRadius;                                                                // 0x050C (size: 0x4)
-    float AgentHeight;                                                                // 0x0510 (size: 0x4)
-    float AgentMaxSlope;                                                              // 0x0514 (size: 0x4)
-    float AgentMaxStepHeight;                                                         // 0x0518 (size: 0x4)
-    float MinRegionArea;                                                              // 0x051C (size: 0x4)
-    float MergeRegionSize;                                                            // 0x0520 (size: 0x4)
-    float MaxSimplificationError;                                                     // 0x0524 (size: 0x4)
-    int32 MaxSimultaneousTileGenerationJobsCount;                                     // 0x0528 (size: 0x4)
-    int32 TileNumberHardLimit;                                                        // 0x052C (size: 0x4)
-    int32 PolyRefTileBits;                                                            // 0x0530 (size: 0x4)
-    int32 PolyRefNavPolyBits;                                                         // 0x0534 (size: 0x4)
-    int32 PolyRefSaltBits;                                                            // 0x0538 (size: 0x4)
-    FVector NavMeshOriginOffset;                                                      // 0x0540 (size: 0x18)
-    float DefaultDrawDistance;                                                        // 0x0558 (size: 0x4)
-    float DefaultMaxSearchNodes;                                                      // 0x055C (size: 0x4)
-    float DefaultMaxHierarchicalSearchNodes;                                          // 0x0560 (size: 0x4)
-    TEnumAsByte<ERecastPartitioning::Type> RegionPartitioning;                        // 0x0564 (size: 0x1)
-    TEnumAsByte<ERecastPartitioning::Type> LayerPartitioning;                         // 0x0565 (size: 0x1)
-    int32 RegionChunkSplits;                                                          // 0x0568 (size: 0x4)
-    int32 LayerChunkSplits;                                                           // 0x056C (size: 0x4)
-    uint8 bSortNavigationAreasByCost;                                                 // 0x0570 (size: 0x1)
-    uint8 bIsWorldPartitioned;                                                        // 0x0570 (size: 0x1)
-    uint8 bPerformVoxelFiltering;                                                     // 0x0570 (size: 0x1)
-    uint8 bMarkLowHeightAreas;                                                        // 0x0570 (size: 0x1)
-    uint8 bUseExtraTopCellWhenMarkingAreas;                                           // 0x0570 (size: 0x1)
-    uint8 bFilterLowSpanSequences;                                                    // 0x0570 (size: 0x1)
-    uint8 bFilterLowSpanFromTileCache;                                                // 0x0570 (size: 0x1)
-    uint8 bDoFullyAsyncNavDataGathering;                                              // 0x0570 (size: 0x1)
-    uint8 bUseBetterOffsetsFromCorners;                                               // 0x0571 (size: 0x1)
-    uint8 bStoreEmptyTileLayers;                                                      // 0x0571 (size: 0x1)
-    uint8 bUseVirtualFilters;                                                         // 0x0571 (size: 0x1)
-    uint8 bUseVirtualGeometryFilteringAndDirtying;                                    // 0x0571 (size: 0x1)
-    uint8 bAllowNavLinkAsPathEnd;                                                     // 0x0571 (size: 0x1)
-    int32 TimeSliceFilterLedgeSpansMaxYProcess;                                       // 0x0574 (size: 0x4)
-    double TimeSliceLongDurationDebug;                                                // 0x0578 (size: 0x8)
-    uint32 InvokerTilePriorityBumpDistanceThresholdInTileUnits;                       // 0x0580 (size: 0x4)
-    uint8 InvokerTilePriorityBumpIncrease;                                            // 0x0584 (size: 0x1)
-    uint8 bUseVoxelCache;                                                             // 0x0588 (size: 0x1)
-    float TileSetUpdateInterval;                                                      // 0x058C (size: 0x4)
-    float HeuristicScale;                                                             // 0x0590 (size: 0x4)
-    float VerticalDeviationFromGroundCompensation;                                    // 0x0594 (size: 0x4)
+    uint8 bDrawTriangleEdges;                                                         // 0x0500 (size: 0x1)
+    uint8 bDrawPolyEdges;                                                             // 0x0500 (size: 0x1)
+    uint8 bDrawFilledPolys;                                                           // 0x0500 (size: 0x1)
+    uint8 bDrawNavMeshEdges;                                                          // 0x0500 (size: 0x1)
+    uint8 bDrawTileBounds;                                                            // 0x0500 (size: 0x1)
+    uint8 bDrawTileResolutions;                                                       // 0x0500 (size: 0x1)
+    uint8 bDrawPathCollidingGeometry;                                                 // 0x0500 (size: 0x1)
+    uint8 bDrawTileLabels;                                                            // 0x0500 (size: 0x1)
+    uint8 bDrawTileBuildTimes;                                                        // 0x0501 (size: 0x1)
+    uint8 bDrawTileBuildTimesHeatMap;                                                 // 0x0501 (size: 0x1)
+    uint8 bDrawPolygonLabels;                                                         // 0x0501 (size: 0x1)
+    uint8 bDrawDefaultPolygonCost;                                                    // 0x0501 (size: 0x1)
+    uint8 bDrawPolygonFlags;                                                          // 0x0501 (size: 0x1)
+    uint8 bDrawLabelsOnPathNodes;                                                     // 0x0501 (size: 0x1)
+    uint8 bDrawNavLinks;                                                              // 0x0501 (size: 0x1)
+    uint8 bDrawFailedNavLinks;                                                        // 0x0501 (size: 0x1)
+    uint8 bDrawClusters;                                                              // 0x0502 (size: 0x1)
+    uint8 bDrawOctree;                                                                // 0x0502 (size: 0x1)
+    uint8 bDrawOctreeDetails;                                                         // 0x0502 (size: 0x1)
+    uint8 bDrawMarkedForbiddenPolys;                                                  // 0x0502 (size: 0x1)
+    uint8 bDistinctlyDrawTilesBeingBuilt;                                             // 0x0502 (size: 0x1)
+    float DrawOffset;                                                                 // 0x0504 (size: 0x4)
+    FRecastNavMeshTileGenerationDebug TileGenerationDebug;                            // 0x0508 (size: 0x30)
+    uint8 bFixedTilePoolSize;                                                         // 0x0538 (size: 0x1)
+    int32 TilePoolSize;                                                               // 0x053C (size: 0x4)
+    float TileSizeUU;                                                                 // 0x0540 (size: 0x4)
+    float CellSize;                                                                   // 0x0544 (size: 0x4)
+    float CellHeight;                                                                 // 0x0548 (size: 0x4)
+    float AgentMaxStepHeight;                                                         // 0x054C (size: 0x4)
+    FNavMeshResolutionParam NavMeshResolutionParams;                                  // 0x0550 (size: 0x24)
+    float AgentRadius;                                                                // 0x0574 (size: 0x4)
+    float AgentHeight;                                                                // 0x0578 (size: 0x4)
+    float AgentMaxSlope;                                                              // 0x057C (size: 0x4)
+    float MinRegionArea;                                                              // 0x0580 (size: 0x4)
+    float MergeRegionSize;                                                            // 0x0584 (size: 0x4)
+    int32 MaxVerticalMergeError;                                                      // 0x0588 (size: 0x4)
+    float MaxSimplificationError;                                                     // 0x058C (size: 0x4)
+    float SimplificationElevationRatio;                                               // 0x0590 (size: 0x4)
+    int32 MaxSimultaneousTileGenerationJobsCount;                                     // 0x0594 (size: 0x4)
+    int32 TileNumberHardLimit;                                                        // 0x0598 (size: 0x4)
+    int32 ExpectedMaxLayersPerTile;                                                   // 0x059C (size: 0x4)
+    int32 PolyRefTileBits;                                                            // 0x05A0 (size: 0x4)
+    int32 PolyRefNavPolyBits;                                                         // 0x05A4 (size: 0x4)
+    int32 PolyRefSaltBits;                                                            // 0x05A8 (size: 0x4)
+    FVector NavMeshOriginOffset;                                                      // 0x05B0 (size: 0x18)
+    float DefaultDrawDistance;                                                        // 0x05C8 (size: 0x4)
+    float DefaultMaxSearchNodes;                                                      // 0x05CC (size: 0x4)
+    float DefaultMaxHierarchicalSearchNodes;                                          // 0x05D0 (size: 0x4)
+    ENavigationLedgeSlopeFilterMode LedgeSlopeFilterMode;                             // 0x05D4 (size: 0x1)
+    TEnumAsByte<ERecastPartitioning::Type> RegionPartitioning;                        // 0x05D5 (size: 0x1)
+    TEnumAsByte<ERecastPartitioning::Type> LayerPartitioning;                         // 0x05D6 (size: 0x1)
+    int32 RegionChunkSplits;                                                          // 0x05D8 (size: 0x4)
+    int32 LayerChunkSplits;                                                           // 0x05DC (size: 0x4)
+    uint8 bSortNavigationAreasByCost;                                                 // 0x05E0 (size: 0x1)
+    uint8 bIsWorldPartitioned;                                                        // 0x05E0 (size: 0x1)
+    uint8 bGenerateNavLinks;                                                          // 0x05E0 (size: 0x1)
+    uint8 bPerformVoxelFiltering;                                                     // 0x05E0 (size: 0x1)
+    uint8 bMarkLowHeightAreas;                                                        // 0x05E0 (size: 0x1)
+    uint8 bUseExtraTopCellWhenMarkingAreas;                                           // 0x05E0 (size: 0x1)
+    uint8 bFilterLowSpanSequences;                                                    // 0x05E0 (size: 0x1)
+    uint8 bFilterLowSpanFromTileCache;                                                // 0x05E0 (size: 0x1)
+    uint8 bDoFullyAsyncNavDataGathering;                                              // 0x05E1 (size: 0x1)
+    uint8 bUseBetterOffsetsFromCorners;                                               // 0x05E1 (size: 0x1)
+    uint8 bStoreEmptyTileLayers;                                                      // 0x05E1 (size: 0x1)
+    uint8 bUseVirtualFilters;                                                         // 0x05E1 (size: 0x1)
+    uint8 bUseVirtualGeometryFilteringAndDirtying;                                    // 0x05E1 (size: 0x1)
+    uint8 bAllowNavLinkAsPathEnd;                                                     // 0x05E1 (size: 0x1)
+    int32 TimeSliceFilterLedgeSpansMaxYProcess;                                       // 0x05E4 (size: 0x4)
+    double TimeSliceLongDurationDebug;                                                // 0x05E8 (size: 0x8)
+    uint32 InvokerTilePriorityBumpDistanceThresholdInTileUnits;                       // 0x05F0 (size: 0x4)
+    uint8 InvokerTilePriorityBumpIncrease;                                            // 0x05F4 (size: 0x1)
+    FNavLinkGenerationJumpDownConfig NavLinkJumpDownConfig;                           // 0x05F8 (size: 0x58)
+    uint8 bUseVoxelCache;                                                             // 0x0654 (size: 0x1)
+    float TileSetUpdateInterval;                                                      // 0x0658 (size: 0x4)
+    float HeuristicScale;                                                             // 0x065C (size: 0x4)
+    float VerticalDeviationFromGroundCompensation;                                    // 0x0660 (size: 0x4)
 
     bool K2_ReplaceAreaInTileBounds(FBox Bounds, TSubclassOf<class UNavArea> OldArea, TSubclassOf<class UNavArea> NewArea, bool ReplaceLinks);
-}; // Size: 0x5C8
+}; // Size: 0x798
 
 class INavLinkCustomInterface : public IInterface
 {
@@ -315,6 +325,13 @@ class INavNodeInterface : public IInterface
 class INavigationPathGenerator : public IInterface
 {
 }; // Size: 0x28
+
+class UBaseGeneratedNavLinksProxy : public UObject
+{
+    FNavLinkId LinkProxyId;                                                           // 0x0030 (size: 0x8)
+    class UObject* Owner;                                                             // 0x0038 (size: 0x8)
+
+}; // Size: 0x40
 
 class UCrowdManagerBase : public UObject
 {
@@ -388,47 +405,47 @@ class UNavArea_Obstacle : public UNavArea
 
 class UNavCollision : public UNavCollisionBase
 {
-    TArray<FNavCollisionCylinder> CylinderCollision;                                  // 0x0080 (size: 0x10)
-    TArray<FNavCollisionBox> BoxCollision;                                            // 0x0090 (size: 0x10)
-    TSubclassOf<class UNavArea> AreaClass;                                            // 0x00A0 (size: 0x8)
-    uint8 bGatherConvexGeometry;                                                      // 0x00A8 (size: 0x1)
-    uint8 bCreateOnClient;                                                            // 0x00A8 (size: 0x1)
+    TArray<FNavCollisionCylinder> CylinderCollision;                                  // 0x00B8 (size: 0x10)
+    TArray<FNavCollisionBox> BoxCollision;                                            // 0x00C8 (size: 0x10)
+    TSubclassOf<class UNavArea> AreaClass;                                            // 0x00D8 (size: 0x8)
+    uint8 bGatherConvexGeometry;                                                      // 0x00E0 (size: 0x1)
+    uint8 bCreateOnClient;                                                            // 0x00E0 (size: 0x1)
 
-}; // Size: 0xD0
+}; // Size: 0x108
 
 class UNavLinkComponent : public UPrimitiveComponent
 {
-    TArray<FNavigationLink> Links;                                                    // 0x0578 (size: 0x10)
+    TArray<FNavigationLink> Links;                                                    // 0x0528 (size: 0x10)
 
-}; // Size: 0x590
+}; // Size: 0x540
 
 class UNavLinkCustomComponent : public UNavRelevantComponent
 {
-    uint32 NavLinkUserId;                                                             // 0x00F8 (size: 0x4)
-    FNavLinkId CustomLinkId;                                                          // 0x0100 (size: 0x8)
-    FNavLinkAuxiliaryId AuxiliaryCustomLinkId;                                        // 0x0108 (size: 0x8)
-    TSubclassOf<class UNavArea> EnabledAreaClass;                                     // 0x0110 (size: 0x8)
-    TSubclassOf<class UNavArea> DisabledAreaClass;                                    // 0x0118 (size: 0x8)
-    FNavAgentSelector SupportedAgents;                                                // 0x0120 (size: 0x4)
-    FVector LinkRelativeStart;                                                        // 0x0128 (size: 0x18)
-    FVector LinkRelativeEnd;                                                          // 0x0140 (size: 0x18)
-    TEnumAsByte<ENavLinkDirection::Type> LinkDirection;                               // 0x0158 (size: 0x1)
-    uint8 bLinkEnabled;                                                               // 0x015C (size: 0x1)
-    uint8 bNotifyWhenEnabled;                                                         // 0x015C (size: 0x1)
-    uint8 bNotifyWhenDisabled;                                                        // 0x015C (size: 0x1)
-    uint8 bCreateBoxObstacle;                                                         // 0x015C (size: 0x1)
-    FVector ObstacleOffset;                                                           // 0x0160 (size: 0x18)
-    FVector ObstacleExtent;                                                           // 0x0178 (size: 0x18)
-    TSubclassOf<class UNavArea> ObstacleAreaClass;                                    // 0x0190 (size: 0x8)
-    float BroadcastRadius;                                                            // 0x0198 (size: 0x4)
-    float BroadcastInterval;                                                          // 0x019C (size: 0x4)
-    TEnumAsByte<ECollisionChannel> BroadcastChannel;                                  // 0x01A0 (size: 0x1)
+    uint32 NavLinkUserId;                                                             // 0x0110 (size: 0x4)
+    FNavLinkId CustomLinkId;                                                          // 0x0118 (size: 0x8)
+    FNavLinkAuxiliaryId AuxiliaryCustomLinkId;                                        // 0x0120 (size: 0x8)
+    TSubclassOf<class UNavArea> EnabledAreaClass;                                     // 0x0128 (size: 0x8)
+    TSubclassOf<class UNavArea> DisabledAreaClass;                                    // 0x0130 (size: 0x8)
+    FNavAgentSelector SupportedAgents;                                                // 0x0138 (size: 0x4)
+    FVector LinkRelativeStart;                                                        // 0x0140 (size: 0x18)
+    FVector LinkRelativeEnd;                                                          // 0x0158 (size: 0x18)
+    TEnumAsByte<ENavLinkDirection::Type> LinkDirection;                               // 0x0170 (size: 0x1)
+    uint8 bLinkEnabled;                                                               // 0x0174 (size: 0x1)
+    uint8 bNotifyWhenEnabled;                                                         // 0x0174 (size: 0x1)
+    uint8 bNotifyWhenDisabled;                                                        // 0x0174 (size: 0x1)
+    uint8 bCreateBoxObstacle;                                                         // 0x0174 (size: 0x1)
+    FVector ObstacleOffset;                                                           // 0x0178 (size: 0x18)
+    FVector ObstacleExtent;                                                           // 0x0190 (size: 0x18)
+    TSubclassOf<class UNavArea> ObstacleAreaClass;                                    // 0x01A8 (size: 0x8)
+    float BroadcastRadius;                                                            // 0x01B0 (size: 0x4)
+    float BroadcastInterval;                                                          // 0x01B4 (size: 0x4)
+    TEnumAsByte<ECollisionChannel> BroadcastChannel;                                  // 0x01B8 (size: 0x1)
 
-}; // Size: 0x1E0
+}; // Size: 0x1F8
 
 class UNavLinkRenderingComponent : public UPrimitiveComponent
 {
-}; // Size: 0x570
+}; // Size: 0x520
 
 class UNavLinkTrivial : public UNavLinkDefinition
 {
@@ -436,53 +453,55 @@ class UNavLinkTrivial : public UNavLinkDefinition
 
 class UNavMeshRenderingComponent : public UDebugDrawComponent
 {
-}; // Size: 0x5D0
+}; // Size: 0x590
 
 class UNavModifierComponent : public UNavRelevantComponent
 {
-    TSubclassOf<class UNavArea> AreaClass;                                            // 0x00F0 (size: 0x8)
-    FVector FailsafeExtent;                                                           // 0x00F8 (size: 0x18)
-    ENavigationDataResolution NavMeshResolution;                                      // 0x0110 (size: 0x1)
-    uint8 bIncludeAgentHeight;                                                        // 0x0111 (size: 0x1)
+    TSubclassOf<class UNavArea> AreaClass;                                            // 0x0108 (size: 0x8)
+    TSubclassOf<class UNavArea> AreaClassToReplace;                                   // 0x0110 (size: 0x8)
+    FVector FailsafeExtent;                                                           // 0x0118 (size: 0x18)
+    ENavigationDataResolution NavMeshResolution;                                      // 0x0130 (size: 0x1)
+    uint8 bIncludeAgentHeight;                                                        // 0x0131 (size: 0x1)
 
+    void SetAreaClassToReplace(TSubclassOf<class UNavArea> NewAreaClassToReplace);
     void SetAreaClass(TSubclassOf<class UNavArea> NewAreaClass);
-}; // Size: 0x190
+}; // Size: 0x1B0
 
 class UNavRelevantComponent : public UActorComponent
 {
-    uint8 bAttachToOwnersRoot;                                                        // 0x00E0 (size: 0x1)
-    class UObject* CachedNavParent;                                                   // 0x00E8 (size: 0x8)
+    uint8 bAttachToOwnersRoot;                                                        // 0x00F8 (size: 0x1)
+    class UObject* CachedNavParent;                                                   // 0x0100 (size: 0x8)
 
     void SetNavigationRelevancy(bool bRelevant);
-}; // Size: 0xF0
-
-class UNavTestRenderingComponent : public UDebugDrawComponent
-{
-}; // Size: 0x5C0
+}; // Size: 0x108
 
 class UNavigationGraphNodeComponent : public USceneComponent
 {
-    FNavGraphNode Node;                                                               // 0x02A0 (size: 0x18)
-    class UNavigationGraphNodeComponent* NextNodeComponent;                           // 0x02B8 (size: 0x8)
-    class UNavigationGraphNodeComponent* PrevNodeComponent;                           // 0x02C0 (size: 0x8)
+    FNavGraphNode Node;                                                               // 0x0240 (size: 0x18)
+    class UNavigationGraphNodeComponent* NextNodeComponent;                           // 0x0258 (size: 0x8)
+    class UNavigationGraphNodeComponent* PrevNodeComponent;                           // 0x0260 (size: 0x8)
 
-}; // Size: 0x2D0
+}; // Size: 0x270
 
 class UNavigationInvokerComponent : public UActorComponent
 {
-    float TileGenerationRadius;                                                       // 0x00A0 (size: 0x4)
-    float TileRemovalRadius;                                                          // 0x00A4 (size: 0x4)
-    FNavAgentSelector SupportedAgents;                                                // 0x00A8 (size: 0x4)
-    ENavigationInvokerPriority Priority;                                              // 0x00AC (size: 0x1)
+    float TileGenerationRadius;                                                       // 0x00B8 (size: 0x4)
+    float TileRemovalRadius;                                                          // 0x00BC (size: 0x4)
+    FNavAgentSelector SupportedAgents;                                                // 0x00C0 (size: 0x4)
+    ENavigationInvokerPriority Priority;                                              // 0x00C4 (size: 0x1)
 
-}; // Size: 0xB0
+}; // Size: 0xC8
+
+class UNavigationObjectRepository : public UWorldSubsystem
+{
+}; // Size: 0x120
 
 class UNavigationPath : public UObject
 {
     FNavigationPathPathUpdatedNotifier PathUpdatedNotifier;                           // 0x0028 (size: 0x10)
     void OnNavigationPathUpdated(class UNavigationPath* AffectedPath, TEnumAsByte<ENavPathEvent::Type> PathEvent);
     TArray<FVector> PathPoints;                                                       // 0x0038 (size: 0x10)
-    TEnumAsByte<ENavigationOptionFlag::Type> RecalculateOnInvalidation;               // 0x0048 (size: 0x1)
+    ENavigationOptionFlag RecalculateOnInvalidation;                                  // 0x0048 (size: 0x1)
 
     bool IsValid();
     bool IsStringPulled();
@@ -490,7 +509,7 @@ class UNavigationPath : public UObject
     double GetPathLength();
     double GetPathCost();
     FString GetDebugString();
-    void EnableRecalculationOnInvalidation(TEnumAsByte<ENavigationOptionFlag::Type> DoRecalculation);
+    void EnableRecalculationOnInvalidation(ENavigationOptionFlag DoRecalculation);
     void EnableDebugDrawing(bool bShouldDrawDebugData, FLinearColor PathColor);
 }; // Size: 0x88
 
@@ -528,19 +547,21 @@ class UNavigationSystemV1 : public UNavigationSystemBase
     int32 GeometryExportTriangleCountWarningThreshold;                                // 0x006C (size: 0x4)
     uint8 bGenerateNavigationOnlyAroundNavigationInvokers;                            // 0x0070 (size: 0x1)
     float ActiveTilesUpdateInterval;                                                  // 0x0074 (size: 0x4)
-    ENavDataGatheringModeConfig DataGatheringMode;                                    // 0x0078 (size: 0x1)
-    float DirtyAreaWarningSizeThreshold;                                              // 0x007C (size: 0x4)
-    float GatheringNavModifiersWarningLimitTime;                                      // 0x0080 (size: 0x4)
-    TArray<FNavDataConfig> SupportedAgents;                                           // 0x0088 (size: 0x10)
-    FNavAgentSelector SupportedAgentsMask;                                            // 0x0098 (size: 0x4)
-    FBox BuildBounds;                                                                 // 0x00A0 (size: 0x38)
-    TArray<class ANavigationData*> NavDataSet;                                        // 0x00D8 (size: 0x10)
-    TArray<class ANavigationData*> NavDataRegistrationQueue;                          // 0x00E8 (size: 0x10)
-    FNavigationSystemV1OnNavDataRegisteredEvent OnNavDataRegisteredEvent;             // 0x0108 (size: 0x10)
+    double InvokersMaximumDistanceFromSeed;                                           // 0x0078 (size: 0x8)
+    ENavDataGatheringModeConfig DataGatheringMode;                                    // 0x0080 (size: 0x1)
+    float DirtyAreaWarningSizeThreshold;                                              // 0x0084 (size: 0x4)
+    float GatheringNavModifiersWarningLimitTime;                                      // 0x0088 (size: 0x4)
+    TArray<FNavDataConfig> SupportedAgents;                                           // 0x0090 (size: 0x10)
+    FNavAgentSelector SupportedAgentsMask;                                            // 0x00A0 (size: 0x4)
+    FBox BuildBounds;                                                                 // 0x00A8 (size: 0x38)
+    TArray<ANavigationData*> NavDataSet;                                              // 0x00E0 (size: 0x10)
+    TArray<ANavigationData*> NavDataRegistrationQueue;                                // 0x00F0 (size: 0x10)
+    FNavigationSystemV1OnNavDataRegisteredEvent OnNavDataRegisteredEvent;             // 0x0110 (size: 0x10)
     void OnNavDataGenericEvent(class ANavigationData* NavData);
-    FNavigationSystemV1OnNavigationGenerationFinishedDelegate OnNavigationGenerationFinishedDelegate; // 0x0118 (size: 0x10)
+    FNavigationSystemV1OnNavigationGenerationFinishedDelegate OnNavigationGenerationFinishedDelegate; // 0x0120 (size: 0x10)
     void OnNavDataGenericEvent(class ANavigationData* NavData);
-    FNavigationSystemRunMode OperationMode;                                           // 0x0208 (size: 0x1)
+    FNavigationSystemRunMode OperationMode;                                           // 0x0220 (size: 0x1)
+    class UNavigationObjectRepository* Repository;                                    // 0x04A8 (size: 0x8)
 
     void UnregisterNavigationInvoker(class AActor* invoker);
     void SetMaxSimultaneousTileGenerationJobsCount(int32 MaxNumberOfJobs);
@@ -561,7 +582,7 @@ class UNavigationSystemV1 : public UNavigationSystemBase
     class UNavigationSystemV1* GetNavigationSystem(class UObject* WorldContextObject);
     class UNavigationPath* FindPathToLocationSynchronously(class UObject* WorldContextObject, const FVector& PathStart, const FVector& PathEnd, class AActor* PathfindingContext, TSubclassOf<class UNavigationQueryFilter> FilterClass);
     class UNavigationPath* FindPathToActorSynchronously(class UObject* WorldContextObject, const FVector& PathStart, class AActor* GoalActor, float TetherDistance, class AActor* PathfindingContext, TSubclassOf<class UNavigationQueryFilter> FilterClass);
-}; // Size: 0x1590
+}; // Size: 0x1610
 
 class URecastFilter_UseDefaultArea : public UNavigationQueryFilter
 {
@@ -570,5 +591,16 @@ class URecastFilter_UseDefaultArea : public UNavigationQueryFilter
 class URecastNavMeshDataChunk : public UNavigationDataChunk
 {
 }; // Size: 0x40
+
+class USplineNavModifierComponent : public UNavModifierComponent
+{
+    bool bUpdateNavDataOnSplineChange;                                                // 0x01B0 (size: 0x1)
+    FComponentReference AttachedSpline;                                               // 0x01B8 (size: 0x28)
+    double StrokeWidth;                                                               // 0x01E0 (size: 0x8)
+    double StrokeHeight;                                                              // 0x01E8 (size: 0x8)
+    ESubdivisionLOD SubdivisionLOD;                                                   // 0x01F0 (size: 0x4)
+
+    void UpdateNavigationWithComponentData();
+}; // Size: 0x260
 
 #endif

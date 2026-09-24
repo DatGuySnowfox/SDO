@@ -49,66 +49,66 @@ struct FRigUnit_ControlRigSplineFromTransforms : public FRigUnit_ControlRigSplin
 
 struct FRigUnit_DrawControlRigSpline : public FRigUnitMutable
 {
-    FControlRigSpline Spline;                                                         // 0x0160 (size: 0x18)
-    FLinearColor Color;                                                               // 0x0178 (size: 0x10)
-    float Thickness;                                                                  // 0x0188 (size: 0x4)
-    int32 Detail;                                                                     // 0x018C (size: 0x4)
+    FControlRigSpline Spline;                                                         // 0x0010 (size: 0x18)
+    FLinearColor Color;                                                               // 0x0028 (size: 0x10)
+    float Thickness;                                                                  // 0x0038 (size: 0x4)
+    int32 Detail;                                                                     // 0x003C (size: 0x4)
 
-}; // Size: 0x190
+}; // Size: 0x40
 
 struct FRigUnit_FitChainToSplineCurve : public FRigUnit_HighlevelBaseMutable
 {
-    FRigElementKeyCollection Items;                                                   // 0x0160 (size: 0x10)
-    FControlRigSpline Spline;                                                         // 0x0170 (size: 0x18)
-    EControlRigCurveAlignment Alignment;                                              // 0x0188 (size: 0x1)
-    float Minimum;                                                                    // 0x018C (size: 0x4)
-    float Maximum;                                                                    // 0x0190 (size: 0x4)
-    int32 SamplingPrecision;                                                          // 0x0194 (size: 0x4)
-    FVector PrimaryAxis;                                                              // 0x0198 (size: 0x18)
-    FVector SecondaryAxis;                                                            // 0x01B0 (size: 0x18)
-    FVector PoleVectorPosition;                                                       // 0x01C8 (size: 0x18)
-    TArray<FRigUnit_FitChainToCurve_Rotation> Rotations;                              // 0x01E0 (size: 0x10)
-    ERigVMAnimEasingType RotationEaseType;                                            // 0x01F0 (size: 0x1)
-    float Weight;                                                                     // 0x01F4 (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x01F8 (size: 0x1)
-    FRigUnit_FitChainToCurve_DebugSettings DebugSettings;                             // 0x0200 (size: 0x90)
-    FRigUnit_FitChainToCurve_WorkData WorkData;                                       // 0x0290 (size: 0x98)
+    FRigElementKeyCollection Items;                                                   // 0x0010 (size: 0x10)
+    FControlRigSpline Spline;                                                         // 0x0020 (size: 0x18)
+    EControlRigCurveAlignment Alignment;                                              // 0x0038 (size: 0x1)
+    float Minimum;                                                                    // 0x003C (size: 0x4)
+    float Maximum;                                                                    // 0x0040 (size: 0x4)
+    int32 SamplingPrecision;                                                          // 0x0044 (size: 0x4)
+    FVector PrimaryAxis;                                                              // 0x0048 (size: 0x18)
+    FVector SecondaryAxis;                                                            // 0x0060 (size: 0x18)
+    FVector PoleVectorPosition;                                                       // 0x0078 (size: 0x18)
+    TArray<FRigUnit_FitChainToCurve_Rotation> Rotations;                              // 0x0090 (size: 0x10)
+    ERigVMAnimEasingType RotationEaseType;                                            // 0x00A0 (size: 0x1)
+    float Weight;                                                                     // 0x00A4 (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x00A8 (size: 0x1)
+    FRigUnit_FitChainToCurve_DebugSettings DebugSettings;                             // 0x00B0 (size: 0x90)
+    FRigUnit_FitChainToCurve_WorkData WorkData;                                       // 0x0140 (size: 0x98)
 
-}; // Size: 0x330
+}; // Size: 0x1E0
 
 struct FRigUnit_FitChainToSplineCurveItemArray : public FRigUnit_HighlevelBaseMutable
 {
-    TArray<FRigElementKey> Items;                                                     // 0x0160 (size: 0x10)
-    FControlRigSpline Spline;                                                         // 0x0170 (size: 0x18)
-    EControlRigCurveAlignment Alignment;                                              // 0x0188 (size: 0x1)
-    float Minimum;                                                                    // 0x018C (size: 0x4)
-    float Maximum;                                                                    // 0x0190 (size: 0x4)
-    int32 SamplingPrecision;                                                          // 0x0194 (size: 0x4)
-    FVector PrimaryAxis;                                                              // 0x0198 (size: 0x18)
-    FVector SecondaryAxis;                                                            // 0x01B0 (size: 0x18)
-    FVector PoleVectorPosition;                                                       // 0x01C8 (size: 0x18)
-    TArray<FRigUnit_FitChainToCurve_Rotation> Rotations;                              // 0x01E0 (size: 0x10)
-    ERigVMAnimEasingType RotationEaseType;                                            // 0x01F0 (size: 0x1)
-    float Weight;                                                                     // 0x01F4 (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x01F8 (size: 0x1)
-    FRigUnit_FitChainToCurve_DebugSettings DebugSettings;                             // 0x0200 (size: 0x90)
-    FRigUnit_FitChainToCurve_WorkData WorkData;                                       // 0x0290 (size: 0x98)
+    TArray<FRigElementKey> Items;                                                     // 0x0010 (size: 0x10)
+    FControlRigSpline Spline;                                                         // 0x0020 (size: 0x18)
+    EControlRigCurveAlignment Alignment;                                              // 0x0038 (size: 0x1)
+    float Minimum;                                                                    // 0x003C (size: 0x4)
+    float Maximum;                                                                    // 0x0040 (size: 0x4)
+    int32 SamplingPrecision;                                                          // 0x0044 (size: 0x4)
+    FVector PrimaryAxis;                                                              // 0x0048 (size: 0x18)
+    FVector SecondaryAxis;                                                            // 0x0060 (size: 0x18)
+    FVector PoleVectorPosition;                                                       // 0x0078 (size: 0x18)
+    TArray<FRigUnit_FitChainToCurve_Rotation> Rotations;                              // 0x0090 (size: 0x10)
+    ERigVMAnimEasingType RotationEaseType;                                            // 0x00A0 (size: 0x1)
+    float Weight;                                                                     // 0x00A4 (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x00A8 (size: 0x1)
+    FRigUnit_FitChainToCurve_DebugSettings DebugSettings;                             // 0x00B0 (size: 0x90)
+    FRigUnit_FitChainToCurve_WorkData WorkData;                                       // 0x0140 (size: 0x98)
 
-}; // Size: 0x330
+}; // Size: 0x1E0
 
 struct FRigUnit_FitSplineCurveToChain : public FRigUnit_HighlevelBaseMutable
 {
-    FRigElementKeyCollection Items;                                                   // 0x0160 (size: 0x10)
-    FControlRigSpline Spline;                                                         // 0x0170 (size: 0x18)
+    FRigElementKeyCollection Items;                                                   // 0x0010 (size: 0x10)
+    FControlRigSpline Spline;                                                         // 0x0020 (size: 0x18)
 
-}; // Size: 0x190
+}; // Size: 0x38
 
 struct FRigUnit_FitSplineCurveToChainItemArray : public FRigUnit_HighlevelBaseMutable
 {
-    TArray<FRigElementKey> Items;                                                     // 0x0160 (size: 0x10)
-    FControlRigSpline Spline;                                                         // 0x0170 (size: 0x18)
+    TArray<FRigElementKey> Items;                                                     // 0x0010 (size: 0x10)
+    FControlRigSpline Spline;                                                         // 0x0020 (size: 0x18)
 
-}; // Size: 0x190
+}; // Size: 0x38
 
 struct FRigUnit_GetLengthAtParamControlRigSpline : public FRigUnit
 {
@@ -143,31 +143,31 @@ struct FRigUnit_PositionFromControlRigSpline : public FRigUnit_ControlRigSplineB
 
 struct FRigUnit_SetSplinePoints : public FRigUnitMutable
 {
-    TArray<FVector> Points;                                                           // 0x0160 (size: 0x10)
-    FControlRigSpline Spline;                                                         // 0x0170 (size: 0x18)
+    TArray<FVector> Points;                                                           // 0x0010 (size: 0x10)
+    FControlRigSpline Spline;                                                         // 0x0020 (size: 0x18)
 
-}; // Size: 0x190
+}; // Size: 0x38
 
 struct FRigUnit_SetSplineTransforms : public FRigUnitMutable
 {
-    TArray<FTransform> Transforms;                                                    // 0x0160 (size: 0x10)
-    FControlRigSpline Spline;                                                         // 0x0170 (size: 0x18)
+    TArray<FTransform> Transforms;                                                    // 0x0010 (size: 0x10)
+    FControlRigSpline Spline;                                                         // 0x0020 (size: 0x18)
 
-}; // Size: 0x190
+}; // Size: 0x38
 
 struct FRigUnit_SplineConstraint : public FRigUnit_HighlevelBaseMutable
 {
-    TArray<FRigElementKey> Items;                                                     // 0x0160 (size: 0x10)
-    FControlRigSpline Spline;                                                         // 0x0170 (size: 0x18)
-    EControlRigCurveAlignment Alignment;                                              // 0x0188 (size: 0x1)
-    float Minimum;                                                                    // 0x018C (size: 0x4)
-    float Maximum;                                                                    // 0x0190 (size: 0x4)
-    FVector PrimaryAxis;                                                              // 0x0198 (size: 0x18)
-    FVector SecondaryAxis;                                                            // 0x01B0 (size: 0x18)
-    bool bPropagateToChildren;                                                        // 0x01C8 (size: 0x1)
-    FRigUnit_SplineConstraint_WorkData WorkData;                                      // 0x01D0 (size: 0x38)
+    TArray<FRigElementKey> Items;                                                     // 0x0010 (size: 0x10)
+    FControlRigSpline Spline;                                                         // 0x0020 (size: 0x18)
+    EControlRigCurveAlignment Alignment;                                              // 0x0038 (size: 0x1)
+    float Minimum;                                                                    // 0x003C (size: 0x4)
+    float Maximum;                                                                    // 0x0040 (size: 0x4)
+    FVector PrimaryAxis;                                                              // 0x0048 (size: 0x18)
+    FVector SecondaryAxis;                                                            // 0x0060 (size: 0x18)
+    bool bPropagateToChildren;                                                        // 0x0078 (size: 0x1)
+    FRigUnit_SplineConstraint_WorkData WorkData;                                      // 0x0080 (size: 0x38)
 
-}; // Size: 0x210
+}; // Size: 0xB8
 
 struct FRigUnit_SplineConstraint_WorkData
 {

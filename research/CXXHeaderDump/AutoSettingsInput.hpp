@@ -58,9 +58,9 @@ struct FInputMappingPreset
 struct FKeyFriendlyName
 {
     FKey Key;                                                                         // 0x0000 (size: 0x18)
-    FText FriendlyName;                                                               // 0x0018 (size: 0x18)
+    FText FriendlyName;                                                               // 0x0018 (size: 0x10)
 
-}; // Size: 0x30
+}; // Size: 0x28
 
 struct FKeyGroup
 {
@@ -81,7 +81,7 @@ struct FKeyIconPair
 struct FKeyIconSet
 {
     FGameplayTagContainer Tags;                                                       // 0x0000 (size: 0x20)
-    TMap<class FKey, class TSoftObjectPtr<UTexture>> IconMap;                         // 0x0020 (size: 0x50)
+    TMap<FKey, TSoftObjectPtr<class UTexture>> IconMap;                               // 0x0020 (size: 0x50)
     TArray<FKeyIconPair> Icons;                                                       // 0x0070 (size: 0x10)
 
 }; // Size: 0x80
@@ -127,62 +127,62 @@ class IAutoSettingsPlayer : public IInterface
 
 class UActionLabel : public UInputLabel
 {
-    FName ActionName;                                                                 // 0x02F0 (size: 0x8)
-    TSubclassOf<class UKeyLabel> KeyLabelWidgetClass;                                 // 0x02F8 (size: 0x8)
-    TSubclassOf<class UWidget> KeySeparatorWidgetClass;                               // 0x0300 (size: 0x8)
-    class UPanelWidget* KeyContainer;                                                 // 0x0308 (size: 0x8)
-    class UKeyLabel* PrimaryKeyLabel;                                                 // 0x0310 (size: 0x8)
-    class UKeyLabel* ShiftLabel;                                                      // 0x0318 (size: 0x8)
-    class UKeyLabel* CtrlLabel;                                                       // 0x0320 (size: 0x8)
-    class UKeyLabel* AltLabel;                                                        // 0x0328 (size: 0x8)
-    class UKeyLabel* CmdLabel;                                                        // 0x0330 (size: 0x8)
-    class UWidget* ShiftSeparator;                                                    // 0x0338 (size: 0x8)
-    class UWidget* CtrlSeparator;                                                     // 0x0340 (size: 0x8)
-    class UWidget* AltSeparator;                                                      // 0x0348 (size: 0x8)
-    class UWidget* CmdSeparator;                                                      // 0x0350 (size: 0x8)
+    FName ActionName;                                                                 // 0x0370 (size: 0x8)
+    TSubclassOf<class UKeyLabel> KeyLabelWidgetClass;                                 // 0x0378 (size: 0x8)
+    TSubclassOf<class UWidget> KeySeparatorWidgetClass;                               // 0x0380 (size: 0x8)
+    class UPanelWidget* KeyContainer;                                                 // 0x0388 (size: 0x8)
+    class UKeyLabel* PrimaryKeyLabel;                                                 // 0x0390 (size: 0x8)
+    class UKeyLabel* ShiftLabel;                                                      // 0x0398 (size: 0x8)
+    class UKeyLabel* CtrlLabel;                                                       // 0x03A0 (size: 0x8)
+    class UKeyLabel* AltLabel;                                                        // 0x03A8 (size: 0x8)
+    class UKeyLabel* CmdLabel;                                                        // 0x03B0 (size: 0x8)
+    class UWidget* ShiftSeparator;                                                    // 0x03B8 (size: 0x8)
+    class UWidget* CtrlSeparator;                                                     // 0x03C0 (size: 0x8)
+    class UWidget* AltSeparator;                                                      // 0x03C8 (size: 0x8)
+    class UWidget* CmdSeparator;                                                      // 0x03D0 (size: 0x8)
 
-}; // Size: 0x358
+}; // Size: 0x3D8
 
 class UActionMapping : public UInputMapping
 {
-    FName ActionName;                                                                 // 0x02F8 (size: 0x8)
-    class UActionLabel* ActionLabel;                                                  // 0x0300 (size: 0x8)
+    FName ActionName;                                                                 // 0x0378 (size: 0x8)
+    class UActionLabel* ActionLabel;                                                  // 0x0380 (size: 0x8)
 
-}; // Size: 0x308
+}; // Size: 0x388
 
 class UAutoSettingsInputConfig : public UDeveloperSettings
 {
     bool bAutoInitializePlayerInputOverrides;                                         // 0x0040 (size: 0x1)
     bool AllowModifierKeys;                                                           // 0x0041 (size: 0x1)
-    FText ShiftModifierOverrideText;                                                  // 0x0048 (size: 0x18)
-    FText CtrlModifierOverrideText;                                                   // 0x0060 (size: 0x18)
-    FText AltModifierOverrideText;                                                    // 0x0078 (size: 0x18)
-    FText CmdModifierOverrideText;                                                    // 0x0090 (size: 0x18)
-    TArray<FInputMappingPreset> InputPresets;                                         // 0x00A8 (size: 0x10)
-    bool AllowMultipleBindingsPerKey;                                                 // 0x00B8 (size: 0x1)
-    TArray<FMappingGroupLink> MappingGroupLinks;                                      // 0x00C0 (size: 0x10)
-    TArray<FName> PreservedActions;                                                   // 0x00D0 (size: 0x10)
-    TArray<FName> PreservedAxes;                                                      // 0x00E0 (size: 0x10)
-    TArray<FKeyIconSet> KeyIconSets;                                                  // 0x00F0 (size: 0x10)
-    TArray<FKeyFriendlyName> KeyFriendlyNames;                                        // 0x0100 (size: 0x10)
-    TArray<FKeyGroup> KeyGroups;                                                      // 0x0110 (size: 0x10)
-    TArray<FKey> AllowedKeys;                                                         // 0x0120 (size: 0x10)
-    TArray<FKey> DisallowedKeys;                                                      // 0x0130 (size: 0x10)
-    TArray<FKey> BindingEscapeKeys;                                                   // 0x0140 (size: 0x10)
-    float MouseMoveCaptureDistance;                                                   // 0x0150 (size: 0x4)
-    TArray<FAxisAssociation> AxisAssociations;                                        // 0x0158 (size: 0x10)
-    TArray<FName> BlacklistedActions;                                                 // 0x0168 (size: 0x10)
-    TArray<FName> BlacklistedAxes;                                                    // 0x0178 (size: 0x10)
+    FText ShiftModifierOverrideText;                                                  // 0x0048 (size: 0x10)
+    FText CtrlModifierOverrideText;                                                   // 0x0058 (size: 0x10)
+    FText AltModifierOverrideText;                                                    // 0x0068 (size: 0x10)
+    FText CmdModifierOverrideText;                                                    // 0x0078 (size: 0x10)
+    TArray<FInputMappingPreset> InputPresets;                                         // 0x0088 (size: 0x10)
+    bool AllowMultipleBindingsPerKey;                                                 // 0x0098 (size: 0x1)
+    TArray<FMappingGroupLink> MappingGroupLinks;                                      // 0x00A0 (size: 0x10)
+    TArray<FName> PreservedActions;                                                   // 0x00B0 (size: 0x10)
+    TArray<FName> PreservedAxes;                                                      // 0x00C0 (size: 0x10)
+    TArray<FKeyIconSet> KeyIconSets;                                                  // 0x00D0 (size: 0x10)
+    TArray<FKeyFriendlyName> KeyFriendlyNames;                                        // 0x00E0 (size: 0x10)
+    TArray<FKeyGroup> KeyGroups;                                                      // 0x00F0 (size: 0x10)
+    TArray<FKey> AllowedKeys;                                                         // 0x0100 (size: 0x10)
+    TArray<FKey> DisallowedKeys;                                                      // 0x0110 (size: 0x10)
+    TArray<FKey> BindingEscapeKeys;                                                   // 0x0120 (size: 0x10)
+    float MouseMoveCaptureDistance;                                                   // 0x0130 (size: 0x4)
+    TArray<FAxisAssociation> AxisAssociations;                                        // 0x0138 (size: 0x10)
+    TArray<FName> BlacklistedActions;                                                 // 0x0148 (size: 0x10)
+    TArray<FName> BlacklistedAxes;                                                    // 0x0158 (size: 0x10)
 
-}; // Size: 0x188
+}; // Size: 0x168
 
 class UAutoSettingsInputProjectConfig : public UAutoSettingsInputConfig
 {
 
-    TArray<class UTexture*> LoadKeyIcons(FGameplayTagContainer KeyIconTags);
+    TArray<UTexture*> LoadKeyIcons(FGameplayTagContainer KeyIconTags);
     FGameplayTag GetKeyGroupStatic(FKey Key);
     FText GetKeyFriendlyNameStatic(FKey Key);
-}; // Size: 0x188
+}; // Size: 0x168
 
 class UAutoSettingsInputSubsystem : public UGameInstanceSubsystem
 {
@@ -194,52 +194,52 @@ class UAutoSettingsInputValidationSubsystem : public UGameInstanceSubsystem
 
 class UAxisLabel : public UInputLabel
 {
-    FName AxisName;                                                                   // 0x02F0 (size: 0x8)
-    float Scale;                                                                      // 0x02F8 (size: 0x4)
-    class UKeyLabel* KeyLabel;                                                        // 0x0300 (size: 0x8)
+    FName AxisName;                                                                   // 0x0370 (size: 0x8)
+    float Scale;                                                                      // 0x0378 (size: 0x4)
+    class UKeyLabel* KeyLabel;                                                        // 0x0380 (size: 0x8)
 
-}; // Size: 0x308
+}; // Size: 0x388
 
 class UAxisMapping : public UInputMapping
 {
-    FName AxisName;                                                                   // 0x02F8 (size: 0x8)
-    float Scale;                                                                      // 0x0300 (size: 0x4)
-    class UAxisLabel* AxisLabel;                                                      // 0x0308 (size: 0x8)
+    FName AxisName;                                                                   // 0x0378 (size: 0x8)
+    float Scale;                                                                      // 0x0380 (size: 0x4)
+    class UAxisLabel* AxisLabel;                                                      // 0x0388 (size: 0x8)
 
-}; // Size: 0x310
+}; // Size: 0x390
 
 class UBindCaptureButton : public UUserWidget
 {
-    FGameplayTag KeyGroup;                                                            // 0x02C0 (size: 0x8)
-    TSubclassOf<class UBindCapturePrompt> BindCapturePromptClass;                     // 0x02C8 (size: 0x8)
-    int32 CapturePromptZOrder;                                                        // 0x02D0 (size: 0x4)
-    class UBindCapturePrompt* Prompt;                                                 // 0x02E8 (size: 0x8)
+    FGameplayTag KeyGroup;                                                            // 0x0340 (size: 0x8)
+    TSubclassOf<class UBindCapturePrompt> BindCapturePromptClass;                     // 0x0348 (size: 0x8)
+    int32 CapturePromptZOrder;                                                        // 0x0350 (size: 0x4)
+    class UBindCapturePrompt* Prompt;                                                 // 0x0368 (size: 0x8)
 
     class UBindCapturePrompt* StartCapture();
     void InitializePrompt(class UBindCapturePrompt* PromptWidget);
     void ChordCaptured(FCapturedInput CapturedInput);
-}; // Size: 0x2F0
+}; // Size: 0x370
 
 class UBindCapturePrompt : public UUserWidget
 {
-    bool bIgnoreGameViewportInputWhileCapturing;                                      // 0x02C0 (size: 0x1)
-    bool bRestrictKeyGroup;                                                           // 0x02C1 (size: 0x1)
-    EBindingCaptureMode CaptureMode;                                                  // 0x02C2 (size: 0x1)
-    FGameplayTag KeyGroup;                                                            // 0x02C4 (size: 0x8)
-    FBindCapturePromptOnChordCaptured OnChordCaptured;                                // 0x02D0 (size: 0x10)
+    bool bIgnoreGameViewportInputWhileCapturing;                                      // 0x0340 (size: 0x1)
+    bool bRestrictKeyGroup;                                                           // 0x0341 (size: 0x1)
+    EBindingCaptureMode CaptureMode;                                                  // 0x0342 (size: 0x1)
+    FGameplayTag KeyGroup;                                                            // 0x0344 (size: 0x8)
+    FBindCapturePromptOnChordCaptured OnChordCaptured;                                // 0x0350 (size: 0x10)
     void ChordCapturedEvent(FCapturedInput CapturedInput);
-    FBindCapturePromptOnChordRejected OnChordRejected;                                // 0x02E0 (size: 0x10)
+    FBindCapturePromptOnChordRejected OnChordRejected;                                // 0x0360 (size: 0x10)
     void ChordRejectedEvent(FCapturedInput CapturedInput);
-    FBindCapturePromptOnCapturePromptClosed OnCapturePromptClosed;                    // 0x02F0 (size: 0x10)
+    FBindCapturePromptOnCapturePromptClosed OnCapturePromptClosed;                    // 0x0370 (size: 0x10)
     void CapturePromptClosedEvent(bool bWasCancelled);
-    TArray<FKey> KeysDown;                                                            // 0x0300 (size: 0x10)
-    bool PreviousIgnoreInput;                                                         // 0x0310 (size: 0x1)
-    FVector2D AccumulatedMouseDelta;                                                  // 0x0318 (size: 0x10)
+    TArray<FKey> KeysDown;                                                            // 0x0380 (size: 0x10)
+    bool PreviousIgnoreInput;                                                         // 0x0390 (size: 0x1)
+    FVector2D AccumulatedMouseDelta;                                                  // 0x0398 (size: 0x10)
 
     bool IsKeyAllowed(FKey PrimaryKey);
     FGameplayTag GetKeyGroup();
     void Cancel();
-}; // Size: 0x328
+}; // Size: 0x3A8
 
 class UGlobalKeyIconTagManager : public UObject
 {
@@ -253,34 +253,34 @@ class UGlobalKeyIconTagManager : public UObject
 
 class UInputLabel : public UUserWidget
 {
-    int32 MappingGroup;                                                               // 0x02C0 (size: 0x4)
-    FGameplayTag KeyGroup;                                                            // 0x02C4 (size: 0x8)
-    bool bUsePlayerKeyGroup;                                                          // 0x02CC (size: 0x1)
-    FGameplayTagContainer IconTags;                                                   // 0x02D0 (size: 0x20)
+    int32 MappingGroup;                                                               // 0x0340 (size: 0x4)
+    FGameplayTag KeyGroup;                                                            // 0x0344 (size: 0x8)
+    bool bUsePlayerKeyGroup;                                                          // 0x034C (size: 0x1)
+    FGameplayTagContainer IconTags;                                                   // 0x0350 (size: 0x20)
 
     void UpdateLabel();
     void MappingsChanged(class APlayerController* Player);
-}; // Size: 0x2F0
+}; // Size: 0x370
 
 class UInputMapping : public UUserWidget
 {
-    int32 MappingGroup;                                                               // 0x02C0 (size: 0x4)
-    FGameplayTag KeyGroup;                                                            // 0x02C4 (size: 0x8)
-    FGameplayTagContainer IconTags;                                                   // 0x02D0 (size: 0x20)
-    class UBindCaptureButton* BindCaptureButton;                                      // 0x02F0 (size: 0x8)
+    int32 MappingGroup;                                                               // 0x0340 (size: 0x4)
+    FGameplayTag KeyGroup;                                                            // 0x0344 (size: 0x8)
+    FGameplayTagContainer IconTags;                                                   // 0x0350 (size: 0x20)
+    class UBindCaptureButton* BindCaptureButton;                                      // 0x0370 (size: 0x8)
 
     void UpdateMapping();
     void UpdateLabel();
     void ChordCaptured(FCapturedInput CapturedInput);
     void BindChord(FCapturedInput CapturedInput);
-}; // Size: 0x2F8
+}; // Size: 0x378
 
 class UInputMappingManager : public UEngineSubsystem
 {
     FInputMappingManagerOnMappingsChanged OnMappingsChanged;                          // 0x0030 (size: 0x10)
     void OnMappingsChanged(class APlayerController* Player);
     TArray<FPlayerInputMappings> PlayerInputOverrides;                                // 0x0040 (size: 0x10)
-    TArray<class APlayerController*> RegisteredPlayerControllers;                     // 0x0050 (size: 0x10)
+    TArray<APlayerController*> RegisteredPlayerControllers;                           // 0x0050 (size: 0x10)
 
     void SetPlayerKeyGroupStatic(class APlayerController* Player, FGameplayTag KeyGroup);
     void SetPlayerInputPresetStatic(class APlayerController* Player, FInputMappingPreset Preset);
@@ -304,11 +304,11 @@ class UInputMappingManager : public UEngineSubsystem
 
 class UKeyLabel : public UUserWidget
 {
-    FText KeyInvalidText;                                                             // 0x02C0 (size: 0x18)
-    FText LabelOverride;                                                              // 0x02D8 (size: 0x18)
-    FKey Key;                                                                         // 0x02F0 (size: 0x18)
-    float AxisScale;                                                                  // 0x0308 (size: 0x4)
-    FGameplayTagContainer IconTags;                                                   // 0x0310 (size: 0x20)
+    FText KeyInvalidText;                                                             // 0x0340 (size: 0x10)
+    FText LabelOverride;                                                              // 0x0350 (size: 0x10)
+    FKey Key;                                                                         // 0x0360 (size: 0x18)
+    float AxisScale;                                                                  // 0x0378 (size: 0x4)
+    FGameplayTagContainer IconTags;                                                   // 0x0380 (size: 0x20)
 
     void UpdateKeyLabel();
     void OnGlobalKeyIconTagsModified();
@@ -319,6 +319,6 @@ class UKeyLabel : public UUserWidget
     class UTexture* GetIcon();
     ESlateVisibility GetDisplayNameVisibility();
     FText GetDisplayName();
-}; // Size: 0x330
+}; // Size: 0x3A0
 
 #endif

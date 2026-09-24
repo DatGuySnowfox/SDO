@@ -5,6 +5,13 @@ enum class ECacheMode {
     ECacheMode_MAX = 3,
 };
 
+enum class EChaosCacheInterpolationMode {
+    QuatInterp = 0,
+    EulerInterp = 1,
+    DualQuatInterp = 2,
+    EChaosCacheInterpolationMode_MAX = 3,
+};
+
 enum class EStartMode {
     Timed = 0,
     Triggered = 1,

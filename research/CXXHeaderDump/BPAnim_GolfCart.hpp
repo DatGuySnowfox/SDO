@@ -7,22 +7,24 @@ struct FAnimBlueprintGeneratedConstantData : public FAnimBlueprintConstantData
     FName __NameProperty_11;                                                          // 0x000C (size: 0x8)
     FAnimNodeFunctionRef __StructProperty_12;                                         // 0x0018 (size: 0x20)
     FAnimSubsystem_PropertyAccess AnimBlueprintExtension_PropertyAccess;              // 0x0038 (size: 0x80)
-    FAnimSubsystem_Base AnimBlueprintExtension_Base;                                  // 0x00B8 (size: 0x18)
+    FAnimSubsystem_Base AnimBlueprintExtension_Base;                                  // 0x00B8 (size: 0x40)
+    FAnimNodeExposedValueHandler_PropertyAccess AnimGraphNode_Root;                   // 0x00F8 (size: 0x30)
+    FAnimNodeExposedValueHandler_PropertyAccess AnimGraphNode_MeshRefPose;            // 0x0128 (size: 0x30)
+    FAnimNodeExposedValueHandler_PropertyAccess AnimGraphNode_WheelController;        // 0x0158 (size: 0x30)
+    FAnimNodeExposedValueHandler_PropertyAccess AnimGraphNode_ComponentToLocalSpace;  // 0x0188 (size: 0x30)
 
-}; // Size: 0xD0
+}; // Size: 0x1B8
 
 class UBPAnim_GolfCart_C : public UVehicleAnimationInstance
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0A90 (size: 0x8)
-    FAnimSubsystemInstance AnimBlueprintExtension_PropertyAccess;                     // 0x0A98 (size: 0x8)
-    FAnimSubsystemInstance AnimBlueprintExtension_Base;                               // 0x0AA0 (size: 0x8)
-    FAnimNode_Root AnimGraphNode_Root;                                                // 0x0AA8 (size: 0x20)
-    FAnimNode_MeshSpaceRefPose AnimGraphNode_MeshRefPose;                             // 0x0AC8 (size: 0x10)
-    FAnimNode_WheelController AnimGraphNode_WheelController;                          // 0x0AD8 (size: 0xE0)
-    FAnimNode_ConvertComponentToLocalSpace AnimGraphNode_ComponentToLocalSpace;       // 0x0BB8 (size: 0x20)
+    FAnimSubsystemInstance AnimBlueprintExtension_PropertyAccess;                     // 0x0BC0 (size: 0x8)
+    FAnimSubsystemInstance AnimBlueprintExtension_Base;                               // 0x0BC8 (size: 0x8)
+    FAnimNode_Root AnimGraphNode_Root;                                                // 0x0BD0 (size: 0x20)
+    FAnimNode_MeshSpaceRefPose AnimGraphNode_MeshRefPose;                             // 0x0BF0 (size: 0x10)
+    FAnimNode_WheelController AnimGraphNode_WheelController;                          // 0x0C00 (size: 0xE0)
+    FAnimNode_ConvertComponentToLocalSpace AnimGraphNode_ComponentToLocalSpace;       // 0x0CE0 (size: 0x20)
 
     void AnimGraph(FPoseLink& AnimGraph);
-    void ExecuteUbergraph_BPAnim_GolfCart(int32 EntryPoint);
-}; // Size: 0xBD8
+}; // Size: 0xD00
 
 #endif

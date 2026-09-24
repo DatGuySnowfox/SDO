@@ -61,40 +61,40 @@ struct FAutomationExecutionEntry
 
 struct FBox
 {
-    FVector Min;                                                                      // 0x0000 (size: 0x18)
-    FVector Max;                                                                      // 0x0018 (size: 0x18)
+    FVector min;                                                                      // 0x0000 (size: 0x18)
+    FVector max;                                                                      // 0x0018 (size: 0x18)
     bool IsValid;                                                                     // 0x0030 (size: 0x1)
 
 }; // Size: 0x38
 
 struct FBox2D
 {
-    FVector2D Min;                                                                    // 0x0000 (size: 0x10)
-    FVector2D Max;                                                                    // 0x0010 (size: 0x10)
+    FVector2D min;                                                                    // 0x0000 (size: 0x10)
+    FVector2D max;                                                                    // 0x0010 (size: 0x10)
     bool bIsValid;                                                                    // 0x0020 (size: 0x1)
 
 }; // Size: 0x28
 
 struct FBox2f
 {
-    FVector2f Min;                                                                    // 0x0000 (size: 0x8)
-    FVector2f Max;                                                                    // 0x0008 (size: 0x8)
+    FVector2f min;                                                                    // 0x0000 (size: 0x8)
+    FVector2f max;                                                                    // 0x0008 (size: 0x8)
     bool bIsValid;                                                                    // 0x0010 (size: 0x1)
 
 }; // Size: 0x14
 
 struct FBox3d
 {
-    FVector3d Min;                                                                    // 0x0000 (size: 0x18)
-    FVector3d Max;                                                                    // 0x0018 (size: 0x18)
+    FVector3d min;                                                                    // 0x0000 (size: 0x18)
+    FVector3d max;                                                                    // 0x0018 (size: 0x18)
     bool IsValid;                                                                     // 0x0030 (size: 0x1)
 
 }; // Size: 0x38
 
 struct FBox3f
 {
-    FVector3f Min;                                                                    // 0x0000 (size: 0xC)
-    FVector3f Max;                                                                    // 0x000C (size: 0xC)
+    FVector3f min;                                                                    // 0x0000 (size: 0xC)
+    FVector3f max;                                                                    // 0x000C (size: 0xC)
     bool IsValid;                                                                     // 0x0018 (size: 0x1)
 
 }; // Size: 0x1C
@@ -132,11 +132,29 @@ struct FColor
 
 }; // Size: 0x4
 
+struct FConstSharedStruct
+{
+}; // Size: 0x10
+
 struct FDateTime
 {
+    int64 Ticks;                                                                      // 0x0000 (size: 0x8)
+
 }; // Size: 0x8
 
+struct FDefault__PropertyBag
+{
+}; // Size: 0x0
+
 struct FDefault__ScriptStruct
+{
+}; // Size: 0x0
+
+struct FDefault__UserDefinedStruct
+{
+}; // Size: 0x0
+
+struct FDefault__VerseStruct
 {
 }; // Size: 0x0
 
@@ -164,6 +182,25 @@ struct FFallbackStruct
 {
 }; // Size: 0x1
 
+struct FFieldCookedMetaDataKey
+{
+    TArray<FName> FieldPath;                                                          // 0x0000 (size: 0x10)
+
+}; // Size: 0x10
+
+struct FFieldCookedMetaDataStore
+{
+    TMap<FName, FString> FieldMetaData;                                               // 0x0000 (size: 0x50)
+    TMap<FFieldCookedMetaDataKey, FFieldCookedMetaDataValue> SubFieldMetaData;        // 0x0050 (size: 0x50)
+
+}; // Size: 0xA0
+
+struct FFieldCookedMetaDataValue
+{
+    TMap<FName, FString> MetaData;                                                    // 0x0000 (size: 0x50)
+
+}; // Size: 0x50
+
 struct FFilePath
 {
     FString FilePath;                                                                 // 0x0000 (size: 0x10)
@@ -172,8 +209,8 @@ struct FFilePath
 
 struct FFloatInterval
 {
-    float Min;                                                                        // 0x0000 (size: 0x4)
-    float Max;                                                                        // 0x0004 (size: 0x4)
+    float min;                                                                        // 0x0000 (size: 0x4)
+    float max;                                                                        // 0x0004 (size: 0x4)
 
 }; // Size: 0x8
 
@@ -225,6 +262,10 @@ struct FFrameTime
 
 }; // Size: 0x8
 
+struct FFreezablePerPlatformInt
+{
+}; // Size: 0x4
+
 struct FGuid
 {
     int32 A;                                                                          // 0x0000 (size: 0x4)
@@ -240,10 +281,24 @@ struct FInputDeviceId
 
 }; // Size: 0x4
 
+struct FInstancedPropertyBag
+{
+    FInstancedStruct Value;                                                           // 0x0000 (size: 0x10)
+
+}; // Size: 0x10
+
+struct FInstancedStruct
+{
+}; // Size: 0x10
+
+struct FInstancedStructContainer
+{
+}; // Size: 0x10
+
 struct FInt32Interval
 {
-    int32 Min;                                                                        // 0x0000 (size: 0x4)
-    int32 Max;                                                                        // 0x0004 (size: 0x4)
+    int32 min;                                                                        // 0x0000 (size: 0x4)
+    int32 max;                                                                        // 0x0004 (size: 0x4)
 
 }; // Size: 0x8
 
@@ -267,6 +322,13 @@ struct FInt32RangeBound
     int32 Value;                                                                      // 0x0004 (size: 0x4)
 
 }; // Size: 0x8
+
+struct FInt32Rect
+{
+    FInt32Point min;                                                                  // 0x0000 (size: 0x8)
+    FInt32Point max;                                                                  // 0x0008 (size: 0x8)
+
+}; // Size: 0x10
 
 struct FInt32Vector
 {
@@ -299,6 +361,13 @@ struct FInt64Point
 
 }; // Size: 0x10
 
+struct FInt64Rect
+{
+    FInt64Point min;                                                                  // 0x0000 (size: 0x10)
+    FInt64Point max;                                                                  // 0x0010 (size: 0x10)
+
+}; // Size: 0x20
+
 struct FInt64Vector
 {
     int64 X;                                                                          // 0x0000 (size: 0x8)
@@ -329,6 +398,13 @@ struct FIntPoint
     int32 Y;                                                                          // 0x0004 (size: 0x4)
 
 }; // Size: 0x8
+
+struct FIntRect
+{
+    FIntPoint min;                                                                    // 0x0000 (size: 0x8)
+    FIntPoint max;                                                                    // 0x0008 (size: 0x8)
+
+}; // Size: 0x10
 
 struct FIntVector
 {
@@ -498,6 +574,21 @@ struct FMatrix44f
 
 }; // Size: 0x40
 
+struct FMusicalTime
+{
+    int32 Bar;                                                                        // 0x0000 (size: 0x4)
+    int32 TickInBar;                                                                  // 0x0004 (size: 0x4)
+    int32 TicksPerBar;                                                                // 0x0008 (size: 0x4)
+    int32 TicksPerBeat;                                                               // 0x000C (size: 0x4)
+
+}; // Size: 0x10
+
+struct FObjectCookedMetaDataStore
+{
+    TMap<FName, FString> ObjectMetaData;                                              // 0x0000 (size: 0x50)
+
+}; // Size: 0x50
+
 struct FOrientedBox
 {
     FVector Center;                                                                   // 0x0000 (size: 0x18)
@@ -509,6 +600,29 @@ struct FOrientedBox
     double ExtentZ;                                                                   // 0x0070 (size: 0x8)
 
 }; // Size: 0x78
+
+struct FOverriddenPropertyNode
+{
+    FOverriddenPropertyNodeID NodeID;                                                 // 0x0000 (size: 0x10)
+    EOverriddenPropertyOperation Operation;                                           // 0x0010 (size: 0x1)
+    TMap<FOverriddenPropertyNodeID, FOverriddenPropertyNodeID> SubPropertyNodeKeys;   // 0x0018 (size: 0x50)
+
+}; // Size: 0x68
+
+struct FOverriddenPropertyNodeID
+{
+    FName Path;                                                                       // 0x0000 (size: 0x8)
+    class UObject* Object;                                                            // 0x0008 (size: 0x8)
+
+}; // Size: 0x10
+
+struct FOverriddenPropertySet
+{
+    class UObject* Owner;                                                             // 0x0000 (size: 0x8)
+    bool bWasAdded;                                                                   // 0x0008 (size: 0x1)
+    TSet<FOverriddenPropertyNode> OverriddenPropertyNodes;                            // 0x0010 (size: 0x50)
+
+}; // Size: 0x68
 
 struct FPackedNormal
 {
@@ -531,6 +645,37 @@ struct FPackedRGBA16N
     int32 ZW;                                                                         // 0x0004 (size: 0x4)
 
 }; // Size: 0x8
+
+struct FPackedRemoteObjectPathName
+{
+    TArray<uint16> RemoteIds;                                                         // 0x0000 (size: 0x10)
+    TArray<uint16> Names;                                                             // 0x0010 (size: 0x10)
+
+}; // Size: 0x20
+
+struct FPerPlatformBool
+{
+    bool Default;                                                                     // 0x0000 (size: 0x1)
+
+}; // Size: 0x1
+
+struct FPerPlatformFloat
+{
+    float Default;                                                                    // 0x0000 (size: 0x4)
+
+}; // Size: 0x4
+
+struct FPerPlatformFrameRate
+{
+    FFrameRate Default;                                                               // 0x0000 (size: 0x8)
+
+}; // Size: 0x8
+
+struct FPerPlatformInt
+{
+    int32 Default;                                                                    // 0x0000 (size: 0x4)
+
+}; // Size: 0x4
 
 struct FPlane : public FVector
 {
@@ -570,11 +715,11 @@ struct FPolyglotTextData
     FString Namespace;                                                                // 0x0018 (size: 0x10)
     FString Key;                                                                      // 0x0028 (size: 0x10)
     FString NativeString;                                                             // 0x0038 (size: 0x10)
-    TMap<class FString, class FString> LocalizedStrings;                              // 0x0048 (size: 0x50)
+    TMap<FString, FString> LocalizedStrings;                                          // 0x0048 (size: 0x50)
     bool bIsMinimalPatch;                                                             // 0x0098 (size: 0x1)
-    FText CachedText;                                                                 // 0x00A0 (size: 0x18)
+    FText CachedText;                                                                 // 0x00A0 (size: 0x10)
 
-}; // Size: 0xB8
+}; // Size: 0xB0
 
 struct FPrimaryAssetId
 {
@@ -588,6 +733,44 @@ struct FPrimaryAssetType
     FName Name;                                                                       // 0x0000 (size: 0x8)
 
 }; // Size: 0x8
+
+struct FProfileLocus
+{
+}; // Size: 0x30
+
+struct FPropertyBagContainerTypes
+{
+}; // Size: 0x3
+
+struct FPropertyBagMissingStruct
+{
+}; // Size: 0x1
+
+struct FPropertyBagPropertyDesc
+{
+    class UObject* ValueTypeObject;                                                   // 0x0000 (size: 0x8)
+    FGuid ID;                                                                         // 0x0008 (size: 0x10)
+    FName Name;                                                                       // 0x0018 (size: 0x8)
+    EPropertyBagPropertyType ValueType;                                               // 0x0020 (size: 0x1)
+    FPropertyBagContainerTypes ContainerTypes;                                        // 0x0021 (size: 0x3)
+    uint64 PropertyFlags;                                                             // 0x0028 (size: 0x8)
+
+}; // Size: 0x40
+
+struct FPropertyBagPropertyDescMetaData
+{
+    FName Key;                                                                        // 0x0000 (size: 0x8)
+    FString Value;                                                                    // 0x0008 (size: 0x10)
+
+}; // Size: 0x18
+
+struct FPropertyTextFName
+{
+}; // Size: 0x18
+
+struct FPropertyTextString
+{
+}; // Size: 0x20
 
 struct FQualifiedFrameTime
 {
@@ -651,6 +834,62 @@ struct FRay3f
 
 }; // Size: 0x18
 
+struct FRemoteObjectBytes
+{
+    TArray<uint8> Bytes;                                                              // 0x0000 (size: 0x10)
+
+}; // Size: 0x10
+
+struct FRemoteObjectData
+{
+    FRemoteObjectTables Tables;                                                       // 0x0000 (size: 0x20)
+    TArray<FPackedRemoteObjectPathName> PathNames;                                    // 0x0020 (size: 0x10)
+    TArray<FRemoteObjectBytes> Bytes;                                                 // 0x0030 (size: 0x10)
+
+}; // Size: 0x40
+
+struct FRemoteObjectId
+{
+    uint64 ID;                                                                        // 0x0000 (size: 0x8)
+
+}; // Size: 0x8
+
+struct FRemoteObjectPathName : public FRemoteObjectTables
+{
+}; // Size: 0x20
+
+struct FRemoteObjectReference
+{
+    FRemoteObjectId ObjectId;                                                         // 0x0000 (size: 0x8)
+    FRemoteServerId ServerId;                                                         // 0x0008 (size: 0x4)
+
+}; // Size: 0x10
+
+struct FRemoteObjectTables
+{
+    TArray<FName> Names;                                                              // 0x0000 (size: 0x10)
+    TArray<FRemoteObjectId> RemoteIds;                                                // 0x0010 (size: 0x10)
+
+}; // Size: 0x20
+
+struct FRemoteServerId
+{
+    uint32 ID;                                                                        // 0x0000 (size: 0x4)
+
+}; // Size: 0x4
+
+struct FRemoteTransactionId
+{
+    uint32 ID;                                                                        // 0x0000 (size: 0x4)
+
+}; // Size: 0x4
+
+struct FRemoteWorkPriority
+{
+    uint64 PackedData;                                                                // 0x0000 (size: 0x8)
+
+}; // Size: 0x8
+
 struct FRotator
 {
     double Pitch;                                                                     // 0x0000 (size: 0x8)
@@ -675,6 +914,10 @@ struct FRotator3f
 
 }; // Size: 0xC
 
+struct FSharedStruct
+{
+}; // Size: 0x10
+
 struct FSoftClassPath : public FSoftObjectPath
 {
 }; // Size: 0x20
@@ -682,9 +925,13 @@ struct FSoftClassPath : public FSoftObjectPath
 struct FSoftObjectPath
 {
     FTopLevelAssetPath AssetPath;                                                     // 0x0000 (size: 0x10)
-    FString SubPathString;                                                            // 0x0010 (size: 0x10)
+    FUtf8String SubPathString;                                                        // 0x0010 (size: 0x10)
 
 }; // Size: 0x20
+
+struct FSolarisProfilingData
+{
+}; // Size: 0x38
 
 struct FSphere
 {
@@ -707,16 +954,24 @@ struct FSphere3f
 
 }; // Size: 0x10
 
+struct FStructCookedMetaDataStore
+{
+    FObjectCookedMetaDataStore ObjectMetaData;                                        // 0x0000 (size: 0x50)
+    TMap<FName, FFieldCookedMetaDataStore> PropertiesMetaData;                        // 0x0050 (size: 0x50)
+
+}; // Size: 0xA0
+
 struct FTemplateString
 {
     FString Template;                                                                 // 0x0000 (size: 0x10)
+    FText Resolved;                                                                   // 0x0010 (size: 0x10)
 
-}; // Size: 0x10
+}; // Size: 0x20
 
 struct FTestUndeclaredScriptStructObjectReferencesTest
 {
     class UObject* StrongObjectPointer;                                               // 0x0000 (size: 0x8)
-    TSoftObjectPtr<UObject> SoftObjectPointer;                                        // 0x0008 (size: 0x28)
+    TSoftObjectPtr<class UObject> SoftObjectPointer;                                  // 0x0008 (size: 0x28)
     FSoftObjectPath SoftObjectPath;                                                   // 0x0030 (size: 0x20)
     TWeakObjectPtr<class UObject> WeakObjectPointer;                                  // 0x0050 (size: 0x8)
 
@@ -736,12 +991,15 @@ struct FTimecode
     int32 Minutes;                                                                    // 0x0004 (size: 0x4)
     int32 Seconds;                                                                    // 0x0008 (size: 0x4)
     int32 Frames;                                                                     // 0x000C (size: 0x4)
-    bool bDropFrameFormat;                                                            // 0x0010 (size: 0x1)
+    float SubFrame;                                                                   // 0x0010 (size: 0x4)
+    bool bDropFrameFormat;                                                            // 0x0014 (size: 0x1)
 
-}; // Size: 0x14
+}; // Size: 0x18
 
 struct FTimespan
 {
+    int64 Ticks;                                                                      // 0x0000 (size: 0x8)
+
 }; // Size: 0x8
 
 struct FTopLevelAssetPath
@@ -789,6 +1047,13 @@ struct FUint32Point
 
 }; // Size: 0x8
 
+struct FUint32Rect
+{
+    FUint32Point min;                                                                 // 0x0000 (size: 0x8)
+    FUint32Point max;                                                                 // 0x0008 (size: 0x8)
+
+}; // Size: 0x10
+
 struct FUint32Vector
 {
     uint32 X;                                                                         // 0x0000 (size: 0x4)
@@ -820,6 +1085,13 @@ struct FUint64Point
 
 }; // Size: 0x10
 
+struct FUint64Rect
+{
+    FUint64Point min;                                                                 // 0x0000 (size: 0x10)
+    FUint64Point max;                                                                 // 0x0010 (size: 0x10)
+
+}; // Size: 0x20
+
 struct FUint64Vector
 {
     uint64 X;                                                                         // 0x0000 (size: 0x8)
@@ -850,6 +1122,13 @@ struct FUintPoint
     int32 Y;                                                                          // 0x0004 (size: 0x4)
 
 }; // Size: 0x8
+
+struct FUintRect
+{
+    FUintPoint min;                                                                   // 0x0000 (size: 0x8)
+    FUintPoint max;                                                                   // 0x0008 (size: 0x8)
+
+}; // Size: 0x10
 
 struct FUintVector
 {
@@ -940,6 +1219,38 @@ struct FVector4f
 
 }; // Size: 0x10
 
+struct FVerseClassVarAccessor
+{
+    class UFunction* Func;                                                            // 0x0000 (size: 0x8)
+    bool bIsInstanceMember;                                                           // 0x0008 (size: 0x1)
+    bool bIsFallible;                                                                 // 0x0009 (size: 0x1)
+
+}; // Size: 0x10
+
+struct FVerseClassVarAccessors
+{
+    TMap<int32, FVerseClassVarAccessor> Getters;                                      // 0x0000 (size: 0x50)
+    TMap<int32, FVerseClassVarAccessor> Setters;                                      // 0x0050 (size: 0x50)
+
+}; // Size: 0xA0
+
+struct FVersePersistentVar
+{
+    FString Path;                                                                     // 0x0000 (size: 0x10)
+    TFieldPath<FMapProperty> Property;                                                // 0x0010 (size: 0x20)
+
+}; // Size: 0x30
+
+struct FVerseSessionVar
+{
+    TFieldPath<FMapProperty> Property;                                                // 0x0000 (size: 0x20)
+
+}; // Size: 0x20
+
+class IEditorPathObjectInterface : public IInterface
+{
+}; // Size: 0x28
+
 class IInterface : public UObject
 {
 }; // Size: 0x28
@@ -960,19 +1271,30 @@ class UClass : public UStruct
 {
 }; // Size: 0x200
 
+class UClassCookedMetaData : public UObject
+{
+    FStructCookedMetaDataStore ClassMetaData;                                         // 0x0028 (size: 0xA0)
+    TMap<FName, FStructCookedMetaDataStore> FunctionsMetaData;                        // 0x00C8 (size: 0x50)
+
+}; // Size: 0x118
+
 class UClassProperty : public UObjectProperty
 {
 }; // Size: 0x80
+
+class UDEPRECATED_MetaData : public UObject
+{
+}; // Size: 0xC8
 
 class UDefault__Class
 {
 }; // Size: 0x0
 
-class UDefault__DynamicClass
+class UDefault__LinkerPlaceholderClass
 {
 }; // Size: 0x0
 
-class UDefault__LinkerPlaceholderClass
+class UDefault__VerseClass
 {
 }; // Size: 0x0
 
@@ -988,13 +1310,15 @@ class UDoubleProperty : public UNumericProperty
 {
 }; // Size: 0x70
 
-class UDynamicClass : public UClass
-{
-}; // Size: 0x280
-
 class UEnum : public UField
 {
 }; // Size: 0x68
+
+class UEnumCookedMetaData : public UObject
+{
+    FObjectCookedMetaDataStore EnumMetaData;                                          // 0x0028 (size: 0x50)
+
+}; // Size: 0x78
 
 class UEnumProperty : public UProperty
 {
@@ -1056,10 +1380,6 @@ class UMapProperty : public UProperty
 {
 }; // Size: 0x98
 
-class UMetaData : public UObject
-{
-}; // Size: 0xC8
-
 class UMulticastDelegateProperty : public UProperty
 {
 }; // Size: 0x78
@@ -1112,7 +1432,7 @@ class UObjectRedirector : public UObject
 
 class UPackage : public UObject
 {
-}; // Size: 0x90
+}; // Size: 0x50
 
 class UPackageMap : public UObject
 {
@@ -1121,6 +1441,16 @@ class UPackageMap : public UObject
 class UProperty : public UField
 {
 }; // Size: 0x70
+
+class UPropertyBag : public UScriptStruct
+{
+    TArray<FPropertyBagPropertyDesc> PropertyDescs;                                   // 0x00C0 (size: 0x10)
+
+}; // Size: 0xD8
+
+class UPropertyBagMissingObject : public UObject
+{
+}; // Size: 0x28
 
 class UPropertyWrapper : public UObject
 {
@@ -1154,6 +1484,12 @@ class UStruct : public UField
 {
 }; // Size: 0xB0
 
+class UStructCookedMetaData : public UObject
+{
+    FStructCookedMetaDataStore StructMetaData;                                        // 0x0028 (size: 0xA0)
+
+}; // Size: 0xC8
+
 class UStructProperty : public UProperty
 {
 }; // Size: 0x78
@@ -1177,6 +1513,60 @@ class UUInt32Property : public UNumericProperty
 class UUInt64Property : public UNumericProperty
 {
 }; // Size: 0x70
+
+class UUserDefinedStruct : public UScriptStruct
+{
+    TEnumAsByte<EUserDefinedStructureStatus> Status;                                  // 0x00C0 (size: 0x1)
+    FGuid Guid;                                                                       // 0x00C4 (size: 0x10)
+
+}; // Size: 0x108
+
+class UUserDefinedStructEditorDataBase : public UObject
+{
+}; // Size: 0x28
+
+class UVerseClass : public UClass
+{
+    uint32 SolClassFlags;                                                             // 0x0200 (size: 0x4)
+    TArray<UClass*> TaskClasses;                                                      // 0x0208 (size: 0x10)
+    class UFunction* InitInstanceFunction;                                            // 0x0218 (size: 0x8)
+    TArray<FVersePersistentVar> PersistentVars;                                       // 0x0220 (size: 0x10)
+    TArray<FVerseSessionVar> SessionVars;                                             // 0x0230 (size: 0x10)
+    TMap<FName, FVerseClassVarAccessors> VarAccessors;                                // 0x0240 (size: 0x50)
+    EVerseEffectSet ConstructorEffects;                                               // 0x0290 (size: 0x1)
+    FName MangledPackageVersePath;                                                    // 0x0294 (size: 0x8)
+    FString PackageRelativeVersePath;                                                 // 0x02A0 (size: 0x10)
+    TMap<FName, FName> DisplayNameToUENameFunctionMap;                                // 0x02B0 (size: 0x50)
+    TArray<UClass*> DirectInterfaces;                                                 // 0x0300 (size: 0x10)
+    TArray<TFieldPath<FProperty>> PropertiesWrittenByInitCDO;                         // 0x0310 (size: 0x10)
+    TMap<FName, FName> FunctionMangledNames;                                          // 0x0320 (size: 0x50)
+    TArray<FName> PredictsFunctionNames;                                              // 0x0370 (size: 0x10)
+
+}; // Size: 0x388
+
+class UVerseEnum : public UEnum
+{
+    EVerseEnumFlags VerseEnumFlags;                                                   // 0x0068 (size: 0x4)
+    FUtf8String QualifiedName;                                                        // 0x0070 (size: 0x10)
+
+}; // Size: 0x80
+
+class UVerseFunction : public UFunction
+{
+}; // Size: 0xF0
+
+class UVerseStruct : public UScriptStruct
+{
+    uint32 VerseClassFlags;                                                           // 0x00C0 (size: 0x4)
+    FUtf8String QualifiedName;                                                        // 0x00C8 (size: 0x10)
+    class UFunction* InitFunction;                                                    // 0x00D8 (size: 0x8)
+    UClass* ModuleClass;                                                              // 0x00E0 (size: 0x8)
+    FGuid Guid;                                                                       // 0x00E8 (size: 0x10)
+    class UFunction* FactoryFunction;                                                 // 0x00F8 (size: 0x8)
+    class UFunction* OverrideFactoryFunction;                                         // 0x0100 (size: 0x8)
+    EVerseEffectSet ConstructorEffects;                                               // 0x0108 (size: 0x1)
+
+}; // Size: 0x110
 
 class UWeakObjectProperty : public UObjectPropertyBase
 {

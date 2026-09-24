@@ -3,9 +3,9 @@
 
 class UVehicleDrivingComponent_C : public UBaseComponent_C
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x00B8 (size: 0x8)
-    class ABP_VehicleMaster_C* Vehicle;                                               // 0x00C0 (size: 0x8)
-    FVehicleDrivingComponent_CDeathInVehicle DeathInVehicle;                          // 0x00C8 (size: 0x10)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x00D0 (size: 0x8)
+    class ABP_VehicleMaster_C* Vehicle;                                               // 0x00D8 (size: 0x8)
+    FVehicleDrivingComponent_CDeathInVehicle DeathInVehicle;                          // 0x00E0 (size: 0x10)
     void DeathInVehicle();
 
     void GetName(FString& Name);
@@ -27,6 +27,6 @@ class UVehicleDrivingComponent_C : public UBaseComponent_C
     void Death();
     void ExecuteUbergraph_VehicleDrivingComponent(int32 EntryPoint);
     void DeathInVehicle__DelegateSignature();
-}; // Size: 0xD8
+}; // Size: 0xF0
 
 #endif

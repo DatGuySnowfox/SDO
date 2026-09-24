@@ -33,17 +33,17 @@ class UActorSequence : public UMovieSceneSequence
 
 class UActorSequenceComponent : public UActorComponent
 {
-    FMovieSceneSequencePlaybackSettings PlaybackSettings;                             // 0x00A0 (size: 0x20)
-    class UActorSequence* Sequence;                                                   // 0x00C0 (size: 0x8)
-    class UActorSequencePlayer* SequencePlayer;                                       // 0x00C8 (size: 0x8)
+    FMovieSceneSequencePlaybackSettings PlaybackSettings;                             // 0x00B8 (size: 0x28)
+    class UActorSequence* Sequence;                                                   // 0x00E0 (size: 0x8)
+    class UActorSequencePlayer* SequencePlayer;                                       // 0x00E8 (size: 0x8)
 
     void StopSequence();
     void PlaySequence();
     void PauseSequence();
-}; // Size: 0xD0
+}; // Size: 0xF0
 
 class UActorSequencePlayer : public UMovieSceneSequencePlayer
 {
-}; // Size: 0x4C8
+}; // Size: 0x470
 
 #endif

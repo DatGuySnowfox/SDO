@@ -3,21 +3,21 @@
 
 class ABP_ItemSnapCaptor_C : public AActor
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0298 (size: 0x8)
-    class USpringArmComponent* SpringArm;                                             // 0x02A0 (size: 0x8)
-    class USceneComponent* Scene;                                                     // 0x02A8 (size: 0x8)
-    class USceneComponent* Main;                                                      // 0x02B0 (size: 0x8)
-    class USpotLightComponent* SpotLight;                                             // 0x02B8 (size: 0x8)
-    class USceneCaptureComponent2D* SceneCaptureComponent2D;                          // 0x02C0 (size: 0x8)
-    double InitialFOV;                                                                // 0x02C8 (size: 0x8)
-    class UJSI_Slot_C* ItemToInspect;                                                 // 0x02D0 (size: 0x8)
-    TMap<class FName, class UTextureRenderTarget2D*> CreatedRenderTargets;            // 0x02D8 (size: 0x50)
-    bool IsLocked?;                                                                   // 0x0328 (size: 0x1)
-    bool Streaming?;                                                                  // 0x0329 (size: 0x1)
-    TArray<class ABP_AMainLocalAttachment_C*> CurrentAttachments;                     // 0x0330 (size: 0x10)
-    FBP_ItemSnapCaptor_COnSnapTaken OnSnapTaken;                                      // 0x0340 (size: 0x10)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02A8 (size: 0x8)
+    class USpringArmComponent* SpringArm;                                             // 0x02B0 (size: 0x8)
+    class USceneComponent* Scene;                                                     // 0x02B8 (size: 0x8)
+    class USceneComponent* Main;                                                      // 0x02C0 (size: 0x8)
+    class USpotLightComponent* SpotLight;                                             // 0x02C8 (size: 0x8)
+    class USceneCaptureComponent2D* SceneCaptureComponent2D;                          // 0x02D0 (size: 0x8)
+    double InitialFOV;                                                                // 0x02D8 (size: 0x8)
+    class UJSI_Slot_C* ItemToInspect;                                                 // 0x02E0 (size: 0x8)
+    TMap<FName, UTextureRenderTarget2D*> CreatedRenderTargets;                        // 0x02E8 (size: 0x50)
+    bool IsLocked?;                                                                   // 0x0338 (size: 0x1)
+    bool Streaming?;                                                                  // 0x0339 (size: 0x1)
+    TArray<ABP_AMainLocalAttachment_C*> CurrentAttachments;                           // 0x0340 (size: 0x10)
+    FBP_ItemSnapCaptor_COnSnapTaken OnSnapTaken;                                      // 0x0350 (size: 0x10)
     void OnSnapTaken();
-    class USceneComponent* ItemMeshComp;                                              // 0x0350 (size: 0x8)
+    class USceneComponent* ItemMeshComp;                                              // 0x0360 (size: 0x8)
 
     void CaptureFromTargetCustom(class UTextureRenderTarget2D* TextureTarget, bool& GoNext?);
     void RemoveIronsights(bool Hide?, class ABP_AMainLocalAttachment_C* Attachment, class USceneComponent* SceneComp);
@@ -42,6 +42,6 @@ class ABP_ItemSnapCaptor_C : public AActor
     void CaptureSnap();
     void ExecuteUbergraph_BP_ItemSnapCaptor(int32 EntryPoint);
     void OnSnapTaken__DelegateSignature();
-}; // Size: 0x358
+}; // Size: 0x368
 
 #endif

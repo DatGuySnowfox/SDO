@@ -3,6 +3,6 @@
 
 class UUI_RadialIcon_C : public UUMG_BasicRadialIcon_C
 {
-}; // Size: 0x340
+}; // Size: 0x3C0
 
 #endif

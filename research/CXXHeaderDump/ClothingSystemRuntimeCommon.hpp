@@ -46,13 +46,12 @@ struct FClothConstraintSetup_Legacy
 
 struct FClothLODDataCommon
 {
-    FClothPhysicalMeshData PhysicalMeshData;                                          // 0x0000 (size: 0xD8)
-    FClothCollisionData CollisionData;                                                // 0x00D8 (size: 0x40)
-    bool bUseMultipleInfluences;                                                      // 0x0118 (size: 0x1)
-    float SkinningKernelRadius;                                                       // 0x011C (size: 0x4)
-    bool bSmoothTransition;                                                           // 0x0120 (size: 0x1)
+    FClothPhysicalMeshData PhysicalMeshData;                                          // 0x0000 (size: 0x128)
+    bool bUseMultipleInfluences;                                                      // 0x0128 (size: 0x1)
+    float SkinningKernelRadius;                                                       // 0x012C (size: 0x4)
+    bool bSmoothTransition;                                                           // 0x0130 (size: 0x1)
 
-}; // Size: 0x148
+}; // Size: 0x158
 
 struct FClothParameterMask_Legacy
 {
@@ -73,13 +72,14 @@ struct FClothPhysicalMeshData
     TMap<uint32, FPointWeightMap> WeightMaps;                                         // 0x0030 (size: 0x50)
     TArray<float> InverseMasses;                                                      // 0x0080 (size: 0x10)
     TArray<FClothVertBoneData> BoneData;                                              // 0x0090 (size: 0x10)
-    TArray<uint32> SelfCollisionIndices;                                              // 0x00A0 (size: 0x10)
-    FClothTetherData EuclideanTethers;                                                // 0x00B0 (size: 0x10)
-    FClothTetherData GeodesicTethers;                                                 // 0x00C0 (size: 0x10)
-    int32 MaxBoneWeights;                                                             // 0x00D0 (size: 0x4)
-    int32 NumFixedVerts;                                                              // 0x00D4 (size: 0x4)
+    TSet<int32> SelfCollisionVertexSet;                                               // 0x00A0 (size: 0x50)
+    FClothTetherData EuclideanTethers;                                                // 0x00F0 (size: 0x10)
+    FClothTetherData GeodesicTethers;                                                 // 0x0100 (size: 0x10)
+    int32 MaxBoneWeights;                                                             // 0x0110 (size: 0x4)
+    int32 NumFixedVerts;                                                              // 0x0114 (size: 0x4)
+    TArray<uint32> SelfCollisionIndices;                                              // 0x0118 (size: 0x10)
 
-}; // Size: 0xD8
+}; // Size: 0x128
 
 struct FClothTetherData
 {
@@ -98,10 +98,10 @@ class UClothConfigCommon : public UClothConfigBase
 class UClothLODDataCommon_Legacy : public UObject
 {
     class UClothPhysicalMeshDataBase_Legacy* PhysicalMeshData;                        // 0x0028 (size: 0x8)
-    FClothPhysicalMeshData ClothPhysicalMeshData;                                     // 0x0030 (size: 0xD8)
-    FClothCollisionData CollisionData;                                                // 0x0108 (size: 0x40)
+    FClothPhysicalMeshData ClothPhysicalMeshData;                                     // 0x0030 (size: 0x128)
+    FClothCollisionData CollisionData;                                                // 0x0158 (size: 0x40)
 
-}; // Size: 0x168
+}; // Size: 0x1B8
 
 class UClothSharedConfigCommon : public UClothConfigCommon
 {
@@ -109,16 +109,15 @@ class UClothSharedConfigCommon : public UClothConfigCommon
 
 class UClothingAssetCommon : public UClothingAssetBase
 {
-    class UPhysicsAsset* PhysicsAsset;                                                // 0x0048 (size: 0x8)
-    TMap<class FName, class UClothConfigBase*> ClothConfigs;                          // 0x0050 (size: 0x50)
-    TArray<FClothLODDataCommon> LODData;                                              // 0x00A0 (size: 0x10)
-    TArray<int32> LodMap;                                                             // 0x00B0 (size: 0x10)
-    TArray<FName> UsedBoneNames;                                                      // 0x00C0 (size: 0x10)
-    TArray<int32> UsedBoneIndices;                                                    // 0x00D0 (size: 0x10)
-    int32 ReferenceBoneIndex;                                                         // 0x00E0 (size: 0x4)
-    class UClothingAssetCustomData* CustomData;                                       // 0x00E8 (size: 0x8)
+    class UPhysicsAsset* PhysicsAsset;                                                // 0x0038 (size: 0x8)
+    TMap<FName, UClothConfigBase*> ClothConfigs;                                      // 0x0040 (size: 0x50)
+    TArray<FClothLODDataCommon> LODData;                                              // 0x0090 (size: 0x10)
+    TArray<int32> LodMap;                                                             // 0x00A0 (size: 0x10)
+    TArray<FName> UsedBoneNames;                                                      // 0x00B0 (size: 0x10)
+    TArray<int32> UsedBoneIndices;                                                    // 0x00C0 (size: 0x10)
+    int32 ReferenceBoneIndex;                                                         // 0x00D0 (size: 0x4)
 
-}; // Size: 0xF0
+}; // Size: 0xD8
 
 class UClothingAssetCustomData : public UObject
 {

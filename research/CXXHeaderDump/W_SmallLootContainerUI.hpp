@@ -3,20 +3,20 @@
 
 class UW_SmallLootContainerUI_C : public UUserWidget
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02C0 (size: 0x8)
-    class UButton* Button_66;                                                         // 0x02C8 (size: 0x8)
-    class UTextBlock* LootAllText;                                                    // 0x02D0 (size: 0x8)
-    class UJSIContainer_C* MainContainer;                                             // 0x02D8 (size: 0x8)
-    TArray<class UJSI_Slot_C*> Array Of Items;                                        // 0x02E0 (size: 0x10)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0340 (size: 0x8)
+    class UJSIContainer_C* MainContainer;                                             // 0x0348 (size: 0x8)
+    class UTextBlock* LootAllText;                                                    // 0x0350 (size: 0x8)
+    class UButton* Button_66;                                                         // 0x0358 (size: 0x8)
+    TArray<UJSI_Slot_C*> Array Of Items;                                              // 0x0360 (size: 0x10)
 
     void GetLootContent(class UUserWidget*& Widget);
-    void GetValidReloadContainers(TArray<class UJSIContainer_C*>& Containers);
+    void GetValidReloadContainers(TArray<UJSIContainer_C*>& Containers);
     void SetActionbarFollower(class UJSI_Slot_C* JigRef, bool& Return);
     void GetAllAttachments(TArray<FName>& Attachments);
-    void GetListOfNonAddContainers(TArray<class UJSIContainer_C*>& Containers);
+    void GetListOfNonAddContainers(TArray<UJSIContainer_C*>& Containers);
     void GetJSIContainerByPlayerSlots(FGameplayTag Slot, class UJSIContainer_C*& Container, class UJSI_Slot_C*& EquippedItem, bool& IsPending?);
     void GetDropWidget(class UDropItemBackGwidget_C*& DropWRef);
-    void GetListOfContainers(TArray<class UJSIContainer_C*>& Containers);
+    void GetListOfContainers(TArray<UJSIContainer_C*>& Containers);
     void GetContainerByAttachmentType(FGameplayTag Type, class UJSIContainer_C*& JigContainer, int32& ContainerIndex);
     FEventReply OnKeyDown(FGeometry MyGeometry, FKeyEvent InKeyEvent);
     void SetItemReference(class UJSI_Slot_C* ItemRef);
@@ -31,6 +31,6 @@ class UW_SmallLootContainerUI_C : public UUserWidget
     void Tick(FGeometry MyGeometry, float InDeltaTime);
     void OnInitialized();
     void ExecuteUbergraph_W_SmallLootContainerUI(int32 EntryPoint);
-}; // Size: 0x2F0
+}; // Size: 0x370
 
 #endif

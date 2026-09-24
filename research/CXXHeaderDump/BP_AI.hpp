@@ -3,12 +3,12 @@
 
 class ABP_AI_C : public ACharacter
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0680 (size: 0x8)
-    bool Dead;                                                                        // 0x0688 (size: 0x1)
-    bool BloodSplatterEnabled?;                                                       // 0x0689 (size: 0x1)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0650 (size: 0x8)
+    bool Dead;                                                                        // 0x0658 (size: 0x1)
+    bool BloodSplatterEnabled?;                                                       // 0x0659 (size: 0x1)
 
     void Event_BloodSplatter();
     void ExecuteUbergraph_BP_AI(int32 EntryPoint);
-}; // Size: 0x68A
+}; // Size: 0x65A
 
 #endif

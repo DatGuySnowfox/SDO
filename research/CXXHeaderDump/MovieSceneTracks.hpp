@@ -3,16 +3,30 @@
 
 #include "MovieSceneTracks_enums.hpp"
 
-struct FBoolParameterNameAndCurve
+struct FBaseParameterNameAndValue
 {
     FName ParameterName;                                                              // 0x0000 (size: 0x8)
-    FMovieSceneBoolChannel ParameterCurve;                                            // 0x0008 (size: 0x100)
 
-}; // Size: 0x108
+}; // Size: 0x8
 
-struct FColorParameterNameAndCurves
+struct FBoolParameterNameAndCurve : public FBaseParameterNameAndValue
 {
-    FName ParameterName;                                                              // 0x0000 (size: 0x8)
+    FMovieSceneBoolChannel ParameterCurve;                                            // 0x0008 (size: 0x108)
+
+}; // Size: 0x110
+
+struct FColorMaterialParameterInfoAndCurves
+{
+    FMaterialParameterInfo ParameterInfo;                                             // 0x0000 (size: 0x10)
+    FMovieSceneFloatChannel RedCurve;                                                 // 0x0010 (size: 0x110)
+    FMovieSceneFloatChannel GreenCurve;                                               // 0x0120 (size: 0x110)
+    FMovieSceneFloatChannel BlueCurve;                                                // 0x0230 (size: 0x110)
+    FMovieSceneFloatChannel AlphaCurve;                                               // 0x0340 (size: 0x110)
+
+}; // Size: 0x450
+
+struct FColorParameterNameAndCurves : public FBaseParameterNameAndValue
+{
     FMovieSceneFloatChannel RedCurve;                                                 // 0x0008 (size: 0x110)
     FMovieSceneFloatChannel GreenCurve;                                               // 0x0118 (size: 0x110)
     FMovieSceneFloatChannel BlueCurve;                                                // 0x0228 (size: 0x110)
@@ -20,18 +34,26 @@ struct FColorParameterNameAndCurves
 
 }; // Size: 0x448
 
-struct FConstraintComponentData
+struct FComponentMaterialInfo
 {
-    FName ConstraintName;                                                             // 0x0000 (size: 0x8)
+    FName MaterialSlotName;                                                           // 0x0000 (size: 0x8)
+    int32 MaterialSlotIndex;                                                          // 0x0008 (size: 0x4)
+    EComponentMaterialType MaterialType;                                              // 0x000C (size: 0x1)
 
 }; // Size: 0x10
+
+struct FConstraintComponentData
+{
+    FGuid ConstraintID;                                                               // 0x0000 (size: 0x10)
+
+}; // Size: 0x18
 
 struct FEventPayload
 {
     FName EventName;                                                                  // 0x0000 (size: 0x8)
-    FMovieSceneEventParameters Parameters;                                            // 0x0008 (size: 0x30)
+    FMovieSceneEventParameters Parameters;                                            // 0x0008 (size: 0x40)
 
-}; // Size: 0x38
+}; // Size: 0x48
 
 struct FLevelVisibilityComponentData
 {
@@ -139,15 +161,32 @@ struct FMovieSceneBaseCacheSectionTemplateParameters
 
 struct FMovieSceneBoolPropertySectionTemplate : public FMovieScenePropertySectionTemplate
 {
-    FMovieSceneBoolChannel BoolCurve;                                                 // 0x0038 (size: 0x100)
+    FMovieSceneBoolChannel BoolCurve;                                                 // 0x0038 (size: 0x108)
 
-}; // Size: 0x138
+}; // Size: 0x140
 
 struct FMovieSceneCVarOverrides
 {
-    TMap<class FString, class FString> ValuesByCVar;                                  // 0x0000 (size: 0x50)
+    TMap<FString, FString> ValuesByCVar;                                              // 0x0000 (size: 0x50)
 
 }; // Size: 0x50
+
+struct FMovieSceneCameraShakeComponentData
+{
+    FMovieSceneCameraShakeSectionData SectionData;                                    // 0x0000 (size: 0x28)
+    FFrameNumber SectionStartTime;                                                    // 0x0028 (size: 0x4)
+    FFrameNumber SectionEndTime;                                                      // 0x002C (size: 0x4)
+    FGuid SectionSignature;                                                           // 0x0030 (size: 0x10)
+
+}; // Size: 0x40
+
+struct FMovieSceneCameraShakeInstanceData
+{
+    class UCameraShakeBase* ShakeInstance;                                            // 0x0000 (size: 0x8)
+    FGuid SectionSignature;                                                           // 0x0008 (size: 0x10)
+    bool bManagedByPreviewer;                                                         // 0x0018 (size: 0x1)
+
+}; // Size: 0x20
 
 struct FMovieSceneCameraShakeSectionData
 {
@@ -157,21 +196,6 @@ struct FMovieSceneCameraShakeSectionData
     FRotator UserDefinedPlaySpace;                                                    // 0x0010 (size: 0x18)
 
 }; // Size: 0x28
-
-struct FMovieSceneCameraShakeSectionTemplate : public FMovieSceneEvalTemplate
-{
-    FMovieSceneCameraShakeSectionData SourceData;                                     // 0x0020 (size: 0x28)
-    FFrameNumber SectionStartTime;                                                    // 0x0048 (size: 0x4)
-
-}; // Size: 0x50
-
-struct FMovieSceneCameraShakeSourceShakeSectionTemplate : public FMovieSceneEvalTemplate
-{
-    FMovieSceneCameraShakeSectionData SourceData;                                     // 0x0020 (size: 0x28)
-    FFrameNumber SectionStartTime;                                                    // 0x0048 (size: 0x4)
-    FFrameNumber SectionEndTime;                                                      // 0x004C (size: 0x4)
-
-}; // Size: 0x50
 
 struct FMovieSceneCameraShakeSourceTrigger
 {
@@ -189,13 +213,6 @@ struct FMovieSceneCameraShakeSourceTriggerChannel : public FMovieSceneChannel
     FMovieSceneKeyHandleMap KeyHandles;                                               // 0x0070 (size: 0x88)
 
 }; // Size: 0xF8
-
-struct FMovieSceneCameraShakeSourceTriggerSectionTemplate : public FMovieSceneEvalTemplate
-{
-    TArray<FFrameNumber> TriggerTimes;                                                // 0x0020 (size: 0x10)
-    TArray<FMovieSceneCameraShakeSourceTrigger> TriggerValues;                        // 0x0030 (size: 0x10)
-
-}; // Size: 0x40
 
 struct FMovieSceneColorKeyStruct : public FMovieSceneKeyStruct
 {
@@ -216,6 +233,20 @@ struct FMovieSceneDataLayerComponentData
     class UMovieSceneDataLayerSection* Section;                                       // 0x0000 (size: 0x8)
 
 }; // Size: 0x8
+
+struct FMovieSceneDirectorBlueprintConditionData
+{
+    class UFunction* Function;                                                        // 0x0000 (size: 0x8)
+    TFieldPath<FProperty> ConditionContextProperty;                                   // 0x0008 (size: 0x20)
+
+}; // Size: 0x28
+
+struct FMovieSceneDirectorBlueprintConditionPayloadVariable
+{
+    FSoftObjectPath ObjectValue;                                                      // 0x0000 (size: 0x20)
+    FString Value;                                                                    // 0x0020 (size: 0x10)
+
+}; // Size: 0x30
 
 struct FMovieSceneDoublePerlinNoiseChannel : public FMovieSceneChannel
 {
@@ -245,13 +276,14 @@ struct FMovieSceneEventChannel : public FMovieSceneChannel
 
 struct FMovieSceneEventParameters
 {
-}; // Size: 0x30
+}; // Size: 0x40
 
 struct FMovieSceneEventPayloadVariable
 {
-    FString Value;                                                                    // 0x0000 (size: 0x10)
+    FSoftObjectPath ObjectValue;                                                      // 0x0000 (size: 0x20)
+    FString Value;                                                                    // 0x0020 (size: 0x10)
 
-}; // Size: 0x10
+}; // Size: 0x30
 
 struct FMovieSceneEventPtrs
 {
@@ -295,11 +327,9 @@ struct FMovieSceneFloatVectorKeyStructBase : public FMovieSceneKeyStruct
 
 }; // Size: 0x28
 
-struct FMovieSceneObjectPropertyTemplate : public FMovieScenePropertySectionTemplate
+struct FMovieSceneMixedAnimationTarget
 {
-    FMovieSceneObjectPathChannel ObjectChannel;                                       // 0x0038 (size: 0x130)
-
-}; // Size: 0x168
+}; // Size: 0x10
 
 struct FMovieSceneParameterSectionTemplate : public FMovieSceneEvalTemplate
 {
@@ -314,7 +344,7 @@ struct FMovieSceneParameterSectionTemplate : public FMovieSceneEvalTemplate
 
 struct FMovieSceneParticleChannel : public FMovieSceneByteChannel
 {
-}; // Size: 0x108
+}; // Size: 0x110
 
 struct FMovieSceneParticleParameterSectionTemplate : public FMovieSceneParameterSectionTemplate
 {
@@ -322,14 +352,14 @@ struct FMovieSceneParticleParameterSectionTemplate : public FMovieSceneParameter
 
 struct FMovieSceneParticleSectionTemplate : public FMovieSceneEvalTemplate
 {
-    FMovieSceneParticleChannel ParticleKeys;                                          // 0x0020 (size: 0x108)
+    FMovieSceneParticleChannel ParticleKeys;                                          // 0x0020 (size: 0x110)
 
-}; // Size: 0x128
+}; // Size: 0x130
 
 struct FMovieScenePreAnimatedMaterialParameters
 {
     class UMaterialInterface* PreviousMaterial;                                       // 0x0000 (size: 0x8)
-    TSoftObjectPtr<UMaterialInterface> SoftPreviousMaterial;                          // 0x0008 (size: 0x28)
+    TSoftObjectPtr<class UMaterialInterface> SoftPreviousMaterial;                    // 0x0008 (size: 0x28)
 
 }; // Size: 0x30
 
@@ -349,24 +379,19 @@ struct FMovieSceneSkeletalAnimationParams
     FFrameNumber FirstLoopStartFrameOffset;                                           // 0x0008 (size: 0x4)
     FFrameNumber StartFrameOffset;                                                    // 0x000C (size: 0x4)
     FFrameNumber EndFrameOffset;                                                      // 0x0010 (size: 0x4)
-    float PlayRate;                                                                   // 0x0014 (size: 0x4)
-    uint8 bReverse;                                                                   // 0x0018 (size: 0x1)
-    FName SlotName;                                                                   // 0x001C (size: 0x8)
-    class UMirrorDataTable* MirrorDataTable;                                          // 0x0028 (size: 0x8)
-    FMovieSceneFloatChannel Weight;                                                   // 0x0030 (size: 0x110)
-    bool bSkipAnimNotifiers;                                                          // 0x0140 (size: 0x1)
-    bool bForceCustomMode;                                                            // 0x0141 (size: 0x1)
-    ESwapRootBone SwapRootBone;                                                       // 0x0142 (size: 0x1)
-    float StartOffset;                                                                // 0x0144 (size: 0x4)
-    float EndOffset;                                                                  // 0x0148 (size: 0x4)
+    FMovieSceneTimeWarpVariant PlayRate;                                              // 0x0018 (size: 0x8)
+    uint8 bReverse;                                                                   // 0x0020 (size: 0x1)
+    FName SlotName;                                                                   // 0x0024 (size: 0x8)
+    class UMirrorDataTable* MirrorDataTable;                                          // 0x0030 (size: 0x8)
+    FMovieSceneFloatChannel Weight;                                                   // 0x0038 (size: 0x110)
+    bool bSkipAnimNotifiers;                                                          // 0x0148 (size: 0x1)
+    bool bForceCustomMode;                                                            // 0x0149 (size: 0x1)
+    ESwapRootBone SwapRootBone;                                                       // 0x014A (size: 0x1)
+    bool bLinearPlaybackWhenScaled;                                                   // 0x014B (size: 0x1)
+    float StartOffset;                                                                // 0x014C (size: 0x4)
+    float EndOffset;                                                                  // 0x0150 (size: 0x4)
 
-}; // Size: 0x150
-
-struct FMovieSceneSlomoSectionTemplate : public FMovieSceneEvalTemplate
-{
-    FMovieSceneFloatChannel SlomoCurve;                                               // 0x0020 (size: 0x110)
-
-}; // Size: 0x130
+}; // Size: 0x158
 
 struct FMovieSceneStringChannel : public FMovieSceneChannel
 {
@@ -420,10 +445,6 @@ struct FMovieSceneVector4fKeyStruct : public FMovieSceneFloatVectorKeyStructBase
 
 }; // Size: 0x40
 
-struct FMovieSceneVisibilitySectionTemplate : public FMovieSceneBoolPropertySectionTemplate
-{
-}; // Size: 0x138
-
 struct FPerlinNoiseParams
 {
     float Frequency;                                                                  // 0x0000 (size: 0x4)
@@ -432,33 +453,36 @@ struct FPerlinNoiseParams
 
 }; // Size: 0x18
 
-struct FScalarParameterNameAndCurve
+struct FScalarMaterialParameterInfoAndCurve
 {
-    FName ParameterName;                                                              // 0x0000 (size: 0x8)
+    FMaterialParameterInfo ParameterInfo;                                             // 0x0000 (size: 0x10)
+    FMovieSceneFloatChannel ParameterCurve;                                           // 0x0010 (size: 0x110)
+
+}; // Size: 0x120
+
+struct FScalarParameterNameAndCurve : public FBaseParameterNameAndValue
+{
     FMovieSceneFloatChannel ParameterCurve;                                           // 0x0008 (size: 0x110)
 
 }; // Size: 0x118
 
-struct FTransformParameterNameAndCurves
+struct FTransformParameterNameAndCurves : public FBaseParameterNameAndValue
 {
-    FName ParameterName;                                                              // 0x0000 (size: 0x8)
     FMovieSceneFloatChannel Translation;                                              // 0x0008 (size: 0x330)
     FMovieSceneFloatChannel Rotation;                                                 // 0x0338 (size: 0x330)
     FMovieSceneFloatChannel Scale;                                                    // 0x0668 (size: 0x330)
 
 }; // Size: 0x998
 
-struct FVector2DParameterNameAndCurves
+struct FVector2DParameterNameAndCurves : public FBaseParameterNameAndValue
 {
-    FName ParameterName;                                                              // 0x0000 (size: 0x8)
     FMovieSceneFloatChannel XCurve;                                                   // 0x0008 (size: 0x110)
     FMovieSceneFloatChannel YCurve;                                                   // 0x0118 (size: 0x110)
 
 }; // Size: 0x228
 
-struct FVectorParameterNameAndCurves
+struct FVectorParameterNameAndCurves : public FBaseParameterNameAndValue
 {
-    FName ParameterName;                                                              // 0x0000 (size: 0x8)
     FMovieSceneFloatChannel XCurve;                                                   // 0x0008 (size: 0x110)
     FMovieSceneFloatChannel YCurve;                                                   // 0x0118 (size: 0x110)
     FMovieSceneFloatChannel ZCurve;                                                   // 0x0228 (size: 0x110)
@@ -474,6 +498,10 @@ class IMovieSceneConstrainedSection : public IInterface
 }; // Size: 0x28
 
 class IMovieSceneParameterSectionExtender : public IInterface
+{
+}; // Size: 0x28
+
+class IMovieSceneSectionsToKey : public IInterface
 {
 }; // Size: 0x28
 
@@ -513,50 +541,50 @@ class UIntegerChannelEvaluatorSystem : public UMovieSceneEntitySystem
 
 class UMovieScene3DAttachSection : public UMovieScene3DConstraintSection
 {
-    FName AttachSocketName;                                                           // 0x0120 (size: 0x8)
-    FName AttachComponentName;                                                        // 0x0128 (size: 0x8)
-    EAttachmentRule AttachmentLocationRule;                                           // 0x0130 (size: 0x1)
-    EAttachmentRule AttachmentRotationRule;                                           // 0x0131 (size: 0x1)
-    EAttachmentRule AttachmentScaleRule;                                              // 0x0132 (size: 0x1)
-    EDetachmentRule DetachmentLocationRule;                                           // 0x0133 (size: 0x1)
-    EDetachmentRule DetachmentRotationRule;                                           // 0x0134 (size: 0x1)
-    EDetachmentRule DetachmentScaleRule;                                              // 0x0135 (size: 0x1)
+    FName AttachSocketName;                                                           // 0x0138 (size: 0x8)
+    FName AttachComponentName;                                                        // 0x0140 (size: 0x8)
+    EAttachmentRule AttachmentLocationRule;                                           // 0x0148 (size: 0x1)
+    EAttachmentRule AttachmentRotationRule;                                           // 0x0149 (size: 0x1)
+    EAttachmentRule AttachmentScaleRule;                                              // 0x014A (size: 0x1)
+    EDetachmentRule DetachmentLocationRule;                                           // 0x014B (size: 0x1)
+    EDetachmentRule DetachmentRotationRule;                                           // 0x014C (size: 0x1)
+    EDetachmentRule DetachmentScaleRule;                                              // 0x014D (size: 0x1)
 
-}; // Size: 0x138
+}; // Size: 0x150
 
 class UMovieScene3DAttachTrack : public UMovieScene3DConstraintTrack
 {
-}; // Size: 0xA8
+}; // Size: 0x120
 
 class UMovieScene3DConstraintSection : public UMovieSceneSection
 {
-    FGuid ConstraintId;                                                               // 0x00F0 (size: 0x10)
-    FMovieSceneObjectBindingID ConstraintBindingID;                                   // 0x0100 (size: 0x18)
+    FGuid ConstraintID;                                                               // 0x0108 (size: 0x10)
+    FMovieSceneObjectBindingID ConstraintBindingID;                                   // 0x0118 (size: 0x18)
 
     void SetConstraintBindingID(const FMovieSceneObjectBindingID& InConstraintBindingID);
     FMovieSceneObjectBindingID GetConstraintBindingID();
-}; // Size: 0x118
+}; // Size: 0x130
 
 class UMovieScene3DConstraintTrack : public UMovieSceneTrack
 {
-    TArray<class UMovieSceneSection*> ConstraintSections;                             // 0x0098 (size: 0x10)
+    TArray<UMovieSceneSection*> ConstraintSections;                                   // 0x0110 (size: 0x10)
 
-}; // Size: 0xA8
+}; // Size: 0x120
 
 class UMovieScene3DPathSection : public UMovieScene3DConstraintSection
 {
-    FMovieSceneFloatChannel TimingCurve;                                              // 0x0118 (size: 0x110)
-    MovieScene3DPathSection_Axis FrontAxisEnum;                                       // 0x0228 (size: 0x1)
-    MovieScene3DPathSection_Axis UpAxisEnum;                                          // 0x0229 (size: 0x1)
-    uint8 bFollow;                                                                    // 0x022C (size: 0x1)
-    uint8 bReverse;                                                                   // 0x022C (size: 0x1)
-    uint8 bForceUpright;                                                              // 0x022C (size: 0x1)
+    FMovieSceneFloatChannel TimingCurve;                                              // 0x0130 (size: 0x110)
+    MovieScene3DPathSection_Axis FrontAxisEnum;                                       // 0x0240 (size: 0x1)
+    MovieScene3DPathSection_Axis UpAxisEnum;                                          // 0x0241 (size: 0x1)
+    uint8 bFollow;                                                                    // 0x0244 (size: 0x1)
+    uint8 bReverse;                                                                   // 0x0244 (size: 0x1)
+    uint8 bForceUpright;                                                              // 0x0244 (size: 0x1)
 
-}; // Size: 0x230
+}; // Size: 0x248
 
 class UMovieScene3DPathTrack : public UMovieScene3DConstraintTrack
 {
-}; // Size: 0xB0
+}; // Size: 0x128
 
 class UMovieScene3DTransformPropertySystem : public UMovieScenePropertySystem
 {
@@ -564,16 +592,16 @@ class UMovieScene3DTransformPropertySystem : public UMovieScenePropertySystem
 
 class UMovieScene3DTransformSection : public UMovieSceneSection
 {
-    FMovieSceneTransformMask TransformMask;                                           // 0x0130 (size: 0x4)
-    FMovieSceneDoubleChannel Translation;                                             // 0x0138 (size: 0x348)
-    FMovieSceneDoubleChannel Rotation;                                                // 0x0480 (size: 0x348)
-    FMovieSceneDoubleChannel Scale;                                                   // 0x07C8 (size: 0x348)
-    FMovieSceneFloatChannel ManualWeight;                                             // 0x0B10 (size: 0x110)
-    class UMovieSceneSectionChannelOverrideRegistry* OverrideRegistry;                // 0x0C20 (size: 0x8)
-    class UMovieScene3DTransformSectionConstraints* Constraints;                      // 0x0C28 (size: 0x8)
-    bool bUseQuaternionInterpolation;                                                 // 0x0C30 (size: 0x1)
+    FMovieSceneTransformMask TransformMask;                                           // 0x0148 (size: 0x4)
+    FMovieSceneDoubleChannel Translation;                                             // 0x0150 (size: 0x348)
+    FMovieSceneDoubleChannel Rotation;                                                // 0x0498 (size: 0x348)
+    FMovieSceneDoubleChannel Scale;                                                   // 0x07E0 (size: 0x348)
+    FMovieSceneFloatChannel ManualWeight;                                             // 0x0B28 (size: 0x110)
+    class UMovieSceneSectionChannelOverrideRegistry* OverrideRegistry;                // 0x0C38 (size: 0x8)
+    class UMovieScene3DTransformSectionConstraints* Constraints;                      // 0x0C40 (size: 0x8)
+    bool bUseQuaternionInterpolation;                                                 // 0x0C48 (size: 0x1)
 
-}; // Size: 0xC38
+}; // Size: 0xC50
 
 class UMovieScene3DTransformSectionConstraints : public UObject
 {
@@ -583,21 +611,21 @@ class UMovieScene3DTransformSectionConstraints : public UObject
 
 class UMovieScene3DTransformTrack : public UMovieScenePropertyTrack
 {
-    TSubclassOf<class UMovieSceneBlenderSystem> BlenderSystemClass;                   // 0x00D0 (size: 0x8)
+    TSubclassOf<class UMovieSceneBlenderSystem> BlenderSystemClass;                   // 0x0148 (size: 0x8)
 
-}; // Size: 0xD8
+}; // Size: 0x150
 
 class UMovieSceneActorReferenceSection : public UMovieSceneSection
 {
-    FMovieSceneActorReferenceData ActorReferenceData;                                 // 0x00F0 (size: 0x120)
-    FIntegralCurve ActorGuidIndexCurve;                                               // 0x0210 (size: 0x80)
-    TArray<FString> ActorGuidStrings;                                                 // 0x0290 (size: 0x10)
+    FMovieSceneActorReferenceData ActorReferenceData;                                 // 0x0108 (size: 0x120)
+    FIntegralCurve ActorGuidIndexCurve;                                               // 0x0228 (size: 0x80)
+    TArray<FString> ActorGuidStrings;                                                 // 0x02A8 (size: 0x10)
 
-}; // Size: 0x2A0
+}; // Size: 0x2B8
 
 class UMovieSceneActorReferenceTrack : public UMovieScenePropertyTrack
 {
-}; // Size: 0xD0
+}; // Size: 0x148
 
 class UMovieSceneAsyncAction_SequencePrediction : public UBlueprintAsyncActionBase
 {
@@ -616,29 +644,29 @@ class UMovieSceneAsyncAction_SequencePrediction : public UBlueprintAsyncActionBa
 
 class UMovieSceneAudioSection : public UMovieSceneSection
 {
-    class USoundBase* Sound;                                                          // 0x00F8 (size: 0x8)
-    FFrameNumber StartFrameOffset;                                                    // 0x0100 (size: 0x4)
-    float StartOffset;                                                                // 0x0104 (size: 0x4)
-    float AudioStartTime;                                                             // 0x0108 (size: 0x4)
-    float AudioDilationFactor;                                                        // 0x010C (size: 0x4)
-    float AudioVolume;                                                                // 0x0110 (size: 0x4)
-    FMovieSceneFloatChannel SoundVolume;                                              // 0x0118 (size: 0x110)
-    FMovieSceneFloatChannel PitchMultiplier;                                          // 0x0228 (size: 0x110)
-    TMap<class FName, class FMovieSceneFloatChannel> Inputs_Float;                    // 0x0338 (size: 0x50)
-    TMap<class FName, class FMovieSceneStringChannel> Inputs_String;                  // 0x0388 (size: 0x50)
-    TMap<class FName, class FMovieSceneBoolChannel> Inputs_Bool;                      // 0x03D8 (size: 0x50)
-    TMap<class FName, class FMovieSceneIntegerChannel> Inputs_Int;                    // 0x0428 (size: 0x50)
-    TMap<class FName, class FMovieSceneAudioTriggerChannel> Inputs_Trigger;           // 0x0478 (size: 0x50)
-    FMovieSceneActorReferenceData AttachActorData;                                    // 0x04C8 (size: 0x120)
-    bool bLooping;                                                                    // 0x05E8 (size: 0x1)
-    bool bSuppressSubtitles;                                                          // 0x05E9 (size: 0x1)
-    bool bOverrideAttenuation;                                                        // 0x05EA (size: 0x1)
-    class USoundAttenuation* AttenuationSettings;                                     // 0x05F0 (size: 0x8)
-    FMovieSceneAudioSectionOnQueueSubtitles OnQueueSubtitles;                         // 0x05F8 (size: 0x10)
+    class USoundBase* Sound;                                                          // 0x0118 (size: 0x8)
+    FFrameNumber StartFrameOffset;                                                    // 0x0120 (size: 0x4)
+    float StartOffset;                                                                // 0x0124 (size: 0x4)
+    float AudioStartTime;                                                             // 0x0128 (size: 0x4)
+    float AudioDilationFactor;                                                        // 0x012C (size: 0x4)
+    float AudioVolume;                                                                // 0x0130 (size: 0x4)
+    FMovieSceneFloatChannel SoundVolume;                                              // 0x0138 (size: 0x110)
+    FMovieSceneFloatChannel PitchMultiplier;                                          // 0x0248 (size: 0x110)
+    TMap<FName, FMovieSceneFloatChannel> Inputs_Float;                                // 0x0358 (size: 0x50)
+    TMap<FName, FMovieSceneStringChannel> Inputs_String;                              // 0x03A8 (size: 0x50)
+    TMap<FName, FMovieSceneBoolChannel> Inputs_Bool;                                  // 0x03F8 (size: 0x50)
+    TMap<FName, FMovieSceneIntegerChannel> Inputs_Int;                                // 0x0448 (size: 0x50)
+    TMap<FName, FMovieSceneAudioTriggerChannel> Inputs_Trigger;                       // 0x0498 (size: 0x50)
+    FMovieSceneActorReferenceData AttachActorData;                                    // 0x04E8 (size: 0x120)
+    bool bLooping;                                                                    // 0x0608 (size: 0x1)
+    bool bSuppressSubtitles;                                                          // 0x0609 (size: 0x1)
+    bool bOverrideAttenuation;                                                        // 0x060A (size: 0x1)
+    class USoundAttenuation* AttenuationSettings;                                     // 0x0610 (size: 0x8)
+    FMovieSceneAudioSectionOnQueueSubtitles OnQueueSubtitles;                         // 0x0618 (size: 0x10)
     void OnQueueSubtitles(const TArray<FSubtitleCue>& Subtitles, float CueDuration);
-    FMovieSceneAudioSectionOnAudioFinished OnAudioFinished;                           // 0x0608 (size: 0x10)
+    FMovieSceneAudioSectionOnAudioFinished OnAudioFinished;                           // 0x0628 (size: 0x10)
     void OnAudioFinished();
-    FMovieSceneAudioSectionOnAudioPlaybackPercent OnAudioPlaybackPercent;             // 0x0618 (size: 0x10)
+    FMovieSceneAudioSectionOnAudioPlaybackPercent OnAudioPlaybackPercent;             // 0x0638 (size: 0x10)
     void OnAudioPlaybackPercent(const class USoundWave* PlayingSoundWave, const float PlaybackPercent);
 
     void SetSuppressSubtitles(bool bInSuppressSubtitles);
@@ -650,10 +678,11 @@ class UMovieSceneAudioSection : public UMovieSceneSection
     bool GetSuppressSubtitles();
     FFrameNumber GetStartOffset();
     class USoundBase* GetSound();
+    class USoundBase* GetPlaybackSound();
     bool GetOverrideAttenuation();
     bool GetLooping();
     class USoundAttenuation* GetAttenuationSettings();
-}; // Size: 0x628
+}; // Size: 0x648
 
 class UMovieSceneAudioSystem : public UMovieSceneEntitySystem
 {
@@ -661,13 +690,13 @@ class UMovieSceneAudioSystem : public UMovieSceneEntitySystem
 
 class UMovieSceneAudioTrack : public UMovieSceneNameableTrack
 {
-    TArray<class UMovieSceneSection*> AudioSections;                                  // 0x0098 (size: 0x10)
+    TArray<UMovieSceneSection*> AudioSections;                                        // 0x0110 (size: 0x10)
 
-}; // Size: 0xA8
+}; // Size: 0x120
 
 class UMovieSceneBaseCacheSection : public UMovieSceneSection
 {
-}; // Size: 0xF8
+}; // Size: 0x110
 
 class UMovieSceneBaseValueEvaluatorSystem : public UMovieSceneEntitySystem
 {
@@ -679,7 +708,7 @@ class UMovieSceneBoolPropertySystem : public UMovieScenePropertySystem
 
 class UMovieSceneBoolTrack : public UMovieScenePropertyTrack
 {
-}; // Size: 0xD0
+}; // Size: 0x148
 
 class UMovieSceneBytePropertySystem : public UMovieScenePropertySystem
 {
@@ -687,30 +716,30 @@ class UMovieSceneBytePropertySystem : public UMovieScenePropertySystem
 
 class UMovieSceneByteSection : public UMovieSceneSection
 {
-    FMovieSceneByteChannel ByteCurve;                                                 // 0x00F8 (size: 0x108)
+    FMovieSceneByteChannel ByteCurve;                                                 // 0x0110 (size: 0x110)
 
-}; // Size: 0x200
+}; // Size: 0x220
 
 class UMovieSceneByteTrack : public UMovieScenePropertyTrack
 {
-    class UEnum* Enum;                                                                // 0x00C8 (size: 0x8)
+    class UEnum* Enum;                                                                // 0x0140 (size: 0x8)
 
-}; // Size: 0xD0
+}; // Size: 0x148
 
 class UMovieSceneCVarSection : public UMovieSceneSection
 {
-    TArray<FMovieSceneConsoleVariableCollection> ConsoleVariableCollections;          // 0x00F8 (size: 0x10)
-    FMovieSceneCVarOverrides ConsoleVariables;                                        // 0x0108 (size: 0x50)
+    TArray<FMovieSceneConsoleVariableCollection> ConsoleVariableCollections;          // 0x0110 (size: 0x10)
+    FMovieSceneCVarOverrides ConsoleVariables;                                        // 0x0120 (size: 0x50)
 
     void SetFromString(FString InString);
     FString GetString();
-}; // Size: 0x158
+}; // Size: 0x170
 
 class UMovieSceneCVarTrack : public UMovieSceneNameableTrack
 {
-    TArray<class UMovieSceneSection*> Sections;                                       // 0x0098 (size: 0x10)
+    TArray<UMovieSceneSection*> Sections;                                             // 0x0110 (size: 0x10)
 
-}; // Size: 0xA8
+}; // Size: 0x120
 
 class UMovieSceneCVarTrackInstance : public UMovieSceneTrackInstance
 {
@@ -718,83 +747,88 @@ class UMovieSceneCVarTrackInstance : public UMovieSceneTrackInstance
 
 class UMovieSceneCameraCutSection : public UMovieSceneSection
 {
-    bool bLockPreviousCamera;                                                         // 0x00F8 (size: 0x1)
-    FGuid CameraGuid;                                                                 // 0x00FC (size: 0x10)
-    FMovieSceneObjectBindingID CameraBindingID;                                       // 0x010C (size: 0x18)
-    FTransform InitialCameraCutTransform;                                             // 0x0130 (size: 0x60)
-    bool bHasInitialCameraCutTransform;                                               // 0x0190 (size: 0x1)
+    bool bLockPreviousCamera;                                                         // 0x0110 (size: 0x1)
+    FGuid CameraGuid;                                                                 // 0x0114 (size: 0x10)
+    FMovieSceneObjectBindingID CameraBindingID;                                       // 0x0124 (size: 0x18)
+    FTransform InitialCameraCutTransform;                                             // 0x0140 (size: 0x60)
+    bool bHasInitialCameraCutTransform;                                               // 0x01A0 (size: 0x1)
 
     void SetCameraBindingID(const FMovieSceneObjectBindingID& InCameraBindingID);
     FMovieSceneObjectBindingID GetCameraBindingID();
-}; // Size: 0x1A0
+}; // Size: 0x1B0
 
 class UMovieSceneCameraCutTrack : public UMovieSceneNameableTrack
 {
-    bool bCanBlend;                                                                   // 0x0098 (size: 0x1)
-    TArray<class UMovieSceneSection*> Sections;                                       // 0x00A0 (size: 0x10)
+    bool bCanBlend;                                                                   // 0x0110 (size: 0x1)
+    TArray<UMovieSceneSection*> Sections;                                             // 0x0118 (size: 0x10)
+    bool bAutoArrangeSections;                                                        // 0x0128 (size: 0x1)
 
-}; // Size: 0xB0
+}; // Size: 0x130
 
 class UMovieSceneCameraCutTrackInstance : public UMovieSceneTrackInstance
 {
-}; // Size: 0xC8
+}; // Size: 0x78
 
-class UMovieSceneCameraShakeEvaluator : public UObject
+class UMovieSceneCameraShakeEvaluatorSystem : public UMovieSceneEntitySystem
 {
-}; // Size: 0x28
+}; // Size: 0x40
+
+class UMovieSceneCameraShakeInstantiatorSystem : public UMovieSceneEntitySystem
+{
+}; // Size: 0xC0
 
 class UMovieSceneCameraShakeSection : public UMovieSceneSection
 {
-    FMovieSceneCameraShakeSectionData ShakeData;                                      // 0x00F0 (size: 0x28)
-    TSubclassOf<class UCameraShakeBase> ShakeClass;                                   // 0x0118 (size: 0x8)
-    float PlayScale;                                                                  // 0x0120 (size: 0x4)
-    ECameraShakePlaySpace PlaySpace;                                                  // 0x0124 (size: 0x1)
-    FRotator UserDefinedPlaySpace;                                                    // 0x0128 (size: 0x18)
+    FMovieSceneCameraShakeSectionData ShakeData;                                      // 0x0110 (size: 0x28)
+    TSubclassOf<class UCameraShakeBase> ShakeClass;                                   // 0x0138 (size: 0x8)
+    float PlayScale;                                                                  // 0x0140 (size: 0x4)
+    ECameraShakePlaySpace PlaySpace;                                                  // 0x0144 (size: 0x1)
+    FRotator UserDefinedPlaySpace;                                                    // 0x0148 (size: 0x18)
 
-}; // Size: 0x140
+}; // Size: 0x160
 
 class UMovieSceneCameraShakeSourceShakeSection : public UMovieSceneSection
 {
-    FMovieSceneCameraShakeSectionData ShakeData;                                      // 0x00F0 (size: 0x28)
+    FMovieSceneCameraShakeSectionData ShakeData;                                      // 0x0110 (size: 0x28)
 
-}; // Size: 0x118
+}; // Size: 0x138
 
 class UMovieSceneCameraShakeSourceShakeTrack : public UMovieSceneNameableTrack
 {
-    TArray<class UMovieSceneSection*> CameraShakeSections;                            // 0x00A0 (size: 0x10)
+    TArray<UMovieSceneSection*> CameraShakeSections;                                  // 0x0110 (size: 0x10)
 
-}; // Size: 0xB0
+}; // Size: 0x120
 
 class UMovieSceneCameraShakeSourceTriggerSection : public UMovieSceneSection
 {
-    FMovieSceneCameraShakeSourceTriggerChannel Channel;                               // 0x00F0 (size: 0xF8)
+    FMovieSceneCameraShakeSourceTriggerChannel Channel;                               // 0x0110 (size: 0xF8)
 
-}; // Size: 0x1E8
+}; // Size: 0x208
 
 class UMovieSceneCameraShakeSourceTriggerTrack : public UMovieSceneTrack
 {
-    TArray<class UMovieSceneSection*> Sections;                                       // 0x00A0 (size: 0x10)
+    TArray<UMovieSceneSection*> Sections;                                             // 0x0110 (size: 0x10)
 
-}; // Size: 0xB0
+}; // Size: 0x120
 
 class UMovieSceneCameraShakeTrack : public UMovieSceneNameableTrack
 {
-    TArray<class UMovieSceneSection*> CameraShakeSections;                            // 0x00A0 (size: 0x10)
+    TArray<UMovieSceneSection*> CameraShakeSections;                                  // 0x0110 (size: 0x10)
 
-}; // Size: 0xB0
+}; // Size: 0x120
 
 class UMovieSceneCinematicShotSection : public UMovieSceneSubSection
 {
-    FString ShotDisplayName;                                                          // 0x0138 (size: 0x10)
-    FText DisplayName;                                                                // 0x0148 (size: 0x18)
+    FString ShotDisplayName;                                                          // 0x07F0 (size: 0x10)
+    FText DisplayName;                                                                // 0x0800 (size: 0x10)
 
     void SetShotDisplayName(FString InShotDisplayName);
     FString GetShotDisplayName();
-}; // Size: 0x160
+}; // Size: 0x810
 
 class UMovieSceneCinematicShotTrack : public UMovieSceneSubTrack
 {
-}; // Size: 0xA8
+}; // Size: 0x120
 
 class UMovieSceneColorPropertySystem : public UMovieScenePropertySystem
 {
@@ -802,18 +836,26 @@ class UMovieSceneColorPropertySystem : public UMovieScenePropertySystem
 
 class UMovieSceneColorSection : public UMovieSceneSection
 {
-    FMovieSceneFloatChannel RedCurve;                                                 // 0x00F8 (size: 0x110)
-    FMovieSceneFloatChannel GreenCurve;                                               // 0x0208 (size: 0x110)
-    FMovieSceneFloatChannel BlueCurve;                                                // 0x0318 (size: 0x110)
-    FMovieSceneFloatChannel AlphaCurve;                                               // 0x0428 (size: 0x110)
+    FMovieSceneFloatChannel RedCurve;                                                 // 0x0110 (size: 0x110)
+    FMovieSceneFloatChannel GreenCurve;                                               // 0x0220 (size: 0x110)
+    FMovieSceneFloatChannel BlueCurve;                                                // 0x0330 (size: 0x110)
+    FMovieSceneFloatChannel AlphaCurve;                                               // 0x0440 (size: 0x110)
 
-}; // Size: 0x538
+}; // Size: 0x550
 
 class UMovieSceneColorTrack : public UMovieScenePropertyTrack
 {
-    bool bIsSlateColor;                                                               // 0x00C8 (size: 0x1)
+    bool bIsSlateColor;                                                               // 0x0140 (size: 0x1)
 
-}; // Size: 0xD0
+}; // Size: 0x148
+
+class UMovieSceneCommonAnimationTrack : public UMovieSceneNameableTrack
+{
+    TArray<UMovieSceneSection*> AnimationSections;                                    // 0x0110 (size: 0x10)
+    FMovieSceneSkeletalAnimRootMotionTrackParams RootMotionParams;                    // 0x0120 (size: 0x80)
+    bool bBlendFirstChildOfRoot;                                                      // 0x01A0 (size: 0x1)
+
+}; // Size: 0x1B0
 
 class UMovieSceneComponentAttachmentInvalidatorSystem : public UMovieSceneEntityInstantiatorSystem
 {
@@ -823,19 +865,30 @@ class UMovieSceneComponentAttachmentSystem : public UMovieSceneEntityInstantiato
 {
 }; // Size: 0x1D0
 
+class UMovieSceneComponentMaterialParameterSection : public UMovieSceneSection
+{
+    TArray<FScalarMaterialParameterInfoAndCurve> ScalarParameterInfosAndCurves;       // 0x0110 (size: 0x10)
+    TArray<FColorMaterialParameterInfoAndCurves> ColorParameterInfosAndCurves;        // 0x0120 (size: 0x10)
+
+    bool RemoveScalarParameter(const FMaterialParameterInfo& InParameterInfo);
+    bool RemoveColorParameter(const FMaterialParameterInfo& InParameterInfo);
+    void AddScalarParameterKey(const FMaterialParameterInfo& InParameterInfo, FFrameNumber InTime, float InValue, FString InLayerName, FString InAssetName);
+    void AddColorParameterKey(const FMaterialParameterInfo& InParameterInfo, FFrameNumber InTime, FLinearColor InValue, FString InLayerName, FString InAssetName, const FParameterChannelNames& InChannelNames);
+}; // Size: 0x130
+
 class UMovieSceneComponentMaterialSystem : public UMovieSceneEntitySystem
 {
-}; // Size: 0x1A0
+}; // Size: 0x208
 
 class UMovieSceneComponentMaterialTrack : public UMovieSceneMaterialTrack
 {
-    int32 MaterialIndex;                                                              // 0x00C0 (size: 0x4)
+    FComponentMaterialInfo MaterialInfo;                                              // 0x0138 (size: 0x10)
 
-}; // Size: 0xC8
+}; // Size: 0x148
 
 class UMovieSceneComponentMobilitySystem : public UMovieSceneEntityInstantiatorSystem
 {
-}; // Size: 0x230
+}; // Size: 0x250
 
 class UMovieSceneComponentTransformSystem : public UMovieScenePropertySystem
 {
@@ -845,35 +898,53 @@ class UMovieSceneConstraintSystem : public UMovieSceneEntitySystem
 {
 }; // Size: 0x50
 
+class UMovieSceneCustomPrimitiveDataSection : public UMovieSceneParameterSection
+{
+}; // Size: 0x170
+
+class UMovieSceneCustomPrimitiveDataSystem : public UMovieSceneEntitySystem
+{
+    class UMovieScenePiecewiseDoubleBlenderSystem* DoubleBlenderSystem;               // 0x01D0 (size: 0x8)
+
+}; // Size: 0x1D8
+
+class UMovieSceneCustomPrimitiveDataTrack : public UMovieSceneNameableTrack
+{
+    TArray<UMovieSceneSection*> Sections;                                             // 0x0120 (size: 0x10)
+    class UMovieSceneSection* SectionToKey;                                           // 0x0130 (size: 0x8)
+
+}; // Size: 0x138
+
 class UMovieSceneDataLayerSection : public UMovieSceneSection
 {
-    TArray<FActorDataLayer> DataLayers;                                               // 0x00F8 (size: 0x10)
-    TArray<class UDataLayerAsset*> DataLayerAssets;                                   // 0x0108 (size: 0x10)
-    EDataLayerRuntimeState DesiredState;                                              // 0x0118 (size: 0x1)
-    EDataLayerRuntimeState PrerollState;                                              // 0x0119 (size: 0x1)
-    bool bFlushOnUnload;                                                              // 0x011A (size: 0x1)
+    TArray<UDataLayerAsset*> DataLayerAssets;                                         // 0x0110 (size: 0x10)
+    EDataLayerRuntimeState DesiredState;                                              // 0x0120 (size: 0x1)
+    EDataLayerRuntimeState PrerollState;                                              // 0x0121 (size: 0x1)
+    bool bFlushOnActivated;                                                           // 0x0122 (size: 0x1)
+    bool bFlushOnUnload;                                                              // 0x0123 (size: 0x1)
 
     void SetPrerollState(EDataLayerRuntimeState InPrerollState);
     void SetFlushOnUnload(bool bFlushOnUnload);
+    void SetFlushOnActivated(bool bFlushOnActivated);
     void SetDesiredState(EDataLayerRuntimeState InDesiredState);
-    void SetDataLayers(const TArray<FActorDataLayer>& InDataLayers);
-    void SetDataLayerAssets(const TArray<class UDataLayerAsset*>& InDataLayerAssets);
+    void SetDataLayerAssets(const TArray<UDataLayerAsset*>& InDataLayerAssets);
+    bool HasPreRoll();
     EDataLayerRuntimeState GetPrerollState();
     bool GetFlushOnUnload();
+    bool GetFlushOnActivated();
     EDataLayerRuntimeState GetDesiredState();
-    TArray<FActorDataLayer> GetDataLayers();
-    TArray<class UDataLayerAsset*> GetDataLayerAssets();
-}; // Size: 0x120
+    TArray<UDataLayerAsset*> GetDataLayerAssets();
+}; // Size: 0x128
 
 class UMovieSceneDataLayerSystem : public UMovieSceneEntitySystem
 {
-}; // Size: 0xD0
+}; // Size: 0xF0
 
 class UMovieSceneDataLayerTrack : public UMovieSceneNameableTrack
 {
-    TArray<class UMovieSceneSection*> Sections;                                       // 0x0098 (size: 0x10)
+    TArray<UMovieSceneSection*> Sections;                                             // 0x0110 (size: 0x10)
 
-}; // Size: 0xA8
+}; // Size: 0x120
 
 class UMovieSceneDecomposerTestObject : public UObject
 {
@@ -884,6 +955,14 @@ class UMovieSceneDecomposerTestObject : public UObject
 class UMovieSceneDeferredComponentMovementSystem : public UMovieSceneEntitySystem
 {
 }; // Size: 0x58
+
+class UMovieSceneDirectorBlueprintCondition : public UMovieSceneCondition
+{
+    FMovieSceneDirectorBlueprintConditionData DirectorBlueprintConditionData;         // 0x0060 (size: 0x28)
+    EMovieSceneConditionScope Scope;                                                  // 0x0088 (size: 0x1)
+    EMovieSceneConditionCheckFrequency CheckFrequency;                                // 0x0089 (size: 0x1)
+
+}; // Size: 0x90
 
 class UMovieSceneDoublePerlinNoiseChannelContainer : public UMovieSceneChannelOverrideContainer
 {
@@ -897,13 +976,13 @@ class UMovieSceneDoublePropertySystem : public UMovieScenePropertySystem
 
 class UMovieSceneDoubleSection : public UMovieSceneSection
 {
-    FMovieSceneDoubleChannel DoubleCurve;                                             // 0x00F8 (size: 0x118)
+    FMovieSceneDoubleChannel DoubleCurve;                                             // 0x0110 (size: 0x118)
 
-}; // Size: 0x210
+}; // Size: 0x228
 
 class UMovieSceneDoubleTrack : public UMovieScenePropertyTrack
 {
-}; // Size: 0xC8
+}; // Size: 0x140
 
 class UMovieSceneDoubleVectorPropertySystem : public UMovieScenePropertySystem
 {
@@ -911,16 +990,16 @@ class UMovieSceneDoubleVectorPropertySystem : public UMovieScenePropertySystem
 
 class UMovieSceneDoubleVectorSection : public UMovieSceneSection
 {
-    FMovieSceneDoubleChannel Curves;                                                  // 0x00F8 (size: 0x460)
-    int32 ChannelsUsed;                                                               // 0x0558 (size: 0x4)
+    FMovieSceneDoubleChannel Curves;                                                  // 0x0110 (size: 0x460)
+    int32 ChannelsUsed;                                                               // 0x0570 (size: 0x4)
 
-}; // Size: 0x560
+}; // Size: 0x578
 
 class UMovieSceneDoubleVectorTrack : public UMovieScenePropertyTrack
 {
-    int32 NumChannelsUsed;                                                            // 0x00C8 (size: 0x4)
+    int32 NumChannelsUsed;                                                            // 0x0140 (size: 0x4)
 
-}; // Size: 0xD0
+}; // Size: 0x148
 
 class UMovieSceneEnumPropertySystem : public UMovieScenePropertySystem
 {
@@ -928,15 +1007,15 @@ class UMovieSceneEnumPropertySystem : public UMovieScenePropertySystem
 
 class UMovieSceneEnumSection : public UMovieSceneSection
 {
-    FMovieSceneByteChannel EnumCurve;                                                 // 0x00F8 (size: 0x108)
+    FMovieSceneByteChannel EnumCurve;                                                 // 0x0110 (size: 0x110)
 
-}; // Size: 0x200
+}; // Size: 0x220
 
 class UMovieSceneEnumTrack : public UMovieScenePropertyTrack
 {
-    class UEnum* Enum;                                                                // 0x00C8 (size: 0x8)
+    class UEnum* Enum;                                                                // 0x0140 (size: 0x8)
 
-}; // Size: 0xD0
+}; // Size: 0x148
 
 class UMovieSceneEulerTransformPropertySystem : public UMovieScenePropertySystem
 {
@@ -944,24 +1023,24 @@ class UMovieSceneEulerTransformPropertySystem : public UMovieScenePropertySystem
 
 class UMovieSceneEulerTransformTrack : public UMovieScenePropertyTrack
 {
-}; // Size: 0xC8
+}; // Size: 0x140
 
 class UMovieSceneEventRepeaterSection : public UMovieSceneEventSectionBase
 {
-    FMovieSceneEvent Event;                                                           // 0x00F8 (size: 0x28)
+    FMovieSceneEvent Event;                                                           // 0x0110 (size: 0x28)
 
-}; // Size: 0x120
+}; // Size: 0x138
 
 class UMovieSceneEventSection : public UMovieSceneSection
 {
-    FNameCurve Events;                                                                // 0x00F0 (size: 0x78)
-    FMovieSceneEventSectionData EventData;                                            // 0x0168 (size: 0xF8)
+    FNameCurve Events;                                                                // 0x0108 (size: 0x78)
+    FMovieSceneEventSectionData EventData;                                            // 0x0180 (size: 0xF8)
 
-}; // Size: 0x260
+}; // Size: 0x278
 
 class UMovieSceneEventSectionBase : public UMovieSceneSection
 {
-}; // Size: 0xF0
+}; // Size: 0x108
 
 class UMovieSceneEventSystem : public UMovieSceneEntitySystem
 {
@@ -969,26 +1048,26 @@ class UMovieSceneEventSystem : public UMovieSceneEntitySystem
 
 class UMovieSceneEventTrack : public UMovieSceneNameableTrack
 {
-    uint8 bFireEventsWhenForwards;                                                    // 0x00A8 (size: 0x1)
-    uint8 bFireEventsWhenBackwards;                                                   // 0x00A8 (size: 0x1)
-    EFireEventsAtPosition EventPosition;                                              // 0x00AC (size: 0x1)
-    TArray<class UMovieSceneSection*> Sections;                                       // 0x00B0 (size: 0x10)
+    uint8 bFireEventsWhenForwards;                                                    // 0x0120 (size: 0x1)
+    uint8 bFireEventsWhenBackwards;                                                   // 0x0120 (size: 0x1)
+    EFireEventsAtPosition EventPosition;                                              // 0x0124 (size: 0x1)
+    TArray<UMovieSceneSection*> Sections;                                             // 0x0128 (size: 0x10)
 
-}; // Size: 0xC0
+}; // Size: 0x138
 
 class UMovieSceneEventTriggerSection : public UMovieSceneEventSectionBase
 {
-    FMovieSceneEventChannel EventChannel;                                             // 0x00F8 (size: 0xF8)
+    FMovieSceneEventChannel EventChannel;                                             // 0x0110 (size: 0xF8)
 
-}; // Size: 0x1F0
+}; // Size: 0x208
 
 class UMovieSceneFadeSection : public UMovieSceneSection
 {
-    FMovieSceneFloatChannel FloatCurve;                                               // 0x00F8 (size: 0x110)
-    FLinearColor FadeColor;                                                           // 0x0208 (size: 0x10)
-    uint8 bFadeAudio;                                                                 // 0x0218 (size: 0x1)
+    FMovieSceneFloatChannel FloatCurve;                                               // 0x0110 (size: 0x110)
+    FLinearColor FadeColor;                                                           // 0x0220 (size: 0x10)
+    uint8 bFadeAudio;                                                                 // 0x0230 (size: 0x1)
 
-}; // Size: 0x220
+}; // Size: 0x238
 
 class UMovieSceneFadeSystem : public UMovieSceneEntitySystem
 {
@@ -996,7 +1075,13 @@ class UMovieSceneFadeSystem : public UMovieSceneEntitySystem
 
 class UMovieSceneFadeTrack : public UMovieSceneFloatTrack
 {
-}; // Size: 0xC8
+}; // Size: 0x140
+
+class UMovieSceneFadeTrackTestLibrary : public UBlueprintFunctionLibrary
+{
+
+    float GetManualFadeAmount(class APlayerCameraManager* PlayerCameraManager);
+}; // Size: 0x28
 
 class UMovieSceneFloatPerlinNoiseChannelContainer : public UMovieSceneChannelOverrideContainer
 {
@@ -1010,14 +1095,14 @@ class UMovieSceneFloatPropertySystem : public UMovieScenePropertySystem
 
 class UMovieSceneFloatSection : public UMovieSceneSection
 {
-    FMovieSceneFloatChannel FloatCurve;                                               // 0x0100 (size: 0x110)
-    class UMovieSceneSectionChannelOverrideRegistry* OverrideRegistry;                // 0x0210 (size: 0x8)
+    FMovieSceneFloatChannel FloatCurve;                                               // 0x0118 (size: 0x110)
+    class UMovieSceneSectionChannelOverrideRegistry* OverrideRegistry;                // 0x0228 (size: 0x8)
 
-}; // Size: 0x218
+}; // Size: 0x230
 
 class UMovieSceneFloatTrack : public UMovieScenePropertyTrack
 {
-}; // Size: 0xC8
+}; // Size: 0x140
 
 class UMovieSceneFloatVectorPropertySystem : public UMovieScenePropertySystem
 {
@@ -1025,26 +1110,26 @@ class UMovieSceneFloatVectorPropertySystem : public UMovieScenePropertySystem
 
 class UMovieSceneFloatVectorSection : public UMovieSceneSection
 {
-    FMovieSceneFloatChannel Curves;                                                   // 0x00F8 (size: 0x440)
-    int32 ChannelsUsed;                                                               // 0x0538 (size: 0x4)
+    FMovieSceneFloatChannel Curves;                                                   // 0x0110 (size: 0x440)
+    int32 ChannelsUsed;                                                               // 0x0550 (size: 0x4)
 
-}; // Size: 0x540
+}; // Size: 0x558
 
 class UMovieSceneFloatVectorTrack : public UMovieScenePropertyTrack
 {
-    int32 NumChannelsUsed;                                                            // 0x00C8 (size: 0x4)
+    int32 NumChannelsUsed;                                                            // 0x0140 (size: 0x4)
 
-}; // Size: 0xD0
+}; // Size: 0x148
 
 class UMovieSceneHierarchicalBiasSystem : public UMovieSceneEntityInstantiatorSystem
 {
-}; // Size: 0x40
+    class UMovieSceneEntityGroupingSystem* GroupingSystem;                            // 0x0040 (size: 0x8)
+
+}; // Size: 0x48
 
 class UMovieSceneHierarchicalEasingFinalizationSystem : public UMovieSceneEntityInstantiatorSystem
 {
-    class UMovieSceneHierarchicalEasingInstantiatorSystem* InstantiatorSystem;        // 0x0040 (size: 0x8)
-
-}; // Size: 0x48
+}; // Size: 0x40
 
 class UMovieSceneHierarchicalEasingInstantiatorSystem : public UMovieSceneEntityInstantiatorSystem
 {
@@ -1052,71 +1137,71 @@ class UMovieSceneHierarchicalEasingInstantiatorSystem : public UMovieSceneEntity
 
 }; // Size: 0xD8
 
-class UMovieSceneInitialValueSystem : public UMovieSceneEntityInstantiatorSystem
-{
-}; // Size: 0x40
-
 class UMovieSceneIntegerPropertySystem : public UMovieScenePropertySystem
 {
 }; // Size: 0x58
 
 class UMovieSceneIntegerSection : public UMovieSceneSection
 {
-    FMovieSceneIntegerChannel IntegerCurve;                                           // 0x00F8 (size: 0x100)
+    FMovieSceneIntegerChannel IntegerCurve;                                           // 0x0110 (size: 0x108)
 
-}; // Size: 0x1F8
+}; // Size: 0x218
 
 class UMovieSceneIntegerTrack : public UMovieScenePropertyTrack
 {
-}; // Size: 0xC8
+}; // Size: 0x140
 
 class UMovieSceneInterrogatedPropertyInstantiatorSystem : public UMovieSceneEntityInstantiatorSystem
 {
-}; // Size: 0x1F0
+}; // Size: 0x200
 
 class UMovieSceneLevelVisibilitySection : public UMovieSceneSection
 {
-    ELevelVisibility Visibility;                                                      // 0x00F8 (size: 0x1)
-    TArray<FName> LevelNames;                                                         // 0x0100 (size: 0x10)
+    ELevelVisibility Visibility;                                                      // 0x0110 (size: 0x1)
+    TArray<FName> LevelNames;                                                         // 0x0118 (size: 0x10)
 
     void SetVisibility(ELevelVisibility InVisibility);
     void SetLevelNames(const TArray<FName>& InLevelNames);
     ELevelVisibility GetVisibility();
     TArray<FName> GetLevelNames();
-}; // Size: 0x110
+}; // Size: 0x128
 
 class UMovieSceneLevelVisibilitySystem : public UMovieSceneEntitySystem
 {
-}; // Size: 0x1A8
+}; // Size: 0x1C8
 
 class UMovieSceneLevelVisibilityTrack : public UMovieSceneNameableTrack
 {
-    TArray<class UMovieSceneSection*> Sections;                                       // 0x0098 (size: 0x10)
+    TArray<UMovieSceneSection*> Sections;                                             // 0x0110 (size: 0x10)
 
-}; // Size: 0xA8
+}; // Size: 0x120
 
 class UMovieSceneMaterialParameterCollectionSystem : public UMovieSceneEntitySystem
 {
-}; // Size: 0x60
+}; // Size: 0x68
 
 class UMovieSceneMaterialParameterCollectionTrack : public UMovieSceneMaterialTrack
 {
-    class UMaterialParameterCollection* MPC;                                          // 0x00C0 (size: 0x8)
+    class UMaterialParameterCollection* MPC;                                          // 0x0138 (size: 0x8)
 
-}; // Size: 0xC8
+}; // Size: 0x140
 
-class UMovieSceneMaterialParameterSystem : public UMovieSceneEntitySystem
+class UMovieSceneMaterialParameterEvaluationSystem : public UMovieSceneEntitySystem
 {
-    class UMovieScenePiecewiseDoubleBlenderSystem* DoubleBlenderSystem;               // 0x0340 (size: 0x8)
+}; // Size: 0x40
 
-}; // Size: 0x348
+class UMovieSceneMaterialParameterInstantiatorSystem : public UMovieSceneEntityInstantiatorSystem
+{
+    class UMovieScenePiecewiseDoubleBlenderSystem* DoubleBlenderSystem;               // 0x0350 (size: 0x8)
+
+}; // Size: 0x358
 
 class UMovieSceneMaterialTrack : public UMovieSceneNameableTrack
 {
-    TArray<class UMovieSceneSection*> Sections;                                       // 0x0098 (size: 0x10)
-    class UMovieSceneSection* SectionToKey;                                           // 0x00A8 (size: 0x8)
+    TArray<UMovieSceneSection*> Sections;                                             // 0x0110 (size: 0x10)
+    class UMovieSceneSection* SectionToKey;                                           // 0x0120 (size: 0x8)
 
-}; // Size: 0xB0
+}; // Size: 0x128
 
 class UMovieSceneMotionVectorSimulationSystem : public UMovieSceneEntitySystem
 {
@@ -1124,24 +1209,28 @@ class UMovieSceneMotionVectorSimulationSystem : public UMovieSceneEntitySystem
 
 class UMovieSceneObjectPropertySection : public UMovieSceneSection
 {
-    FMovieSceneObjectPathChannel ObjectChannel;                                       // 0x00F0 (size: 0x130)
+    FMovieSceneObjectPathChannel ObjectChannel;                                       // 0x0110 (size: 0x130)
 
-}; // Size: 0x220
+}; // Size: 0x240
+
+class UMovieSceneObjectPropertySystem : public UMovieScenePropertySystem
+{
+}; // Size: 0x58
 
 class UMovieSceneObjectPropertyTrack : public UMovieScenePropertyTrack
 {
-    UClass* PropertyClass;                                                            // 0x00D0 (size: 0x8)
+    UClass* PropertyClass;                                                            // 0x0140 (size: 0x8)
 
-}; // Size: 0xD8
+}; // Size: 0x148
 
 class UMovieSceneParameterSection : public UMovieSceneSection
 {
-    TArray<FBoolParameterNameAndCurve> BoolParameterNamesAndCurves;                   // 0x00F8 (size: 0x10)
-    TArray<FScalarParameterNameAndCurve> ScalarParameterNamesAndCurves;               // 0x0108 (size: 0x10)
-    TArray<FVector2DParameterNameAndCurves> Vector2DParameterNamesAndCurves;          // 0x0118 (size: 0x10)
-    TArray<FVectorParameterNameAndCurves> VectorParameterNamesAndCurves;              // 0x0128 (size: 0x10)
-    TArray<FColorParameterNameAndCurves> ColorParameterNamesAndCurves;                // 0x0138 (size: 0x10)
-    TArray<FTransformParameterNameAndCurves> TransformParameterNamesAndCurves;        // 0x0148 (size: 0x10)
+    TArray<FBoolParameterNameAndCurve> BoolParameterNamesAndCurves;                   // 0x0110 (size: 0x10)
+    TArray<FScalarParameterNameAndCurve> ScalarParameterNamesAndCurves;               // 0x0120 (size: 0x10)
+    TArray<FVector2DParameterNameAndCurves> Vector2DParameterNamesAndCurves;          // 0x0130 (size: 0x10)
+    TArray<FVectorParameterNameAndCurves> VectorParameterNamesAndCurves;              // 0x0140 (size: 0x10)
+    TArray<FColorParameterNameAndCurves> ColorParameterNamesAndCurves;                // 0x0150 (size: 0x10)
+    TArray<FTransformParameterNameAndCurves> TransformParameterNamesAndCurves;        // 0x0160 (size: 0x10)
 
     bool RemoveVectorParameter(FName InParameterName);
     bool RemoveVector2DParameter(FName InParameterName);
@@ -1156,25 +1245,32 @@ class UMovieSceneParameterSection : public UMovieSceneSection
     void AddScalarParameterKey(FName InParameterName, FFrameNumber InTime, float InValue);
     void AddColorParameterKey(FName InParameterName, FFrameNumber InTime, FLinearColor InValue);
     void AddBoolParameterKey(FName InParameterName, FFrameNumber InTime, bool InValue);
-}; // Size: 0x158
+}; // Size: 0x170
+
+class UMovieScenePartialEvaluationTestObject : public UObject
+{
+    float FloatProperty;                                                              // 0x0028 (size: 0x4)
+    FVector VectorProperty;                                                           // 0x0030 (size: 0x18)
+
+}; // Size: 0x48
 
 class UMovieSceneParticleParameterTrack : public UMovieSceneNameableTrack
 {
-    TArray<class UMovieSceneSection*> Sections;                                       // 0x00A0 (size: 0x10)
+    TArray<UMovieSceneSection*> Sections;                                             // 0x0118 (size: 0x10)
 
-}; // Size: 0xB0
+}; // Size: 0x128
 
 class UMovieSceneParticleSection : public UMovieSceneSection
 {
-    FMovieSceneParticleChannel ParticleKeys;                                          // 0x00F0 (size: 0x108)
+    FMovieSceneParticleChannel ParticleKeys;                                          // 0x0108 (size: 0x110)
 
-}; // Size: 0x1F8
+}; // Size: 0x218
 
 class UMovieSceneParticleTrack : public UMovieSceneNameableTrack
 {
-    TArray<class UMovieSceneSection*> ParticleSections;                               // 0x00A0 (size: 0x10)
+    TArray<UMovieSceneSection*> ParticleSections;                                     // 0x0118 (size: 0x10)
 
-}; // Size: 0xB0
+}; // Size: 0x128
 
 class UMovieScenePiecewiseBoolBlenderSystem : public UMovieSceneBlenderSystem
 {
@@ -1186,7 +1282,7 @@ class UMovieScenePiecewiseByteBlenderSystem : public UMovieSceneBlenderSystem
 
 class UMovieScenePiecewiseDoubleBlenderSystem : public UMovieSceneBlenderSystem
 {
-}; // Size: 0x130
+}; // Size: 0x160
 
 class UMovieScenePiecewiseEnumBlenderSystem : public UMovieSceneBlenderSystem
 {
@@ -1195,6 +1291,12 @@ class UMovieScenePiecewiseEnumBlenderSystem : public UMovieSceneBlenderSystem
 class UMovieScenePiecewiseIntegerBlenderSystem : public UMovieSceneBlenderSystem
 {
 }; // Size: 0xB0
+
+class UMovieScenePlatformCondition : public UMovieSceneCondition
+{
+    TArray<FName> ValidPlatforms;                                                     // 0x0060 (size: 0x10)
+
+}; // Size: 0x70
 
 class UMovieScenePostEvalEventSystem : public UMovieSceneEventSystem
 {
@@ -1210,26 +1312,26 @@ class UMovieScenePreSpawnEventSystem : public UMovieSceneEventSystem
 
 class UMovieScenePredictionSystem : public UMovieSceneEntitySystem
 {
-    TArray<class UMovieSceneAsyncAction_SequencePrediction*> PendingPredictions;      // 0x00D0 (size: 0x10)
-    TArray<class UMovieSceneAsyncAction_SequencePrediction*> ProcessingPredictions;   // 0x00E0 (size: 0x10)
+    TArray<UMovieSceneAsyncAction_SequencePrediction*> PendingPredictions;            // 0x00D0 (size: 0x10)
+    TArray<UMovieSceneAsyncAction_SequencePrediction*> ProcessingPredictions;         // 0x00E0 (size: 0x10)
 
 }; // Size: 0xF0
 
 class UMovieScenePrimitiveMaterialSection : public UMovieSceneSection
 {
-    FMovieSceneObjectPathChannel MaterialChannel;                                     // 0x00F8 (size: 0x130)
+    FMovieSceneObjectPathChannel MaterialChannel;                                     // 0x0110 (size: 0x130)
 
-}; // Size: 0x228
+}; // Size: 0x240
 
 class UMovieScenePrimitiveMaterialTrack : public UMovieScenePropertyTrack
 {
-    int32 MaterialIndex;                                                              // 0x00C8 (size: 0x4)
+    FComponentMaterialInfo MaterialInfo;                                              // 0x0140 (size: 0x10)
 
-}; // Size: 0xD0
+}; // Size: 0x150
 
 class UMovieScenePropertyInstantiatorSystem : public UMovieSceneEntityInstantiatorSystem
 {
-}; // Size: 0x268
+}; // Size: 0x1E0
 
 class UMovieScenePropertySystem : public UMovieSceneEntitySystem
 {
@@ -1239,11 +1341,11 @@ class UMovieScenePropertySystem : public UMovieSceneEntitySystem
 
 class UMovieScenePropertyTrack : public UMovieSceneNameableTrack
 {
-    class UMovieSceneSection* SectionToKey;                                           // 0x0098 (size: 0x8)
-    FMovieScenePropertyBinding PropertyBinding;                                       // 0x00A0 (size: 0x14)
-    TArray<class UMovieSceneSection*> Sections;                                       // 0x00B8 (size: 0x10)
+    class UMovieSceneSection* SectionToKey;                                           // 0x0110 (size: 0x8)
+    FMovieScenePropertyBinding PropertyBinding;                                       // 0x0118 (size: 0x14)
+    TArray<UMovieSceneSection*> Sections;                                             // 0x0130 (size: 0x10)
 
-}; // Size: 0xC8
+}; // Size: 0x140
 
 class UMovieSceneQuaternionBlenderSystem : public UMovieSceneBlenderSystem
 {
@@ -1253,55 +1355,121 @@ class UMovieSceneQuaternionInterpolationRotationSystem : public UMovieSceneEntit
 {
 }; // Size: 0x40
 
+class UMovieSceneReplaceableActorBinding : public UMovieSceneReplaceableBindingBase
+{
+}; // Size: 0x28
+
+class UMovieSceneReplaceableActorBinding_BPBase : public UMovieSceneReplaceableBindingBase
+{
+    int32 CustomBindingPriority;                                                      // 0x0028 (size: 0x4)
+    TSubclassOf<class UMovieSceneSpawnableBindingBase> PreviewSpawnableType;          // 0x0030 (size: 0x8)
+
+    bool BP_SupportsBindingCreationFromObject(const class UObject* SourceObject);
+    FMovieSceneBindingResolveResult BP_ResolveRuntimeBinding(const FMovieSceneBindingResolveContext& ResolveContext);
+    void BP_InitReplaceableBinding(class UObject* SourceObject, class UMovieScene* OwnerMovieScene);
+}; // Size: 0x38
+
+class UMovieSceneReplaceableDirectorBlueprintBinding : public UMovieSceneReplaceableBindingBase
+{
+    FMovieSceneDynamicBinding DynamicBinding;                                         // 0x0028 (size: 0x28)
+    TSubclassOf<class UMovieSceneSpawnableBindingBase> PreviewSpawnableType;          // 0x0050 (size: 0x8)
+
+}; // Size: 0x58
+
+class UMovieSceneRotatorPropertySystem : public UMovieScenePropertySystem
+{
+}; // Size: 0x58
+
+class UMovieSceneRotatorSection : public UMovieSceneSection
+{
+    FMovieSceneDoubleChannel Rotation;                                                // 0x0110 (size: 0x348)
+
+}; // Size: 0x458
+
+class UMovieSceneRotatorTrack : public UMovieScenePropertyTrack
+{
+}; // Size: 0x140
+
+class UMovieSceneScalabilityCondition : public UMovieSceneCondition
+{
+    EMovieSceneScalabilityConditionGroup Group;                                       // 0x0060 (size: 0x1)
+    EMovieSceneScalabilityConditionOperator Operator;                                 // 0x0061 (size: 0x1)
+    EMovieSceneScalabilityConditionLevel Level;                                       // 0x0062 (size: 0x1)
+
+}; // Size: 0x68
+
 class UMovieSceneSkeletalAnimationSection : public UMovieSceneSection
 {
-    FMovieSceneSkeletalAnimationParams Params;                                        // 0x00F8 (size: 0x150)
-    class UAnimSequence* AnimSequence;                                                // 0x0248 (size: 0x8)
-    class UAnimSequenceBase* Animation;                                               // 0x0250 (size: 0x8)
-    float StartOffset;                                                                // 0x0258 (size: 0x4)
-    float EndOffset;                                                                  // 0x025C (size: 0x4)
-    float PlayRate;                                                                   // 0x0260 (size: 0x4)
-    uint8 bReverse;                                                                   // 0x0264 (size: 0x1)
-    FName SlotName;                                                                   // 0x0268 (size: 0x8)
-    FVector StartLocationOffset;                                                      // 0x0270 (size: 0x18)
-    FRotator StartRotationOffset;                                                     // 0x0288 (size: 0x18)
-    bool bMatchWithPrevious;                                                          // 0x02A0 (size: 0x1)
-    FName MatchedBoneName;                                                            // 0x02A4 (size: 0x8)
-    FVector MatchedLocationOffset;                                                    // 0x02B0 (size: 0x18)
-    FRotator MatchedRotationOffset;                                                   // 0x02C8 (size: 0x18)
-    bool bMatchTranslation;                                                           // 0x02E0 (size: 0x1)
-    bool bMatchIncludeZHeight;                                                        // 0x02E1 (size: 0x1)
-    bool bMatchRotationYaw;                                                           // 0x02E2 (size: 0x1)
-    bool bMatchRotationPitch;                                                         // 0x02E3 (size: 0x1)
-    bool bMatchRotationRoll;                                                          // 0x02E4 (size: 0x1)
+    FMovieSceneSkeletalAnimationParams Params;                                        // 0x0110 (size: 0x158)
+    class UAnimSequence* AnimSequence;                                                // 0x0268 (size: 0x8)
+    class UAnimSequenceBase* Animation;                                               // 0x0270 (size: 0x8)
+    float StartOffset;                                                                // 0x0278 (size: 0x4)
+    float EndOffset;                                                                  // 0x027C (size: 0x4)
+    float PlayRate;                                                                   // 0x0280 (size: 0x4)
+    uint8 bReverse;                                                                   // 0x0284 (size: 0x1)
+    FName SlotName;                                                                   // 0x0288 (size: 0x8)
+    FVector StartLocationOffset;                                                      // 0x0290 (size: 0x18)
+    FRotator StartRotationOffset;                                                     // 0x02A8 (size: 0x18)
+    FName MatchedBoneName;                                                            // 0x02C0 (size: 0x8)
+    FVector MatchedLocationOffset;                                                    // 0x02C8 (size: 0x18)
+    FRotator MatchedRotationOffset;                                                   // 0x02E0 (size: 0x18)
+    uint8 bMatchWithPrevious;                                                         // 0x02F8 (size: 0x1)
+    uint8 bMatchTranslation;                                                          // 0x02F8 (size: 0x1)
+    uint8 bMatchIncludeZHeight;                                                       // 0x02F8 (size: 0x1)
+    uint8 bMatchRotationYaw;                                                          // 0x02F8 (size: 0x1)
+    uint8 bMatchRotationPitch;                                                        // 0x02F8 (size: 0x1)
+    uint8 bMatchRotationRoll;                                                         // 0x02F8 (size: 0x1)
+    uint8 bDebugForceTickPose;                                                        // 0x02F8 (size: 0x1)
+    FInstancedStruct MixedAnimationTarget;                                            // 0x0300 (size: 0x10)
+    int32 MixedAnimationPriority;                                                     // 0x0310 (size: 0x4)
 
-}; // Size: 0x360
+}; // Size: 0x390
 
 class UMovieSceneSkeletalAnimationSystem : public UMovieSceneEntitySystem
 {
 }; // Size: 0xE0
 
-class UMovieSceneSkeletalAnimationTrack : public UMovieSceneNameableTrack
+class UMovieSceneSkeletalAnimationTrack : public UMovieSceneCommonAnimationTrack
 {
-    TArray<class UMovieSceneSection*> AnimationSections;                              // 0x0098 (size: 0x10)
-    bool bUseLegacySectionIndexBlend;                                                 // 0x00A8 (size: 0x1)
-    FMovieSceneSkeletalAnimRootMotionTrackParams RootMotionParams;                    // 0x00B0 (size: 0x80)
-    bool bBlendFirstChildOfRoot;                                                      // 0x0130 (size: 0x1)
-    ESwapRootBone SwapRootBone;                                                       // 0x0131 (size: 0x1)
+    bool bUseLegacySectionIndexBlend;                                                 // 0x01A8 (size: 0x1)
+    ESwapRootBone SwapRootBone;                                                       // 0x01A9 (size: 0x1)
 
     void SetSwapRootBone(ESwapRootBone InValue);
     ESwapRootBone GetSwapRootBone();
-}; // Size: 0x140
+}; // Size: 0x1B0
 
 class UMovieSceneSlomoSection : public UMovieSceneSection
 {
-    FMovieSceneFloatChannel FloatCurve;                                               // 0x00F0 (size: 0x110)
+    FMovieSceneFloatChannel FloatCurve;                                               // 0x0110 (size: 0x110)
 
-}; // Size: 0x200
+}; // Size: 0x220
+
+class UMovieSceneSlomoSystem : public UMovieSceneEntitySystem
+{
+}; // Size: 0x58
 
 class UMovieSceneSlomoTrack : public UMovieSceneFloatTrack
 {
-}; // Size: 0xD0
+}; // Size: 0x140
+
+class UMovieSceneSpawnableActorBinding : public UMovieSceneSpawnableActorBindingBase
+{
+    class AActor* ActorTemplate;                                                      // 0x0040 (size: 0x8)
+
+}; // Size: 0x48
+
+class UMovieSceneSpawnableActorBindingBase : public UMovieSceneSpawnableBindingBase
+{
+    bool bNetAddressableName;                                                         // 0x0030 (size: 0x1)
+    FName LevelName;                                                                  // 0x0034 (size: 0x8)
+
+}; // Size: 0x40
+
+class UMovieSceneSpawnableDirectorBlueprintBinding : public UMovieSceneSpawnableBindingBase
+{
+    FMovieSceneDynamicBinding DynamicBinding;                                         // 0x0030 (size: 0x28)
+
+}; // Size: 0x58
 
 class UMovieSceneStringPropertySystem : public UMovieScenePropertySystem
 {
@@ -1309,21 +1477,27 @@ class UMovieSceneStringPropertySystem : public UMovieScenePropertySystem
 
 class UMovieSceneStringSection : public UMovieSceneSection
 {
-    FMovieSceneStringChannel StringCurve;                                             // 0x00F8 (size: 0x110)
+    FMovieSceneStringChannel StringCurve;                                             // 0x0110 (size: 0x110)
 
-}; // Size: 0x208
+}; // Size: 0x220
 
 class UMovieSceneStringTrack : public UMovieScenePropertyTrack
 {
-}; // Size: 0xC8
+}; // Size: 0x140
 
 class UMovieSceneTestSequence : public UMovieSceneSequence
 {
     class UMovieScene* MovieScene;                                                    // 0x0068 (size: 0x8)
-    TArray<class UObject*> BoundObjects;                                              // 0x0070 (size: 0x10)
+    TArray<UObject*> BoundObjects;                                                    // 0x0070 (size: 0x10)
     TArray<FGuid> BindingGuids;                                                       // 0x0080 (size: 0x10)
 
 }; // Size: 0x90
+
+class UMovieSceneTracksSettings : public UObject
+{
+    bool bPreviewCameraCutsInSimulate;                                                // 0x0028 (size: 0x1)
+
+}; // Size: 0x30
 
 class UMovieSceneTransformOriginInstantiatorSystem : public UMovieSceneEntitySystem
 {
@@ -1331,15 +1505,23 @@ class UMovieSceneTransformOriginInstantiatorSystem : public UMovieSceneEntitySys
 
 class UMovieSceneTransformOriginSystem : public UMovieSceneEntitySystem
 {
-}; // Size: 0x78
+}; // Size: 0x158
 
 class UMovieSceneTransformTrack : public UMovieScenePropertyTrack
 {
-}; // Size: 0xC8
+}; // Size: 0x140
 
-class UMovieSceneVisibilityTrack : public UMovieSceneBoolTrack
+class UMovieSceneVisibilitySection : public UMovieSceneBoolSection
 {
-}; // Size: 0xD0
+}; // Size: 0x220
+
+class UMovieSceneVisibilitySystem : public UMovieSceneEntityInstantiatorSystem
+{
+}; // Size: 0x50
+
+class UMovieSceneVisibilityTrack : public UMovieScenePropertyTrack
+{
+}; // Size: 0x140
 
 class UObjectPathChannelEvaluatorSystem : public UMovieSceneEntitySystem
 {

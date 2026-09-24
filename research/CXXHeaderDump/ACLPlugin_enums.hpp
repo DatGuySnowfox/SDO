@@ -4,7 +4,8 @@ enum ACLCompressionLevel {
     ACLCL_Medium = 2,
     ACLCL_High = 3,
     ACLCL_Highest = 4,
-    ACLCL_MAX = 5,
+    ACLCL_Automatic = 5,
+    ACLCL_MAX = 6,
 };
 
 enum ACLRotationFormat {

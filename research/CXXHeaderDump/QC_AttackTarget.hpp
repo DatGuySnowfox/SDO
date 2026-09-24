@@ -4,7 +4,7 @@
 class UQC_AttackTarget_C : public UEnvQueryContext_BlueprintBase
 {
 
-    void ProvideActorsSet(class UObject* QuerierObject, class AActor* QuerierActor, TArray<class AActor*>& ResultingActorsSet);
+    void ProvideActorsSet(class UObject* QuerierObject, class AActor* QuerierActor, TArray<AActor*>& ResultingActorsSet);
 }; // Size: 0x30
 
 #endif

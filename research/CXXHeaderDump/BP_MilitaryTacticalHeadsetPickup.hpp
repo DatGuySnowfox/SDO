@@ -3,7 +3,7 @@
 
 class ABP_MilitaryTacticalHeadsetPickup_C : public ABP_StaticMeshPickup_C
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0310 (size: 0x8)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0320 (size: 0x8)
 
     void Jig_AttachmentInstalled(FGuid MainUID, TArray<FS_RepAttachmentInfo>& Attachments, bool& Result, FGameplayTag& AttachmentType);
     void Jig_AttachmentRemoved(TArray<FS_RepAttachmentInfo>& Attachments, bool& Result, FGameplayTag& AttachmentType);
@@ -21,13 +21,13 @@ class ABP_MilitaryTacticalHeadsetPickup_C : public ABP_StaticMeshPickup_C
     void Jig_GetPendingMag(bool FindMagIfNoPending?, class ABP_AMainLocalAttachment_C*& MagRef);
     void Jig_GetAttachmentActiveState(FGameplayTag& Result);
     void Jig_GetAvailableAttachmentStates(FGameplayTagContainer& States);
-    void Jig_GetAttachmentArrayByType(FGameplayTag Type, TArray<class ABP_AMainLocalAttachment_C*>& Attachment, bool& Found);
+    void Jig_GetAttachmentArrayByType(FGameplayTag Type, TArray<ABP_AMainLocalAttachment_C*>& Attachment, bool& Found);
     void Jig_OnMontageNotify(FName NotifyName);
     void Jig_OnAttachmentSnapInspector();
     void Jig_SetAttachmentActiveState(FGameplayTag Value);
     void Jig_ToggleAttachmentActiveState();
     void Jig_SetAttachmentState(const TArray<FGuid>& UID, FGameplayTag NewState, bool PreExecuteClientSide?);
     void ExecuteUbergraph_BP_MilitaryTacticalHeadsetPickup(int32 EntryPoint);
-}; // Size: 0x318
+}; // Size: 0x328
 
 #endif

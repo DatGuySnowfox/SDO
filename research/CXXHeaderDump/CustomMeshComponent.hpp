@@ -15,6 +15,6 @@ class UCustomMeshComponent : public UMeshComponent
     bool SetCustomMeshTriangles(const TArray<FCustomMeshTriangle>& Triangles);
     void ClearCustomMeshTriangles();
     void AddCustomMeshTriangles(const TArray<FCustomMeshTriangle>& Triangles);
-}; // Size: 0x5C0
+}; // Size: 0x580
 
 #endif

@@ -3,20 +3,20 @@
 
 class ABP_Barber_C : public ABP_MasterObject_C
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02A0 (size: 0x8)
-    class UBillboardComponent* DebugCamera;                                           // 0x02A8 (size: 0x8)
-    class UBillboardComponent* Debug;                                                 // 0x02B0 (size: 0x8)
-    class UStaticMeshComponent* Glasses;                                              // 0x02B8 (size: 0x8)
-    class UStaticMeshComponent* Hair;                                                 // 0x02C0 (size: 0x8)
-    class UStaticMeshComponent* Object;                                               // 0x02C8 (size: 0x8)
-    class UAIOSubjectComponent* AIOSubject;                                           // 0x02D0 (size: 0x8)
-    class UCameraComponent* Camera;                                                   // 0x02D8 (size: 0x8)
-    class USkeletalMeshComponent* SkeletalMesh;                                       // 0x02E0 (size: 0x8)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02B0 (size: 0x8)
+    class UBillboardComponent* DebugCamera;                                           // 0x02B8 (size: 0x8)
+    class UBillboardComponent* Debug;                                                 // 0x02C0 (size: 0x8)
+    class UStaticMeshComponent* Glasses;                                              // 0x02C8 (size: 0x8)
+    class UStaticMeshComponent* Hair;                                                 // 0x02D0 (size: 0x8)
+    class UStaticMeshComponent* Object;                                               // 0x02D8 (size: 0x8)
+    class UAIOSubjectComponent* AIOSubject;                                           // 0x02E0 (size: 0x8)
+    class UCameraComponent* Camera;                                                   // 0x02E8 (size: 0x8)
+    class USkeletalMeshComponent* SkeletalMesh;                                       // 0x02F0 (size: 0x8)
 
     void GetMainSceneComp(class USceneComponent*& Comp);
-    void GetInteractOptions(TMap<class FGameplayTag, class FText>& Options);
+    void GetInteractOptions(TMap<FGameplayTag, FText>& Options);
     void GetJigMultiplayerComponent(class UActorComponent*& JigComp);
-    void GetItemInfo(class UJigsawItem_DataAsset_C*& Info, int32& Count, FS_RandomStatsConfig& RandomStatsConfig, TMap<class FString, class FString>& CustomData);
+    void GetItemInfo(class UJigsawItem_DataAsset_C*& Info, int32& Count, FS_RandomStatsConfig& RandomStatsConfig, TMap<FString, FString>& CustomData);
     void JigCanInteract(bool& Result);
     void JigSetCanInteract(bool CanInteract, bool EnablePhysics, bool& Result);
     void SetPickupCount(int32 NewCount, bool& Result);
@@ -32,9 +32,9 @@ class ABP_Barber_C : public ABP_MasterObject_C
     void ReceiveBeginPlay();
     void OnExecuteInteract(class AActor* InteractingActor, FGameplayTag Option);
     void OnEndInteract();
-    void OnBeginInteract(class AActor* InteractingActor, const TMap<class FGameplayTag, class FText> Options);
+    void OnBeginInteract(class AActor* InteractingActor, const TMap<FGameplayTag, FText> Options);
     void Event_Exit();
     void ExecuteUbergraph_BP_Barber(int32 EntryPoint);
-}; // Size: 0x2E8
+}; // Size: 0x2F8
 
 #endif

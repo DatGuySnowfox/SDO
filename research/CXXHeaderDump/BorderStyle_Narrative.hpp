@@ -3,6 +3,6 @@
 
 class UBorderStyle_Narrative_C : public UCommonBorderStyle
 {
-}; // Size: 0x100
+}; // Size: 0xE0
 
 #endif

@@ -27,16 +27,17 @@ class UAnimBoneCompressionCodec_ACLSafe : public UAnimBoneCompressionCodec_ACLBa
 
 class UAnimCurveCompressionCodec_ACL : public UAnimCurveCompressionCodec
 {
-}; // Size: 0x38
+}; // Size: 0x28
 
 class UAnimationCompressionLibraryDatabase : public UObject
 {
     TArray<uint8> CookedCompressedBytes;                                              // 0x0028 (size: 0x10)
     TArray<uint64> CookedAnimSequenceMappings;                                        // 0x0038 (size: 0x10)
-    uint32 MaxStreamRequestSizeKB;                                                    // 0x0160 (size: 0x4)
+    uint32 MaxStreamRequestSizeKB;                                                    // 0x0120 (size: 0x4)
+    ACLVisualFidelity DefaultVisualFidelity;                                          // 0x0124 (size: 0x1)
 
     void SetVisualFidelity(class UObject* WorldContextObject, FLatentActionInfo LatentInfo, class UAnimationCompressionLibraryDatabase* DatabaseAsset, ACLVisualFidelityChangeResult& Result, ACLVisualFidelity VisualFidelity);
     ACLVisualFidelity GetVisualFidelity(class UAnimationCompressionLibraryDatabase* DatabaseAsset);
-}; // Size: 0x168
+}; // Size: 0x128
 
 #endif

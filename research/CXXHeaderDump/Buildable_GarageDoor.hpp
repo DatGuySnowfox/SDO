@@ -3,11 +3,11 @@
 
 class ABuildable_GarageDoor_C : public ABuildable_MASTER_C
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0430 (size: 0x8)
-    class USphereComponent* Sphere;                                                   // 0x0438 (size: 0x8)
-    class USkeletalMeshComponent* SkeletalMesh;                                       // 0x0440 (size: 0x8)
-    bool Opened?;                                                                     // 0x0448 (size: 0x1)
-    bool DoorOpening?;                                                                // 0x0449 (size: 0x1)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0440 (size: 0x8)
+    class USphereComponent* Sphere;                                                   // 0x0448 (size: 0x8)
+    class USkeletalMeshComponent* SkeletalMesh;                                       // 0x0450 (size: 0x8)
+    bool Opened?;                                                                     // 0x0458 (size: 0x1)
+    bool DoorOpening?;                                                                // 0x0459 (size: 0x1)
 
     void OnNotifyEnd_3D2E1B16475F14FE5B531DA34A955BAC(FName NotifyName);
     void OnNotifyBegin_3D2E1B16475F14FE5B531DA34A955BAC(FName NotifyName);
@@ -26,6 +26,6 @@ class ABuildable_GarageDoor_C : public ABuildable_MASTER_C
     void OnServerExecuteInteract(FGameplayTag Option, class AActor* ByActor, FS_JigPayload Payload);
     void BndEvt__BP_CookingStation_AIOSubject_K2Node_ComponentBoundEvent_0_OnOptimizationUpdate__DelegateSignature(bool bIsBeyondLastLayer, int32 LayerIndex, bool bIsSeen);
     void ExecuteUbergraph_Buildable_GarageDoor(int32 EntryPoint);
-}; // Size: 0x44A
+}; // Size: 0x45A
 
 #endif

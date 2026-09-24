@@ -5,16 +5,23 @@
 
 struct FBodyInstanceCore
 {
-    uint8 bSimulatePhysics;                                                           // 0x0010 (size: 0x1)
-    uint8 bOverrideMass;                                                              // 0x0010 (size: 0x1)
-    uint8 bEnableGravity;                                                             // 0x0010 (size: 0x1)
-    uint8 bUpdateKinematicFromSimulation;                                             // 0x0010 (size: 0x1)
-    uint8 bAutoWeld;                                                                  // 0x0010 (size: 0x1)
-    uint8 bStartAwake;                                                                // 0x0010 (size: 0x1)
-    uint8 bGenerateWakeEvents;                                                        // 0x0010 (size: 0x1)
-    uint8 bUpdateMassWhenScaleChanges;                                                // 0x0010 (size: 0x1)
+    uint8 bSimulatePhysics;                                                           // 0x0008 (size: 0x1)
+    uint8 bOverrideMass;                                                              // 0x0008 (size: 0x1)
+    uint8 bEnableGravity;                                                             // 0x0008 (size: 0x1)
+    uint8 bUpdateKinematicFromSimulation;                                             // 0x0008 (size: 0x1)
+    uint8 bGyroscopicTorqueEnabled;                                                   // 0x0008 (size: 0x1)
+    uint8 bAutoWeld;                                                                  // 0x0008 (size: 0x1)
+    uint8 bStartAwake;                                                                // 0x0008 (size: 0x1)
+    uint8 bGenerateWakeEvents;                                                        // 0x0008 (size: 0x1)
+    uint8 bUpdateMassWhenScaleChanges;                                                // 0x0009 (size: 0x1)
 
-}; // Size: 0x18
+}; // Size: 0xC
+
+struct FPhysicalMaterialDamageModifier
+{
+    float DamageThresholdMultiplier;                                                  // 0x0000 (size: 0x4)
+
+}; // Size: 0x4
 
 struct FPhysicalMaterialStrength
 {
@@ -67,8 +74,14 @@ class UPhysicalMaterial : public UObject
     class UDEPRECATED_PhysicalMaterialPropertyBase* PhysicalMaterialProperty;         // 0x0058 (size: 0x8)
     TEnumAsByte<EPhysicalSurface> SurfaceType;                                        // 0x0060 (size: 0x1)
     FPhysicalMaterialStrength Strength;                                               // 0x0064 (size: 0xC)
+    FPhysicalMaterialDamageModifier DamageModifier;                                   // 0x0070 (size: 0x4)
+    FLinearColor DebugColor;                                                          // 0x0074 (size: 0x10)
+    bool bShowExperimentalProperties;                                                 // 0x0084 (size: 0x1)
+    EPhysicalMaterialSoftCollisionMode SoftCollisionMode;                             // 0x0085 (size: 0x1)
+    float SoftCollisionThickness;                                                     // 0x0088 (size: 0x4)
+    float BaseFrictionImpulse;                                                        // 0x008C (size: 0x4)
 
-}; // Size: 0x88
+}; // Size: 0xA8
 
 class UPhysicsSettingsCore : public UDeveloperSettings
 {
@@ -95,8 +108,8 @@ class UPhysicsSettingsCore : public UDeveloperSettings
     float MaxContactOffset;                                                           // 0x0070 (size: 0x4)
     bool bSimulateSkeletalMeshOnDedicatedServer;                                      // 0x0074 (size: 0x1)
     TEnumAsByte<ECollisionTraceFlag> DefaultShapeComplexity;                          // 0x0075 (size: 0x1)
-    FChaosSolverConfiguration SolverOptions;                                          // 0x0078 (size: 0x68)
+    FChaosSolverConfiguration SolverOptions;                                          // 0x0078 (size: 0x84)
 
-}; // Size: 0xE0
+}; // Size: 0x100
 
 #endif

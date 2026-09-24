@@ -3,21 +3,21 @@
 
 class URandom_Weather_Variation_C : public UActorComponent
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x00A0 (size: 0x8)
-    class AUltra_Dynamic_Weather_C* UDW;                                              // 0x00A8 (size: 0x8)
-    class UUDS_Weather_Settings_C* Target Random Weather Type;                        // 0x00B0 (size: 0x8)
-    double Current Lerp Alpha;                                                        // 0x00B8 (size: 0x8)
-    double Current Timer Length;                                                      // 0x00C0 (size: 0x8)
-    class AWeather_Override_Volume_C* Volume;                                         // 0x00C8 (size: 0x8)
-    class UUDS_Weather_Settings_C* Last Random Weather Type;                          // 0x00D0 (size: 0x8)
-    class UUDS_Weather_Settings_C* Current Random Weather State;                      // 0x00D8 (size: 0x8)
-    double Change Timer;                                                              // 0x00E0 (size: 0x8)
-    bool Started;                                                                     // 0x00E8 (size: 0x1)
-    double Eased Lerp Alpha;                                                          // 0x00F0 (size: 0x8)
-    bool Changing Weather;                                                            // 0x00F8 (size: 0x1)
-    bool For WOV;                                                                     // 0x00F9 (size: 0x1)
-    TArray<class UUDS_Weather_Settings_C*> Weather Forecast;                          // 0x0100 (size: 0x10)
-    bool First Type Selected;                                                         // 0x0110 (size: 0x1)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x00B8 (size: 0x8)
+    class AUltra_Dynamic_Weather_C* UDW;                                              // 0x00C0 (size: 0x8)
+    class UUDS_Weather_Settings_C* Target Random Weather Type;                        // 0x00C8 (size: 0x8)
+    double Current Lerp Alpha;                                                        // 0x00D0 (size: 0x8)
+    double Current Timer Length;                                                      // 0x00D8 (size: 0x8)
+    class AWeather_Override_Volume_C* Volume;                                         // 0x00E0 (size: 0x8)
+    class UUDS_Weather_Settings_C* Last Random Weather Type;                          // 0x00E8 (size: 0x8)
+    class UUDS_Weather_Settings_C* Current Random Weather State;                      // 0x00F0 (size: 0x8)
+    double Change Timer;                                                              // 0x00F8 (size: 0x8)
+    bool Started;                                                                     // 0x0100 (size: 0x1)
+    double Eased Lerp Alpha;                                                          // 0x0108 (size: 0x8)
+    bool Changing Weather;                                                            // 0x0110 (size: 0x1)
+    bool For WOV;                                                                     // 0x0111 (size: 0x1)
+    TArray<UUDS_Weather_Settings_C*> Weather Forecast;                                // 0x0118 (size: 0x10)
+    bool First Type Selected;                                                         // 0x0128 (size: 0x1)
 
     void Instant Material Update();
     void Get Material State Manager(class UUDW_Material_State_Manager_C*& Material State Manager);
@@ -47,6 +47,6 @@ class URandom_Weather_Variation_C : public UActorComponent
     void ReceiveTick(float DeltaSeconds);
     void Reset Timer();
     void ExecuteUbergraph_Random_Weather_Variation(int32 EntryPoint);
-}; // Size: 0x111
+}; // Size: 0x129
 
 #endif

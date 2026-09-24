@@ -10,17 +10,6 @@ struct FXRDeviceId
 
 }; // Size: 0xC
 
-struct FXRGestureConfig
-{
-    bool bTap;                                                                        // 0x0000 (size: 0x1)
-    bool bHold;                                                                       // 0x0001 (size: 0x1)
-    ESpatialInputGestureAxis AxisGesture;                                             // 0x0002 (size: 0x1)
-    bool bNavigationAxisX;                                                            // 0x0003 (size: 0x1)
-    bool bNavigationAxisY;                                                            // 0x0004 (size: 0x1)
-    bool bNavigationAxisZ;                                                            // 0x0005 (size: 0x1)
-
-}; // Size: 0x6
-
 struct FXRHMDData
 {
     bool bValid;                                                                      // 0x0000 (size: 0x1)
@@ -31,6 +20,20 @@ struct FXRHMDData
     FQuat Rotation;                                                                   // 0x0040 (size: 0x20)
 
 }; // Size: 0x60
+
+struct FXRHandTrackingState
+{
+    bool bValid;                                                                      // 0x0000 (size: 0x1)
+    FName DeviceName;                                                                 // 0x0004 (size: 0x8)
+    FGuid ApplicationInstanceID;                                                      // 0x000C (size: 0x10)
+    EXRSpaceType XRSpaceType;                                                         // 0x001C (size: 0x1)
+    EControllerHand Hand;                                                             // 0x001D (size: 0x1)
+    ETrackingStatus TrackingStatus;                                                   // 0x001E (size: 0x1)
+    TArray<FVector> HandKeyLocations;                                                 // 0x0020 (size: 0x10)
+    TArray<FQuat> HandKeyRotations;                                                   // 0x0030 (size: 0x10)
+    TArray<float> HandKeyRadii;                                                       // 0x0040 (size: 0x10)
+
+}; // Size: 0x50
 
 struct FXRMotionControllerData
 {
@@ -53,6 +56,22 @@ struct FXRMotionControllerData
 
 }; // Size: 0x120
 
+struct FXRMotionControllerState
+{
+    bool bValid;                                                                      // 0x0000 (size: 0x1)
+    FName DeviceName;                                                                 // 0x0004 (size: 0x8)
+    FGuid ApplicationInstanceID;                                                      // 0x000C (size: 0x10)
+    EXRSpaceType XRSpaceType;                                                         // 0x001C (size: 0x1)
+    EControllerHand Hand;                                                             // 0x001D (size: 0x1)
+    ETrackingStatus TrackingStatus;                                                   // 0x001E (size: 0x1)
+    EXRControllerPoseType XRControllerPoseType;                                       // 0x001F (size: 0x1)
+    FVector ControllerLocation;                                                       // 0x0020 (size: 0x18)
+    FQuat ControllerRotation;                                                         // 0x0040 (size: 0x20)
+    FVector GripUnrealSpaceLocation;                                                  // 0x0060 (size: 0x18)
+    FQuat GripUnrealSpaceRotation;                                                    // 0x0080 (size: 0x20)
+
+}; // Size: 0xA0
+
 class UHandKeypointConversion : public UBlueprintFunctionLibrary
 {
 
@@ -61,21 +80,13 @@ class UHandKeypointConversion : public UBlueprintFunctionLibrary
 
 class UMotionControllerComponent : public UPrimitiveComponent
 {
-    int32 PlayerIndex;                                                                // 0x0570 (size: 0x4)
-    FName MotionSource;                                                               // 0x0574 (size: 0x8)
-    uint8 bDisableLowLatencyUpdate;                                                   // 0x057C (size: 0x1)
-    ETrackingStatus CurrentTrackingStatus;                                            // 0x0580 (size: 0x1)
-    bool bDisplayDeviceModel;                                                         // 0x0581 (size: 0x1)
-    FName DisplayModelSource;                                                         // 0x0584 (size: 0x8)
-    class UStaticMesh* CustomDisplayMesh;                                             // 0x0590 (size: 0x8)
-    TArray<class UMaterialInterface*> DisplayMeshMaterialOverrides;                   // 0x0598 (size: 0x10)
-    class UPrimitiveComponent* DisplayComponent;                                      // 0x05A8 (size: 0x8)
+    int32 PlayerIndex;                                                                // 0x0520 (size: 0x4)
+    FName MotionSource;                                                               // 0x0524 (size: 0x8)
+    uint8 bDisableLowLatencyUpdate;                                                   // 0x052C (size: 0x1)
+    ETrackingStatus CurrentTrackingStatus;                                            // 0x0530 (size: 0x1)
 
     void SetTrackingSource(const EControllerHand NewSource);
     void SetTrackingMotionSource(const FName NewSource);
-    void SetShowDeviceModel(const bool bShowControllerModel);
-    void SetDisplayModelSource(const FName NewDisplayModelSource);
-    void SetCustomDisplayMesh(class UStaticMesh* NewDisplayMesh);
     void SetAssociatedPlayerIndex(const int32 NewPlayer);
     void OnMotionControllerUpdated();
     bool IsTracked();
@@ -85,6 +96,6 @@ class UMotionControllerComponent : public UPrimitiveComponent
     bool GetLinearAcceleration(FVector& OutLinearAcceleration);
     FVector GetHandJointPosition(int32 jointIndex, bool& bValueFound);
     bool GetAngularVelocity(FRotator& OutAngularVelocity);
-}; // Size: 0x6F0
+}; // Size: 0x660
 
 #endif

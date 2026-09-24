@@ -13,21 +13,23 @@ struct FAimTarget
 
 struct FAnimNode_ControlRig : public FAnimNode_ControlRigBase
 {
-    TSubclassOf<class UControlRig> ControlRigClass;                                   // 0x0230 (size: 0x8)
+    TSubclassOf<class UControlRig> ControlRigClass;                                   // 0x0228 (size: 0x8)
+    TSubclassOf<class UControlRig> DefaultControlRigClass;                            // 0x0230 (size: 0x8)
     class UControlRig* ControlRig;                                                    // 0x0238 (size: 0x8)
-    float Alpha;                                                                      // 0x0240 (size: 0x4)
-    EAnimAlphaInputType AlphaInputType;                                               // 0x0244 (size: 0x1)
-    uint8 bAlphaBoolEnabled;                                                          // 0x0245 (size: 0x1)
-    uint8 bSetRefPoseFromSkeleton;                                                    // 0x0245 (size: 0x1)
-    FInputScaleBias AlphaScaleBias;                                                   // 0x0248 (size: 0x8)
-    FInputAlphaBoolBlend AlphaBoolBlend;                                              // 0x0250 (size: 0x48)
-    FName AlphaCurveName;                                                             // 0x0298 (size: 0x8)
-    FInputScaleBiasClamp AlphaScaleBiasClamp;                                         // 0x02A0 (size: 0x30)
-    TMap<class FName, class FName> InputMapping;                                      // 0x02D0 (size: 0x50)
-    TMap<class FName, class FName> OutputMapping;                                     // 0x0320 (size: 0x50)
-    int32 LODThreshold;                                                               // 0x0420 (size: 0x4)
+    TMap<UClass*, UControlRig*> ControlRigPerClass;                                   // 0x0240 (size: 0x50)
+    float Alpha;                                                                      // 0x0290 (size: 0x4)
+    EAnimAlphaInputType AlphaInputType;                                               // 0x0294 (size: 0x1)
+    uint8 bAlphaBoolEnabled;                                                          // 0x0295 (size: 0x1)
+    uint8 bSetRefPoseFromSkeleton;                                                    // 0x0295 (size: 0x1)
+    FInputScaleBias AlphaScaleBias;                                                   // 0x0298 (size: 0x8)
+    FInputAlphaBoolBlend AlphaBoolBlend;                                              // 0x02A0 (size: 0x48)
+    FName AlphaCurveName;                                                             // 0x02E8 (size: 0x8)
+    FInputScaleBiasClamp AlphaScaleBiasClamp;                                         // 0x02F0 (size: 0x30)
+    TMap<FName, FName> InputMapping;                                                  // 0x0320 (size: 0x50)
+    TMap<FName, FName> OutputMapping;                                                 // 0x0370 (size: 0x50)
+    int32 LODThreshold;                                                               // 0x03C0 (size: 0x4)
 
-}; // Size: 0x460
+}; // Size: 0x4B8
 
 struct FAnimNode_ControlRigBase : public FAnimNode_CustomProperty
 {
@@ -38,13 +40,14 @@ struct FAnimNode_ControlRigBase : public FAnimNode_CustomProperty
     bool bTransferPoseInGlobalSpace;                                                  // 0x006B (size: 0x1)
     TArray<FBoneReference> InputBonesToTransfer;                                      // 0x0070 (size: 0x10)
     TArray<FBoneReference> OutputBonesToTransfer;                                     // 0x0080 (size: 0x10)
-    TWeakObjectPtr<class UNodeMappingContainer> NodeMappingContainer;                 // 0x0200 (size: 0x8)
-    FControlRigIOSettings InputSettings;                                              // 0x0208 (size: 0x2)
-    FControlRigIOSettings OutputSettings;                                             // 0x020A (size: 0x2)
-    bool bExecute;                                                                    // 0x020C (size: 0x1)
-    TArray<FControlRigAnimNodeEventName> EventQueue;                                  // 0x0218 (size: 0x10)
+    TArray<UAssetUserData*> AssetUserData;                                            // 0x0090 (size: 0x10)
+    TWeakObjectPtr<class UNodeMappingContainer> NodeMappingContainer;                 // 0x00A0 (size: 0x8)
+    FControlRigIOSettings InputSettings;                                              // 0x00A8 (size: 0x2)
+    FControlRigIOSettings OutputSettings;                                             // 0x00AA (size: 0x2)
+    bool bExecute;                                                                    // 0x00AC (size: 0x1)
+    TArray<FControlRigAnimNodeEventName> EventQueue;                                  // 0x00B8 (size: 0x10)
 
-}; // Size: 0x230
+}; // Size: 0x228
 
 struct FAnimNode_ControlRigInputPose : public FAnimNode_Base
 {
@@ -54,9 +57,9 @@ struct FAnimNode_ControlRigInputPose : public FAnimNode_Base
 
 struct FAnimNode_ControlRig_ExternalSource : public FAnimNode_ControlRigBase
 {
-    TWeakObjectPtr<class UControlRig> ControlRig;                                     // 0x0230 (size: 0x8)
+    TWeakObjectPtr<class UControlRig> ControlRig;                                     // 0x0228 (size: 0x8)
 
-}; // Size: 0x238
+}; // Size: 0x230
 
 struct FAnimationHierarchy : public FNodeHierarchyWithUserData
 {
@@ -130,6 +133,14 @@ struct FCRSimSoftCollision
 
 }; // Size: 0x80
 
+struct FCachedRigComponent
+{
+    FCachedRigElement CachedElement;                                                  // 0x0000 (size: 0x20)
+    FName Name;                                                                       // 0x0020 (size: 0x8)
+    uint16 Index;                                                                     // 0x0028 (size: 0x2)
+
+}; // Size: 0x38
+
 struct FCachedRigElement
 {
     FRigElementKey Key;                                                               // 0x0000 (size: 0xC)
@@ -180,7 +191,7 @@ struct FConstraintTarget
 
 struct FControlRigAnimInstanceProxy : public FAnimInstanceProxy
 {
-}; // Size: 0x7A0
+}; // Size: 0x880
 
 struct FControlRigAnimNodeEventName
 {
@@ -236,7 +247,7 @@ struct FControlRigControlPose
 
 struct FControlRigExecuteContext : public FRigVMExecuteContext
 {
-}; // Size: 0x150
+}; // Size: 0x210
 
 struct FControlRigIOSettings
 {
@@ -247,7 +258,31 @@ struct FControlRigIOSettings
 
 struct FControlRigLayerInstanceProxy : public FAnimInstanceProxy
 {
-}; // Size: 0x7A0
+}; // Size: 0x840
+
+struct FControlRigOverrideContainer
+{
+}; // Size: 0x158
+
+struct FControlRigOverrideValue
+{
+}; // Size: 0x50
+
+struct FControlRigReference : public FAnimNodeReference
+{
+}; // Size: 0x10
+
+struct FControlRigReplayTracks : public FSampleTrackHost
+{
+}; // Size: 0x178
+
+struct FControlRigReplayVariable
+{
+    FName Name;                                                                       // 0x0000 (size: 0x8)
+    FName CPPType;                                                                    // 0x0008 (size: 0x8)
+    FString Value;                                                                    // 0x0010 (size: 0x10)
+
+}; // Size: 0x20
 
 struct FControlRigSequenceObjectReference
 {
@@ -270,14 +305,14 @@ struct FControlRigSequenceObjectReferences
 
 struct FControlRigSettingsPerPinBool
 {
-    TMap<class FString, class bool> Values;                                           // 0x0000 (size: 0x50)
+    TMap<FString, bool> Values;                                                       // 0x0000 (size: 0x50)
 
 }; // Size: 0x50
 
 struct FControlRigShapeDefinition
 {
     FName ShapeName;                                                                  // 0x0000 (size: 0x8)
-    TSoftObjectPtr<UStaticMesh> StaticMesh;                                           // 0x0008 (size: 0x28)
+    TSoftObjectPtr<class UStaticMesh> StaticMesh;                                     // 0x0008 (size: 0x28)
     FTransform Transform;                                                             // 0x0030 (size: 0x60)
 
 }; // Size: 0xA0
@@ -286,18 +321,11 @@ struct FControlRigTestDataFrame
 {
     double AbsoluteTime;                                                              // 0x0000 (size: 0x8)
     double DeltaTime;                                                                 // 0x0008 (size: 0x8)
-    TArray<FControlRigTestDataVariable> Variables;                                    // 0x0010 (size: 0x10)
+    TArray<FControlRigReplayVariable> Variables;                                      // 0x0010 (size: 0x10)
     FRigPose Pose;                                                                    // 0x0020 (size: 0x70)
+    TArray<uint8> MetaData;                                                           // 0x0090 (size: 0x10)
 
-}; // Size: 0x90
-
-struct FControlRigTestDataVariable
-{
-    FName Name;                                                                       // 0x0000 (size: 0x8)
-    FName CPPType;                                                                    // 0x0008 (size: 0x8)
-    FString Value;                                                                    // 0x0010 (size: 0x10)
-
-}; // Size: 0x20
+}; // Size: 0x108
 
 struct FControlRigValidationContext
 {
@@ -314,19 +342,71 @@ struct FControlShapeActorCreationParam
 {
 }; // Size: 0x1C0
 
-struct FEnumParameterNameAndCurve
+struct FEnumParameterNameAndCurve : public FBaseParameterNameAndValue
 {
-    FName ParameterName;                                                              // 0x0000 (size: 0x8)
-    FMovieSceneByteChannel ParameterCurve;                                            // 0x0008 (size: 0x108)
+    FMovieSceneByteChannel ParameterCurve;                                            // 0x0008 (size: 0x110)
+
+}; // Size: 0x118
+
+struct FIntegerParameterNameAndCurve : public FBaseParameterNameAndValue
+{
+    FMovieSceneIntegerChannel ParameterCurve;                                         // 0x0008 (size: 0x108)
 
 }; // Size: 0x110
 
-struct FIntegerParameterNameAndCurve
+struct FModularRigConnections
 {
-    FName ParameterName;                                                              // 0x0000 (size: 0x8)
-    FMovieSceneIntegerChannel ParameterCurve;                                         // 0x0008 (size: 0x100)
+    TArray<FModularRigSingleConnection> ConnectionList;                               // 0x0000 (size: 0x10)
 
-}; // Size: 0x108
+}; // Size: 0x60
+
+struct FModularRigModel
+{
+    TArray<FRigModuleReference> Modules;                                              // 0x0000 (size: 0x10)
+    FModularRigConnections Connections;                                               // 0x0030 (size: 0x60)
+    class UObject* Controller;                                                        // 0x0090 (size: 0x8)
+    TMap<FRigHierarchyModulePath, FName> PreviousModulePaths;                         // 0x0098 (size: 0x50)
+
+}; // Size: 0x100
+
+struct FModularRigModuleSettingsForClipboard
+{
+    FSoftObjectPath ModuleClass;                                                      // 0x0000 (size: 0x20)
+    TMap<FString, FString> Defaults;                                                  // 0x0020 (size: 0x50)
+    TMap<FString, FString> Overrides;                                                 // 0x0070 (size: 0x50)
+    TMap<FName, FString> Bindings;                                                    // 0x00C0 (size: 0x50)
+
+}; // Size: 0x110
+
+struct FModularRigModuleSettingsSetForClipboard
+{
+    TMap<FName, FModularRigModuleSettingsForClipboard> Settings;                      // 0x0000 (size: 0x50)
+
+}; // Size: 0x50
+
+struct FModularRigResolveResult
+{
+    FRigElementKey Connector;                                                         // 0x0000 (size: 0xC)
+    TArray<FRigElementResolveResult> Matches;                                         // 0x0010 (size: 0x10)
+    TArray<FRigElementResolveResult> Excluded;                                        // 0x0020 (size: 0x10)
+    EModularRigResolveState State;                                                    // 0x0030 (size: 0x1)
+    FText Message;                                                                    // 0x0038 (size: 0x10)
+
+}; // Size: 0x48
+
+struct FModularRigSettings
+{
+    bool bAutoResolve;                                                                // 0x0000 (size: 0x1)
+
+}; // Size: 0x1
+
+struct FModularRigSingleConnection
+{
+    FRigElementKey Connector;                                                         // 0x0000 (size: 0xC)
+    FRigElementKey Target;                                                            // 0x000C (size: 0xC)
+    TArray<FRigElementKey> Targets;                                                   // 0x0018 (size: 0x10)
+
+}; // Size: 0x28
 
 struct FMovieSceneControlRigInstanceData : public FMovieSceneSequenceInstanceData
 {
@@ -371,23 +451,32 @@ struct FRegionScaleFactors
 
 }; // Size: 0x10
 
+struct FRigAndConnectionRule : public FRigConnectionRule
+{
+    TArray<FRigConnectionRuleStash> ChildRules;                                       // 0x0008 (size: 0x10)
+
+}; // Size: 0x18
+
+struct FRigBaseComponent
+{
+}; // Size: 0x48
+
 struct FRigBaseElement
 {
-    FRigElementKey Key;                                                               // 0x0008 (size: 0xC)
-    FString NameString;                                                               // 0x0018 (size: 0x10)
-    int32 Index;                                                                      // 0x0028 (size: 0x4)
-    int32 SubIndex;                                                                   // 0x002C (size: 0x4)
-    int32 CreatedAtInstructionIndex;                                                  // 0x00D8 (size: 0x4)
-    bool bSelected;                                                                   // 0x00E4 (size: 0x1)
+    FRigElementKey Key;                                                               // 0x0010 (size: 0xC)
+    int32 Index;                                                                      // 0x001C (size: 0x4)
+    int32 SubIndex;                                                                   // 0x0020 (size: 0x4)
+    int32 CreatedAtInstructionIndex;                                                  // 0x0024 (size: 0x4)
+    bool bSelected;                                                                   // 0x0028 (size: 0x1)
 
-}; // Size: 0xE8
+}; // Size: 0x58
 
 struct FRigBaseMetadata
 {
-    FName Name;                                                                       // 0x0010 (size: 0x8)
-    ERigMetadataType Type;                                                            // 0x0018 (size: 0x1)
+    FName Name;                                                                       // 0x0008 (size: 0x8)
+    ERigMetadataType Type;                                                            // 0x0010 (size: 0x1)
 
-}; // Size: 0x28
+}; // Size: 0x20
 
 struct FRigBone : public FRigElement
 {
@@ -403,9 +492,9 @@ struct FRigBone : public FRigElement
 
 struct FRigBoneElement : public FRigSingleParentElement
 {
-    ERigBoneType BoneType;                                                            // 0x02D8 (size: 0x1)
+    ERigBoneType BoneType;                                                            // 0x0120 (size: 0x1)
 
-}; // Size: 0x2E0
+}; // Size: 0x128
 
 struct FRigBoneHierarchy
 {
@@ -415,21 +504,65 @@ struct FRigBoneHierarchy
 
 struct FRigBoolArrayMetadata : public FRigBaseMetadata
 {
-    TArray<bool> Value;                                                               // 0x0028 (size: 0x10)
-
-}; // Size: 0x38
-
-struct FRigBoolMetadata : public FRigBaseMetadata
-{
-    bool Value;                                                                       // 0x0028 (size: 0x1)
+    TArray<bool> Value;                                                               // 0x0020 (size: 0x10)
 
 }; // Size: 0x30
 
+struct FRigBoolMetadata : public FRigBaseMetadata
+{
+    bool Value;                                                                       // 0x0020 (size: 0x1)
+
+}; // Size: 0x28
+
+struct FRigChildOfPrimaryConnectionRule : public FRigConnectionRule
+{
+}; // Size: 0x8
+
+struct FRigComponentKey
+{
+    FRigElementKey ElementKey;                                                        // 0x0000 (size: 0xC)
+    FName Name;                                                                       // 0x000C (size: 0x8)
+
+}; // Size: 0x14
+
 struct FRigComputedTransform
 {
-    FTransform Transform;                                                             // 0x0000 (size: 0x60)
+}; // Size: 0x10
 
-}; // Size: 0x60
+struct FRigConnectionRule
+{
+}; // Size: 0x8
+
+struct FRigConnectionRuleStash
+{
+    FString ScriptStructPath;                                                         // 0x0000 (size: 0x10)
+    FString ExportedText;                                                             // 0x0010 (size: 0x10)
+
+}; // Size: 0x20
+
+struct FRigConnectorElement : public FRigBaseElement
+{
+    FRigConnectorSettings Settings;                                                   // 0x0058 (size: 0x28)
+
+}; // Size: 0x80
+
+struct FRigConnectorSettings
+{
+    FString Description;                                                              // 0x0000 (size: 0x10)
+    EConnectorType Type;                                                              // 0x0010 (size: 0x1)
+    bool bOptional;                                                                   // 0x0011 (size: 0x1)
+    bool bIsArray;                                                                    // 0x0012 (size: 0x1)
+    TArray<FRigConnectionRuleStash> Rules;                                            // 0x0018 (size: 0x10)
+
+}; // Size: 0x28
+
+struct FRigConnectorState
+{
+    FName Name;                                                                       // 0x0000 (size: 0x8)
+    FRigElementKey ResolvedTarget;                                                    // 0x0008 (size: 0xC)
+    FRigConnectorSettings Settings;                                                   // 0x0018 (size: 0x28)
+
+}; // Size: 0x40
 
 struct FRigControl : public FRigElement
 {
@@ -464,29 +597,27 @@ struct FRigControl : public FRigElement
 
 struct FRigControlCopy
 {
-    FName Name;                                                                       // 0x0010 (size: 0x8)
-    ERigControlType ControlType;                                                      // 0x0018 (size: 0x1)
-    FRigControlValue Value;                                                           // 0x001C (size: 0x84)
-    FRigElementKey ParentKey;                                                         // 0x00A0 (size: 0xC)
-    FTransform OffsetTransform;                                                       // 0x00B0 (size: 0x60)
-    FTransform ParentTransform;                                                       // 0x0110 (size: 0x60)
-    FTransform LocalTransform;                                                        // 0x0170 (size: 0x60)
-    FTransform GlobalTransform;                                                       // 0x01D0 (size: 0x60)
+    FName Name;                                                                       // 0x0000 (size: 0x8)
+    ERigControlType ControlType;                                                      // 0x0008 (size: 0x1)
+    FRigElementKey ParentKey;                                                         // 0x000C (size: 0xC)
+    FRigControlValue Value;                                                           // 0x0018 (size: 0x84)
+    FTransform OffsetTransform;                                                       // 0x00A0 (size: 0x60)
+    FTransform ParentTransform;                                                       // 0x0100 (size: 0x60)
+    FTransform LocalTransform;                                                        // 0x0160 (size: 0x60)
+    FTransform GlobalTransform;                                                       // 0x01C0 (size: 0x60)
 
-}; // Size: 0x230
+}; // Size: 0x220
 
 struct FRigControlElement : public FRigMultiParentElement
 {
-    FRigControlSettings Settings;                                                     // 0x03D0 (size: 0x1B8)
-    FRigCurrentAndInitialTransform Offset;                                            // 0x0590 (size: 0x1A0)
-    FRigCurrentAndInitialTransform Shape;                                             // 0x0730 (size: 0x1A0)
-    FRigPreferredEulerAngles PreferredEulerAngles;                                    // 0x08D0 (size: 0x38)
+    FRigControlSettings Settings;                                                     // 0x0230 (size: 0x220)
+    FRigPreferredEulerAngles PreferredEulerAngles;                                    // 0x0450 (size: 0x38)
 
-}; // Size: 0x910
+}; // Size: 0x590
 
 struct FRigControlElementCustomization
 {
-    TArray<FRigElementKey> AvailableSpaces;                                           // 0x0000 (size: 0x10)
+    TArray<FRigElementKeyWithLabel> AvailableSpaces;                                  // 0x0000 (size: 0x10)
     TArray<FRigElementKey> RemovedSpaces;                                             // 0x0010 (size: 0x10)
 
 }; // Size: 0x20
@@ -532,8 +663,9 @@ struct FRigControlSettings
     TArray<ERigControlTransformChannel> FilteredChannels;                             // 0x01A0 (size: 0x10)
     EEulerRotationOrder PreferredRotationOrder;                                       // 0x01B0 (size: 0x1)
     bool bUsePreferredRotationOrder;                                                  // 0x01B1 (size: 0x1)
+    FTransform ShapeTransform;                                                        // 0x01C0 (size: 0x60)
 
-}; // Size: 0x1B8
+}; // Size: 0x220
 
 struct FRigControlValue
 {
@@ -579,12 +711,19 @@ struct FRigControlValueStorage
 
 }; // Size: 0x84
 
+struct FRigCurrentAndInitialDirtyState
+{
+    FRigLocalAndGlobalDirtyState Current;                                             // 0x0000 (size: 0x20)
+    FRigLocalAndGlobalDirtyState Initial;                                             // 0x0020 (size: 0x20)
+
+}; // Size: 0x40
+
 struct FRigCurrentAndInitialTransform
 {
-    FRigLocalAndGlobalTransform Current;                                              // 0x0000 (size: 0xD0)
-    FRigLocalAndGlobalTransform Initial;                                              // 0x00D0 (size: 0xD0)
+    FRigLocalAndGlobalTransform Current;                                              // 0x0000 (size: 0x20)
+    FRigLocalAndGlobalTransform Initial;                                              // 0x0020 (size: 0x20)
 
-}; // Size: 0x1A0
+}; // Size: 0x40
 
 struct FRigCurve : public FRigElement
 {
@@ -600,7 +739,7 @@ struct FRigCurveContainer
 
 struct FRigCurveElement : public FRigBaseElement
 {
-}; // Size: 0xF0
+}; // Size: 0x68
 
 struct FRigDispatchFactory : public FRigVMDispatchFactory
 {
@@ -610,13 +749,29 @@ struct FRigDispatch_AnimAttributeBase : public FRigDispatchFactory
 {
 }; // Size: 0xA0
 
+struct FRigDispatch_ComponentBase : public FRigDispatchFactory
+{
+}; // Size: 0xA8
+
 struct FRigDispatch_GetAnimAttribute : public FRigDispatch_AnimAttributeBase
 {
 }; // Size: 0xA0
 
+struct FRigDispatch_GetComponentContent : public FRigDispatch_ComponentBase
+{
+}; // Size: 0xA8
+
 struct FRigDispatch_GetMetadata : public FRigDispatch_MetadataBase
 {
 }; // Size: 0xA0
+
+struct FRigDispatch_GetModuleMetadata : public FRigDispatch_GetMetadata
+{
+}; // Size: 0xA0
+
+struct FRigDispatch_GetTopLevelComponentContent : public FRigDispatch_ComponentBase
+{
+}; // Size: 0xA8
 
 struct FRigDispatch_GetUserData : public FRigDispatchFactory
 {
@@ -630,9 +785,29 @@ struct FRigDispatch_SetAnimAttribute : public FRigDispatch_AnimAttributeBase
 {
 }; // Size: 0xA0
 
+struct FRigDispatch_SetComponentContent : public FRigDispatch_ComponentBase
+{
+}; // Size: 0xA8
+
 struct FRigDispatch_SetMetadata : public FRigDispatch_MetadataBase
 {
 }; // Size: 0xA0
+
+struct FRigDispatch_SetModuleMetadata : public FRigDispatch_SetMetadata
+{
+}; // Size: 0xA0
+
+struct FRigDispatch_SetTopLevelComponentContent : public FRigDispatch_ComponentBase
+{
+}; // Size: 0xA8
+
+struct FRigDispatch_SpawnComponent : public FRigDispatch_ComponentBase
+{
+}; // Size: 0xA8
+
+struct FRigDispatch_SpawnTopLevelComponent : public FRigDispatch_ComponentBase
+{
+}; // Size: 0xA8
 
 struct FRigElement
 {
@@ -650,9 +825,9 @@ struct FRigElementKey
 
 struct FRigElementKeyArrayMetadata : public FRigBaseMetadata
 {
-    TArray<FRigElementKey> Value;                                                     // 0x0028 (size: 0x10)
+    TArray<FRigElementKey> Value;                                                     // 0x0020 (size: 0x10)
 
-}; // Size: 0x38
+}; // Size: 0x30
 
 struct FRigElementKeyCollection
 {
@@ -662,13 +837,28 @@ struct FRigElementKeyCollection
 
 struct FRigElementKeyMetadata : public FRigBaseMetadata
 {
-    FRigElementKey Value;                                                             // 0x0028 (size: 0xC)
+    FRigElementKey Value;                                                             // 0x0020 (size: 0xC)
 
-}; // Size: 0x38
+}; // Size: 0x30
+
+struct FRigElementKeyWithLabel
+{
+    FRigElementKey Key;                                                               // 0x0000 (size: 0xC)
+    FName Label;                                                                      // 0x000C (size: 0x8)
+
+}; // Size: 0x14
 
 struct FRigElementParentConstraint
 {
-}; // Size: 0x90
+}; // Size: 0xA0
+
+struct FRigElementResolveResult
+{
+    FRigElementKey Key;                                                               // 0x0000 (size: 0xC)
+    ERigElementResolveState State;                                                    // 0x000C (size: 0x1)
+    FText Message;                                                                    // 0x0010 (size: 0x10)
+
+}; // Size: 0x20
 
 struct FRigElementWeight
 {
@@ -684,15 +874,15 @@ struct FRigEventContext
 
 struct FRigFloatArrayMetadata : public FRigBaseMetadata
 {
-    TArray<float> Value;                                                              // 0x0028 (size: 0x10)
+    TArray<float> Value;                                                              // 0x0020 (size: 0x10)
 
-}; // Size: 0x38
+}; // Size: 0x30
 
 struct FRigFloatMetadata : public FRigBaseMetadata
 {
-    float Value;                                                                      // 0x0028 (size: 0x4)
+    float Value;                                                                      // 0x0020 (size: 0x4)
 
-}; // Size: 0x30
+}; // Size: 0x28
 
 struct FRigHierarchyContainer
 {
@@ -717,11 +907,22 @@ struct FRigHierarchyCopyPasteContentPerElement
 {
     FRigElementKey Key;                                                               // 0x0000 (size: 0xC)
     FString Content;                                                                  // 0x0010 (size: 0x10)
-    TArray<FRigElementKey> Parents;                                                   // 0x0020 (size: 0x10)
+    TArray<FRigElementKeyWithLabel> Parents;                                          // 0x0020 (size: 0x10)
     TArray<FRigElementWeight> ParentWeights;                                          // 0x0030 (size: 0x10)
-    FRigCurrentAndInitialTransform Pose;                                              // 0x0040 (size: 0x1A0)
+    TArray<FTransform> Poses;                                                         // 0x0040 (size: 0x10)
+    TArray<bool> DirtyStates;                                                         // 0x0050 (size: 0x10)
 
-}; // Size: 0x1E0
+}; // Size: 0x60
+
+struct FRigHierarchyKey
+{
+}; // Size: 0x28
+
+struct FRigHierarchyModulePath
+{
+    FString ModulePath;                                                               // 0x0000 (size: 0x10)
+
+}; // Size: 0x40
 
 struct FRigHierarchyRef
 {
@@ -729,9 +930,10 @@ struct FRigHierarchyRef
 
 struct FRigHierarchySettings
 {
-    int32 ProceduralElementLimit;                                                     // 0x0000 (size: 0x4)
+    EElementNameDisplayMode ElementNameDisplayMode;                                   // 0x0000 (size: 0x1)
+    int32 ProceduralElementLimit;                                                     // 0x0004 (size: 0x4)
 
-}; // Size: 0x4
+}; // Size: 0x8
 
 struct FRigInfluenceEntry
 {
@@ -763,54 +965,151 @@ struct FRigInfluenceMapPerEvent
 
 struct FRigInt32ArrayMetadata : public FRigBaseMetadata
 {
-    TArray<int32> Value;                                                              // 0x0028 (size: 0x10)
+    TArray<int32> Value;                                                              // 0x0020 (size: 0x10)
 
-}; // Size: 0x38
+}; // Size: 0x30
 
 struct FRigInt32Metadata : public FRigBaseMetadata
 {
-    int32 Value;                                                                      // 0x0028 (size: 0x4)
+    int32 Value;                                                                      // 0x0020 (size: 0x4)
 
-}; // Size: 0x30
+}; // Size: 0x28
 
 struct FRigLinearColorArrayMetadata : public FRigBaseMetadata
 {
-    TArray<FLinearColor> Value;                                                       // 0x0028 (size: 0x10)
-
-}; // Size: 0x38
-
-struct FRigLinearColorMetadata : public FRigBaseMetadata
-{
-    FLinearColor Value;                                                               // 0x0028 (size: 0x10)
-
-}; // Size: 0x38
-
-struct FRigLocalAndGlobalTransform
-{
-    FRigComputedTransform Local;                                                      // 0x0000 (size: 0x60)
-    FRigComputedTransform Global;                                                     // 0x0060 (size: 0x60)
-
-}; // Size: 0xD0
-
-struct FRigMultiParentElement : public FRigTransformElement
-{
-}; // Size: 0x3D0
-
-struct FRigNameArrayMetadata : public FRigBaseMetadata
-{
-    TArray<FName> Value;                                                              // 0x0028 (size: 0x10)
-
-}; // Size: 0x38
-
-struct FRigNameMetadata : public FRigBaseMetadata
-{
-    FName Value;                                                                      // 0x0028 (size: 0x8)
+    TArray<FLinearColor> Value;                                                       // 0x0020 (size: 0x10)
 
 }; // Size: 0x30
 
+struct FRigLinearColorMetadata : public FRigBaseMetadata
+{
+    FLinearColor Value;                                                               // 0x0020 (size: 0x10)
+
+}; // Size: 0x30
+
+struct FRigLocalAndGlobalDirtyState
+{
+    FRigTransformDirtyState Global;                                                   // 0x0000 (size: 0x10)
+    FRigTransformDirtyState Local;                                                    // 0x0010 (size: 0x10)
+
+}; // Size: 0x20
+
+struct FRigLocalAndGlobalTransform
+{
+    FRigComputedTransform Local;                                                      // 0x0000 (size: 0x10)
+    FRigComputedTransform Global;                                                     // 0x0010 (size: 0x10)
+
+}; // Size: 0x20
+
+struct FRigModuleConnector
+{
+    FString Name;                                                                     // 0x0000 (size: 0x10)
+    FRigConnectorSettings Settings;                                                   // 0x0010 (size: 0x28)
+
+}; // Size: 0x38
+
+struct FRigModuleDescription
+{
+    FSoftObjectPath Path;                                                             // 0x0000 (size: 0x20)
+    FRigModuleSettings Settings;                                                      // 0x0020 (size: 0x80)
+
+}; // Size: 0xA0
+
+struct FRigModuleExecutionElement
+{
+    FName ModuleName;                                                                 // 0x0000 (size: 0x8)
+    FName EventName;                                                                  // 0x0010 (size: 0x8)
+    bool bExecuted;                                                                   // 0x0018 (size: 0x1)
+
+}; // Size: 0x20
+
+struct FRigModuleIdentifier
+{
+    FString Name;                                                                     // 0x0000 (size: 0x10)
+    FString Type;                                                                     // 0x0010 (size: 0x10)
+
+}; // Size: 0x20
+
+struct FRigModuleInstance
+{
+    FName Name;                                                                       // 0x0000 (size: 0x8)
+    class UControlRig* RigPtr;                                                        // 0x0008 (size: 0x8)
+    FString ParentPath;                                                               // 0x0010 (size: 0x10)
+    FName ParentModuleName;                                                           // 0x0020 (size: 0x8)
+    TMap<FName, FRigVMExternalVariable> VariableBindings;                             // 0x0028 (size: 0x50)
+
+}; // Size: 0xB0
+
+struct FRigModuleReference
+{
+    FName Name;                                                                       // 0x0000 (size: 0x8)
+    FString ShortName;                                                                // 0x0008 (size: 0x10)
+    bool bShortNameBasedOnPath;                                                       // 0x0018 (size: 0x1)
+    FString ParentPath;                                                               // 0x0020 (size: 0x10)
+    FName ParentModuleName;                                                           // 0x0030 (size: 0x8)
+    TSoftClassPtr<UControlRig> Class;                                                 // 0x0038 (size: 0x28)
+    TMap<FRigElementKey, FRigElementKey> Connections;                                 // 0x0060 (size: 0x50)
+    TMap<FName, FString> ConfigValues;                                                // 0x00B0 (size: 0x50)
+    FControlRigOverrideContainer ConfigOverrides;                                     // 0x0100 (size: 0x158)
+    TMap<FName, FString> Bindings;                                                    // 0x0258 (size: 0x50)
+    FName PreviousName;                                                               // 0x02A8 (size: 0x8)
+    FName PreviousParentName;                                                         // 0x02B0 (size: 0x8)
+
+}; // Size: 0x2D0
+
+struct FRigModuleSettings
+{
+    FRigModuleIdentifier Identifier;                                                  // 0x0000 (size: 0x20)
+    FSoftObjectPath Icon;                                                             // 0x0020 (size: 0x20)
+    FString Category;                                                                 // 0x0040 (size: 0x10)
+    FString Keywords;                                                                 // 0x0050 (size: 0x10)
+    FString Description;                                                              // 0x0060 (size: 0x10)
+    TArray<FRigModuleConnector> ExposedConnectors;                                    // 0x0070 (size: 0x10)
+
+}; // Size: 0x80
+
+struct FRigMultiParentElement : public FRigTransformElement
+{
+}; // Size: 0x230
+
+struct FRigNameArrayMetadata : public FRigBaseMetadata
+{
+    TArray<FName> Value;                                                              // 0x0020 (size: 0x10)
+
+}; // Size: 0x30
+
+struct FRigNameMetadata : public FRigBaseMetadata
+{
+    FName Value;                                                                      // 0x0020 (size: 0x8)
+
+}; // Size: 0x28
+
 struct FRigNullElement : public FRigMultiParentElement
 {
-}; // Size: 0x3D0
+}; // Size: 0x230
+
+struct FRigOrConnectionRule : public FRigConnectionRule
+{
+    TArray<FRigConnectionRuleStash> ChildRules;                                       // 0x0008 (size: 0x10)
+
+}; // Size: 0x18
+
+struct FRigPhysicsSimulationBase
+{
+}; // Size: 0x28
+
+struct FRigPhysicsSolverDescription
+{
+    FRigPhysicsSolverID ID;                                                           // 0x0000 (size: 0x10)
+    FName Name;                                                                       // 0x0010 (size: 0x8)
+
+}; // Size: 0x18
+
+struct FRigPhysicsSolverID
+{
+    FGuid Guid;                                                                       // 0x0000 (size: 0x10)
+
+}; // Size: 0x10
 
 struct FRigPose
 {
@@ -825,9 +1124,11 @@ struct FRigPoseElement
     FCachedRigElement Index;                                                          // 0x0000 (size: 0x20)
     FTransform GlobalTransform;                                                       // 0x0020 (size: 0x60)
     FTransform LocalTransform;                                                        // 0x0080 (size: 0x60)
-    float CurveValue;                                                                 // 0x00E0 (size: 0x4)
+    FVector PreferredEulerAngle;                                                      // 0x00E0 (size: 0x18)
+    FRigElementKey ActiveParent;                                                      // 0x00F8 (size: 0xC)
+    float CurveValue;                                                                 // 0x0104 (size: 0x4)
 
-}; // Size: 0xF0
+}; // Size: 0x110
 
 struct FRigPreferredEulerAngles
 {
@@ -839,47 +1140,49 @@ struct FRigPreferredEulerAngles
 
 struct FRigQuatArrayMetadata : public FRigBaseMetadata
 {
-    TArray<FQuat> Value;                                                              // 0x0028 (size: 0x10)
+    TArray<FQuat> Value;                                                              // 0x0020 (size: 0x10)
 
-}; // Size: 0x38
+}; // Size: 0x30
 
 struct FRigQuatMetadata : public FRigBaseMetadata
 {
-    FQuat Value;                                                                      // 0x0030 (size: 0x20)
-
-}; // Size: 0x50
-
-struct FRigReferenceElement : public FRigSingleParentElement
-{
-}; // Size: 0x2F0
-
-struct FRigRigidBodyElement : public FRigSingleParentElement
-{
-    FRigRigidBodySettings Settings;                                                   // 0x02D8 (size: 0x4)
-
-}; // Size: 0x2E0
-
-struct FRigRigidBodySettings
-{
-    float Mass;                                                                       // 0x0000 (size: 0x4)
-
-}; // Size: 0x4
-
-struct FRigRotatorArrayMetadata : public FRigBaseMetadata
-{
-    TArray<FRotator> Value;                                                           // 0x0028 (size: 0x10)
-
-}; // Size: 0x38
-
-struct FRigRotatorMetadata : public FRigBaseMetadata
-{
-    FRotator Value;                                                                   // 0x0028 (size: 0x18)
+    FQuat Value;                                                                      // 0x0020 (size: 0x20)
 
 }; // Size: 0x40
 
+struct FRigReferenceElement : public FRigSingleParentElement
+{
+}; // Size: 0x130
+
+struct FRigRotatorArrayMetadata : public FRigBaseMetadata
+{
+    TArray<FRotator> Value;                                                           // 0x0020 (size: 0x10)
+
+}; // Size: 0x30
+
+struct FRigRotatorMetadata : public FRigBaseMetadata
+{
+    FRotator Value;                                                                   // 0x0020 (size: 0x18)
+
+}; // Size: 0x38
+
 struct FRigSingleParentElement : public FRigTransformElement
 {
-}; // Size: 0x2E0
+}; // Size: 0x120
+
+struct FRigSocketElement : public FRigSingleParentElement
+{
+}; // Size: 0x120
+
+struct FRigSocketState
+{
+    FName Name;                                                                       // 0x0000 (size: 0x8)
+    FRigElementKey Parent;                                                            // 0x0008 (size: 0xC)
+    FTransform InitialLocalTransform;                                                 // 0x0020 (size: 0x60)
+    FLinearColor Color;                                                               // 0x0080 (size: 0x10)
+    FString Description;                                                              // 0x0090 (size: 0x10)
+
+}; // Size: 0xA0
 
 struct FRigSpace : public FRigElement
 {
@@ -897,23 +1200,31 @@ struct FRigSpaceHierarchy
 
 }; // Size: 0x10
 
+struct FRigTagConnectionRule : public FRigConnectionRule
+{
+    FName Tag;                                                                        // 0x0008 (size: 0x8)
+
+}; // Size: 0x10
+
 struct FRigTransformArrayMetadata : public FRigBaseMetadata
 {
-    TArray<FTransform> Value;                                                         // 0x0028 (size: 0x10)
+    TArray<FTransform> Value;                                                         // 0x0020 (size: 0x10)
 
-}; // Size: 0x38
+}; // Size: 0x30
+
+struct FRigTransformDirtyState
+{
+}; // Size: 0x10
 
 struct FRigTransformElement : public FRigBaseElement
 {
-    FRigCurrentAndInitialTransform Pose;                                              // 0x00F0 (size: 0x1A0)
-
-}; // Size: 0x2D0
+}; // Size: 0x118
 
 struct FRigTransformMetadata : public FRigBaseMetadata
 {
-    FTransform Value;                                                                 // 0x0030 (size: 0x60)
+    FTransform Value;                                                                 // 0x0020 (size: 0x60)
 
-}; // Size: 0x90
+}; // Size: 0x80
 
 struct FRigTransformStackEntry
 {
@@ -927,33 +1238,47 @@ struct FRigTransformStackEntry
 
 }; // Size: 0xF0
 
+struct FRigTypeConnectionRule : public FRigConnectionRule
+{
+    ERigElementType ElementType;                                                      // 0x0008 (size: 0x1)
+
+}; // Size: 0x10
+
 struct FRigUnit : public FRigVMStruct
 {
 }; // Size: 0x8
 
 struct FRigUnitMutable : public FRigUnit
 {
-    FControlRigExecuteContext ExecuteContext;                                         // 0x0010 (size: 0x150)
+    FRigVMExecutePin ExecutePin;                                                      // 0x0008 (size: 0x8)
 
-}; // Size: 0x160
+}; // Size: 0x10
+
+struct FRigUnit_AddAvailableSpaces : public FRigUnit_DynamicHierarchyBaseMutable
+{
+    FRigElementKey Control;                                                           // 0x0010 (size: 0xC)
+    TArray<FRigElementKeyWithLabel> Spaces;                                           // 0x0020 (size: 0x10)
+
+}; // Size: 0x30
 
 struct FRigUnit_AddBoneTransform : public FRigUnitMutable
 {
-    FName bone;                                                                       // 0x0160 (size: 0x8)
-    FTransform Transform;                                                             // 0x0170 (size: 0x60)
-    float Weight;                                                                     // 0x01D0 (size: 0x4)
-    bool bPostMultiply;                                                               // 0x01D4 (size: 0x1)
-    bool bPropagateToChildren;                                                        // 0x01D5 (size: 0x1)
-    FCachedRigElement CachedBone;                                                     // 0x01D8 (size: 0x20)
+    FName bone;                                                                       // 0x0010 (size: 0x8)
+    FTransform Transform;                                                             // 0x0020 (size: 0x60)
+    float Weight;                                                                     // 0x0080 (size: 0x4)
+    bool bPostMultiply;                                                               // 0x0084 (size: 0x1)
+    bool bPropagateToChildren;                                                        // 0x0085 (size: 0x1)
+    FCachedRigElement CachedBone;                                                     // 0x0088 (size: 0x20)
 
-}; // Size: 0x200
+}; // Size: 0xB0
 
 struct FRigUnit_AddParent : public FRigUnit_DynamicHierarchyBaseMutable
 {
-    FRigElementKey Child;                                                             // 0x0160 (size: 0xC)
-    FRigElementKey Parent;                                                            // 0x016C (size: 0xC)
+    FRigElementKey Child;                                                             // 0x0010 (size: 0xC)
+    FRigElementKey Parent;                                                            // 0x001C (size: 0xC)
+    FName DisplayLabel;                                                               // 0x0028 (size: 0x8)
 
-}; // Size: 0x180
+}; // Size: 0x30
 
 struct FRigUnit_Add_FloatFloat : public FRigUnit_BinaryFloatOp
 {
@@ -965,18 +1290,18 @@ struct FRigUnit_Add_VectorVector : public FRigUnit_BinaryVectorOp
 
 struct FRigUnit_AimBone : public FRigUnit_HighlevelBaseMutable
 {
-    FName bone;                                                                       // 0x0160 (size: 0x8)
-    FRigUnit_AimBone_Target Primary;                                                  // 0x0168 (size: 0x48)
-    FRigUnit_AimBone_Target Secondary;                                                // 0x01B0 (size: 0x48)
-    float Weight;                                                                     // 0x01F8 (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x01FC (size: 0x1)
-    FRigUnit_AimBone_DebugSettings DebugSettings;                                     // 0x0200 (size: 0x70)
-    FCachedRigElement CachedBoneIndex;                                                // 0x0270 (size: 0x20)
-    FCachedRigElement PrimaryCachedSpace;                                             // 0x0290 (size: 0x20)
-    FCachedRigElement SecondaryCachedSpace;                                           // 0x02B0 (size: 0x20)
-    bool bIsInitialized;                                                              // 0x02D0 (size: 0x1)
+    FName bone;                                                                       // 0x0010 (size: 0x8)
+    FRigUnit_AimBone_Target Primary;                                                  // 0x0018 (size: 0x48)
+    FRigUnit_AimBone_Target Secondary;                                                // 0x0060 (size: 0x48)
+    float Weight;                                                                     // 0x00A8 (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x00AC (size: 0x1)
+    FRigUnit_AimBone_DebugSettings DebugSettings;                                     // 0x00B0 (size: 0x70)
+    FCachedRigElement CachedBoneIndex;                                                // 0x0120 (size: 0x20)
+    FCachedRigElement PrimaryCachedSpace;                                             // 0x0140 (size: 0x20)
+    FCachedRigElement SecondaryCachedSpace;                                           // 0x0160 (size: 0x20)
+    bool bIsInitialized;                                                              // 0x0180 (size: 0x1)
 
-}; // Size: 0x2E0
+}; // Size: 0x190
 
 struct FRigUnit_AimBoneMath : public FRigUnit_HighlevelBase
 {
@@ -1012,34 +1337,34 @@ struct FRigUnit_AimBone_Target
 
 struct FRigUnit_AimConstraint : public FRigUnitMutable
 {
-    FName Joint;                                                                      // 0x0160 (size: 0x8)
-    EAimMode AimMode;                                                                 // 0x0168 (size: 0x1)
-    EAimMode UpMode;                                                                  // 0x0169 (size: 0x1)
-    FVector AimVector;                                                                // 0x0170 (size: 0x18)
-    FVector UpVector;                                                                 // 0x0188 (size: 0x18)
-    TArray<FAimTarget> AimTargets;                                                    // 0x01A0 (size: 0x10)
-    TArray<FAimTarget> UpTargets;                                                     // 0x01B0 (size: 0x10)
-    FRigUnit_AimConstraint_WorkData WorkData;                                         // 0x01C0 (size: 0x10)
+    FName Joint;                                                                      // 0x0010 (size: 0x8)
+    EAimMode AimMode;                                                                 // 0x0018 (size: 0x1)
+    EAimMode UpMode;                                                                  // 0x0019 (size: 0x1)
+    FVector AimVector;                                                                // 0x0020 (size: 0x18)
+    FVector UpVector;                                                                 // 0x0038 (size: 0x18)
+    TArray<FAimTarget> AimTargets;                                                    // 0x0050 (size: 0x10)
+    TArray<FAimTarget> UpTargets;                                                     // 0x0060 (size: 0x10)
+    FRigUnit_AimConstraint_WorkData WorkData;                                         // 0x0070 (size: 0x10)
 
-}; // Size: 0x1D0
+}; // Size: 0x80
 
 struct FRigUnit_AimConstraintLocalSpaceOffset : public FRigUnit_HighlevelBaseMutable
 {
-    FRigElementKey Child;                                                             // 0x0160 (size: 0xC)
-    bool bMaintainOffset;                                                             // 0x016C (size: 0x1)
-    FFilterOptionPerAxis Filter;                                                      // 0x016D (size: 0x3)
-    FVector AimAxis;                                                                  // 0x0170 (size: 0x18)
-    FVector UpAxis;                                                                   // 0x0188 (size: 0x18)
-    FRigUnit_AimConstraint_WorldUp WorldUp;                                           // 0x01A0 (size: 0x28)
-    TArray<FConstraintParent> Parents;                                                // 0x01C8 (size: 0x10)
-    FRigUnit_AimConstraint_AdvancedSettings AdvancedSettings;                         // 0x01E0 (size: 0x80)
-    float Weight;                                                                     // 0x0260 (size: 0x4)
-    FCachedRigElement WorldUpSpaceCache;                                              // 0x0268 (size: 0x20)
-    FCachedRigElement ChildCache;                                                     // 0x0288 (size: 0x20)
-    TArray<FCachedRigElement> ParentCaches;                                           // 0x02A8 (size: 0x10)
-    bool bIsInitialized;                                                              // 0x02B8 (size: 0x1)
+    FRigElementKey Child;                                                             // 0x0010 (size: 0xC)
+    bool bMaintainOffset;                                                             // 0x001C (size: 0x1)
+    FFilterOptionPerAxis Filter;                                                      // 0x001D (size: 0x3)
+    FVector AimAxis;                                                                  // 0x0020 (size: 0x18)
+    FVector UpAxis;                                                                   // 0x0038 (size: 0x18)
+    FRigUnit_AimConstraint_WorldUp WorldUp;                                           // 0x0050 (size: 0x28)
+    TArray<FConstraintParent> Parents;                                                // 0x0078 (size: 0x10)
+    FRigUnit_AimConstraint_AdvancedSettings AdvancedSettings;                         // 0x0090 (size: 0x80)
+    float Weight;                                                                     // 0x0110 (size: 0x4)
+    FCachedRigElement WorldUpSpaceCache;                                              // 0x0118 (size: 0x20)
+    FCachedRigElement ChildCache;                                                     // 0x0138 (size: 0x20)
+    TArray<FCachedRigElement> ParentCaches;                                           // 0x0158 (size: 0x10)
+    bool bIsInitialized;                                                              // 0x0168 (size: 0x1)
 
-}; // Size: 0x2C0
+}; // Size: 0x170
 
 struct FRigUnit_AimConstraint_AdvancedSettings
 {
@@ -1064,17 +1389,17 @@ struct FRigUnit_AimConstraint_WorldUp
 
 struct FRigUnit_AimItem : public FRigUnit_HighlevelBaseMutable
 {
-    FRigElementKey Item;                                                              // 0x0160 (size: 0xC)
-    FRigUnit_AimItem_Target Primary;                                                  // 0x0170 (size: 0x48)
-    FRigUnit_AimItem_Target Secondary;                                                // 0x01B8 (size: 0x48)
-    float Weight;                                                                     // 0x0200 (size: 0x4)
-    FRigUnit_AimBone_DebugSettings DebugSettings;                                     // 0x0210 (size: 0x70)
-    FCachedRigElement CachedItem;                                                     // 0x0280 (size: 0x20)
-    FCachedRigElement PrimaryCachedSpace;                                             // 0x02A0 (size: 0x20)
-    FCachedRigElement SecondaryCachedSpace;                                           // 0x02C0 (size: 0x20)
-    bool bIsInitialized;                                                              // 0x02E0 (size: 0x1)
+    FRigElementKey Item;                                                              // 0x0010 (size: 0xC)
+    FRigUnit_AimItem_Target Primary;                                                  // 0x0020 (size: 0x48)
+    FRigUnit_AimItem_Target Secondary;                                                // 0x0068 (size: 0x48)
+    float Weight;                                                                     // 0x00B0 (size: 0x4)
+    FRigUnit_AimBone_DebugSettings DebugSettings;                                     // 0x00C0 (size: 0x70)
+    FCachedRigElement CachedItem;                                                     // 0x0130 (size: 0x20)
+    FCachedRigElement PrimaryCachedSpace;                                             // 0x0150 (size: 0x20)
+    FCachedRigElement SecondaryCachedSpace;                                           // 0x0170 (size: 0x20)
+    bool bIsInitialized;                                                              // 0x0190 (size: 0x1)
 
-}; // Size: 0x2F0
+}; // Size: 0x1A0
 
 struct FRigUnit_AimItem_Target
 {
@@ -1088,21 +1413,21 @@ struct FRigUnit_AimItem_Target
 
 struct FRigUnit_ApplyFK : public FRigUnitMutable
 {
-    FName Joint;                                                                      // 0x0160 (size: 0x8)
-    FTransform Transform;                                                             // 0x0170 (size: 0x60)
-    FTransformFilter Filter;                                                          // 0x01D0 (size: 0x9)
-    EApplyTransformMode ApplyTransformMode;                                           // 0x01D9 (size: 0x1)
-    ETransformSpaceMode ApplyTransformSpace;                                          // 0x01DA (size: 0x1)
-    FTransform BaseTransform;                                                         // 0x01E0 (size: 0x60)
-    FName BaseJoint;                                                                  // 0x0240 (size: 0x8)
+    FName Joint;                                                                      // 0x0010 (size: 0x8)
+    FTransform Transform;                                                             // 0x0020 (size: 0x60)
+    FTransformFilter Filter;                                                          // 0x0080 (size: 0x9)
+    EApplyTransformMode ApplyTransformMode;                                           // 0x0089 (size: 0x1)
+    ETransformSpaceMode ApplyTransformSpace;                                          // 0x008A (size: 0x1)
+    FTransform BaseTransform;                                                         // 0x0090 (size: 0x60)
+    FName BaseJoint;                                                                  // 0x00F0 (size: 0x8)
 
-}; // Size: 0x250
+}; // Size: 0x100
 
 struct FRigUnit_BeginExecution : public FRigUnit
 {
-    FControlRigExecuteContext ExecuteContext;                                         // 0x0010 (size: 0x150)
+    FRigVMExecutePin ExecutePin;                                                      // 0x0008 (size: 0x8)
 
-}; // Size: 0x160
+}; // Size: 0x10
 
 struct FRigUnit_BinaryFloatOp : public FRigUnit
 {
@@ -1146,20 +1471,20 @@ struct FRigUnit_BlendTransform : public FRigUnit
 
 struct FRigUnit_BoneHarmonics : public FRigUnit_HighlevelBaseMutable
 {
-    TArray<FRigUnit_BoneHarmonics_BoneTarget> Bones;                                  // 0x0160 (size: 0x10)
-    FVector WaveSpeed;                                                                // 0x0170 (size: 0x18)
-    FVector WaveFrequency;                                                            // 0x0188 (size: 0x18)
-    FVector WaveAmplitude;                                                            // 0x01A0 (size: 0x18)
-    FVector WaveOffset;                                                               // 0x01B8 (size: 0x18)
-    FVector WaveNoise;                                                                // 0x01D0 (size: 0x18)
-    ERigVMAnimEasingType WaveEase;                                                    // 0x01E8 (size: 0x1)
-    float WaveMinimum;                                                                // 0x01EC (size: 0x4)
-    float WaveMaximum;                                                                // 0x01F0 (size: 0x4)
-    EEulerRotationOrder RotationOrder;                                                // 0x01F4 (size: 0x1)
-    bool bPropagateToChildren;                                                        // 0x01F5 (size: 0x1)
-    FRigUnit_BoneHarmonics_WorkData WorkData;                                         // 0x01F8 (size: 0x28)
+    TArray<FRigUnit_BoneHarmonics_BoneTarget> Bones;                                  // 0x0010 (size: 0x10)
+    FVector WaveSpeed;                                                                // 0x0020 (size: 0x18)
+    FVector WaveFrequency;                                                            // 0x0038 (size: 0x18)
+    FVector WaveAmplitude;                                                            // 0x0050 (size: 0x18)
+    FVector WaveOffset;                                                               // 0x0068 (size: 0x18)
+    FVector WaveNoise;                                                                // 0x0080 (size: 0x18)
+    ERigVMAnimEasingType WaveEase;                                                    // 0x0098 (size: 0x1)
+    float WaveMinimum;                                                                // 0x009C (size: 0x4)
+    float WaveMaximum;                                                                // 0x00A0 (size: 0x4)
+    EEulerRotationOrder RotationOrder;                                                // 0x00A4 (size: 0x1)
+    bool bPropagateToChildren;                                                        // 0x00A5 (size: 0x1)
+    FRigUnit_BoneHarmonics_WorkData WorkData;                                         // 0x00A8 (size: 0x28)
 
-}; // Size: 0x220
+}; // Size: 0xD0
 
 struct FRigUnit_BoneHarmonics_BoneTarget
 {
@@ -1183,49 +1508,49 @@ struct FRigUnit_BoneName : public FRigUnit
 
 struct FRigUnit_CCDIK : public FRigUnit_HighlevelBaseMutable
 {
-    FName StartBone;                                                                  // 0x0160 (size: 0x8)
-    FName EffectorBone;                                                               // 0x0168 (size: 0x8)
-    FTransform EffectorTransform;                                                     // 0x0170 (size: 0x60)
-    float Precision;                                                                  // 0x01D0 (size: 0x4)
-    float Weight;                                                                     // 0x01D4 (size: 0x4)
-    int32 MaxIterations;                                                              // 0x01D8 (size: 0x4)
-    bool bStartFromTail;                                                              // 0x01DC (size: 0x1)
-    float BaseRotationLimit;                                                          // 0x01E0 (size: 0x4)
-    TArray<FRigUnit_CCDIK_RotationLimit> RotationLimits;                              // 0x01E8 (size: 0x10)
-    bool bPropagateToChildren;                                                        // 0x01F8 (size: 0x1)
-    FRigUnit_CCDIK_WorkData WorkData;                                                 // 0x0200 (size: 0x60)
+    FName StartBone;                                                                  // 0x0010 (size: 0x8)
+    FName EffectorBone;                                                               // 0x0018 (size: 0x8)
+    FTransform EffectorTransform;                                                     // 0x0020 (size: 0x60)
+    float Precision;                                                                  // 0x0080 (size: 0x4)
+    float Weight;                                                                     // 0x0084 (size: 0x4)
+    int32 MaxIterations;                                                              // 0x0088 (size: 0x4)
+    bool bStartFromTail;                                                              // 0x008C (size: 0x1)
+    float BaseRotationLimit;                                                          // 0x0090 (size: 0x4)
+    TArray<FRigUnit_CCDIK_RotationLimit> RotationLimits;                              // 0x0098 (size: 0x10)
+    bool bPropagateToChildren;                                                        // 0x00A8 (size: 0x1)
+    FRigUnit_CCDIK_WorkData WorkData;                                                 // 0x00B0 (size: 0x60)
 
-}; // Size: 0x260
+}; // Size: 0x110
 
 struct FRigUnit_CCDIKItemArray : public FRigUnit_HighlevelBaseMutable
 {
-    TArray<FRigElementKey> Items;                                                     // 0x0160 (size: 0x10)
-    FTransform EffectorTransform;                                                     // 0x0170 (size: 0x60)
-    float Precision;                                                                  // 0x01D0 (size: 0x4)
-    float Weight;                                                                     // 0x01D4 (size: 0x4)
-    int32 MaxIterations;                                                              // 0x01D8 (size: 0x4)
-    bool bStartFromTail;                                                              // 0x01DC (size: 0x1)
-    float BaseRotationLimit;                                                          // 0x01E0 (size: 0x4)
-    TArray<FRigUnit_CCDIK_RotationLimitPerItem> RotationLimits;                       // 0x01E8 (size: 0x10)
-    bool bPropagateToChildren;                                                        // 0x01F8 (size: 0x1)
-    FRigUnit_CCDIK_WorkData WorkData;                                                 // 0x0200 (size: 0x60)
+    TArray<FRigElementKey> Items;                                                     // 0x0010 (size: 0x10)
+    FTransform EffectorTransform;                                                     // 0x0020 (size: 0x60)
+    float Precision;                                                                  // 0x0080 (size: 0x4)
+    float Weight;                                                                     // 0x0084 (size: 0x4)
+    int32 MaxIterations;                                                              // 0x0088 (size: 0x4)
+    bool bStartFromTail;                                                              // 0x008C (size: 0x1)
+    float BaseRotationLimit;                                                          // 0x0090 (size: 0x4)
+    TArray<FRigUnit_CCDIK_RotationLimitPerItem> RotationLimits;                       // 0x0098 (size: 0x10)
+    bool bPropagateToChildren;                                                        // 0x00A8 (size: 0x1)
+    FRigUnit_CCDIK_WorkData WorkData;                                                 // 0x00B0 (size: 0x60)
 
-}; // Size: 0x260
+}; // Size: 0x110
 
 struct FRigUnit_CCDIKPerItem : public FRigUnit_HighlevelBaseMutable
 {
-    FRigElementKeyCollection Items;                                                   // 0x0160 (size: 0x10)
-    FTransform EffectorTransform;                                                     // 0x0170 (size: 0x60)
-    float Precision;                                                                  // 0x01D0 (size: 0x4)
-    float Weight;                                                                     // 0x01D4 (size: 0x4)
-    int32 MaxIterations;                                                              // 0x01D8 (size: 0x4)
-    bool bStartFromTail;                                                              // 0x01DC (size: 0x1)
-    float BaseRotationLimit;                                                          // 0x01E0 (size: 0x4)
-    TArray<FRigUnit_CCDIK_RotationLimitPerItem> RotationLimits;                       // 0x01E8 (size: 0x10)
-    bool bPropagateToChildren;                                                        // 0x01F8 (size: 0x1)
-    FRigUnit_CCDIK_WorkData WorkData;                                                 // 0x0200 (size: 0x60)
+    FRigElementKeyCollection Items;                                                   // 0x0010 (size: 0x10)
+    FTransform EffectorTransform;                                                     // 0x0020 (size: 0x60)
+    float Precision;                                                                  // 0x0080 (size: 0x4)
+    float Weight;                                                                     // 0x0084 (size: 0x4)
+    int32 MaxIterations;                                                              // 0x0088 (size: 0x4)
+    bool bStartFromTail;                                                              // 0x008C (size: 0x1)
+    float BaseRotationLimit;                                                          // 0x0090 (size: 0x4)
+    TArray<FRigUnit_CCDIK_RotationLimitPerItem> RotationLimits;                       // 0x0098 (size: 0x10)
+    bool bPropagateToChildren;                                                        // 0x00A8 (size: 0x1)
+    FRigUnit_CCDIK_WorkData WorkData;                                                 // 0x00B0 (size: 0x60)
 
-}; // Size: 0x260
+}; // Size: 0x110
 
 struct FRigUnit_CCDIK_RotationLimit
 {
@@ -1253,31 +1578,31 @@ struct FRigUnit_CCDIK_WorkData
 
 struct FRigUnit_ChainHarmonics : public FRigUnit_HighlevelBaseMutable
 {
-    FName ChainRoot;                                                                  // 0x0160 (size: 0x8)
-    FVector Speed;                                                                    // 0x0168 (size: 0x18)
-    FRigUnit_ChainHarmonics_Reach Reach;                                              // 0x0180 (size: 0x48)
-    FRigUnit_ChainHarmonics_Wave Wave;                                                // 0x01C8 (size: 0x78)
-    FRuntimeFloatCurve WaveCurve;                                                     // 0x0240 (size: 0x88)
-    FRigUnit_ChainHarmonics_Pendulum Pendulum;                                        // 0x02C8 (size: 0x58)
-    bool bDrawDebug;                                                                  // 0x0320 (size: 0x1)
-    FTransform DrawWorldOffset;                                                       // 0x0330 (size: 0x60)
-    FRigUnit_ChainHarmonics_WorkData WorkData;                                        // 0x0390 (size: 0x98)
+    FName ChainRoot;                                                                  // 0x0010 (size: 0x8)
+    FVector Speed;                                                                    // 0x0018 (size: 0x18)
+    FRigUnit_ChainHarmonics_Reach Reach;                                              // 0x0030 (size: 0x48)
+    FRigUnit_ChainHarmonics_Wave Wave;                                                // 0x0078 (size: 0x78)
+    FRuntimeFloatCurve WaveCurve;                                                     // 0x00F0 (size: 0x88)
+    FRigUnit_ChainHarmonics_Pendulum Pendulum;                                        // 0x0178 (size: 0x58)
+    bool bDrawDebug;                                                                  // 0x01D0 (size: 0x1)
+    FTransform DrawWorldOffset;                                                       // 0x01E0 (size: 0x60)
+    FRigUnit_ChainHarmonics_WorkData WorkData;                                        // 0x0240 (size: 0x98)
 
-}; // Size: 0x430
+}; // Size: 0x2E0
 
 struct FRigUnit_ChainHarmonicsPerItem : public FRigUnit_HighlevelBaseMutable
 {
-    FRigElementKey ChainRoot;                                                         // 0x0160 (size: 0xC)
-    FVector Speed;                                                                    // 0x0170 (size: 0x18)
-    FRigUnit_ChainHarmonics_Reach Reach;                                              // 0x0188 (size: 0x48)
-    FRigUnit_ChainHarmonics_Wave Wave;                                                // 0x01D0 (size: 0x78)
-    FRuntimeFloatCurve WaveCurve;                                                     // 0x0248 (size: 0x88)
-    FRigUnit_ChainHarmonics_Pendulum Pendulum;                                        // 0x02D0 (size: 0x58)
-    bool bDrawDebug;                                                                  // 0x0328 (size: 0x1)
-    FTransform DrawWorldOffset;                                                       // 0x0330 (size: 0x60)
-    FRigUnit_ChainHarmonics_WorkData WorkData;                                        // 0x0390 (size: 0x98)
+    FRigElementKey ChainRoot;                                                         // 0x0010 (size: 0xC)
+    FVector Speed;                                                                    // 0x0020 (size: 0x18)
+    FRigUnit_ChainHarmonics_Reach Reach;                                              // 0x0038 (size: 0x48)
+    FRigUnit_ChainHarmonics_Wave Wave;                                                // 0x0080 (size: 0x78)
+    FRuntimeFloatCurve WaveCurve;                                                     // 0x00F8 (size: 0x88)
+    FRigUnit_ChainHarmonics_Pendulum Pendulum;                                        // 0x0180 (size: 0x58)
+    bool bDrawDebug;                                                                  // 0x01D8 (size: 0x1)
+    FTransform DrawWorldOffset;                                                       // 0x01E0 (size: 0x60)
+    FRigUnit_ChainHarmonics_WorkData WorkData;                                        // 0x0240 (size: 0x98)
 
-}; // Size: 0x430
+}; // Size: 0x2E0
 
 struct FRigUnit_ChainHarmonics_Pendulum
 {
@@ -1333,11 +1658,55 @@ struct FRigUnit_ChainHarmonics_WorkData
 
 }; // Size: 0x98
 
+struct FRigUnit_ChainInfo : public FRigUnit_HighlevelBase
+{
+    TArray<FRigElementKey> Items;                                                     // 0x0008 (size: 0x10)
+    float Param;                                                                      // 0x0018 (size: 0x4)
+    bool bCalculateStretch;                                                           // 0x001C (size: 0x1)
+    bool bInitial;                                                                    // 0x001D (size: 0x1)
+    bool bDebug;                                                                      // 0x001E (size: 0x1)
+    float DebugScale;                                                                 // 0x0020 (size: 0x4)
+    FTransform InterpolatedTransform;                                                 // 0x0030 (size: 0x60)
+    float ChainLength;                                                                // 0x0090 (size: 0x4)
+    float ParamLength;                                                                // 0x0094 (size: 0x4)
+    float ChainStretchFactor;                                                         // 0x0098 (size: 0x4)
+    FRigUnit_ChainInfo_SegmentInfo SegmentInfo;                                       // 0x009C (size: 0x34)
+    TArray<FCachedRigElement> CachedElements;                                         // 0x00D0 (size: 0x10)
+
+}; // Size: 0xE0
+
+struct FRigUnit_ChainInfo_Segment
+{
+    FCachedRigElement StartItem;                                                      // 0x0000 (size: 0x20)
+    int32 StartItemIndex;                                                             // 0x0020 (size: 0x4)
+    FCachedRigElement EndItem;                                                        // 0x0028 (size: 0x20)
+    int32 EndItemIndex;                                                               // 0x0048 (size: 0x4)
+    float InitialLength;                                                              // 0x004C (size: 0x4)
+    float InitialCumLength;                                                           // 0x0050 (size: 0x4)
+    float Length;                                                                     // 0x0054 (size: 0x4)
+    float CumLength;                                                                  // 0x0058 (size: 0x4)
+
+}; // Size: 0x60
+
+struct FRigUnit_ChainInfo_SegmentInfo
+{
+    int32 SegmentIndex;                                                               // 0x0000 (size: 0x4)
+    float SegmentLength;                                                              // 0x0004 (size: 0x4)
+    float SegmentParam;                                                               // 0x0008 (size: 0x4)
+    float SegmentParamLength;                                                         // 0x000C (size: 0x4)
+    FRigElementKey SegmentStartItem;                                                  // 0x0010 (size: 0xC)
+    int32 SegmentStartItemIndex;                                                      // 0x001C (size: 0x4)
+    FRigElementKey SegmentEndItem;                                                    // 0x0020 (size: 0xC)
+    int32 SegmentEndItemIndex;                                                        // 0x002C (size: 0x4)
+    float SegmentStretchFactor;                                                       // 0x0030 (size: 0x4)
+
+}; // Size: 0x34
+
 struct FRigUnit_Clamp_Float : public FRigUnit
 {
     float Value;                                                                      // 0x0008 (size: 0x4)
-    float Min;                                                                        // 0x000C (size: 0x4)
-    float Max;                                                                        // 0x0010 (size: 0x4)
+    float min;                                                                        // 0x000C (size: 0x4)
+    float max;                                                                        // 0x0010 (size: 0x4)
     float Result;                                                                     // 0x0014 (size: 0x4)
 
 }; // Size: 0x18
@@ -1356,7 +1725,7 @@ struct FRigUnit_CollectionBase : public FRigUnit
 
 struct FRigUnit_CollectionBaseMutable : public FRigUnitMutable
 {
-}; // Size: 0x160
+}; // Size: 0x10
 
 struct FRigUnit_CollectionChain : public FRigUnit_CollectionBase
 {
@@ -1391,7 +1760,8 @@ struct FRigUnit_CollectionChildrenArray : public FRigUnit_CollectionBase
     FRigElementKey Parent;                                                            // 0x0008 (size: 0xC)
     bool bIncludeParent;                                                              // 0x0014 (size: 0x1)
     bool bRecursive;                                                                  // 0x0015 (size: 0x1)
-    ERigElementType TypeToSearch;                                                     // 0x0016 (size: 0x1)
+    bool bDefaultChildren;                                                            // 0x0016 (size: 0x1)
+    ERigElementType TypeToSearch;                                                     // 0x0017 (size: 0x1)
     TArray<FRigElementKey> Items;                                                     // 0x0018 (size: 0x10)
 
 }; // Size: 0x28
@@ -1465,15 +1835,15 @@ struct FRigUnit_CollectionItems : public FRigUnit_CollectionBase
 
 struct FRigUnit_CollectionLoop : public FRigUnit_CollectionBaseMutable
 {
-    FName BlockToRun;                                                                 // 0x0160 (size: 0x8)
-    FRigElementKeyCollection Collection;                                              // 0x0168 (size: 0x10)
-    FRigElementKey Item;                                                              // 0x0178 (size: 0xC)
-    int32 Index;                                                                      // 0x0184 (size: 0x4)
-    int32 Count;                                                                      // 0x0188 (size: 0x4)
-    float Ratio;                                                                      // 0x018C (size: 0x4)
-    FControlRigExecuteContext Completed;                                              // 0x0190 (size: 0x150)
+    FName BlockToRun;                                                                 // 0x0010 (size: 0x8)
+    FRigElementKeyCollection Collection;                                              // 0x0018 (size: 0x10)
+    FRigElementKey Item;                                                              // 0x0028 (size: 0xC)
+    int32 Index;                                                                      // 0x0034 (size: 0x4)
+    int32 Count;                                                                      // 0x0038 (size: 0x4)
+    float Ratio;                                                                      // 0x003C (size: 0x4)
+    FControlRigExecuteContext Completed;                                              // 0x0040 (size: 0x210)
 
-}; // Size: 0x2E0
+}; // Size: 0x250
 
 struct FRigUnit_CollectionNameSearch : public FRigUnit_CollectionBase
 {
@@ -1528,6 +1898,12 @@ struct FRigUnit_CollectionUnion : public FRigUnit_CollectionBase
     FRigElementKeyCollection Collection;                                              // 0x0030 (size: 0x10)
 
 }; // Size: 0x40
+
+struct FRigUnit_ConnectorExecution : public FRigUnit
+{
+    FControlRigExecuteContext ExecuteContext;                                         // 0x0010 (size: 0x210)
+
+}; // Size: 0x220
 
 struct FRigUnit_Control : public FRigUnit
 {
@@ -1612,164 +1988,178 @@ struct FRigUnit_ConvertVectorToRotation : public FRigUnit
 
 }; // Size: 0x38
 
+struct FRigUnit_CurveExists : public FRigUnit
+{
+    FName Curve;                                                                      // 0x0008 (size: 0x8)
+    bool Exists;                                                                      // 0x0010 (size: 0x1)
+    FCachedRigElement CachedCurveIndex;                                               // 0x0018 (size: 0x20)
+
+}; // Size: 0x38
+
 struct FRigUnit_DebugArc : public FRigUnit_DebugBaseMutable
 {
-    FTransform Transform;                                                             // 0x0160 (size: 0x60)
-    FLinearColor Color;                                                               // 0x01C0 (size: 0x10)
-    float Radius;                                                                     // 0x01D0 (size: 0x4)
-    float MinimumDegrees;                                                             // 0x01D4 (size: 0x4)
-    float MaximumDegrees;                                                             // 0x01D8 (size: 0x4)
-    float Thickness;                                                                  // 0x01DC (size: 0x4)
-    int32 Detail;                                                                     // 0x01E0 (size: 0x4)
-    FName Space;                                                                      // 0x01E4 (size: 0x8)
-    FTransform WorldOffset;                                                           // 0x01F0 (size: 0x60)
-    bool bEnabled;                                                                    // 0x0250 (size: 0x1)
+    FTransform Transform;                                                             // 0x0020 (size: 0x60)
+    FLinearColor Color;                                                               // 0x0080 (size: 0x10)
+    float Radius;                                                                     // 0x0090 (size: 0x4)
+    float MinimumDegrees;                                                             // 0x0094 (size: 0x4)
+    float MaximumDegrees;                                                             // 0x0098 (size: 0x4)
+    float Thickness;                                                                  // 0x009C (size: 0x4)
+    int32 Detail;                                                                     // 0x00A0 (size: 0x4)
+    FName Space;                                                                      // 0x00A4 (size: 0x8)
+    FTransform WorldOffset;                                                           // 0x00B0 (size: 0x60)
+    bool bEnabled;                                                                    // 0x0110 (size: 0x1)
 
-}; // Size: 0x260
+}; // Size: 0x120
 
 struct FRigUnit_DebugArcItemSpace : public FRigUnit_DebugBaseMutable
 {
-    FTransform Transform;                                                             // 0x0160 (size: 0x60)
-    FLinearColor Color;                                                               // 0x01C0 (size: 0x10)
-    float Radius;                                                                     // 0x01D0 (size: 0x4)
-    float MinimumDegrees;                                                             // 0x01D4 (size: 0x4)
-    float MaximumDegrees;                                                             // 0x01D8 (size: 0x4)
-    float Thickness;                                                                  // 0x01DC (size: 0x4)
-    int32 Detail;                                                                     // 0x01E0 (size: 0x4)
-    FRigElementKey Space;                                                             // 0x01E4 (size: 0xC)
-    FTransform WorldOffset;                                                           // 0x01F0 (size: 0x60)
-    bool bEnabled;                                                                    // 0x0250 (size: 0x1)
+    FTransform Transform;                                                             // 0x0020 (size: 0x60)
+    FLinearColor Color;                                                               // 0x0080 (size: 0x10)
+    float Radius;                                                                     // 0x0090 (size: 0x4)
+    float MinimumDegrees;                                                             // 0x0094 (size: 0x4)
+    float MaximumDegrees;                                                             // 0x0098 (size: 0x4)
+    float Thickness;                                                                  // 0x009C (size: 0x4)
+    int32 Detail;                                                                     // 0x00A0 (size: 0x4)
+    FRigElementKey Space;                                                             // 0x00A4 (size: 0xC)
+    FTransform WorldOffset;                                                           // 0x00B0 (size: 0x60)
+    bool bEnabled;                                                                    // 0x0110 (size: 0x1)
 
-}; // Size: 0x260
+}; // Size: 0x120
 
 struct FRigUnit_DebugBase : public FRigUnit
 {
-}; // Size: 0x8
+    FRigVMDebugDrawSettings DebugDrawSettings;                                        // 0x0008 (size: 0x8)
+
+}; // Size: 0x10
 
 struct FRigUnit_DebugBaseMutable : public FRigUnitMutable
 {
-}; // Size: 0x160
+    FRigVMDebugDrawSettings DebugDrawSettings;                                        // 0x0010 (size: 0x8)
+
+}; // Size: 0x18
 
 struct FRigUnit_DebugBezier : public FRigVMFunction_DebugBaseMutable
 {
-    FRigVMFourPointBezier Bezier;                                                     // 0x0100 (size: 0x60)
-    float MinimumU;                                                                   // 0x0160 (size: 0x4)
-    float MaximumU;                                                                   // 0x0164 (size: 0x4)
-    FLinearColor Color;                                                               // 0x0168 (size: 0x10)
-    float Thickness;                                                                  // 0x0178 (size: 0x4)
-    int32 Detail;                                                                     // 0x017C (size: 0x4)
-    FName Space;                                                                      // 0x0180 (size: 0x8)
-    FTransform WorldOffset;                                                           // 0x0190 (size: 0x60)
-    bool bEnabled;                                                                    // 0x01F0 (size: 0x1)
+    FRigVMFourPointBezier Bezier;                                                     // 0x0018 (size: 0x60)
+    float MinimumU;                                                                   // 0x0078 (size: 0x4)
+    float MaximumU;                                                                   // 0x007C (size: 0x4)
+    FLinearColor Color;                                                               // 0x0080 (size: 0x10)
+    float Thickness;                                                                  // 0x0090 (size: 0x4)
+    int32 Detail;                                                                     // 0x0094 (size: 0x4)
+    FName Space;                                                                      // 0x0098 (size: 0x8)
+    FTransform WorldOffset;                                                           // 0x00A0 (size: 0x60)
+    bool bEnabled;                                                                    // 0x0100 (size: 0x1)
 
-}; // Size: 0x200
+}; // Size: 0x110
 
 struct FRigUnit_DebugBezierItemSpace : public FRigVMFunction_DebugBaseMutable
 {
-    FRigVMFourPointBezier Bezier;                                                     // 0x0100 (size: 0x60)
-    float MinimumU;                                                                   // 0x0160 (size: 0x4)
-    float MaximumU;                                                                   // 0x0164 (size: 0x4)
-    FLinearColor Color;                                                               // 0x0168 (size: 0x10)
-    float Thickness;                                                                  // 0x0178 (size: 0x4)
-    int32 Detail;                                                                     // 0x017C (size: 0x4)
-    FRigElementKey Space;                                                             // 0x0180 (size: 0xC)
-    FTransform WorldOffset;                                                           // 0x0190 (size: 0x60)
-    bool bEnabled;                                                                    // 0x01F0 (size: 0x1)
+    FRigVMFourPointBezier Bezier;                                                     // 0x0018 (size: 0x60)
+    float MinimumU;                                                                   // 0x0078 (size: 0x4)
+    float MaximumU;                                                                   // 0x007C (size: 0x4)
+    FLinearColor Color;                                                               // 0x0080 (size: 0x10)
+    float Thickness;                                                                  // 0x0090 (size: 0x4)
+    int32 Detail;                                                                     // 0x0094 (size: 0x4)
+    FRigElementKey Space;                                                             // 0x0098 (size: 0xC)
+    FTransform WorldOffset;                                                           // 0x00B0 (size: 0x60)
+    bool bEnabled;                                                                    // 0x0110 (size: 0x1)
 
-}; // Size: 0x200
+}; // Size: 0x120
 
 struct FRigUnit_DebugHierarchy : public FRigVMFunction_DebugBase
 {
-    FControlRigExecuteContext ExecuteContext;                                         // 0x0010 (size: 0x150)
-    float Scale;                                                                      // 0x0160 (size: 0x4)
-    FLinearColor Color;                                                               // 0x0164 (size: 0x10)
-    float Thickness;                                                                  // 0x0174 (size: 0x4)
-    FTransform WorldOffset;                                                           // 0x0180 (size: 0x60)
-    bool bEnabled;                                                                    // 0x01E0 (size: 0x1)
+    FRigVMExecutePin ExecutePin;                                                      // 0x0010 (size: 0x8)
+    TArray<FRigElementKey> Items;                                                     // 0x0018 (size: 0x10)
+    float Scale;                                                                      // 0x0028 (size: 0x4)
+    FLinearColor Color;                                                               // 0x002C (size: 0x10)
+    float Thickness;                                                                  // 0x003C (size: 0x4)
+    FTransform WorldOffset;                                                           // 0x0040 (size: 0x60)
+    bool bEnabled;                                                                    // 0x00A0 (size: 0x1)
 
-}; // Size: 0x1F0
+}; // Size: 0xB0
 
 struct FRigUnit_DebugLine : public FRigUnit_DebugBaseMutable
 {
-    FVector A;                                                                        // 0x0160 (size: 0x18)
-    FVector B;                                                                        // 0x0178 (size: 0x18)
-    FLinearColor Color;                                                               // 0x0190 (size: 0x10)
-    float Thickness;                                                                  // 0x01A0 (size: 0x4)
-    FName Space;                                                                      // 0x01A4 (size: 0x8)
-    FTransform WorldOffset;                                                           // 0x01B0 (size: 0x60)
-    bool bEnabled;                                                                    // 0x0210 (size: 0x1)
+    FVector A;                                                                        // 0x0018 (size: 0x18)
+    FVector B;                                                                        // 0x0030 (size: 0x18)
+    FLinearColor Color;                                                               // 0x0048 (size: 0x10)
+    float Thickness;                                                                  // 0x0058 (size: 0x4)
+    FName Space;                                                                      // 0x005C (size: 0x8)
+    FTransform WorldOffset;                                                           // 0x0070 (size: 0x60)
+    bool bEnabled;                                                                    // 0x00D0 (size: 0x1)
 
-}; // Size: 0x220
+}; // Size: 0xE0
 
 struct FRigUnit_DebugLineItemSpace : public FRigUnit_DebugBaseMutable
 {
-    FVector A;                                                                        // 0x0160 (size: 0x18)
-    FVector B;                                                                        // 0x0178 (size: 0x18)
-    FLinearColor Color;                                                               // 0x0190 (size: 0x10)
-    float Thickness;                                                                  // 0x01A0 (size: 0x4)
-    FRigElementKey Space;                                                             // 0x01A4 (size: 0xC)
-    FTransform WorldOffset;                                                           // 0x01B0 (size: 0x60)
-    bool bEnabled;                                                                    // 0x0210 (size: 0x1)
+    FVector A;                                                                        // 0x0018 (size: 0x18)
+    FVector B;                                                                        // 0x0030 (size: 0x18)
+    FLinearColor Color;                                                               // 0x0048 (size: 0x10)
+    float Thickness;                                                                  // 0x0058 (size: 0x4)
+    FRigElementKey Space;                                                             // 0x005C (size: 0xC)
+    FTransform WorldOffset;                                                           // 0x0070 (size: 0x60)
+    bool bEnabled;                                                                    // 0x00D0 (size: 0x1)
 
-}; // Size: 0x220
+}; // Size: 0xE0
 
 struct FRigUnit_DebugLineStrip : public FRigUnit_DebugBaseMutable
 {
-    TArray<FVector> Points;                                                           // 0x0160 (size: 0x10)
-    FLinearColor Color;                                                               // 0x0170 (size: 0x10)
-    float Thickness;                                                                  // 0x0180 (size: 0x4)
-    FName Space;                                                                      // 0x0184 (size: 0x8)
-    FTransform WorldOffset;                                                           // 0x0190 (size: 0x60)
-    bool bEnabled;                                                                    // 0x01F0 (size: 0x1)
+    TArray<FVector> Points;                                                           // 0x0018 (size: 0x10)
+    FLinearColor Color;                                                               // 0x0028 (size: 0x10)
+    float Thickness;                                                                  // 0x0038 (size: 0x4)
+    FName Space;                                                                      // 0x003C (size: 0x8)
+    FTransform WorldOffset;                                                           // 0x0050 (size: 0x60)
+    bool bEnabled;                                                                    // 0x00B0 (size: 0x1)
 
-}; // Size: 0x200
+}; // Size: 0xC0
 
 struct FRigUnit_DebugLineStripItemSpace : public FRigUnit_DebugBaseMutable
 {
-    TArray<FVector> Points;                                                           // 0x0160 (size: 0x10)
-    FLinearColor Color;                                                               // 0x0170 (size: 0x10)
-    float Thickness;                                                                  // 0x0180 (size: 0x4)
-    FRigElementKey Space;                                                             // 0x0184 (size: 0xC)
-    FTransform WorldOffset;                                                           // 0x0190 (size: 0x60)
-    bool bEnabled;                                                                    // 0x01F0 (size: 0x1)
+    TArray<FVector> Points;                                                           // 0x0018 (size: 0x10)
+    FLinearColor Color;                                                               // 0x0028 (size: 0x10)
+    float Thickness;                                                                  // 0x0038 (size: 0x4)
+    FRigElementKey Space;                                                             // 0x003C (size: 0xC)
+    FTransform WorldOffset;                                                           // 0x0050 (size: 0x60)
+    bool bEnabled;                                                                    // 0x00B0 (size: 0x1)
 
-}; // Size: 0x200
+}; // Size: 0xC0
 
 struct FRigUnit_DebugPose : public FRigVMFunction_DebugBase
 {
-    FControlRigExecuteContext ExecuteContext;                                         // 0x0010 (size: 0x150)
-    FRigPose Pose;                                                                    // 0x0160 (size: 0x70)
-    float Scale;                                                                      // 0x01D0 (size: 0x4)
-    FLinearColor Color;                                                               // 0x01D4 (size: 0x10)
-    float Thickness;                                                                  // 0x01E4 (size: 0x4)
-    FTransform WorldOffset;                                                           // 0x01F0 (size: 0x60)
-    bool bEnabled;                                                                    // 0x0250 (size: 0x1)
+    FRigVMExecutePin ExecutePin;                                                      // 0x0010 (size: 0x8)
+    FRigPose Pose;                                                                    // 0x0018 (size: 0x70)
+    TArray<FRigElementKey> Items;                                                     // 0x0088 (size: 0x10)
+    float Scale;                                                                      // 0x0098 (size: 0x4)
+    FLinearColor Color;                                                               // 0x009C (size: 0x10)
+    float Thickness;                                                                  // 0x00AC (size: 0x4)
+    FTransform WorldOffset;                                                           // 0x00B0 (size: 0x60)
+    bool bEnabled;                                                                    // 0x0110 (size: 0x1)
 
-}; // Size: 0x260
+}; // Size: 0x120
 
 struct FRigUnit_DebugRectangle : public FRigUnit_DebugBaseMutable
 {
-    FTransform Transform;                                                             // 0x0160 (size: 0x60)
-    FLinearColor Color;                                                               // 0x01C0 (size: 0x10)
-    float Scale;                                                                      // 0x01D0 (size: 0x4)
-    float Thickness;                                                                  // 0x01D4 (size: 0x4)
-    FName Space;                                                                      // 0x01D8 (size: 0x8)
-    FTransform WorldOffset;                                                           // 0x01E0 (size: 0x60)
-    bool bEnabled;                                                                    // 0x0240 (size: 0x1)
+    FTransform Transform;                                                             // 0x0020 (size: 0x60)
+    FLinearColor Color;                                                               // 0x0080 (size: 0x10)
+    float Scale;                                                                      // 0x0090 (size: 0x4)
+    float Thickness;                                                                  // 0x0094 (size: 0x4)
+    FName Space;                                                                      // 0x0098 (size: 0x8)
+    FTransform WorldOffset;                                                           // 0x00A0 (size: 0x60)
+    bool bEnabled;                                                                    // 0x0100 (size: 0x1)
 
-}; // Size: 0x250
+}; // Size: 0x110
 
 struct FRigUnit_DebugRectangleItemSpace : public FRigUnit_DebugBaseMutable
 {
-    FTransform Transform;                                                             // 0x0160 (size: 0x60)
-    FLinearColor Color;                                                               // 0x01C0 (size: 0x10)
-    float Scale;                                                                      // 0x01D0 (size: 0x4)
-    float Thickness;                                                                  // 0x01D4 (size: 0x4)
-    FRigElementKey Space;                                                             // 0x01D8 (size: 0xC)
-    FTransform WorldOffset;                                                           // 0x01F0 (size: 0x60)
-    bool bEnabled;                                                                    // 0x0250 (size: 0x1)
+    FTransform Transform;                                                             // 0x0020 (size: 0x60)
+    FLinearColor Color;                                                               // 0x0080 (size: 0x10)
+    float Scale;                                                                      // 0x0090 (size: 0x4)
+    float Thickness;                                                                  // 0x0094 (size: 0x4)
+    FRigElementKey Space;                                                             // 0x0098 (size: 0xC)
+    FTransform WorldOffset;                                                           // 0x00B0 (size: 0x60)
+    bool bEnabled;                                                                    // 0x0110 (size: 0x1)
 
-}; // Size: 0x260
+}; // Size: 0x120
 
 struct FRigUnit_DebugTransform : public FRigUnit_DebugBase
 {
@@ -1786,31 +2176,31 @@ struct FRigUnit_DebugTransform : public FRigUnit_DebugBase
 
 struct FRigUnit_DebugTransformArrayMutable : public FRigUnit_DebugBaseMutable
 {
-    TArray<FTransform> Transforms;                                                    // 0x0160 (size: 0x10)
-    ERigUnitDebugTransformMode Mode;                                                  // 0x0170 (size: 0x1)
-    FLinearColor Color;                                                               // 0x0174 (size: 0x10)
-    float Thickness;                                                                  // 0x0184 (size: 0x4)
-    float Scale;                                                                      // 0x0188 (size: 0x4)
-    FName Space;                                                                      // 0x018C (size: 0x8)
-    FTransform WorldOffset;                                                           // 0x01A0 (size: 0x60)
-    bool bEnabled;                                                                    // 0x0200 (size: 0x1)
-    FRigUnit_DebugTransformArrayMutable_WorkData WorkData;                            // 0x0208 (size: 0x10)
+    TArray<FTransform> Transforms;                                                    // 0x0018 (size: 0x10)
+    ERigUnitDebugTransformMode Mode;                                                  // 0x0028 (size: 0x1)
+    FLinearColor Color;                                                               // 0x002C (size: 0x10)
+    float Thickness;                                                                  // 0x003C (size: 0x4)
+    float Scale;                                                                      // 0x0040 (size: 0x4)
+    FName Space;                                                                      // 0x0044 (size: 0x8)
+    FTransform WorldOffset;                                                           // 0x0050 (size: 0x60)
+    bool bEnabled;                                                                    // 0x00B0 (size: 0x1)
+    FRigUnit_DebugTransformArrayMutable_WorkData WorkData;                            // 0x00B8 (size: 0x10)
 
-}; // Size: 0x220
+}; // Size: 0xD0
 
 struct FRigUnit_DebugTransformArrayMutableItemSpace : public FRigUnit_DebugBaseMutable
 {
-    TArray<FTransform> Transforms;                                                    // 0x0160 (size: 0x10)
-    TArray<int32> ParentIndices;                                                      // 0x0170 (size: 0x10)
-    ERigUnitDebugTransformMode Mode;                                                  // 0x0180 (size: 0x1)
-    FLinearColor Color;                                                               // 0x0184 (size: 0x10)
-    float Thickness;                                                                  // 0x0194 (size: 0x4)
-    float Scale;                                                                      // 0x0198 (size: 0x4)
-    FRigElementKey Space;                                                             // 0x019C (size: 0xC)
-    FTransform WorldOffset;                                                           // 0x01B0 (size: 0x60)
-    bool bEnabled;                                                                    // 0x0210 (size: 0x1)
+    TArray<FTransform> Transforms;                                                    // 0x0018 (size: 0x10)
+    TArray<int32> ParentIndices;                                                      // 0x0028 (size: 0x10)
+    ERigUnitDebugTransformMode Mode;                                                  // 0x0038 (size: 0x1)
+    FLinearColor Color;                                                               // 0x003C (size: 0x10)
+    float Thickness;                                                                  // 0x004C (size: 0x4)
+    float Scale;                                                                      // 0x0050 (size: 0x4)
+    FRigElementKey Space;                                                             // 0x0054 (size: 0xC)
+    FTransform WorldOffset;                                                           // 0x0060 (size: 0x60)
+    bool bEnabled;                                                                    // 0x00C0 (size: 0x1)
 
-}; // Size: 0x220
+}; // Size: 0xD0
 
 struct FRigUnit_DebugTransformArrayMutable_WorkData
 {
@@ -1820,29 +2210,36 @@ struct FRigUnit_DebugTransformArrayMutable_WorkData
 
 struct FRigUnit_DebugTransformMutable : public FRigUnit_DebugBaseMutable
 {
-    FTransform Transform;                                                             // 0x0160 (size: 0x60)
-    ERigUnitDebugTransformMode Mode;                                                  // 0x01C0 (size: 0x1)
-    FLinearColor Color;                                                               // 0x01C4 (size: 0x10)
-    float Thickness;                                                                  // 0x01D4 (size: 0x4)
-    float Scale;                                                                      // 0x01D8 (size: 0x4)
-    FName Space;                                                                      // 0x01DC (size: 0x8)
-    FTransform WorldOffset;                                                           // 0x01F0 (size: 0x60)
-    bool bEnabled;                                                                    // 0x0250 (size: 0x1)
+    FTransform Transform;                                                             // 0x0020 (size: 0x60)
+    ERigUnitDebugTransformMode Mode;                                                  // 0x0080 (size: 0x1)
+    FLinearColor Color;                                                               // 0x0084 (size: 0x10)
+    float Thickness;                                                                  // 0x0094 (size: 0x4)
+    float Scale;                                                                      // 0x0098 (size: 0x4)
+    FName Space;                                                                      // 0x009C (size: 0x8)
+    FTransform WorldOffset;                                                           // 0x00B0 (size: 0x60)
+    bool bEnabled;                                                                    // 0x0110 (size: 0x1)
 
-}; // Size: 0x260
+}; // Size: 0x120
 
 struct FRigUnit_DebugTransformMutableItemSpace : public FRigUnit_DebugBaseMutable
 {
-    FTransform Transform;                                                             // 0x0160 (size: 0x60)
-    ERigUnitDebugTransformMode Mode;                                                  // 0x01C0 (size: 0x1)
-    FLinearColor Color;                                                               // 0x01C4 (size: 0x10)
-    float Thickness;                                                                  // 0x01D4 (size: 0x4)
-    float Scale;                                                                      // 0x01D8 (size: 0x4)
-    FRigElementKey Space;                                                             // 0x01DC (size: 0xC)
-    FTransform WorldOffset;                                                           // 0x01F0 (size: 0x60)
-    bool bEnabled;                                                                    // 0x0250 (size: 0x1)
+    FTransform Transform;                                                             // 0x0020 (size: 0x60)
+    ERigUnitDebugTransformMode Mode;                                                  // 0x0080 (size: 0x1)
+    FLinearColor Color;                                                               // 0x0084 (size: 0x10)
+    float Thickness;                                                                  // 0x0094 (size: 0x4)
+    float Scale;                                                                      // 0x0098 (size: 0x4)
+    FRigElementKey Space;                                                             // 0x009C (size: 0xC)
+    FTransform WorldOffset;                                                           // 0x00B0 (size: 0x60)
+    bool bEnabled;                                                                    // 0x0110 (size: 0x1)
 
-}; // Size: 0x260
+}; // Size: 0x120
+
+struct FRigUnit_DiscardMatches : public FRigUnitMutable
+{
+    TArray<FRigElementKey> Excluded;                                                  // 0x0010 (size: 0x10)
+    FString Message;                                                                  // 0x0020 (size: 0x10)
+
+}; // Size: 0x30
 
 struct FRigUnit_Distance_VectorVector : public FRigUnit
 {
@@ -1854,35 +2251,35 @@ struct FRigUnit_Distance_VectorVector : public FRigUnit
 
 struct FRigUnit_DistributeRotation : public FRigUnit_HighlevelBaseMutable
 {
-    FName StartBone;                                                                  // 0x0160 (size: 0x8)
-    FName EndBone;                                                                    // 0x0168 (size: 0x8)
-    TArray<FRigUnit_DistributeRotation_Rotation> Rotations;                           // 0x0170 (size: 0x10)
-    ERigVMAnimEasingType RotationEaseType;                                            // 0x0180 (size: 0x1)
-    float Weight;                                                                     // 0x0184 (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x0188 (size: 0x1)
-    FRigUnit_DistributeRotation_WorkData WorkData;                                    // 0x0190 (size: 0x50)
+    FName StartBone;                                                                  // 0x0010 (size: 0x8)
+    FName EndBone;                                                                    // 0x0018 (size: 0x8)
+    TArray<FRigUnit_DistributeRotation_Rotation> Rotations;                           // 0x0020 (size: 0x10)
+    ERigVMAnimEasingType RotationEaseType;                                            // 0x0030 (size: 0x1)
+    float Weight;                                                                     // 0x0034 (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x0038 (size: 0x1)
+    FRigUnit_DistributeRotation_WorkData WorkData;                                    // 0x0040 (size: 0x50)
 
-}; // Size: 0x1E0
+}; // Size: 0x90
 
 struct FRigUnit_DistributeRotationForCollection : public FRigUnit_HighlevelBaseMutable
 {
-    FRigElementKeyCollection Items;                                                   // 0x0160 (size: 0x10)
-    TArray<FRigUnit_DistributeRotation_Rotation> Rotations;                           // 0x0170 (size: 0x10)
-    ERigVMAnimEasingType RotationEaseType;                                            // 0x0180 (size: 0x1)
-    float Weight;                                                                     // 0x0184 (size: 0x4)
-    FRigUnit_DistributeRotation_WorkData WorkData;                                    // 0x0188 (size: 0x50)
+    FRigElementKeyCollection Items;                                                   // 0x0010 (size: 0x10)
+    TArray<FRigUnit_DistributeRotation_Rotation> Rotations;                           // 0x0020 (size: 0x10)
+    ERigVMAnimEasingType RotationEaseType;                                            // 0x0030 (size: 0x1)
+    float Weight;                                                                     // 0x0034 (size: 0x4)
+    FRigUnit_DistributeRotation_WorkData WorkData;                                    // 0x0038 (size: 0x50)
 
-}; // Size: 0x1E0
+}; // Size: 0x88
 
 struct FRigUnit_DistributeRotationForItemArray : public FRigUnit_HighlevelBaseMutable
 {
-    TArray<FRigElementKey> Items;                                                     // 0x0160 (size: 0x10)
-    TArray<FRigUnit_DistributeRotation_Rotation> Rotations;                           // 0x0170 (size: 0x10)
-    ERigVMAnimEasingType RotationEaseType;                                            // 0x0180 (size: 0x1)
-    float Weight;                                                                     // 0x0184 (size: 0x4)
-    FRigUnit_DistributeRotation_WorkData WorkData;                                    // 0x0188 (size: 0x50)
+    TArray<FRigElementKey> Items;                                                     // 0x0010 (size: 0x10)
+    TArray<FRigUnit_DistributeRotation_Rotation> Rotations;                           // 0x0020 (size: 0x10)
+    ERigVMAnimEasingType RotationEaseType;                                            // 0x0030 (size: 0x1)
+    float Weight;                                                                     // 0x0034 (size: 0x4)
+    FRigUnit_DistributeRotation_WorkData WorkData;                                    // 0x0038 (size: 0x50)
 
-}; // Size: 0x1E0
+}; // Size: 0x88
 
 struct FRigUnit_DistributeRotation_Rotation
 {
@@ -1919,24 +2316,24 @@ struct FRigUnit_DrawContainerGetInstruction : public FRigUnit
 
 struct FRigUnit_DrawContainerSetColor : public FRigUnitMutable
 {
-    FName InstructionName;                                                            // 0x0160 (size: 0x8)
-    FLinearColor Color;                                                               // 0x0168 (size: 0x10)
+    FName InstructionName;                                                            // 0x0010 (size: 0x8)
+    FLinearColor Color;                                                               // 0x0018 (size: 0x10)
 
-}; // Size: 0x180
+}; // Size: 0x28
 
 struct FRigUnit_DrawContainerSetThickness : public FRigUnitMutable
 {
-    FName InstructionName;                                                            // 0x0160 (size: 0x8)
-    float Thickness;                                                                  // 0x0168 (size: 0x4)
+    FName InstructionName;                                                            // 0x0010 (size: 0x8)
+    float Thickness;                                                                  // 0x0018 (size: 0x4)
 
-}; // Size: 0x170
+}; // Size: 0x20
 
 struct FRigUnit_DrawContainerSetTransform : public FRigUnitMutable
 {
-    FName InstructionName;                                                            // 0x0160 (size: 0x8)
-    FTransform Transform;                                                             // 0x0170 (size: 0x60)
+    FName InstructionName;                                                            // 0x0010 (size: 0x8)
+    FTransform Transform;                                                             // 0x0020 (size: 0x60)
 
-}; // Size: 0x1D0
+}; // Size: 0x80
 
 struct FRigUnit_DynamicHierarchyBase : public FRigUnit
 {
@@ -1944,57 +2341,57 @@ struct FRigUnit_DynamicHierarchyBase : public FRigUnit
 
 struct FRigUnit_DynamicHierarchyBaseMutable : public FRigUnitMutable
 {
-}; // Size: 0x160
+}; // Size: 0x10
 
 struct FRigUnit_EndProfilingTimer : public FRigVMFunction_DebugBaseMutable
 {
-    int32 NumberOfMeasurements;                                                       // 0x0100 (size: 0x4)
-    FString Prefix;                                                                   // 0x0108 (size: 0x10)
-    float AccumulatedTime;                                                            // 0x0118 (size: 0x4)
-    int32 MeasurementsLeft;                                                           // 0x011C (size: 0x4)
-    bool bIsInitialized;                                                              // 0x0120 (size: 0x1)
+    int32 NumberOfMeasurements;                                                       // 0x0018 (size: 0x4)
+    FString Prefix;                                                                   // 0x0020 (size: 0x10)
+    float AccumulatedTime;                                                            // 0x0030 (size: 0x4)
+    int32 MeasurementsLeft;                                                           // 0x0034 (size: 0x4)
+    bool bIsInitialized;                                                              // 0x0038 (size: 0x1)
 
-}; // Size: 0x130
+}; // Size: 0x40
 
 struct FRigUnit_FABRIK : public FRigUnit_HighlevelBaseMutable
 {
-    FName StartBone;                                                                  // 0x0160 (size: 0x8)
-    FName EffectorBone;                                                               // 0x0168 (size: 0x8)
-    FTransform EffectorTransform;                                                     // 0x0170 (size: 0x60)
-    float Precision;                                                                  // 0x01D0 (size: 0x4)
-    float Weight;                                                                     // 0x01D4 (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x01D8 (size: 0x1)
-    int32 MaxIterations;                                                              // 0x01DC (size: 0x4)
-    FRigUnit_FABRIK_WorkData WorkData;                                                // 0x01E0 (size: 0x40)
-    bool bSetEffectorTransform;                                                       // 0x0220 (size: 0x1)
+    FName StartBone;                                                                  // 0x0010 (size: 0x8)
+    FName EffectorBone;                                                               // 0x0018 (size: 0x8)
+    FTransform EffectorTransform;                                                     // 0x0020 (size: 0x60)
+    float Precision;                                                                  // 0x0080 (size: 0x4)
+    float Weight;                                                                     // 0x0084 (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x0088 (size: 0x1)
+    int32 MaxIterations;                                                              // 0x008C (size: 0x4)
+    FRigUnit_FABRIK_WorkData WorkData;                                                // 0x0090 (size: 0x40)
+    bool bSetEffectorTransform;                                                       // 0x00D0 (size: 0x1)
 
-}; // Size: 0x230
+}; // Size: 0xE0
 
 struct FRigUnit_FABRIKItemArray : public FRigUnit_HighlevelBaseMutable
 {
-    TArray<FRigElementKey> Items;                                                     // 0x0160 (size: 0x10)
-    FTransform EffectorTransform;                                                     // 0x0170 (size: 0x60)
-    float Precision;                                                                  // 0x01D0 (size: 0x4)
-    float Weight;                                                                     // 0x01D4 (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x01D8 (size: 0x1)
-    int32 MaxIterations;                                                              // 0x01DC (size: 0x4)
-    FRigUnit_FABRIK_WorkData WorkData;                                                // 0x01E0 (size: 0x40)
-    bool bSetEffectorTransform;                                                       // 0x0220 (size: 0x1)
+    TArray<FRigElementKey> Items;                                                     // 0x0010 (size: 0x10)
+    FTransform EffectorTransform;                                                     // 0x0020 (size: 0x60)
+    float Precision;                                                                  // 0x0080 (size: 0x4)
+    float Weight;                                                                     // 0x0084 (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x0088 (size: 0x1)
+    int32 MaxIterations;                                                              // 0x008C (size: 0x4)
+    FRigUnit_FABRIK_WorkData WorkData;                                                // 0x0090 (size: 0x40)
+    bool bSetEffectorTransform;                                                       // 0x00D0 (size: 0x1)
 
-}; // Size: 0x230
+}; // Size: 0xE0
 
 struct FRigUnit_FABRIKPerItem : public FRigUnit_HighlevelBaseMutable
 {
-    FRigElementKeyCollection Items;                                                   // 0x0160 (size: 0x10)
-    FTransform EffectorTransform;                                                     // 0x0170 (size: 0x60)
-    float Precision;                                                                  // 0x01D0 (size: 0x4)
-    float Weight;                                                                     // 0x01D4 (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x01D8 (size: 0x1)
-    int32 MaxIterations;                                                              // 0x01DC (size: 0x4)
-    FRigUnit_FABRIK_WorkData WorkData;                                                // 0x01E0 (size: 0x40)
-    bool bSetEffectorTransform;                                                       // 0x0220 (size: 0x1)
+    FRigElementKeyCollection Items;                                                   // 0x0010 (size: 0x10)
+    FTransform EffectorTransform;                                                     // 0x0020 (size: 0x60)
+    float Precision;                                                                  // 0x0080 (size: 0x4)
+    float Weight;                                                                     // 0x0084 (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x0088 (size: 0x1)
+    int32 MaxIterations;                                                              // 0x008C (size: 0x4)
+    FRigUnit_FABRIK_WorkData WorkData;                                                // 0x0090 (size: 0x40)
+    bool bSetEffectorTransform;                                                       // 0x00D0 (size: 0x1)
 
-}; // Size: 0x230
+}; // Size: 0xE0
 
 struct FRigUnit_FABRIK_WorkData
 {
@@ -2008,16 +2405,27 @@ struct FRigUnit_FilterItemsByMetadataTags : public FRigUnit
 {
     TArray<FRigElementKey> Items;                                                     // 0x0008 (size: 0x10)
     TArray<FName> Tags;                                                               // 0x0018 (size: 0x10)
-    bool Inclusive;                                                                   // 0x0028 (size: 0x1)
+    ERigMetaDataNameSpace Namespace;                                                  // 0x0028 (size: 0x1)
+    bool Inclusive;                                                                   // 0x0029 (size: 0x1)
     TArray<FRigElementKey> Result;                                                    // 0x0030 (size: 0x10)
     TArray<FCachedRigElement> CachedIndices;                                          // 0x0040 (size: 0x10)
 
 }; // Size: 0x50
 
+struct FRigUnit_FindClosestItem : public FRigUnitMutable
+{
+    TArray<FRigElementKey> Items;                                                     // 0x0010 (size: 0x10)
+    FVector Point;                                                                    // 0x0020 (size: 0x18)
+    FRigElementKey Item;                                                              // 0x0038 (size: 0xC)
+    TArray<FCachedRigElement> CachedItems;                                            // 0x0048 (size: 0x10)
+
+}; // Size: 0x58
+
 struct FRigUnit_FindItemsWithMetadata : public FRigUnit
 {
     FName Name;                                                                       // 0x0008 (size: 0x8)
     ERigMetadataType Type;                                                            // 0x0010 (size: 0x1)
+    ERigMetaDataNameSpace Namespace;                                                  // 0x0011 (size: 0x1)
     TArray<FRigElementKey> Items;                                                     // 0x0018 (size: 0x10)
 
 }; // Size: 0x28
@@ -2025,77 +2433,79 @@ struct FRigUnit_FindItemsWithMetadata : public FRigUnit
 struct FRigUnit_FindItemsWithMetadataTag : public FRigUnit
 {
     FName Tag;                                                                        // 0x0008 (size: 0x8)
-    TArray<FRigElementKey> Items;                                                     // 0x0010 (size: 0x10)
-
-}; // Size: 0x20
-
-struct FRigUnit_FindItemsWithMetadataTagArray : public FRigUnit
-{
-    TArray<FName> Tags;                                                               // 0x0008 (size: 0x10)
+    ERigMetaDataNameSpace Namespace;                                                  // 0x0010 (size: 0x1)
     TArray<FRigElementKey> Items;                                                     // 0x0018 (size: 0x10)
 
 }; // Size: 0x28
 
+struct FRigUnit_FindItemsWithMetadataTagArray : public FRigUnit
+{
+    TArray<FName> Tags;                                                               // 0x0008 (size: 0x10)
+    ERigMetaDataNameSpace Namespace;                                                  // 0x0018 (size: 0x1)
+    TArray<FRigElementKey> Items;                                                     // 0x0020 (size: 0x10)
+
+}; // Size: 0x30
+
 struct FRigUnit_FitChainToCurve : public FRigUnit_HighlevelBaseMutable
 {
-    FName StartBone;                                                                  // 0x0160 (size: 0x8)
-    FName EndBone;                                                                    // 0x0168 (size: 0x8)
-    FRigVMFourPointBezier Bezier;                                                     // 0x0170 (size: 0x60)
-    EControlRigCurveAlignment Alignment;                                              // 0x01D0 (size: 0x1)
-    float Minimum;                                                                    // 0x01D4 (size: 0x4)
-    float Maximum;                                                                    // 0x01D8 (size: 0x4)
-    int32 SamplingPrecision;                                                          // 0x01DC (size: 0x4)
-    FVector PrimaryAxis;                                                              // 0x01E0 (size: 0x18)
-    FVector SecondaryAxis;                                                            // 0x01F8 (size: 0x18)
-    FVector PoleVectorPosition;                                                       // 0x0210 (size: 0x18)
-    TArray<FRigUnit_FitChainToCurve_Rotation> Rotations;                              // 0x0228 (size: 0x10)
-    ERigVMAnimEasingType RotationEaseType;                                            // 0x0238 (size: 0x1)
-    float Weight;                                                                     // 0x023C (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x0240 (size: 0x1)
-    FRigUnit_FitChainToCurve_DebugSettings DebugSettings;                             // 0x0250 (size: 0x90)
-    FRigUnit_FitChainToCurve_WorkData WorkData;                                       // 0x02E0 (size: 0x98)
+    FName StartBone;                                                                  // 0x0010 (size: 0x8)
+    FName EndBone;                                                                    // 0x0018 (size: 0x8)
+    FRigVMFourPointBezier Bezier;                                                     // 0x0020 (size: 0x60)
+    EControlRigCurveAlignment Alignment;                                              // 0x0080 (size: 0x1)
+    float Minimum;                                                                    // 0x0084 (size: 0x4)
+    float Maximum;                                                                    // 0x0088 (size: 0x4)
+    int32 SamplingPrecision;                                                          // 0x008C (size: 0x4)
+    FVector PrimaryAxis;                                                              // 0x0090 (size: 0x18)
+    FVector SecondaryAxis;                                                            // 0x00A8 (size: 0x18)
+    FVector PoleVectorPosition;                                                       // 0x00C0 (size: 0x18)
+    TArray<FRigUnit_FitChainToCurve_Rotation> Rotations;                              // 0x00D8 (size: 0x10)
+    ERigVMAnimEasingType RotationEaseType;                                            // 0x00E8 (size: 0x1)
+    float Weight;                                                                     // 0x00EC (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x00F0 (size: 0x1)
+    FRigUnit_FitChainToCurve_DebugSettings DebugSettings;                             // 0x0100 (size: 0x90)
+    FRigUnit_FitChainToCurve_WorkData WorkData;                                       // 0x0190 (size: 0x98)
 
-}; // Size: 0x380
+}; // Size: 0x230
 
 struct FRigUnit_FitChainToCurveItemArray : public FRigUnit_HighlevelBaseMutable
 {
-    TArray<FRigElementKey> Items;                                                     // 0x0160 (size: 0x10)
-    FRigVMFourPointBezier Bezier;                                                     // 0x0170 (size: 0x60)
-    EControlRigCurveAlignment Alignment;                                              // 0x01D0 (size: 0x1)
-    float Minimum;                                                                    // 0x01D4 (size: 0x4)
-    float Maximum;                                                                    // 0x01D8 (size: 0x4)
-    int32 SamplingPrecision;                                                          // 0x01DC (size: 0x4)
-    FVector PrimaryAxis;                                                              // 0x01E0 (size: 0x18)
-    FVector SecondaryAxis;                                                            // 0x01F8 (size: 0x18)
-    FVector PoleVectorPosition;                                                       // 0x0210 (size: 0x18)
-    TArray<FRigUnit_FitChainToCurve_Rotation> Rotations;                              // 0x0228 (size: 0x10)
-    ERigVMAnimEasingType RotationEaseType;                                            // 0x0238 (size: 0x1)
-    float Weight;                                                                     // 0x023C (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x0240 (size: 0x1)
-    FRigUnit_FitChainToCurve_DebugSettings DebugSettings;                             // 0x0250 (size: 0x90)
-    FRigUnit_FitChainToCurve_WorkData WorkData;                                       // 0x02E0 (size: 0x98)
+    TArray<FRigElementKey> Items;                                                     // 0x0010 (size: 0x10)
+    FRigVMFourPointBezier Bezier;                                                     // 0x0020 (size: 0x60)
+    EControlRigCurveAlignment Alignment;                                              // 0x0080 (size: 0x1)
+    float Minimum;                                                                    // 0x0084 (size: 0x4)
+    float Maximum;                                                                    // 0x0088 (size: 0x4)
+    int32 SamplingPrecision;                                                          // 0x008C (size: 0x4)
+    FVector PrimaryAxis;                                                              // 0x0090 (size: 0x18)
+    FVector SecondaryAxis;                                                            // 0x00A8 (size: 0x18)
+    FVector PoleVectorPosition;                                                       // 0x00C0 (size: 0x18)
+    TArray<FRigUnit_FitChainToCurve_Rotation> Rotations;                              // 0x00D8 (size: 0x10)
+    ERigVMAnimEasingType RotationEaseType;                                            // 0x00E8 (size: 0x1)
+    float Weight;                                                                     // 0x00EC (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x00F0 (size: 0x1)
+    FRigUnit_FitChainToCurve_DebugSettings DebugSettings;                             // 0x0100 (size: 0x90)
+    FRigUnit_FitChainToCurve_WorkData WorkData;                                       // 0x0190 (size: 0x98)
 
-}; // Size: 0x380
+}; // Size: 0x230
 
 struct FRigUnit_FitChainToCurvePerItem : public FRigUnit_HighlevelBaseMutable
 {
-    FRigElementKeyCollection Items;                                                   // 0x0160 (size: 0x10)
-    FRigVMFourPointBezier Bezier;                                                     // 0x0170 (size: 0x60)
-    EControlRigCurveAlignment Alignment;                                              // 0x01D0 (size: 0x1)
-    float Minimum;                                                                    // 0x01D4 (size: 0x4)
-    float Maximum;                                                                    // 0x01D8 (size: 0x4)
-    int32 SamplingPrecision;                                                          // 0x01DC (size: 0x4)
-    FVector PrimaryAxis;                                                              // 0x01E0 (size: 0x18)
-    FVector SecondaryAxis;                                                            // 0x01F8 (size: 0x18)
-    FVector PoleVectorPosition;                                                       // 0x0210 (size: 0x18)
-    TArray<FRigUnit_FitChainToCurve_Rotation> Rotations;                              // 0x0228 (size: 0x10)
-    ERigVMAnimEasingType RotationEaseType;                                            // 0x0238 (size: 0x1)
-    float Weight;                                                                     // 0x023C (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x0240 (size: 0x1)
-    FRigUnit_FitChainToCurve_DebugSettings DebugSettings;                             // 0x0250 (size: 0x90)
-    FRigUnit_FitChainToCurve_WorkData WorkData;                                       // 0x02E0 (size: 0x98)
+    FRigElementKeyCollection Items;                                                   // 0x0010 (size: 0x10)
+    FRigVMFourPointBezier Bezier;                                                     // 0x0020 (size: 0x60)
+    EControlRigCurveAlignment Alignment;                                              // 0x0080 (size: 0x1)
+    float Minimum;                                                                    // 0x0084 (size: 0x4)
+    float Maximum;                                                                    // 0x0088 (size: 0x4)
+    int32 SamplingPrecision;                                                          // 0x008C (size: 0x4)
+    FVector PrimaryAxis;                                                              // 0x0090 (size: 0x18)
+    FVector SecondaryAxis;                                                            // 0x00A8 (size: 0x18)
+    FVector PoleVectorPosition;                                                       // 0x00C0 (size: 0x18)
+    TArray<FRigUnit_FitChainToCurve_Rotation> Rotations;                              // 0x00D8 (size: 0x10)
+    ERigVMAnimEasingType RotationEaseType;                                            // 0x00E8 (size: 0x1)
+    float Weight;                                                                     // 0x00EC (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x00F0 (size: 0x1)
+    FRigUnit_FitChainToCurve_DebugSettings DebugSettings;                             // 0x0100 (size: 0x90)
+    FRigUnit_FitChainToCurve_WorkData WorkData;                                       // 0x0190 (size: 0x98)
 
-}; // Size: 0x380
+}; // Size: 0x230
 
 struct FRigUnit_FitChainToCurve_DebugSettings
 {
@@ -2139,6 +2549,13 @@ struct FRigUnit_GetAnimationChannelBase : public FRigUnit
 
 }; // Size: 0x30
 
+struct FRigUnit_GetAnimationChannelFromItemBase : public FRigUnit
+{
+    FRigElementKey Item;                                                              // 0x0008 (size: 0xC)
+    bool bInitial;                                                                    // 0x0014 (size: 0x1)
+
+}; // Size: 0x18
+
 struct FRigUnit_GetBoneTransform : public FRigUnit
 {
     FName bone;                                                                       // 0x0008 (size: 0x8)
@@ -2154,6 +2571,19 @@ struct FRigUnit_GetBoolAnimationChannel : public FRigUnit_GetAnimationChannelBas
     bool Value;                                                                       // 0x0030 (size: 0x1)
 
 }; // Size: 0x38
+
+struct FRigUnit_GetBoolAnimationChannelFromItem : public FRigUnit_GetAnimationChannelFromItemBase
+{
+    bool Value;                                                                       // 0x0018 (size: 0x1)
+
+}; // Size: 0x20
+
+struct FRigUnit_GetCandidates : public FRigUnit
+{
+    FRigElementKey Connector;                                                         // 0x0008 (size: 0xC)
+    TArray<FRigElementKey> Candidates;                                                // 0x0018 (size: 0x10)
+
+}; // Size: 0x28
 
 struct FRigUnit_GetControlBool : public FRigUnit
 {
@@ -2208,6 +2638,15 @@ struct FRigUnit_GetControlInteger : public FRigUnit
 
 }; // Size: 0x40
 
+struct FRigUnit_GetControlOffset : public FRigUnit
+{
+    FName Control;                                                                    // 0x0008 (size: 0x8)
+    ERigVMTransformSpace Space;                                                       // 0x0010 (size: 0x1)
+    FTransform OffsetTransform;                                                       // 0x0020 (size: 0x60)
+    FCachedRigElement CachedIndex;                                                    // 0x0080 (size: 0x20)
+
+}; // Size: 0xA0
+
 struct FRigUnit_GetControlRotator : public FRigUnit
 {
     FName Control;                                                                    // 0x0008 (size: 0x8)
@@ -2259,6 +2698,12 @@ struct FRigUnit_GetControlVisibility : public FRigUnit
 
 }; // Size: 0x38
 
+struct FRigUnit_GetCurrentNameSpace : public FRigUnit_RigModulesBase
+{
+    FString Namespace;                                                                // 0x0008 (size: 0x10)
+
+}; // Size: 0x18
+
 struct FRigUnit_GetCurveValue : public FRigUnit
 {
     FName Curve;                                                                      // 0x0008 (size: 0x8)
@@ -2273,6 +2718,12 @@ struct FRigUnit_GetFloatAnimationChannel : public FRigUnit_GetAnimationChannelBa
     float Value;                                                                      // 0x0030 (size: 0x4)
 
 }; // Size: 0x38
+
+struct FRigUnit_GetFloatAnimationChannelFromItem : public FRigUnit_GetAnimationChannelFromItemBase
+{
+    float Value;                                                                      // 0x0018 (size: 0x4)
+
+}; // Size: 0x20
 
 struct FRigUnit_GetInitialBoneTransform : public FRigUnit
 {
@@ -2289,16 +2740,59 @@ struct FRigUnit_GetIntAnimationChannel : public FRigUnit_GetAnimationChannelBase
 
 }; // Size: 0x38
 
+struct FRigUnit_GetIntAnimationChannelFromItem : public FRigUnit_GetAnimationChannelFromItemBase
+{
+    int32 Value;                                                                      // 0x0018 (size: 0x4)
+
+}; // Size: 0x20
+
+struct FRigUnit_GetItemModuleName : public FRigUnit_RigModulesBase
+{
+    FRigElementKey Item;                                                              // 0x0008 (size: 0xC)
+    bool IsPartOfModule;                                                              // 0x0014 (size: 0x1)
+    FString Module;                                                                   // 0x0018 (size: 0x10)
+
+}; // Size: 0x28
+
+struct FRigUnit_GetItemNameSpace : public FRigUnit_RigModulesBase
+{
+    FRigElementKey Item;                                                              // 0x0008 (size: 0xC)
+    bool HasNameSpace;                                                                // 0x0014 (size: 0x1)
+    FString Namespace;                                                                // 0x0018 (size: 0x10)
+
+}; // Size: 0x28
+
+struct FRigUnit_GetItemShortName : public FRigUnit_RigModulesBase
+{
+    FRigElementKey Item;                                                              // 0x0008 (size: 0xC)
+    FName ShortName;                                                                  // 0x0014 (size: 0x8)
+
+}; // Size: 0x20
+
+struct FRigUnit_GetItemsInModule : public FRigUnit_RigModulesBase
+{
+    ERigElementType TypeToSearch;                                                     // 0x0008 (size: 0x1)
+    TArray<FRigElementKey> Items;                                                     // 0x0010 (size: 0x10)
+
+}; // Size: 0x20
+
+struct FRigUnit_GetItemsInNameSpace : public FRigUnit_RigModulesBase
+{
+    ERigElementType TypeToSearch;                                                     // 0x0008 (size: 0x1)
+    TArray<FRigElementKey> Items;                                                     // 0x0010 (size: 0x10)
+
+}; // Size: 0x20
+
 struct FRigUnit_GetJointTransform : public FRigUnitMutable
 {
-    FName Joint;                                                                      // 0x0160 (size: 0x8)
-    ETransformGetterType Type;                                                        // 0x0168 (size: 0x1)
-    ETransformSpaceMode TransformSpace;                                               // 0x0169 (size: 0x1)
-    FTransform BaseTransform;                                                         // 0x0170 (size: 0x60)
-    FName BaseJoint;                                                                  // 0x01D0 (size: 0x8)
-    FTransform Output;                                                                // 0x01E0 (size: 0x60)
+    FName Joint;                                                                      // 0x0010 (size: 0x8)
+    ETransformGetterType Type;                                                        // 0x0018 (size: 0x1)
+    ETransformSpaceMode TransformSpace;                                               // 0x0019 (size: 0x1)
+    FTransform BaseTransform;                                                         // 0x0020 (size: 0x60)
+    FName BaseJoint;                                                                  // 0x0080 (size: 0x8)
+    FTransform Output;                                                                // 0x0090 (size: 0x60)
 
-}; // Size: 0x240
+}; // Size: 0xF0
 
 struct FRigUnit_GetMetadataTags : public FRigUnit
 {
@@ -2307,6 +2801,12 @@ struct FRigUnit_GetMetadataTags : public FRigUnit
     FCachedRigElement CachedIndex;                                                    // 0x0028 (size: 0x20)
 
 }; // Size: 0x48
+
+struct FRigUnit_GetModuleName : public FRigUnit_RigModulesBase
+{
+    FString Module;                                                                   // 0x0008 (size: 0x10)
+
+}; // Size: 0x18
 
 struct FRigUnit_GetRelativeBoneTransform : public FRigUnit
 {
@@ -2339,6 +2839,12 @@ struct FRigUnit_GetRotatorAnimationChannel : public FRigUnit_GetAnimationChannel
     FRotator Value;                                                                   // 0x0030 (size: 0x18)
 
 }; // Size: 0x48
+
+struct FRigUnit_GetRotatorAnimationChannelFromItem : public FRigUnit_GetAnimationChannelFromItemBase
+{
+    FRotator Value;                                                                   // 0x0018 (size: 0x18)
+
+}; // Size: 0x30
 
 struct FRigUnit_GetShapeTransform : public FRigUnit
 {
@@ -2373,6 +2879,12 @@ struct FRigUnit_GetTransformAnimationChannel : public FRigUnit_GetAnimationChann
 
 }; // Size: 0x90
 
+struct FRigUnit_GetTransformAnimationChannelFromItem : public FRigUnit_GetAnimationChannelFromItemBase
+{
+    FTransform Value;                                                                 // 0x0020 (size: 0x60)
+
+}; // Size: 0x80
+
 struct FRigUnit_GetTransformArray : public FRigUnit
 {
     FRigElementKeyCollection Items;                                                   // 0x0008 (size: 0x10)
@@ -2399,11 +2911,23 @@ struct FRigUnit_GetVector2DAnimationChannel : public FRigUnit_GetAnimationChanne
 
 }; // Size: 0x40
 
+struct FRigUnit_GetVector2DAnimationChannelFromItem : public FRigUnit_GetAnimationChannelFromItemBase
+{
+    FVector2D Value;                                                                  // 0x0018 (size: 0x10)
+
+}; // Size: 0x28
+
 struct FRigUnit_GetVectorAnimationChannel : public FRigUnit_GetAnimationChannelBase
 {
     FVector Value;                                                                    // 0x0030 (size: 0x18)
 
 }; // Size: 0x48
+
+struct FRigUnit_GetVectorAnimationChannelFromItem : public FRigUnit_GetAnimationChannelFromItemBase
+{
+    FVector Value;                                                                    // 0x0018 (size: 0x18)
+
+}; // Size: 0x30
 
 struct FRigUnit_Harmonics_TargetItem
 {
@@ -2417,7 +2941,8 @@ struct FRigUnit_HasMetadata : public FRigUnit
     FRigElementKey Item;                                                              // 0x0008 (size: 0xC)
     FName Name;                                                                       // 0x0014 (size: 0x8)
     ERigMetadataType Type;                                                            // 0x001C (size: 0x1)
-    bool Found;                                                                       // 0x001D (size: 0x1)
+    ERigMetaDataNameSpace Namespace;                                                  // 0x001D (size: 0x1)
+    bool Found;                                                                       // 0x001E (size: 0x1)
     FCachedRigElement CachedIndex;                                                    // 0x0020 (size: 0x20)
 
 }; // Size: 0x40
@@ -2426,7 +2951,8 @@ struct FRigUnit_HasMetadataTag : public FRigUnit
 {
     FRigElementKey Item;                                                              // 0x0008 (size: 0xC)
     FName Tag;                                                                        // 0x0014 (size: 0x8)
-    bool Found;                                                                       // 0x001C (size: 0x1)
+    ERigMetaDataNameSpace Namespace;                                                  // 0x001C (size: 0x1)
+    bool Found;                                                                       // 0x001D (size: 0x1)
     FCachedRigElement CachedIndex;                                                    // 0x0020 (size: 0x20)
 
 }; // Size: 0x40
@@ -2435,79 +2961,138 @@ struct FRigUnit_HasMetadataTagArray : public FRigUnit
 {
     FRigElementKey Item;                                                              // 0x0008 (size: 0xC)
     TArray<FName> Tags;                                                               // 0x0018 (size: 0x10)
-    bool Found;                                                                       // 0x0028 (size: 0x1)
+    ERigMetaDataNameSpace Namespace;                                                  // 0x0028 (size: 0x1)
+    bool Found;                                                                       // 0x0029 (size: 0x1)
     FCachedRigElement CachedIndex;                                                    // 0x0030 (size: 0x20)
 
 }; // Size: 0x50
 
+struct FRigUnit_HierarchyAddAnimationChannel2DLimitSettings : public FRigUnit_HierarchyAddAnimationChannelEmptyLimitSettings
+{
+    FRigControlLimitEnabled X;                                                        // 0x0000 (size: 0x2)
+    FRigControlLimitEnabled Y;                                                        // 0x0002 (size: 0x2)
+
+}; // Size: 0x4
+
 struct FRigUnit_HierarchyAddAnimationChannelBool : public FRigUnit_HierarchyAddElement
 {
-    bool InitialValue;                                                                // 0x0180 (size: 0x1)
-    bool MinimumValue;                                                                // 0x0181 (size: 0x1)
-    bool MaximumValue;                                                                // 0x0182 (size: 0x1)
+    bool InitialValue;                                                                // 0x0030 (size: 0x1)
+    bool MinimumValue;                                                                // 0x0031 (size: 0x1)
+    bool MaximumValue;                                                                // 0x0032 (size: 0x1)
+    FRigUnit_HierarchyAddAnimationChannelEmptyLimitSettings LimitsEnabled;            // 0x0033 (size: 0x1)
 
-}; // Size: 0x190
+}; // Size: 0x38
+
+struct FRigUnit_HierarchyAddAnimationChannelEmptyLimitSettings
+{
+}; // Size: 0x1
 
 struct FRigUnit_HierarchyAddAnimationChannelFloat : public FRigUnit_HierarchyAddElement
 {
-    float InitialValue;                                                               // 0x0180 (size: 0x4)
-    float MinimumValue;                                                               // 0x0184 (size: 0x4)
-    float MaximumValue;                                                               // 0x0188 (size: 0x4)
+    float InitialValue;                                                               // 0x0030 (size: 0x4)
+    float MinimumValue;                                                               // 0x0034 (size: 0x4)
+    float MaximumValue;                                                               // 0x0038 (size: 0x4)
+    FRigUnit_HierarchyAddAnimationChannelSingleLimitSettings LimitsEnabled;           // 0x003C (size: 0x2)
 
-}; // Size: 0x190
+}; // Size: 0x40
 
 struct FRigUnit_HierarchyAddAnimationChannelInteger : public FRigUnit_HierarchyAddElement
 {
-    int32 InitialValue;                                                               // 0x0180 (size: 0x4)
-    int32 MinimumValue;                                                               // 0x0184 (size: 0x4)
-    int32 MaximumValue;                                                               // 0x0188 (size: 0x4)
+    int32 InitialValue;                                                               // 0x0030 (size: 0x4)
+    int32 MinimumValue;                                                               // 0x0034 (size: 0x4)
+    int32 MaximumValue;                                                               // 0x0038 (size: 0x4)
+    FRigUnit_HierarchyAddAnimationChannelSingleLimitSettings LimitsEnabled;           // 0x003C (size: 0x2)
+    class UEnum* ControlEnum;                                                         // 0x0040 (size: 0x8)
 
-}; // Size: 0x190
+}; // Size: 0x48
 
 struct FRigUnit_HierarchyAddAnimationChannelRotator : public FRigUnit_HierarchyAddElement
 {
-    FRotator InitialValue;                                                            // 0x0180 (size: 0x18)
-    FRotator MinimumValue;                                                            // 0x0198 (size: 0x18)
-    FRotator MaximumValue;                                                            // 0x01B0 (size: 0x18)
+    FRotator InitialValue;                                                            // 0x0030 (size: 0x18)
+    FRotator MinimumValue;                                                            // 0x0048 (size: 0x18)
+    FRotator MaximumValue;                                                            // 0x0060 (size: 0x18)
+    FRigUnit_HierarchyAddAnimationChannelRotatorLimitSettings LimitsEnabled;          // 0x0078 (size: 0x6)
 
-}; // Size: 0x1D0
+}; // Size: 0x80
+
+struct FRigUnit_HierarchyAddAnimationChannelRotatorLimitSettings : public FRigUnit_HierarchyAddAnimationChannelEmptyLimitSettings
+{
+    FRigControlLimitEnabled Pitch;                                                    // 0x0000 (size: 0x2)
+    FRigControlLimitEnabled Yaw;                                                      // 0x0002 (size: 0x2)
+    FRigControlLimitEnabled Roll;                                                     // 0x0004 (size: 0x2)
+
+}; // Size: 0x6
+
+struct FRigUnit_HierarchyAddAnimationChannelScaleFloat : public FRigUnit_HierarchyAddElement
+{
+    float InitialValue;                                                               // 0x0030 (size: 0x4)
+    float MinimumValue;                                                               // 0x0034 (size: 0x4)
+    float MaximumValue;                                                               // 0x0038 (size: 0x4)
+    FRigUnit_HierarchyAddAnimationChannelSingleLimitSettings LimitsEnabled;           // 0x003C (size: 0x2)
+
+}; // Size: 0x40
+
+struct FRigUnit_HierarchyAddAnimationChannelScaleVector : public FRigUnit_HierarchyAddElement
+{
+    FVector InitialValue;                                                             // 0x0030 (size: 0x18)
+    FVector MinimumValue;                                                             // 0x0048 (size: 0x18)
+    FVector MaximumValue;                                                             // 0x0060 (size: 0x18)
+    FRigUnit_HierarchyAddAnimationChannelVectorLimitSettings LimitsEnabled;           // 0x0078 (size: 0x6)
+
+}; // Size: 0x80
+
+struct FRigUnit_HierarchyAddAnimationChannelSingleLimitSettings : public FRigUnit_HierarchyAddAnimationChannelEmptyLimitSettings
+{
+    FRigControlLimitEnabled Enabled;                                                  // 0x0000 (size: 0x2)
+
+}; // Size: 0x2
 
 struct FRigUnit_HierarchyAddAnimationChannelVector : public FRigUnit_HierarchyAddElement
 {
-    FVector InitialValue;                                                             // 0x0180 (size: 0x18)
-    FVector MinimumValue;                                                             // 0x0198 (size: 0x18)
-    FVector MaximumValue;                                                             // 0x01B0 (size: 0x18)
+    FVector InitialValue;                                                             // 0x0030 (size: 0x18)
+    FVector MinimumValue;                                                             // 0x0048 (size: 0x18)
+    FVector MaximumValue;                                                             // 0x0060 (size: 0x18)
+    FRigUnit_HierarchyAddAnimationChannelVectorLimitSettings LimitsEnabled;           // 0x0078 (size: 0x6)
 
-}; // Size: 0x1D0
+}; // Size: 0x80
 
 struct FRigUnit_HierarchyAddAnimationChannelVector2D : public FRigUnit_HierarchyAddElement
 {
-    FVector2D InitialValue;                                                           // 0x0180 (size: 0x10)
-    FVector2D MinimumValue;                                                           // 0x0190 (size: 0x10)
-    FVector2D MaximumValue;                                                           // 0x01A0 (size: 0x10)
+    FVector2D InitialValue;                                                           // 0x0030 (size: 0x10)
+    FVector2D MinimumValue;                                                           // 0x0040 (size: 0x10)
+    FVector2D MaximumValue;                                                           // 0x0050 (size: 0x10)
+    FRigUnit_HierarchyAddAnimationChannel2DLimitSettings LimitsEnabled;               // 0x0060 (size: 0x4)
 
-}; // Size: 0x1B0
+}; // Size: 0x68
+
+struct FRigUnit_HierarchyAddAnimationChannelVectorLimitSettings : public FRigUnit_HierarchyAddAnimationChannelEmptyLimitSettings
+{
+    FRigControlLimitEnabled X;                                                        // 0x0000 (size: 0x2)
+    FRigControlLimitEnabled Y;                                                        // 0x0002 (size: 0x2)
+    FRigControlLimitEnabled Z;                                                        // 0x0004 (size: 0x2)
+
+}; // Size: 0x6
 
 struct FRigUnit_HierarchyAddBone : public FRigUnit_HierarchyAddElement
 {
-    FTransform Transform;                                                             // 0x0180 (size: 0x60)
-    ERigVMTransformSpace Space;                                                       // 0x01E0 (size: 0x1)
+    FTransform Transform;                                                             // 0x0030 (size: 0x60)
+    ERigVMTransformSpace Space;                                                       // 0x0090 (size: 0x1)
 
-}; // Size: 0x1F0
+}; // Size: 0xA0
 
 struct FRigUnit_HierarchyAddControlElement : public FRigUnit_HierarchyAddElement
 {
-    FTransform OffsetTransform;                                                       // 0x0180 (size: 0x60)
-    ERigVMTransformSpace OffsetSpace;                                                 // 0x01E0 (size: 0x1)
+    FTransform OffsetTransform;                                                       // 0x0030 (size: 0x60)
+    ERigVMTransformSpace OffsetSpace;                                                 // 0x0090 (size: 0x1)
 
-}; // Size: 0x1F0
+}; // Size: 0xA0
 
 struct FRigUnit_HierarchyAddControlFloat : public FRigUnit_HierarchyAddControlElement
 {
-    float InitialValue;                                                               // 0x01E8 (size: 0x4)
-    FRigUnit_HierarchyAddControlFloat_Settings Settings;                              // 0x01F0 (size: 0xD0)
+    float InitialValue;                                                               // 0x0098 (size: 0x4)
+    FRigUnit_HierarchyAddControlFloat_Settings Settings;                              // 0x00A0 (size: 0xD0)
 
-}; // Size: 0x2C0
+}; // Size: 0x170
 
 struct FRigUnit_HierarchyAddControlFloat_LimitSettings
 {
@@ -2521,6 +3106,7 @@ struct FRigUnit_HierarchyAddControlFloat_LimitSettings
 struct FRigUnit_HierarchyAddControlFloat_Settings : public FRigUnit_HierarchyAddControl_Settings
 {
     ERigControlAxis PrimaryAxis;                                                      // 0x0010 (size: 0x1)
+    bool bIsScale;                                                                    // 0x0011 (size: 0x1)
     FRigUnit_HierarchyAddControlFloat_LimitSettings Limits;                           // 0x0014 (size: 0x10)
     FRigUnit_HierarchyAddControl_ShapeSettings Shape;                                 // 0x0030 (size: 0x80)
     FRigUnit_HierarchyAddControl_ProxySettings Proxy;                                 // 0x00B0 (size: 0x20)
@@ -2529,10 +3115,10 @@ struct FRigUnit_HierarchyAddControlFloat_Settings : public FRigUnit_HierarchyAdd
 
 struct FRigUnit_HierarchyAddControlInteger : public FRigUnit_HierarchyAddControlElement
 {
-    int32 InitialValue;                                                               // 0x01E8 (size: 0x4)
-    FRigUnit_HierarchyAddControlInteger_Settings Settings;                            // 0x01F0 (size: 0xD0)
+    int32 InitialValue;                                                               // 0x0098 (size: 0x4)
+    FRigUnit_HierarchyAddControlInteger_Settings Settings;                            // 0x00A0 (size: 0xD0)
 
-}; // Size: 0x2C0
+}; // Size: 0x170
 
 struct FRigUnit_HierarchyAddControlInteger_LimitSettings
 {
@@ -2546,7 +3132,8 @@ struct FRigUnit_HierarchyAddControlInteger_LimitSettings
 struct FRigUnit_HierarchyAddControlInteger_Settings : public FRigUnit_HierarchyAddControl_Settings
 {
     ERigControlAxis PrimaryAxis;                                                      // 0x0010 (size: 0x1)
-    FRigUnit_HierarchyAddControlInteger_LimitSettings Limits;                         // 0x0014 (size: 0x10)
+    class UEnum* ControlEnum;                                                         // 0x0018 (size: 0x8)
+    FRigUnit_HierarchyAddControlInteger_LimitSettings Limits;                         // 0x0020 (size: 0x10)
     FRigUnit_HierarchyAddControl_ShapeSettings Shape;                                 // 0x0030 (size: 0x80)
     FRigUnit_HierarchyAddControl_ProxySettings Proxy;                                 // 0x00B0 (size: 0x20)
 
@@ -2554,10 +3141,10 @@ struct FRigUnit_HierarchyAddControlInteger_Settings : public FRigUnit_HierarchyA
 
 struct FRigUnit_HierarchyAddControlRotator : public FRigUnit_HierarchyAddControlElement
 {
-    FRotator InitialValue;                                                            // 0x01E8 (size: 0x18)
-    FRigUnit_HierarchyAddControlRotator_Settings Settings;                            // 0x0200 (size: 0x110)
+    FRotator InitialValue;                                                            // 0x0098 (size: 0x18)
+    FRigUnit_HierarchyAddControlRotator_Settings Settings;                            // 0x00B0 (size: 0x120)
 
-}; // Size: 0x310
+}; // Size: 0x1D0
 
 struct FRigUnit_HierarchyAddControlRotator_LimitSettings
 {
@@ -2577,38 +3164,60 @@ struct FRigUnit_HierarchyAddControlRotator_Settings : public FRigUnit_HierarchyA
     FRigUnit_HierarchyAddControl_ShapeSettings Shape;                                 // 0x0060 (size: 0x80)
     FRigUnit_HierarchyAddControl_ProxySettings Proxy;                                 // 0x00E0 (size: 0x20)
     TArray<ERigControlTransformChannel> FilteredChannels;                             // 0x0100 (size: 0x10)
+    bool bUsePreferredRotationOrder;                                                  // 0x0110 (size: 0x1)
+    EEulerRotationOrder PreferredRotationOrder;                                       // 0x0111 (size: 0x1)
 
-}; // Size: 0x110
+}; // Size: 0x120
 
 struct FRigUnit_HierarchyAddControlTransform : public FRigUnit_HierarchyAddControlElement
 {
-    FTransform InitialValue;                                                          // 0x01F0 (size: 0x60)
-    FRigUnit_HierarchyAddControlTransform_Settings Settings;                          // 0x0250 (size: 0xD0)
+    FTransform InitialValue;                                                          // 0x00A0 (size: 0x60)
+    FRigUnit_HierarchyAddControlTransform_Settings Settings;                          // 0x0100 (size: 0x180)
 
-}; // Size: 0x320
+}; // Size: 0x280
+
+struct FRigUnit_HierarchyAddControlTransform_LimitSettings
+{
+    FRigControlLimitEnabled LimitTranslationX;                                        // 0x0000 (size: 0x2)
+    FRigControlLimitEnabled LimitTranslationY;                                        // 0x0002 (size: 0x2)
+    FRigControlLimitEnabled LimitTranslationZ;                                        // 0x0004 (size: 0x2)
+    FRigControlLimitEnabled LimitPitch;                                               // 0x0006 (size: 0x2)
+    FRigControlLimitEnabled LimitYaw;                                                 // 0x0008 (size: 0x2)
+    FRigControlLimitEnabled LimitRoll;                                                // 0x000A (size: 0x2)
+    FRigControlLimitEnabled LimitScaleX;                                              // 0x000C (size: 0x2)
+    FRigControlLimitEnabled LimitScaleY;                                              // 0x000E (size: 0x2)
+    FRigControlLimitEnabled LimitScaleZ;                                              // 0x0010 (size: 0x2)
+    FEulerTransform MinValue;                                                         // 0x0018 (size: 0x48)
+    FEulerTransform MaxValue;                                                         // 0x0060 (size: 0x48)
+    bool bDrawLimits;                                                                 // 0x00A8 (size: 0x1)
+
+}; // Size: 0xB0
 
 struct FRigUnit_HierarchyAddControlTransform_Settings : public FRigUnit_HierarchyAddControl_Settings
 {
     ERigVMTransformSpace InitialSpace;                                                // 0x0010 (size: 0x1)
-    FRigUnit_HierarchyAddControl_ShapeSettings Shape;                                 // 0x0020 (size: 0x80)
-    FRigUnit_HierarchyAddControl_ProxySettings Proxy;                                 // 0x00A0 (size: 0x20)
-    TArray<ERigControlTransformChannel> FilteredChannels;                             // 0x00C0 (size: 0x10)
+    bool bUsePreferredRotationOrder;                                                  // 0x0011 (size: 0x1)
+    EEulerRotationOrder PreferredRotationOrder;                                       // 0x0012 (size: 0x1)
+    FRigUnit_HierarchyAddControlTransform_LimitSettings Limits;                       // 0x0018 (size: 0xB0)
+    FRigUnit_HierarchyAddControl_ShapeSettings Shape;                                 // 0x00D0 (size: 0x80)
+    FRigUnit_HierarchyAddControl_ProxySettings Proxy;                                 // 0x0150 (size: 0x20)
+    TArray<ERigControlTransformChannel> FilteredChannels;                             // 0x0170 (size: 0x10)
 
-}; // Size: 0xD0
+}; // Size: 0x180
 
 struct FRigUnit_HierarchyAddControlVector : public FRigUnit_HierarchyAddControlElement
 {
-    FVector InitialValue;                                                             // 0x01E8 (size: 0x18)
-    FRigUnit_HierarchyAddControlVector_Settings Settings;                             // 0x0200 (size: 0x110)
+    FVector InitialValue;                                                             // 0x0098 (size: 0x18)
+    FRigUnit_HierarchyAddControlVector_Settings Settings;                             // 0x00B0 (size: 0x110)
 
-}; // Size: 0x310
+}; // Size: 0x1C0
 
 struct FRigUnit_HierarchyAddControlVector2D : public FRigUnit_HierarchyAddControlElement
 {
-    FVector2D InitialValue;                                                           // 0x01E8 (size: 0x10)
-    FRigUnit_HierarchyAddControlVector2D_Settings Settings;                           // 0x0200 (size: 0x100)
+    FVector2D InitialValue;                                                           // 0x0098 (size: 0x10)
+    FRigUnit_HierarchyAddControlVector2D_Settings Settings;                           // 0x00B0 (size: 0x100)
 
-}; // Size: 0x300
+}; // Size: 0x1B0
 
 struct FRigUnit_HierarchyAddControlVector2D_LimitSettings
 {
@@ -2677,18 +3286,41 @@ struct FRigUnit_HierarchyAddControl_ShapeSettings
 
 struct FRigUnit_HierarchyAddElement : public FRigUnit_DynamicHierarchyBaseMutable
 {
-    FRigElementKey Parent;                                                            // 0x0160 (size: 0xC)
-    FName Name;                                                                       // 0x016C (size: 0x8)
-    FRigElementKey Item;                                                              // 0x0174 (size: 0xC)
+    FRigElementKey Parent;                                                            // 0x0010 (size: 0xC)
+    FName Name;                                                                       // 0x001C (size: 0x8)
+    FRigElementKey Item;                                                              // 0x0024 (size: 0xC)
 
-}; // Size: 0x180
+}; // Size: 0x30
 
 struct FRigUnit_HierarchyAddNull : public FRigUnit_HierarchyAddElement
 {
-    FTransform Transform;                                                             // 0x0180 (size: 0x60)
-    ERigVMTransformSpace Space;                                                       // 0x01E0 (size: 0x1)
+    FTransform Transform;                                                             // 0x0030 (size: 0x60)
+    ERigVMTransformSpace Space;                                                       // 0x0090 (size: 0x1)
 
-}; // Size: 0x1F0
+}; // Size: 0xA0
+
+struct FRigUnit_HierarchyAddPhysicsJoint : public FRigUnit_HierarchyAddElement
+{
+    FTransform Transform;                                                             // 0x0030 (size: 0x60)
+    FRigPhysicsSolverID Solver;                                                       // 0x0090 (size: 0x10)
+
+}; // Size: 0xA0
+
+struct FRigUnit_HierarchyAddPhysicsSolver : public FRigUnit_DynamicHierarchyBaseMutable
+{
+    FName Name;                                                                       // 0x0010 (size: 0x8)
+    FRigPhysicsSolverID Solver;                                                       // 0x0018 (size: 0x10)
+
+}; // Size: 0x28
+
+struct FRigUnit_HierarchyAddSocket : public FRigUnit_HierarchyAddElement
+{
+    FTransform Transform;                                                             // 0x0030 (size: 0x60)
+    ERigVMTransformSpace Space;                                                       // 0x0090 (size: 0x1)
+    FLinearColor Color;                                                               // 0x0094 (size: 0x10)
+    FString Description;                                                              // 0x00A8 (size: 0x10)
+
+}; // Size: 0xC0
 
 struct FRigUnit_HierarchyBase : public FRigUnit
 {
@@ -2696,7 +3328,39 @@ struct FRigUnit_HierarchyBase : public FRigUnit
 
 struct FRigUnit_HierarchyBaseMutable : public FRigUnitMutable
 {
-}; // Size: 0x160
+}; // Size: 0x10
+
+struct FRigUnit_HierarchyCreatePoseItemArray : public FRigUnit_HierarchyBase
+{
+    TArray<FRigUnit_HierarchyCreatePoseItemArray_Entry> Entries;                      // 0x0008 (size: 0x10)
+    FRigPose Pose;                                                                    // 0x0018 (size: 0x70)
+
+}; // Size: 0x88
+
+struct FRigUnit_HierarchyCreatePoseItemArray_Entry
+{
+    FRigElementKey Item;                                                              // 0x0000 (size: 0xC)
+    FTransform LocalTransform;                                                        // 0x0010 (size: 0x60)
+    FTransform GlobalTransform;                                                       // 0x0070 (size: 0x60)
+    bool UseEulerAngles;                                                              // 0x00D0 (size: 0x1)
+    FVector EulerAngles;                                                              // 0x00D8 (size: 0x18)
+    float CurveValue;                                                                 // 0x00F0 (size: 0x4)
+
+}; // Size: 0x100
+
+struct FRigUnit_HierarchyGetChainItemArray : public FRigUnit_HierarchyBase
+{
+    FRigElementKey Start;                                                             // 0x0008 (size: 0xC)
+    FRigElementKey End;                                                               // 0x0014 (size: 0xC)
+    bool bIncludeStart;                                                               // 0x0020 (size: 0x1)
+    bool bIncludeEnd;                                                                 // 0x0021 (size: 0x1)
+    bool bReverse;                                                                    // 0x0022 (size: 0x1)
+    TArray<FRigElementKey> Chain;                                                     // 0x0028 (size: 0x10)
+    FCachedRigElement CachedStart;                                                    // 0x0038 (size: 0x20)
+    FCachedRigElement CachedEnd;                                                      // 0x0058 (size: 0x20)
+    FRigElementKeyCollection CachedChain;                                             // 0x0078 (size: 0x10)
+
+}; // Size: 0x88
 
 struct FRigUnit_HierarchyGetChildren : public FRigUnit_HierarchyBase
 {
@@ -2712,11 +3376,12 @@ struct FRigUnit_HierarchyGetChildren : public FRigUnit_HierarchyBase
 struct FRigUnit_HierarchyGetParent : public FRigUnit_HierarchyBase
 {
     FRigElementKey Child;                                                             // 0x0008 (size: 0xC)
-    FRigElementKey Parent;                                                            // 0x0014 (size: 0xC)
-    FCachedRigElement CachedChild;                                                    // 0x0020 (size: 0x20)
-    FCachedRigElement CachedParent;                                                   // 0x0040 (size: 0x20)
+    bool bDefaultParent;                                                              // 0x0014 (size: 0x1)
+    FRigElementKey Parent;                                                            // 0x0018 (size: 0xC)
+    FCachedRigElement CachedChild;                                                    // 0x0028 (size: 0x20)
+    FCachedRigElement CachedParent;                                                   // 0x0048 (size: 0x20)
 
-}; // Size: 0x60
+}; // Size: 0x68
 
 struct FRigUnit_HierarchyGetParentWeights : public FRigUnit_DynamicHierarchyBase
 {
@@ -2750,6 +3415,7 @@ struct FRigUnit_HierarchyGetParentsItemArray : public FRigUnit_HierarchyBase
     FRigElementKey Child;                                                             // 0x0008 (size: 0xC)
     bool bIncludeChild;                                                               // 0x0014 (size: 0x1)
     bool bReverse;                                                                    // 0x0015 (size: 0x1)
+    bool bDefaultParent;                                                              // 0x0016 (size: 0x1)
     TArray<FRigElementKey> Parents;                                                   // 0x0018 (size: 0x10)
     FCachedRigElement CachedChild;                                                    // 0x0028 (size: 0x20)
     FRigElementKeyCollection CachedParents;                                           // 0x0048 (size: 0x10)
@@ -2795,6 +3461,7 @@ struct FRigUnit_HierarchyGetSiblingsItemArray : public FRigUnit_HierarchyBase
 {
     FRigElementKey Item;                                                              // 0x0008 (size: 0xC)
     bool bIncludeItem;                                                                // 0x0014 (size: 0x1)
+    bool bDefaultSiblings;                                                            // 0x0015 (size: 0x1)
     TArray<FRigElementKey> Siblings;                                                  // 0x0018 (size: 0x10)
     FCachedRigElement CachedItem;                                                     // 0x0028 (size: 0x20)
     FRigElementKeyCollection CachedSiblings;                                          // 0x0048 (size: 0x10)
@@ -2803,56 +3470,58 @@ struct FRigUnit_HierarchyGetSiblingsItemArray : public FRigUnit_HierarchyBase
 
 struct FRigUnit_HierarchyImportFromSkeleton : public FRigUnit_DynamicHierarchyBaseMutable
 {
-    FName Namespace;                                                                  // 0x0160 (size: 0x8)
-    bool bIncludeCurves;                                                              // 0x0168 (size: 0x1)
-    TArray<FRigElementKey> Items;                                                     // 0x0170 (size: 0x10)
+    FName Namespace;                                                                  // 0x0010 (size: 0x8)
+    bool bIncludeCurves;                                                              // 0x0018 (size: 0x1)
+    bool bIncludeMeshSockets;                                                         // 0x0019 (size: 0x1)
+    bool bIncludeVirtualBones;                                                        // 0x001A (size: 0x1)
+    TArray<FRigElementKey> Items;                                                     // 0x0020 (size: 0x10)
 
-}; // Size: 0x180
+}; // Size: 0x30
 
 struct FRigUnit_HierarchyRemoveElement : public FRigUnit_DynamicHierarchyBaseMutable
 {
-    FRigElementKey Item;                                                              // 0x0160 (size: 0xC)
-    bool bSuccess;                                                                    // 0x016C (size: 0x1)
+    FRigElementKey Item;                                                              // 0x0010 (size: 0xC)
+    bool bSuccess;                                                                    // 0x001C (size: 0x1)
 
-}; // Size: 0x170
+}; // Size: 0x20
 
 struct FRigUnit_HierarchyReset : public FRigUnit_DynamicHierarchyBaseMutable
 {
-}; // Size: 0x160
+}; // Size: 0x10
 
 struct FRigUnit_HierarchySetParentWeights : public FRigUnit_DynamicHierarchyBaseMutable
 {
-    FRigElementKey Child;                                                             // 0x0160 (size: 0xC)
-    TArray<FRigElementWeight> Weights;                                                // 0x0170 (size: 0x10)
+    FRigElementKey Child;                                                             // 0x0010 (size: 0xC)
+    TArray<FRigElementWeight> Weights;                                                // 0x0020 (size: 0x10)
 
-}; // Size: 0x180
+}; // Size: 0x30
 
 struct FRigUnit_HierarchySetPose : public FRigUnit_HierarchyBaseMutable
 {
-    FRigPose Pose;                                                                    // 0x0160 (size: 0x70)
-    ERigElementType ElementType;                                                      // 0x01D0 (size: 0x1)
-    ERigVMTransformSpace Space;                                                       // 0x01D1 (size: 0x1)
-    FRigElementKeyCollection ItemsToSet;                                              // 0x01D8 (size: 0x10)
-    float Weight;                                                                     // 0x01E8 (size: 0x4)
+    FRigPose Pose;                                                                    // 0x0010 (size: 0x70)
+    ERigElementType ElementType;                                                      // 0x0080 (size: 0x1)
+    ERigVMTransformSpace Space;                                                       // 0x0081 (size: 0x1)
+    FRigElementKeyCollection ItemsToSet;                                              // 0x0088 (size: 0x10)
+    float Weight;                                                                     // 0x0098 (size: 0x4)
 
-}; // Size: 0x1F0
+}; // Size: 0xA0
 
 struct FRigUnit_HierarchySetPoseItemArray : public FRigUnit_HierarchyBaseMutable
 {
-    FRigPose Pose;                                                                    // 0x0160 (size: 0x70)
-    ERigElementType ElementType;                                                      // 0x01D0 (size: 0x1)
-    ERigVMTransformSpace Space;                                                       // 0x01D1 (size: 0x1)
-    TArray<FRigElementKey> ItemsToSet;                                                // 0x01D8 (size: 0x10)
-    float Weight;                                                                     // 0x01E8 (size: 0x4)
+    FRigPose Pose;                                                                    // 0x0010 (size: 0x70)
+    ERigElementType ElementType;                                                      // 0x0080 (size: 0x1)
+    ERigVMTransformSpace Space;                                                       // 0x0081 (size: 0x1)
+    TArray<FRigElementKey> ItemsToSet;                                                // 0x0088 (size: 0x10)
+    float Weight;                                                                     // 0x0098 (size: 0x4)
 
-}; // Size: 0x1F0
+}; // Size: 0xA0
 
 struct FRigUnit_HierarchySetShapeSettings : public FRigUnit_DynamicHierarchyBaseMutable
 {
-    FRigElementKey Item;                                                              // 0x0160 (size: 0xC)
-    FRigUnit_HierarchyAddControl_ShapeSettings Settings;                              // 0x0170 (size: 0x80)
+    FRigElementKey Item;                                                              // 0x0010 (size: 0xC)
+    FRigUnit_HierarchyAddControl_ShapeSettings Settings;                              // 0x0020 (size: 0x80)
 
-}; // Size: 0x1F0
+}; // Size: 0xA0
 
 struct FRigUnit_HighlevelBase : public FRigUnit
 {
@@ -2860,19 +3529,19 @@ struct FRigUnit_HighlevelBase : public FRigUnit
 
 struct FRigUnit_HighlevelBaseMutable : public FRigUnitMutable
 {
-}; // Size: 0x160
+}; // Size: 0x10
 
 struct FRigUnit_InteractionExecution : public FRigUnit
 {
-    FControlRigExecuteContext ExecuteContext;                                         // 0x0010 (size: 0x150)
+    FRigVMExecutePin ExecutePin;                                                      // 0x0008 (size: 0x8)
 
-}; // Size: 0x160
+}; // Size: 0x10
 
 struct FRigUnit_InverseExecution : public FRigUnit
 {
-    FControlRigExecuteContext ExecuteContext;                                         // 0x0010 (size: 0x150)
+    FRigVMExecutePin ExecutePin;                                                      // 0x0008 (size: 0x8)
 
-}; // Size: 0x160
+}; // Size: 0x10
 
 struct FRigUnit_InverseQuaterion : public FRigUnit_UnaryQuaternionOp
 {
@@ -2887,6 +3556,20 @@ struct FRigUnit_IsInteracting : public FRigUnit
     TArray<FRigElementKey> Items;                                                     // 0x0010 (size: 0x10)
 
 }; // Size: 0x20
+
+struct FRigUnit_IsItemInCurrentModule : public FRigUnit_RigModulesBase
+{
+    FRigElementKey Item;                                                              // 0x0008 (size: 0xC)
+    bool Result;                                                                      // 0x0014 (size: 0x1)
+
+}; // Size: 0x18
+
+struct FRigUnit_IsItemInCurrentNameSpace : public FRigUnit_RigModulesBase
+{
+    FRigElementKey Item;                                                              // 0x0008 (size: 0xC)
+    bool Result;                                                                      // 0x0014 (size: 0x1)
+
+}; // Size: 0x18
 
 struct FRigUnit_Item : public FRigUnit
 {
@@ -2906,7 +3589,7 @@ struct FRigUnit_ItemBase : public FRigUnit
 
 struct FRigUnit_ItemBaseMutable : public FRigUnitMutable
 {
-}; // Size: 0x160
+}; // Size: 0x10
 
 struct FRigUnit_ItemEquals : public FRigUnit_ItemBase
 {
@@ -2926,19 +3609,19 @@ struct FRigUnit_ItemExists : public FRigUnit_ItemBase
 
 struct FRigUnit_ItemHarmonics : public FRigUnit_HighlevelBaseMutable
 {
-    TArray<FRigUnit_Harmonics_TargetItem> Targets;                                    // 0x0160 (size: 0x10)
-    FVector WaveSpeed;                                                                // 0x0170 (size: 0x18)
-    FVector WaveFrequency;                                                            // 0x0188 (size: 0x18)
-    FVector WaveAmplitude;                                                            // 0x01A0 (size: 0x18)
-    FVector WaveOffset;                                                               // 0x01B8 (size: 0x18)
-    FVector WaveNoise;                                                                // 0x01D0 (size: 0x18)
-    ERigVMAnimEasingType WaveEase;                                                    // 0x01E8 (size: 0x1)
-    float WaveMinimum;                                                                // 0x01EC (size: 0x4)
-    float WaveMaximum;                                                                // 0x01F0 (size: 0x4)
-    EEulerRotationOrder RotationOrder;                                                // 0x01F4 (size: 0x1)
-    FRigUnit_BoneHarmonics_WorkData WorkData;                                         // 0x01F8 (size: 0x28)
+    TArray<FRigUnit_Harmonics_TargetItem> Targets;                                    // 0x0010 (size: 0x10)
+    FVector WaveSpeed;                                                                // 0x0020 (size: 0x18)
+    FVector WaveFrequency;                                                            // 0x0038 (size: 0x18)
+    FVector WaveAmplitude;                                                            // 0x0050 (size: 0x18)
+    FVector WaveOffset;                                                               // 0x0068 (size: 0x18)
+    FVector WaveNoise;                                                                // 0x0080 (size: 0x18)
+    ERigVMAnimEasingType WaveEase;                                                    // 0x0098 (size: 0x1)
+    float WaveMinimum;                                                                // 0x009C (size: 0x4)
+    float WaveMaximum;                                                                // 0x00A0 (size: 0x4)
+    EEulerRotationOrder RotationOrder;                                                // 0x00A4 (size: 0x1)
+    FRigUnit_BoneHarmonics_WorkData WorkData;                                         // 0x00A8 (size: 0x28)
 
-}; // Size: 0x220
+}; // Size: 0xD0
 
 struct FRigUnit_ItemNotEquals : public FRigUnit_ItemBase
 {
@@ -2993,14 +3676,14 @@ struct FRigUnit_MapRange_Float : public FRigUnit
 
 struct FRigUnit_ModifyBoneTransforms : public FRigUnit_HighlevelBaseMutable
 {
-    TArray<FRigUnit_ModifyBoneTransforms_PerBone> BoneToModify;                       // 0x0160 (size: 0x10)
-    float Weight;                                                                     // 0x0170 (size: 0x4)
-    float WeightMinimum;                                                              // 0x0174 (size: 0x4)
-    float WeightMaximum;                                                              // 0x0178 (size: 0x4)
-    EControlRigModifyBoneMode Mode;                                                   // 0x017C (size: 0x1)
-    FRigUnit_ModifyBoneTransforms_WorkData WorkData;                                  // 0x0180 (size: 0x10)
+    TArray<FRigUnit_ModifyBoneTransforms_PerBone> BoneToModify;                       // 0x0010 (size: 0x10)
+    float Weight;                                                                     // 0x0020 (size: 0x4)
+    float WeightMinimum;                                                              // 0x0024 (size: 0x4)
+    float WeightMaximum;                                                              // 0x0028 (size: 0x4)
+    EControlRigModifyBoneMode Mode;                                                   // 0x002C (size: 0x1)
+    FRigUnit_ModifyBoneTransforms_WorkData WorkData;                                  // 0x0030 (size: 0x10)
 
-}; // Size: 0x190
+}; // Size: 0x40
 
 struct FRigUnit_ModifyBoneTransforms_PerBone
 {
@@ -3015,14 +3698,14 @@ struct FRigUnit_ModifyBoneTransforms_WorkData : public FRigUnit_ModifyTransforms
 
 struct FRigUnit_ModifyTransforms : public FRigUnit_HighlevelBaseMutable
 {
-    TArray<FRigUnit_ModifyTransforms_PerItem> ItemToModify;                           // 0x0160 (size: 0x10)
-    float Weight;                                                                     // 0x0170 (size: 0x4)
-    float WeightMinimum;                                                              // 0x0174 (size: 0x4)
-    float WeightMaximum;                                                              // 0x0178 (size: 0x4)
-    EControlRigModifyBoneMode Mode;                                                   // 0x017C (size: 0x1)
-    FRigUnit_ModifyTransforms_WorkData WorkData;                                      // 0x0180 (size: 0x10)
+    TArray<FRigUnit_ModifyTransforms_PerItem> ItemToModify;                           // 0x0010 (size: 0x10)
+    float Weight;                                                                     // 0x0020 (size: 0x4)
+    float WeightMinimum;                                                              // 0x0024 (size: 0x4)
+    float WeightMaximum;                                                              // 0x0028 (size: 0x4)
+    EControlRigModifyBoneMode Mode;                                                   // 0x002C (size: 0x1)
+    FRigUnit_ModifyTransforms_WorkData WorkData;                                      // 0x0030 (size: 0x10)
 
-}; // Size: 0x190
+}; // Size: 0x40
 
 struct FRigUnit_ModifyTransforms_PerItem
 {
@@ -3039,15 +3722,15 @@ struct FRigUnit_ModifyTransforms_WorkData
 
 struct FRigUnit_MultiFABRIK : public FRigUnit_HighlevelBaseMutable
 {
-    FName RootBone;                                                                   // 0x0160 (size: 0x8)
-    TArray<FRigUnit_MultiFABRIK_EndEffector> Effectors;                               // 0x0168 (size: 0x10)
-    float Precision;                                                                  // 0x0178 (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x017C (size: 0x1)
-    int32 MaxIterations;                                                              // 0x0180 (size: 0x4)
-    FRigUnit_MultiFABRIK_WorkData WorkData;                                           // 0x0188 (size: 0x68)
-    bool bIsInitialized;                                                              // 0x01F0 (size: 0x1)
+    FName RootBone;                                                                   // 0x0010 (size: 0x8)
+    TArray<FRigUnit_MultiFABRIK_EndEffector> Effectors;                               // 0x0018 (size: 0x10)
+    float Precision;                                                                  // 0x0028 (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x002C (size: 0x1)
+    int32 MaxIterations;                                                              // 0x0030 (size: 0x4)
+    FRigUnit_MultiFABRIK_WorkData WorkData;                                           // 0x0038 (size: 0x68)
+    bool bIsInitialized;                                                              // 0x00A0 (size: 0x1)
 
-}; // Size: 0x200
+}; // Size: 0xA8
 
 struct FRigUnit_MultiFABRIK_EndEffector
 {
@@ -3078,26 +3761,42 @@ struct FRigUnit_Multiply_VectorVector : public FRigUnit_BinaryVectorOp
 
 struct FRigUnit_OffsetTransformForItem : public FRigUnitMutable
 {
-    FRigElementKey Item;                                                              // 0x0160 (size: 0xC)
-    FTransform OffsetTransform;                                                       // 0x0170 (size: 0x60)
-    float Weight;                                                                     // 0x01D0 (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x01D4 (size: 0x1)
-    FCachedRigElement CachedIndex;                                                    // 0x01D8 (size: 0x20)
+    FRigElementKey Item;                                                              // 0x0010 (size: 0xC)
+    FTransform OffsetTransform;                                                       // 0x0020 (size: 0x60)
+    float Weight;                                                                     // 0x0080 (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x0084 (size: 0x1)
+    FCachedRigElement CachedIndex;                                                    // 0x0088 (size: 0x20)
 
-}; // Size: 0x200
+}; // Size: 0xB0
 
 struct FRigUnit_ParentConstraint : public FRigUnit_HighlevelBaseMutable
 {
-    FRigElementKey Child;                                                             // 0x0160 (size: 0xC)
-    bool bMaintainOffset;                                                             // 0x016C (size: 0x1)
-    FTransformFilter Filter;                                                          // 0x016D (size: 0x9)
-    TArray<FConstraintParent> Parents;                                                // 0x0178 (size: 0x10)
-    FRigUnit_ParentConstraint_AdvancedSettings AdvancedSettings;                      // 0x0188 (size: 0x2)
-    float Weight;                                                                     // 0x018C (size: 0x4)
-    FCachedRigElement ChildCache;                                                     // 0x0190 (size: 0x20)
-    TArray<FCachedRigElement> ParentCaches;                                           // 0x01B0 (size: 0x10)
+    FRigElementKey Child;                                                             // 0x0010 (size: 0xC)
+    bool bMaintainOffset;                                                             // 0x001C (size: 0x1)
+    FTransformFilter Filter;                                                          // 0x001D (size: 0x9)
+    TArray<FConstraintParent> Parents;                                                // 0x0028 (size: 0x10)
+    FRigUnit_ParentConstraint_AdvancedSettings AdvancedSettings;                      // 0x0038 (size: 0x2)
+    float Weight;                                                                     // 0x003C (size: 0x4)
+    FCachedRigElement ChildCache;                                                     // 0x0040 (size: 0x20)
+    TArray<FCachedRigElement> ParentCaches;                                           // 0x0060 (size: 0x10)
 
-}; // Size: 0x1C0
+}; // Size: 0x70
+
+struct FRigUnit_ParentConstraintMath : public FRigUnit_HighlevelBase
+{
+    FTransform Input;                                                                 // 0x0010 (size: 0x60)
+    TArray<FConstraintParent> Parents;                                                // 0x0070 (size: 0x10)
+    FRigUnit_ParentConstraintMath_AdvancedSettings AdvancedSettings;                  // 0x0080 (size: 0x1)
+    FTransform Output;                                                                // 0x0090 (size: 0x60)
+    TArray<FCachedRigElement> ParentCaches;                                           // 0x00F0 (size: 0x10)
+
+}; // Size: 0x100
+
+struct FRigUnit_ParentConstraintMath_AdvancedSettings
+{
+    EConstraintInterpType InterpolationType;                                          // 0x0000 (size: 0x1)
+
+}; // Size: 0x1
 
 struct FRigUnit_ParentConstraint_AdvancedSettings
 {
@@ -3108,53 +3807,53 @@ struct FRigUnit_ParentConstraint_AdvancedSettings
 
 struct FRigUnit_ParentSwitchConstraint : public FRigUnitMutable
 {
-    FRigElementKey subject;                                                           // 0x0160 (size: 0xC)
-    int32 ParentIndex;                                                                // 0x016C (size: 0x4)
-    FRigElementKeyCollection Parents;                                                 // 0x0170 (size: 0x10)
-    FTransform InitialGlobalTransform;                                                // 0x0180 (size: 0x60)
-    float Weight;                                                                     // 0x01E0 (size: 0x4)
-    FTransform Transform;                                                             // 0x01F0 (size: 0x60)
-    bool Switched;                                                                    // 0x0250 (size: 0x1)
-    FCachedRigElement CachedSubject;                                                  // 0x0258 (size: 0x20)
-    FCachedRigElement CachedParent;                                                   // 0x0278 (size: 0x20)
-    FTransform RelativeOffset;                                                        // 0x02A0 (size: 0x60)
+    FRigElementKey subject;                                                           // 0x0010 (size: 0xC)
+    int32 ParentIndex;                                                                // 0x001C (size: 0x4)
+    FRigElementKeyCollection Parents;                                                 // 0x0020 (size: 0x10)
+    FTransform InitialGlobalTransform;                                                // 0x0030 (size: 0x60)
+    float Weight;                                                                     // 0x0090 (size: 0x4)
+    FTransform Transform;                                                             // 0x00A0 (size: 0x60)
+    bool Switched;                                                                    // 0x0100 (size: 0x1)
+    FCachedRigElement CachedSubject;                                                  // 0x0108 (size: 0x20)
+    FCachedRigElement CachedParent;                                                   // 0x0128 (size: 0x20)
+    FTransform RelativeOffset;                                                        // 0x0150 (size: 0x60)
 
-}; // Size: 0x300
+}; // Size: 0x1B0
 
 struct FRigUnit_ParentSwitchConstraintArray : public FRigUnitMutable
 {
-    FRigElementKey subject;                                                           // 0x0160 (size: 0xC)
-    int32 ParentIndex;                                                                // 0x016C (size: 0x4)
-    TArray<FRigElementKey> Parents;                                                   // 0x0170 (size: 0x10)
-    FTransform InitialGlobalTransform;                                                // 0x0180 (size: 0x60)
-    float Weight;                                                                     // 0x01E0 (size: 0x4)
-    FTransform Transform;                                                             // 0x01F0 (size: 0x60)
-    bool Switched;                                                                    // 0x0250 (size: 0x1)
-    FCachedRigElement CachedSubject;                                                  // 0x0258 (size: 0x20)
-    FCachedRigElement CachedParent;                                                   // 0x0278 (size: 0x20)
-    FTransform RelativeOffset;                                                        // 0x02A0 (size: 0x60)
+    FRigElementKey subject;                                                           // 0x0010 (size: 0xC)
+    int32 ParentIndex;                                                                // 0x001C (size: 0x4)
+    TArray<FRigElementKey> Parents;                                                   // 0x0020 (size: 0x10)
+    FTransform InitialGlobalTransform;                                                // 0x0030 (size: 0x60)
+    float Weight;                                                                     // 0x0090 (size: 0x4)
+    FTransform Transform;                                                             // 0x00A0 (size: 0x60)
+    bool Switched;                                                                    // 0x0100 (size: 0x1)
+    FCachedRigElement CachedSubject;                                                  // 0x0108 (size: 0x20)
+    FCachedRigElement CachedParent;                                                   // 0x0128 (size: 0x20)
+    FTransform RelativeOffset;                                                        // 0x0150 (size: 0x60)
 
-}; // Size: 0x300
+}; // Size: 0x1B0
 
 struct FRigUnit_PointSimulation : public FRigVMFunction_SimBaseMutable
 {
-    TArray<FRigVMSimPoint> Points;                                                    // 0x0100 (size: 0x10)
-    TArray<FCRSimLinearSpring> Links;                                                 // 0x0110 (size: 0x10)
-    TArray<FCRSimPointForce> Forces;                                                  // 0x0120 (size: 0x10)
-    TArray<FCRSimSoftCollision> CollisionVolumes;                                     // 0x0130 (size: 0x10)
-    float SimulatedStepsPerSecond;                                                    // 0x0140 (size: 0x4)
-    ERigVMSimPointIntegrateType IntegratorType;                                       // 0x0144 (size: 0x1)
-    float VerletBlend;                                                                // 0x0148 (size: 0x4)
-    TArray<FRigUnit_PointSimulation_BoneTarget> BoneTargets;                          // 0x0150 (size: 0x10)
-    bool bLimitLocalPosition;                                                         // 0x0160 (size: 0x1)
-    bool bPropagateToChildren;                                                        // 0x0161 (size: 0x1)
-    FVector PrimaryAimAxis;                                                           // 0x0168 (size: 0x18)
-    FVector SecondaryAimAxis;                                                         // 0x0180 (size: 0x18)
-    FRigUnit_PointSimulation_DebugSettings DebugSettings;                             // 0x01A0 (size: 0x80)
-    FRigVMFourPointBezier Bezier;                                                     // 0x0220 (size: 0x60)
-    FRigUnit_PointSimulation_WorkData WorkData;                                       // 0x0280 (size: 0x88)
+    TArray<FRigVMSimPoint> Points;                                                    // 0x0010 (size: 0x10)
+    TArray<FCRSimLinearSpring> Links;                                                 // 0x0020 (size: 0x10)
+    TArray<FCRSimPointForce> Forces;                                                  // 0x0030 (size: 0x10)
+    TArray<FCRSimSoftCollision> CollisionVolumes;                                     // 0x0040 (size: 0x10)
+    float SimulatedStepsPerSecond;                                                    // 0x0050 (size: 0x4)
+    ERigVMSimPointIntegrateType IntegratorType;                                       // 0x0054 (size: 0x1)
+    float VerletBlend;                                                                // 0x0058 (size: 0x4)
+    TArray<FRigUnit_PointSimulation_BoneTarget> BoneTargets;                          // 0x0060 (size: 0x10)
+    bool bLimitLocalPosition;                                                         // 0x0070 (size: 0x1)
+    bool bPropagateToChildren;                                                        // 0x0071 (size: 0x1)
+    FVector PrimaryAimAxis;                                                           // 0x0078 (size: 0x18)
+    FVector SecondaryAimAxis;                                                         // 0x0090 (size: 0x18)
+    FRigUnit_PointSimulation_DebugSettings DebugSettings;                             // 0x00B0 (size: 0x80)
+    FRigVMFourPointBezier Bezier;                                                     // 0x0130 (size: 0x60)
+    FRigUnit_PointSimulation_WorkData WorkData;                                       // 0x0190 (size: 0x88)
 
-}; // Size: 0x310
+}; // Size: 0x220
 
 struct FRigUnit_PointSimulation_BoneTarget
 {
@@ -3257,46 +3956,64 @@ struct FRigUnit_PoseIsEmpty : public FRigUnit_HierarchyBase
 
 struct FRigUnit_PoseLoop : public FRigUnit_HierarchyBaseMutable
 {
-    FName BlockToRun;                                                                 // 0x0160 (size: 0x8)
-    FRigPose Pose;                                                                    // 0x0168 (size: 0x70)
-    FRigElementKey Item;                                                              // 0x01D8 (size: 0xC)
-    FTransform GlobalTransform;                                                       // 0x01F0 (size: 0x60)
-    FTransform LocalTransform;                                                        // 0x0250 (size: 0x60)
-    float CurveValue;                                                                 // 0x02B0 (size: 0x4)
-    int32 Index;                                                                      // 0x02B4 (size: 0x4)
-    int32 Count;                                                                      // 0x02B8 (size: 0x4)
-    float Ratio;                                                                      // 0x02BC (size: 0x4)
-    FControlRigExecuteContext Completed;                                              // 0x02C0 (size: 0x150)
+    FName BlockToRun;                                                                 // 0x0010 (size: 0x8)
+    FRigPose Pose;                                                                    // 0x0018 (size: 0x70)
+    FRigElementKey Item;                                                              // 0x0088 (size: 0xC)
+    FTransform GlobalTransform;                                                       // 0x00A0 (size: 0x60)
+    FTransform LocalTransform;                                                        // 0x0100 (size: 0x60)
+    float CurveValue;                                                                 // 0x0160 (size: 0x4)
+    int32 Index;                                                                      // 0x0164 (size: 0x4)
+    int32 Count;                                                                      // 0x0168 (size: 0x4)
+    float Ratio;                                                                      // 0x016C (size: 0x4)
+    FControlRigExecuteContext Completed;                                              // 0x0170 (size: 0x210)
 
-}; // Size: 0x410
+}; // Size: 0x380
 
 struct FRigUnit_PositionConstraint : public FRigUnit_HighlevelBaseMutable
 {
-    FRigElementKey Child;                                                             // 0x0160 (size: 0xC)
-    bool bMaintainOffset;                                                             // 0x016C (size: 0x1)
-    FFilterOptionPerAxis Filter;                                                      // 0x016D (size: 0x3)
-    TArray<FConstraintParent> Parents;                                                // 0x0170 (size: 0x10)
-    float Weight;                                                                     // 0x0180 (size: 0x4)
+    FRigElementKey Child;                                                             // 0x0010 (size: 0xC)
+    bool bMaintainOffset;                                                             // 0x001C (size: 0x1)
+    FFilterOptionPerAxis Filter;                                                      // 0x001D (size: 0x3)
+    TArray<FConstraintParent> Parents;                                                // 0x0020 (size: 0x10)
+    float Weight;                                                                     // 0x0030 (size: 0x4)
 
-}; // Size: 0x190
+}; // Size: 0x38
 
 struct FRigUnit_PositionConstraintLocalSpaceOffset : public FRigUnit_HighlevelBaseMutable
 {
-    FRigElementKey Child;                                                             // 0x0160 (size: 0xC)
-    bool bMaintainOffset;                                                             // 0x016C (size: 0x1)
-    FFilterOptionPerAxis Filter;                                                      // 0x016D (size: 0x3)
-    TArray<FConstraintParent> Parents;                                                // 0x0170 (size: 0x10)
-    float Weight;                                                                     // 0x0180 (size: 0x4)
-    FCachedRigElement ChildCache;                                                     // 0x0188 (size: 0x20)
-    TArray<FCachedRigElement> ParentCaches;                                           // 0x01A8 (size: 0x10)
+    FRigElementKey Child;                                                             // 0x0010 (size: 0xC)
+    bool bMaintainOffset;                                                             // 0x001C (size: 0x1)
+    FFilterOptionPerAxis Filter;                                                      // 0x001D (size: 0x3)
+    TArray<FConstraintParent> Parents;                                                // 0x0020 (size: 0x10)
+    float Weight;                                                                     // 0x0030 (size: 0x4)
+    FCachedRigElement ChildCache;                                                     // 0x0038 (size: 0x20)
+    TArray<FCachedRigElement> ParentCaches;                                           // 0x0058 (size: 0x10)
 
-}; // Size: 0x1C0
+}; // Size: 0x68
+
+struct FRigUnit_PostBeginExecution : public FRigUnit
+{
+    FRigVMExecutePin ExecutePin;                                                      // 0x0008 (size: 0x8)
+
+}; // Size: 0x10
+
+struct FRigUnit_PostPrepareForExecution : public FRigUnit
+{
+    FRigVMExecutePin ExecutePin;                                                      // 0x0008 (size: 0x8)
+
+}; // Size: 0x10
+
+struct FRigUnit_PreBeginExecution : public FRigUnit
+{
+    FRigVMExecutePin ExecutePin;                                                      // 0x0008 (size: 0x8)
+
+}; // Size: 0x10
 
 struct FRigUnit_PrepareForExecution : public FRigUnit
 {
-    FControlRigExecuteContext ExecuteContext;                                         // 0x0010 (size: 0x150)
+    FRigVMExecutePin ExecutePin;                                                      // 0x0008 (size: 0x8)
 
-}; // Size: 0x160
+}; // Size: 0x10
 
 struct FRigUnit_ProjectTransformToNewParent : public FRigUnit
 {
@@ -3315,13 +4032,13 @@ struct FRigUnit_ProjectTransformToNewParent : public FRigUnit
 
 struct FRigUnit_PropagateTransform : public FRigUnitMutable
 {
-    FRigElementKey Item;                                                              // 0x0160 (size: 0xC)
-    bool bRecomputeGlobal;                                                            // 0x016C (size: 0x1)
-    bool bApplyToChildren;                                                            // 0x016D (size: 0x1)
-    bool bRecursive;                                                                  // 0x016E (size: 0x1)
-    FCachedRigElement CachedIndex;                                                    // 0x0170 (size: 0x20)
+    FRigElementKey Item;                                                              // 0x0010 (size: 0xC)
+    bool bRecomputeGlobal;                                                            // 0x001C (size: 0x1)
+    bool bApplyToChildren;                                                            // 0x001D (size: 0x1)
+    bool bRecursive;                                                                  // 0x001E (size: 0x1)
+    FCachedRigElement CachedIndex;                                                    // 0x0020 (size: 0x20)
 
-}; // Size: 0x190
+}; // Size: 0x40
 
 struct FRigUnit_QuaternionFromAxisAndAngle : public FRigUnit
 {
@@ -3349,53 +4066,82 @@ struct FRigUnit_QuaternionToAxisAndAngle : public FRigUnit
 
 struct FRigUnit_RemoveAllMetadata : public FRigUnitMutable
 {
-    FRigElementKey Item;                                                              // 0x0160 (size: 0xC)
-    bool Removed;                                                                     // 0x016C (size: 0x1)
-    FCachedRigElement CachedIndex;                                                    // 0x0170 (size: 0x20)
+    FRigElementKey Item;                                                              // 0x0010 (size: 0xC)
+    ERigMetaDataNameSpace Namespace;                                                  // 0x001C (size: 0x1)
+    bool Removed;                                                                     // 0x001D (size: 0x1)
+    FCachedRigElement CachedIndex;                                                    // 0x0020 (size: 0x20)
 
-}; // Size: 0x190
+}; // Size: 0x40
 
 struct FRigUnit_RemoveMetadata : public FRigUnitMutable
 {
-    FRigElementKey Item;                                                              // 0x0160 (size: 0xC)
-    FName Name;                                                                       // 0x016C (size: 0x8)
-    bool Removed;                                                                     // 0x0174 (size: 0x1)
-    FCachedRigElement CachedIndex;                                                    // 0x0178 (size: 0x20)
+    FRigElementKey Item;                                                              // 0x0010 (size: 0xC)
+    FName Name;                                                                       // 0x001C (size: 0x8)
+    ERigMetaDataNameSpace Namespace;                                                  // 0x0024 (size: 0x1)
+    bool Removed;                                                                     // 0x0025 (size: 0x1)
+    FCachedRigElement CachedIndex;                                                    // 0x0028 (size: 0x20)
 
-}; // Size: 0x1A0
+}; // Size: 0x48
 
 struct FRigUnit_RemoveMetadataTag : public FRigUnitMutable
 {
-    FRigElementKey Item;                                                              // 0x0160 (size: 0xC)
-    FName Tag;                                                                        // 0x016C (size: 0x8)
-    bool Removed;                                                                     // 0x0174 (size: 0x1)
-    FCachedRigElement CachedIndex;                                                    // 0x0178 (size: 0x20)
+    FRigElementKey Item;                                                              // 0x0010 (size: 0xC)
+    FName Tag;                                                                        // 0x001C (size: 0x8)
+    ERigMetaDataNameSpace Namespace;                                                  // 0x0024 (size: 0x1)
+    bool Removed;                                                                     // 0x0025 (size: 0x1)
+    FCachedRigElement CachedIndex;                                                    // 0x0028 (size: 0x20)
 
-}; // Size: 0x1A0
+}; // Size: 0x48
+
+struct FRigUnit_ResolveArrayConnector : public FRigUnit_RigModulesBase
+{
+    FRigElementKey Connector;                                                         // 0x0008 (size: 0xC)
+    bool SkipSocket;                                                                  // 0x0014 (size: 0x1)
+    TArray<FRigElementKey> Result;                                                    // 0x0018 (size: 0x10)
+    bool bIsConnected;                                                                // 0x0028 (size: 0x1)
+
+}; // Size: 0x30
+
+struct FRigUnit_ResolveConnector : public FRigUnit_RigModulesBase
+{
+    FRigElementKey Connector;                                                         // 0x0008 (size: 0xC)
+    bool SkipSocket;                                                                  // 0x0014 (size: 0x1)
+    FRigElementKey Result;                                                            // 0x0018 (size: 0xC)
+    bool bIsConnected;                                                                // 0x0024 (size: 0x1)
+
+}; // Size: 0x28
+
+struct FRigUnit_RigModulesBase : public FRigUnit
+{
+}; // Size: 0x8
+
+struct FRigUnit_RigModulesBaseMutable : public FRigUnitMutable
+{
+}; // Size: 0x10
 
 struct FRigUnit_RotationConstraint : public FRigUnit_HighlevelBaseMutable
 {
-    FRigElementKey Child;                                                             // 0x0160 (size: 0xC)
-    bool bMaintainOffset;                                                             // 0x016C (size: 0x1)
-    FFilterOptionPerAxis Filter;                                                      // 0x016D (size: 0x3)
-    TArray<FConstraintParent> Parents;                                                // 0x0170 (size: 0x10)
-    FRigUnit_RotationConstraint_AdvancedSettings AdvancedSettings;                    // 0x0180 (size: 0x2)
-    float Weight;                                                                     // 0x0184 (size: 0x4)
+    FRigElementKey Child;                                                             // 0x0010 (size: 0xC)
+    bool bMaintainOffset;                                                             // 0x001C (size: 0x1)
+    FFilterOptionPerAxis Filter;                                                      // 0x001D (size: 0x3)
+    TArray<FConstraintParent> Parents;                                                // 0x0020 (size: 0x10)
+    FRigUnit_RotationConstraint_AdvancedSettings AdvancedSettings;                    // 0x0030 (size: 0x2)
+    float Weight;                                                                     // 0x0034 (size: 0x4)
 
-}; // Size: 0x190
+}; // Size: 0x38
 
 struct FRigUnit_RotationConstraintLocalSpaceOffset : public FRigUnit_HighlevelBaseMutable
 {
-    FRigElementKey Child;                                                             // 0x0160 (size: 0xC)
-    bool bMaintainOffset;                                                             // 0x016C (size: 0x1)
-    FFilterOptionPerAxis Filter;                                                      // 0x016D (size: 0x3)
-    TArray<FConstraintParent> Parents;                                                // 0x0170 (size: 0x10)
-    FRigUnit_RotationConstraint_AdvancedSettings AdvancedSettings;                    // 0x0180 (size: 0x2)
-    float Weight;                                                                     // 0x0184 (size: 0x4)
-    FCachedRigElement ChildCache;                                                     // 0x0188 (size: 0x20)
-    TArray<FCachedRigElement> ParentCaches;                                           // 0x01A8 (size: 0x10)
+    FRigElementKey Child;                                                             // 0x0010 (size: 0xC)
+    bool bMaintainOffset;                                                             // 0x001C (size: 0x1)
+    FFilterOptionPerAxis Filter;                                                      // 0x001D (size: 0x3)
+    TArray<FConstraintParent> Parents;                                                // 0x0020 (size: 0x10)
+    FRigUnit_RotationConstraint_AdvancedSettings AdvancedSettings;                    // 0x0030 (size: 0x2)
+    float Weight;                                                                     // 0x0034 (size: 0x4)
+    FCachedRigElement ChildCache;                                                     // 0x0038 (size: 0x20)
+    TArray<FCachedRigElement> ParentCaches;                                           // 0x0058 (size: 0x10)
 
-}; // Size: 0x1C0
+}; // Size: 0x68
 
 struct FRigUnit_RotationConstraint_AdvancedSettings
 {
@@ -3406,251 +4152,317 @@ struct FRigUnit_RotationConstraint_AdvancedSettings
 
 struct FRigUnit_ScaleConstraint : public FRigUnit_HighlevelBaseMutable
 {
-    FRigElementKey Child;                                                             // 0x0160 (size: 0xC)
-    bool bMaintainOffset;                                                             // 0x016C (size: 0x1)
-    FFilterOptionPerAxis Filter;                                                      // 0x016D (size: 0x3)
-    TArray<FConstraintParent> Parents;                                                // 0x0170 (size: 0x10)
-    float Weight;                                                                     // 0x0180 (size: 0x4)
+    FRigElementKey Child;                                                             // 0x0010 (size: 0xC)
+    bool bMaintainOffset;                                                             // 0x001C (size: 0x1)
+    FFilterOptionPerAxis Filter;                                                      // 0x001D (size: 0x3)
+    TArray<FConstraintParent> Parents;                                                // 0x0020 (size: 0x10)
+    float Weight;                                                                     // 0x0030 (size: 0x4)
 
-}; // Size: 0x190
+}; // Size: 0x38
 
 struct FRigUnit_ScaleConstraintLocalSpaceOffset : public FRigUnit_HighlevelBaseMutable
 {
-    FRigElementKey Child;                                                             // 0x0160 (size: 0xC)
-    bool bMaintainOffset;                                                             // 0x016C (size: 0x1)
-    FFilterOptionPerAxis Filter;                                                      // 0x016D (size: 0x3)
-    TArray<FConstraintParent> Parents;                                                // 0x0170 (size: 0x10)
-    float Weight;                                                                     // 0x0180 (size: 0x4)
-    FCachedRigElement ChildCache;                                                     // 0x0188 (size: 0x20)
-    TArray<FCachedRigElement> ParentCaches;                                           // 0x01A8 (size: 0x10)
+    FRigElementKey Child;                                                             // 0x0010 (size: 0xC)
+    bool bMaintainOffset;                                                             // 0x001C (size: 0x1)
+    FFilterOptionPerAxis Filter;                                                      // 0x001D (size: 0x3)
+    TArray<FConstraintParent> Parents;                                                // 0x0020 (size: 0x10)
+    float Weight;                                                                     // 0x0030 (size: 0x4)
+    FCachedRigElement ChildCache;                                                     // 0x0038 (size: 0x20)
+    TArray<FCachedRigElement> ParentCaches;                                           // 0x0058 (size: 0x10)
 
-}; // Size: 0x1C0
+}; // Size: 0x68
 
 struct FRigUnit_SendEvent : public FRigUnitMutable
 {
-    ERigEvent Event;                                                                  // 0x0160 (size: 0x1)
-    FRigElementKey Item;                                                              // 0x0164 (size: 0xC)
-    float OffsetInSeconds;                                                            // 0x0170 (size: 0x4)
-    bool bEnable;                                                                     // 0x0174 (size: 0x1)
-    bool bOnlyDuringInteraction;                                                      // 0x0175 (size: 0x1)
+    ERigEvent Event;                                                                  // 0x0010 (size: 0x1)
+    FRigElementKey Item;                                                              // 0x0014 (size: 0xC)
+    float OffsetInSeconds;                                                            // 0x0020 (size: 0x4)
+    bool bEnable;                                                                     // 0x0024 (size: 0x1)
+    bool bOnlyDuringInteraction;                                                      // 0x0025 (size: 0x1)
 
-}; // Size: 0x180
+}; // Size: 0x28
 
 struct FRigUnit_SequenceExecution : public FRigUnit
 {
-    FControlRigExecuteContext ExecuteContext;                                         // 0x0010 (size: 0x150)
-    FControlRigExecuteContext A;                                                      // 0x0160 (size: 0x150)
-    FControlRigExecuteContext B;                                                      // 0x02B0 (size: 0x150)
-    FControlRigExecuteContext C;                                                      // 0x0400 (size: 0x150)
-    FControlRigExecuteContext D;                                                      // 0x0550 (size: 0x150)
+    FControlRigExecuteContext ExecuteContext;                                         // 0x0010 (size: 0x210)
+    FControlRigExecuteContext A;                                                      // 0x0220 (size: 0x210)
+    FControlRigExecuteContext B;                                                      // 0x0430 (size: 0x210)
+    FControlRigExecuteContext C;                                                      // 0x0640 (size: 0x210)
+    FControlRigExecuteContext D;                                                      // 0x0850 (size: 0x210)
 
-}; // Size: 0x6A0
+}; // Size: 0xA60
 
 struct FRigUnit_SetAnimationChannelBase : public FRigUnit_GetAnimationChannelBase
 {
-    FControlRigExecuteContext ExecuteContext;                                         // 0x0030 (size: 0x150)
+    FRigVMExecutePin ExecutePin;                                                      // 0x0030 (size: 0x8)
 
-}; // Size: 0x180
+}; // Size: 0x38
+
+struct FRigUnit_SetAnimationChannelBaseFromItem : public FRigUnit_GetAnimationChannelFromItemBase
+{
+    FRigVMExecutePin ExecutePin;                                                      // 0x0018 (size: 0x8)
+
+}; // Size: 0x20
 
 struct FRigUnit_SetBoneInitialTransform : public FRigUnitMutable
 {
-    FName bone;                                                                       // 0x0160 (size: 0x8)
-    FTransform Transform;                                                             // 0x0170 (size: 0x60)
-    FTransform Result;                                                                // 0x01D0 (size: 0x60)
-    ERigVMTransformSpace Space;                                                       // 0x0230 (size: 0x1)
-    bool bPropagateToChildren;                                                        // 0x0231 (size: 0x1)
-    FCachedRigElement CachedBone;                                                     // 0x0238 (size: 0x20)
+    FName bone;                                                                       // 0x0010 (size: 0x8)
+    FTransform Transform;                                                             // 0x0020 (size: 0x60)
+    FTransform Result;                                                                // 0x0080 (size: 0x60)
+    ERigVMTransformSpace Space;                                                       // 0x00E0 (size: 0x1)
+    bool bPropagateToChildren;                                                        // 0x00E1 (size: 0x1)
+    FCachedRigElement CachedBone;                                                     // 0x00E8 (size: 0x20)
 
-}; // Size: 0x260
+}; // Size: 0x110
 
 struct FRigUnit_SetBoneRotation : public FRigUnitMutable
 {
-    FName bone;                                                                       // 0x0160 (size: 0x8)
-    FQuat Rotation;                                                                   // 0x0170 (size: 0x20)
-    ERigVMTransformSpace Space;                                                       // 0x0190 (size: 0x1)
-    float Weight;                                                                     // 0x0194 (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x0198 (size: 0x1)
-    FCachedRigElement CachedBone;                                                     // 0x01A0 (size: 0x20)
+    FName bone;                                                                       // 0x0010 (size: 0x8)
+    FQuat Rotation;                                                                   // 0x0020 (size: 0x20)
+    ERigVMTransformSpace Space;                                                       // 0x0040 (size: 0x1)
+    float Weight;                                                                     // 0x0044 (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x0048 (size: 0x1)
+    FCachedRigElement CachedBone;                                                     // 0x0050 (size: 0x20)
 
-}; // Size: 0x1C0
+}; // Size: 0x70
 
 struct FRigUnit_SetBoneTransform : public FRigUnitMutable
 {
-    FName bone;                                                                       // 0x0160 (size: 0x8)
-    FTransform Transform;                                                             // 0x0170 (size: 0x60)
-    FTransform Result;                                                                // 0x01D0 (size: 0x60)
-    ERigVMTransformSpace Space;                                                       // 0x0230 (size: 0x1)
-    float Weight;                                                                     // 0x0234 (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x0238 (size: 0x1)
-    FCachedRigElement CachedBone;                                                     // 0x0240 (size: 0x20)
+    FName bone;                                                                       // 0x0010 (size: 0x8)
+    FTransform Transform;                                                             // 0x0020 (size: 0x60)
+    FTransform Result;                                                                // 0x0080 (size: 0x60)
+    ERigVMTransformSpace Space;                                                       // 0x00E0 (size: 0x1)
+    float Weight;                                                                     // 0x00E4 (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x00E8 (size: 0x1)
+    FCachedRigElement CachedBone;                                                     // 0x00F0 (size: 0x20)
 
-}; // Size: 0x260
+}; // Size: 0x110
 
 struct FRigUnit_SetBoneTranslation : public FRigUnitMutable
 {
-    FName bone;                                                                       // 0x0160 (size: 0x8)
-    FVector Translation;                                                              // 0x0168 (size: 0x18)
-    ERigVMTransformSpace Space;                                                       // 0x0180 (size: 0x1)
-    float Weight;                                                                     // 0x0184 (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x0188 (size: 0x1)
-    FCachedRigElement CachedBone;                                                     // 0x0190 (size: 0x20)
+    FName bone;                                                                       // 0x0010 (size: 0x8)
+    FVector Translation;                                                              // 0x0018 (size: 0x18)
+    ERigVMTransformSpace Space;                                                       // 0x0030 (size: 0x1)
+    float Weight;                                                                     // 0x0034 (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x0038 (size: 0x1)
+    FCachedRigElement CachedBone;                                                     // 0x0040 (size: 0x20)
 
-}; // Size: 0x1B0
+}; // Size: 0x60
 
 struct FRigUnit_SetBoolAnimationChannel : public FRigUnit_SetAnimationChannelBase
 {
-    bool Value;                                                                       // 0x0180 (size: 0x1)
+    bool Value;                                                                       // 0x0038 (size: 0x1)
 
-}; // Size: 0x190
+}; // Size: 0x40
+
+struct FRigUnit_SetBoolAnimationChannelFromItem : public FRigUnit_SetAnimationChannelBaseFromItem
+{
+    bool Value;                                                                       // 0x0020 (size: 0x1)
+
+}; // Size: 0x28
+
+struct FRigUnit_SetChannelHosts : public FRigUnit_DynamicHierarchyBaseMutable
+{
+    FRigElementKey Channel;                                                           // 0x0010 (size: 0xC)
+    TArray<FRigElementKey> Hosts;                                                     // 0x0020 (size: 0x10)
+
+}; // Size: 0x30
 
 struct FRigUnit_SetControlBool : public FRigUnitMutable
 {
-    FName Control;                                                                    // 0x0160 (size: 0x8)
-    bool BoolValue;                                                                   // 0x0168 (size: 0x1)
-    FCachedRigElement CachedControlIndex;                                             // 0x0170 (size: 0x20)
+    FName Control;                                                                    // 0x0010 (size: 0x8)
+    bool BoolValue;                                                                   // 0x0018 (size: 0x1)
+    FCachedRigElement CachedControlIndex;                                             // 0x0020 (size: 0x20)
 
-}; // Size: 0x190
+}; // Size: 0x40
 
 struct FRigUnit_SetControlColor : public FRigUnitMutable
 {
-    FName Control;                                                                    // 0x0160 (size: 0x8)
-    FLinearColor Color;                                                               // 0x0168 (size: 0x10)
-    FCachedRigElement CachedControlIndex;                                             // 0x0178 (size: 0x20)
+    FName Control;                                                                    // 0x0010 (size: 0x8)
+    FLinearColor Color;                                                               // 0x0018 (size: 0x10)
+    FCachedRigElement CachedControlIndex;                                             // 0x0028 (size: 0x20)
 
-}; // Size: 0x1A0
+}; // Size: 0x48
 
 struct FRigUnit_SetControlDrivenList : public FRigUnitMutable
 {
-    FName Control;                                                                    // 0x0160 (size: 0x8)
-    TArray<FRigElementKey> Driven;                                                    // 0x0168 (size: 0x10)
-    FCachedRigElement CachedControlIndex;                                             // 0x0178 (size: 0x20)
+    FName Control;                                                                    // 0x0010 (size: 0x8)
+    TArray<FRigElementKey> Driven;                                                    // 0x0018 (size: 0x10)
+    FCachedRigElement CachedControlIndex;                                             // 0x0028 (size: 0x20)
 
-}; // Size: 0x1A0
+}; // Size: 0x48
 
 struct FRigUnit_SetControlFloat : public FRigUnitMutable
 {
-    FName Control;                                                                    // 0x0160 (size: 0x8)
-    float Weight;                                                                     // 0x0168 (size: 0x4)
-    float FloatValue;                                                                 // 0x016C (size: 0x4)
-    FCachedRigElement CachedControlIndex;                                             // 0x0170 (size: 0x20)
+    FName Control;                                                                    // 0x0010 (size: 0x8)
+    float Weight;                                                                     // 0x0018 (size: 0x4)
+    float FloatValue;                                                                 // 0x001C (size: 0x4)
+    FCachedRigElement CachedControlIndex;                                             // 0x0020 (size: 0x20)
 
-}; // Size: 0x190
+}; // Size: 0x40
 
 struct FRigUnit_SetControlInteger : public FRigUnitMutable
 {
-    FName Control;                                                                    // 0x0160 (size: 0x8)
-    int32 Weight;                                                                     // 0x0168 (size: 0x4)
-    int32 IntegerValue;                                                               // 0x016C (size: 0x4)
-    FCachedRigElement CachedControlIndex;                                             // 0x0170 (size: 0x20)
+    FName Control;                                                                    // 0x0010 (size: 0x8)
+    int32 Weight;                                                                     // 0x0018 (size: 0x4)
+    int32 IntegerValue;                                                               // 0x001C (size: 0x4)
+    FCachedRigElement CachedControlIndex;                                             // 0x0020 (size: 0x20)
 
-}; // Size: 0x190
+}; // Size: 0x40
 
 struct FRigUnit_SetControlOffset : public FRigUnitMutable
 {
-    FName Control;                                                                    // 0x0160 (size: 0x8)
-    FTransform Offset;                                                                // 0x0170 (size: 0x60)
-    ERigVMTransformSpace Space;                                                       // 0x01D0 (size: 0x1)
-    FCachedRigElement CachedControlIndex;                                             // 0x01D8 (size: 0x20)
+    FName Control;                                                                    // 0x0010 (size: 0x8)
+    FTransform Offset;                                                                // 0x0020 (size: 0x60)
+    ERigVMTransformSpace Space;                                                       // 0x0080 (size: 0x1)
+    FCachedRigElement CachedControlIndex;                                             // 0x0088 (size: 0x20)
 
-}; // Size: 0x200
+}; // Size: 0xB0
+
+struct FRigUnit_SetControlRotationOffset : public FRigUnitMutable
+{
+    FName Control;                                                                    // 0x0010 (size: 0x8)
+    FQuat Offset;                                                                     // 0x0020 (size: 0x20)
+    ERigVMTransformSpace Space;                                                       // 0x0040 (size: 0x1)
+    FCachedRigElement CachedControlIndex;                                             // 0x0048 (size: 0x20)
+
+}; // Size: 0x70
 
 struct FRigUnit_SetControlRotator : public FRigUnitMutable
 {
-    FName Control;                                                                    // 0x0160 (size: 0x8)
-    float Weight;                                                                     // 0x0168 (size: 0x4)
-    FRotator Rotator;                                                                 // 0x0170 (size: 0x18)
-    ERigVMTransformSpace Space;                                                       // 0x0188 (size: 0x1)
-    FCachedRigElement CachedControlIndex;                                             // 0x0190 (size: 0x20)
+    FName Control;                                                                    // 0x0010 (size: 0x8)
+    float Weight;                                                                     // 0x0018 (size: 0x4)
+    FRotator Rotator;                                                                 // 0x0020 (size: 0x18)
+    ERigVMTransformSpace Space;                                                       // 0x0038 (size: 0x1)
+    FCachedRigElement CachedControlIndex;                                             // 0x0040 (size: 0x20)
 
-}; // Size: 0x1B0
+}; // Size: 0x60
+
+struct FRigUnit_SetControlScaleOffset : public FRigUnitMutable
+{
+    FName Control;                                                                    // 0x0010 (size: 0x8)
+    FVector Scale;                                                                    // 0x0018 (size: 0x18)
+    ERigVMTransformSpace Space;                                                       // 0x0030 (size: 0x1)
+    FCachedRigElement CachedControlIndex;                                             // 0x0038 (size: 0x20)
+
+}; // Size: 0x58
 
 struct FRigUnit_SetControlTransform : public FRigUnitMutable
 {
-    FName Control;                                                                    // 0x0160 (size: 0x8)
-    float Weight;                                                                     // 0x0168 (size: 0x4)
-    FTransform Transform;                                                             // 0x0170 (size: 0x60)
-    ERigVMTransformSpace Space;                                                       // 0x01D0 (size: 0x1)
-    FCachedRigElement CachedControlIndex;                                             // 0x01D8 (size: 0x20)
+    FName Control;                                                                    // 0x0010 (size: 0x8)
+    float Weight;                                                                     // 0x0018 (size: 0x4)
+    FTransform Transform;                                                             // 0x0020 (size: 0x60)
+    ERigVMTransformSpace Space;                                                       // 0x0080 (size: 0x1)
+    FCachedRigElement CachedControlIndex;                                             // 0x0088 (size: 0x20)
 
-}; // Size: 0x200
+}; // Size: 0xB0
+
+struct FRigUnit_SetControlTranslationOffset : public FRigUnitMutable
+{
+    FName Control;                                                                    // 0x0010 (size: 0x8)
+    FVector Offset;                                                                   // 0x0018 (size: 0x18)
+    ERigVMTransformSpace Space;                                                       // 0x0030 (size: 0x1)
+    FCachedRigElement CachedControlIndex;                                             // 0x0038 (size: 0x20)
+
+}; // Size: 0x58
 
 struct FRigUnit_SetControlVector : public FRigUnitMutable
 {
-    FName Control;                                                                    // 0x0160 (size: 0x8)
-    float Weight;                                                                     // 0x0168 (size: 0x4)
-    FVector Vector;                                                                   // 0x0170 (size: 0x18)
-    ERigVMTransformSpace Space;                                                       // 0x0188 (size: 0x1)
-    FCachedRigElement CachedControlIndex;                                             // 0x0190 (size: 0x20)
+    FName Control;                                                                    // 0x0010 (size: 0x8)
+    float Weight;                                                                     // 0x0018 (size: 0x4)
+    FVector Vector;                                                                   // 0x0020 (size: 0x18)
+    ERigVMTransformSpace Space;                                                       // 0x0038 (size: 0x1)
+    FCachedRigElement CachedControlIndex;                                             // 0x0040 (size: 0x20)
 
-}; // Size: 0x1B0
+}; // Size: 0x60
 
 struct FRigUnit_SetControlVector2D : public FRigUnitMutable
 {
-    FName Control;                                                                    // 0x0160 (size: 0x8)
-    float Weight;                                                                     // 0x0168 (size: 0x4)
-    FVector2D Vector;                                                                 // 0x0170 (size: 0x10)
-    FCachedRigElement CachedControlIndex;                                             // 0x0180 (size: 0x20)
+    FName Control;                                                                    // 0x0010 (size: 0x8)
+    float Weight;                                                                     // 0x0018 (size: 0x4)
+    FVector2D Vector;                                                                 // 0x0020 (size: 0x10)
+    FCachedRigElement CachedControlIndex;                                             // 0x0030 (size: 0x20)
 
-}; // Size: 0x1A0
+}; // Size: 0x50
 
 struct FRigUnit_SetControlVisibility : public FRigUnitMutable
 {
-    FRigElementKey Item;                                                              // 0x0160 (size: 0xC)
-    FString Pattern;                                                                  // 0x0170 (size: 0x10)
-    bool bVisible;                                                                    // 0x0180 (size: 0x1)
-    TArray<FCachedRigElement> CachedControlIndices;                                   // 0x0188 (size: 0x10)
+    FRigElementKey Item;                                                              // 0x0010 (size: 0xC)
+    FString Pattern;                                                                  // 0x0020 (size: 0x10)
+    bool bVisible;                                                                    // 0x0030 (size: 0x1)
+    TArray<FCachedRigElement> CachedControlIndices;                                   // 0x0038 (size: 0x10)
 
-}; // Size: 0x1A0
+}; // Size: 0x48
 
 struct FRigUnit_SetCurveValue : public FRigUnitMutable
 {
-    FName Curve;                                                                      // 0x0160 (size: 0x8)
-    float Value;                                                                      // 0x0168 (size: 0x4)
-    FCachedRigElement CachedCurveIndex;                                               // 0x0170 (size: 0x20)
+    FName Curve;                                                                      // 0x0010 (size: 0x8)
+    float Value;                                                                      // 0x0018 (size: 0x4)
+    FCachedRigElement CachedCurveIndex;                                               // 0x0020 (size: 0x20)
 
-}; // Size: 0x190
+}; // Size: 0x40
+
+struct FRigUnit_SetDefaultMatch : public FRigUnitMutable
+{
+    FRigElementKey Default;                                                           // 0x0010 (size: 0xC)
+
+}; // Size: 0x20
 
 struct FRigUnit_SetDefaultParent : public FRigUnit_DynamicHierarchyBaseMutable
 {
-    FRigElementKey Child;                                                             // 0x0160 (size: 0xC)
-    FRigElementKey Parent;                                                            // 0x016C (size: 0xC)
+    FRigElementKey Child;                                                             // 0x0010 (size: 0xC)
+    FRigElementKey Parent;                                                            // 0x001C (size: 0xC)
 
-}; // Size: 0x180
+}; // Size: 0x28
 
 struct FRigUnit_SetFloatAnimationChannel : public FRigUnit_SetAnimationChannelBase
 {
-    float Value;                                                                      // 0x0180 (size: 0x4)
+    float Value;                                                                      // 0x0038 (size: 0x4)
 
-}; // Size: 0x190
+}; // Size: 0x40
+
+struct FRigUnit_SetFloatAnimationChannelFromItem : public FRigUnit_SetAnimationChannelBaseFromItem
+{
+    float Value;                                                                      // 0x0020 (size: 0x4)
+
+}; // Size: 0x28
 
 struct FRigUnit_SetIntAnimationChannel : public FRigUnit_SetAnimationChannelBase
 {
-    int32 Value;                                                                      // 0x0180 (size: 0x4)
+    int32 Value;                                                                      // 0x0038 (size: 0x4)
 
-}; // Size: 0x190
+}; // Size: 0x40
+
+struct FRigUnit_SetIntAnimationChannelFromItem : public FRigUnit_SetAnimationChannelBaseFromItem
+{
+    int32 Value;                                                                      // 0x0020 (size: 0x4)
+
+}; // Size: 0x28
 
 struct FRigUnit_SetMetadataTag : public FRigUnitMutable
 {
-    FRigElementKey Item;                                                              // 0x0160 (size: 0xC)
-    FName Tag;                                                                        // 0x016C (size: 0x8)
-    FCachedRigElement CachedIndex;                                                    // 0x0178 (size: 0x20)
+    FRigElementKey Item;                                                              // 0x0010 (size: 0xC)
+    FName Tag;                                                                        // 0x001C (size: 0x8)
+    ERigMetaDataNameSpace Namespace;                                                  // 0x0024 (size: 0x1)
+    FCachedRigElement CachedIndex;                                                    // 0x0028 (size: 0x20)
 
-}; // Size: 0x1A0
+}; // Size: 0x48
 
 struct FRigUnit_SetMetadataTagArray : public FRigUnitMutable
 {
-    FRigElementKey Item;                                                              // 0x0160 (size: 0xC)
-    TArray<FName> Tags;                                                               // 0x0170 (size: 0x10)
-    FCachedRigElement CachedIndex;                                                    // 0x0180 (size: 0x20)
+    FRigElementKey Item;                                                              // 0x0010 (size: 0xC)
+    TArray<FName> Tags;                                                               // 0x0020 (size: 0x10)
+    ERigMetaDataNameSpace Namespace;                                                  // 0x0030 (size: 0x1)
+    FCachedRigElement CachedIndex;                                                    // 0x0038 (size: 0x20)
 
-}; // Size: 0x1A0
+}; // Size: 0x58
 
 struct FRigUnit_SetMultiControlBool : public FRigUnitMutable
 {
-    TArray<FRigUnit_SetMultiControlBool_Entry> Entries;                               // 0x0160 (size: 0x10)
-    TArray<FCachedRigElement> CachedControlIndices;                                   // 0x0170 (size: 0x10)
+    TArray<FRigUnit_SetMultiControlBool_Entry> Entries;                               // 0x0010 (size: 0x10)
+    TArray<FCachedRigElement> CachedControlIndices;                                   // 0x0020 (size: 0x10)
 
-}; // Size: 0x180
+}; // Size: 0x30
 
 struct FRigUnit_SetMultiControlBool_Entry
 {
@@ -3661,11 +4473,11 @@ struct FRigUnit_SetMultiControlBool_Entry
 
 struct FRigUnit_SetMultiControlFloat : public FRigUnitMutable
 {
-    TArray<FRigUnit_SetMultiControlFloat_Entry> Entries;                              // 0x0160 (size: 0x10)
-    float Weight;                                                                     // 0x0170 (size: 0x4)
-    TArray<FCachedRigElement> CachedControlIndices;                                   // 0x0178 (size: 0x10)
+    TArray<FRigUnit_SetMultiControlFloat_Entry> Entries;                              // 0x0010 (size: 0x10)
+    float Weight;                                                                     // 0x0020 (size: 0x4)
+    TArray<FCachedRigElement> CachedControlIndices;                                   // 0x0028 (size: 0x10)
 
-}; // Size: 0x190
+}; // Size: 0x38
 
 struct FRigUnit_SetMultiControlFloat_Entry
 {
@@ -3676,11 +4488,11 @@ struct FRigUnit_SetMultiControlFloat_Entry
 
 struct FRigUnit_SetMultiControlInteger : public FRigUnitMutable
 {
-    TArray<FRigUnit_SetMultiControlInteger_Entry> Entries;                            // 0x0160 (size: 0x10)
-    float Weight;                                                                     // 0x0170 (size: 0x4)
-    TArray<FCachedRigElement> CachedControlIndices;                                   // 0x0178 (size: 0x10)
+    TArray<FRigUnit_SetMultiControlInteger_Entry> Entries;                            // 0x0010 (size: 0x10)
+    float Weight;                                                                     // 0x0020 (size: 0x4)
+    TArray<FCachedRigElement> CachedControlIndices;                                   // 0x0028 (size: 0x10)
 
-}; // Size: 0x190
+}; // Size: 0x38
 
 struct FRigUnit_SetMultiControlInteger_Entry
 {
@@ -3691,11 +4503,11 @@ struct FRigUnit_SetMultiControlInteger_Entry
 
 struct FRigUnit_SetMultiControlRotator : public FRigUnitMutable
 {
-    TArray<FRigUnit_SetMultiControlRotator_Entry> Entries;                            // 0x0160 (size: 0x10)
-    float Weight;                                                                     // 0x0170 (size: 0x4)
-    TArray<FCachedRigElement> CachedControlIndices;                                   // 0x0178 (size: 0x10)
+    TArray<FRigUnit_SetMultiControlRotator_Entry> Entries;                            // 0x0010 (size: 0x10)
+    float Weight;                                                                     // 0x0020 (size: 0x4)
+    TArray<FCachedRigElement> CachedControlIndices;                                   // 0x0028 (size: 0x10)
 
-}; // Size: 0x190
+}; // Size: 0x38
 
 struct FRigUnit_SetMultiControlRotator_Entry
 {
@@ -3707,11 +4519,11 @@ struct FRigUnit_SetMultiControlRotator_Entry
 
 struct FRigUnit_SetMultiControlVector2D : public FRigUnitMutable
 {
-    TArray<FRigUnit_SetMultiControlVector2D_Entry> Entries;                           // 0x0160 (size: 0x10)
-    float Weight;                                                                     // 0x0170 (size: 0x4)
-    TArray<FCachedRigElement> CachedControlIndices;                                   // 0x0178 (size: 0x10)
+    TArray<FRigUnit_SetMultiControlVector2D_Entry> Entries;                           // 0x0010 (size: 0x10)
+    float Weight;                                                                     // 0x0020 (size: 0x4)
+    TArray<FCachedRigElement> CachedControlIndices;                                   // 0x0028 (size: 0x10)
 
-}; // Size: 0x190
+}; // Size: 0x38
 
 struct FRigUnit_SetMultiControlVector2D_Entry
 {
@@ -3722,188 +4534,211 @@ struct FRigUnit_SetMultiControlVector2D_Entry
 
 struct FRigUnit_SetRelativeBoneTransform : public FRigUnitMutable
 {
-    FName bone;                                                                       // 0x0160 (size: 0x8)
-    FName Space;                                                                      // 0x0168 (size: 0x8)
-    FTransform Transform;                                                             // 0x0170 (size: 0x60)
-    float Weight;                                                                     // 0x01D0 (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x01D4 (size: 0x1)
-    FCachedRigElement CachedBone;                                                     // 0x01D8 (size: 0x20)
-    FCachedRigElement CachedSpaceIndex;                                               // 0x01F8 (size: 0x20)
+    FName bone;                                                                       // 0x0010 (size: 0x8)
+    FName Space;                                                                      // 0x0018 (size: 0x8)
+    FTransform Transform;                                                             // 0x0020 (size: 0x60)
+    float Weight;                                                                     // 0x0080 (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x0084 (size: 0x1)
+    FCachedRigElement CachedBone;                                                     // 0x0088 (size: 0x20)
+    FCachedRigElement CachedSpaceIndex;                                               // 0x00A8 (size: 0x20)
 
-}; // Size: 0x220
+}; // Size: 0xD0
 
 struct FRigUnit_SetRelativeRotationForItem : public FRigUnitMutable
 {
-    FRigElementKey Child;                                                             // 0x0160 (size: 0xC)
-    FRigElementKey Parent;                                                            // 0x016C (size: 0xC)
-    bool bParentInitial;                                                              // 0x0178 (size: 0x1)
-    FQuat Value;                                                                      // 0x0180 (size: 0x20)
-    float Weight;                                                                     // 0x01A0 (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x01A4 (size: 0x1)
-    FCachedRigElement CachedChild;                                                    // 0x01A8 (size: 0x20)
-    FCachedRigElement CachedParent;                                                   // 0x01C8 (size: 0x20)
+    FRigElementKey Child;                                                             // 0x0010 (size: 0xC)
+    FRigElementKey Parent;                                                            // 0x001C (size: 0xC)
+    bool bParentInitial;                                                              // 0x0028 (size: 0x1)
+    FQuat Value;                                                                      // 0x0030 (size: 0x20)
+    float Weight;                                                                     // 0x0050 (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x0054 (size: 0x1)
+    FCachedRigElement CachedChild;                                                    // 0x0058 (size: 0x20)
+    FCachedRigElement CachedParent;                                                   // 0x0078 (size: 0x20)
 
-}; // Size: 0x1F0
+}; // Size: 0xA0
 
 struct FRigUnit_SetRelativeTransformForItem : public FRigUnitMutable
 {
-    FRigElementKey Child;                                                             // 0x0160 (size: 0xC)
-    FRigElementKey Parent;                                                            // 0x016C (size: 0xC)
-    bool bParentInitial;                                                              // 0x0178 (size: 0x1)
-    FTransform Value;                                                                 // 0x0180 (size: 0x60)
-    float Weight;                                                                     // 0x01E0 (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x01E4 (size: 0x1)
-    FCachedRigElement CachedChild;                                                    // 0x01E8 (size: 0x20)
-    FCachedRigElement CachedParent;                                                   // 0x0208 (size: 0x20)
+    FRigElementKey Child;                                                             // 0x0010 (size: 0xC)
+    FRigElementKey Parent;                                                            // 0x001C (size: 0xC)
+    bool bParentInitial;                                                              // 0x0028 (size: 0x1)
+    FTransform Value;                                                                 // 0x0030 (size: 0x60)
+    float Weight;                                                                     // 0x0090 (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x0094 (size: 0x1)
+    FCachedRigElement CachedChild;                                                    // 0x0098 (size: 0x20)
+    FCachedRigElement CachedParent;                                                   // 0x00B8 (size: 0x20)
 
-}; // Size: 0x230
+}; // Size: 0xE0
 
 struct FRigUnit_SetRelativeTranslationForItem : public FRigUnitMutable
 {
-    FRigElementKey Child;                                                             // 0x0160 (size: 0xC)
-    FRigElementKey Parent;                                                            // 0x016C (size: 0xC)
-    bool bParentInitial;                                                              // 0x0178 (size: 0x1)
-    FVector Value;                                                                    // 0x0180 (size: 0x18)
-    float Weight;                                                                     // 0x0198 (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x019C (size: 0x1)
-    FCachedRigElement CachedChild;                                                    // 0x01A0 (size: 0x20)
-    FCachedRigElement CachedParent;                                                   // 0x01C0 (size: 0x20)
+    FRigElementKey Child;                                                             // 0x0010 (size: 0xC)
+    FRigElementKey Parent;                                                            // 0x001C (size: 0xC)
+    bool bParentInitial;                                                              // 0x0028 (size: 0x1)
+    FVector Value;                                                                    // 0x0030 (size: 0x18)
+    float Weight;                                                                     // 0x0048 (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x004C (size: 0x1)
+    FCachedRigElement CachedChild;                                                    // 0x0050 (size: 0x20)
+    FCachedRigElement CachedParent;                                                   // 0x0070 (size: 0x20)
 
-}; // Size: 0x1E0
+}; // Size: 0x90
 
 struct FRigUnit_SetRotation : public FRigUnitMutable
 {
-    FRigElementKey Item;                                                              // 0x0160 (size: 0xC)
-    ERigVMTransformSpace Space;                                                       // 0x016C (size: 0x1)
-    bool bInitial;                                                                    // 0x016D (size: 0x1)
-    FQuat Value;                                                                      // 0x0170 (size: 0x20)
-    float Weight;                                                                     // 0x0190 (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x0194 (size: 0x1)
-    FCachedRigElement CachedIndex;                                                    // 0x0198 (size: 0x20)
+    FRigElementKey Item;                                                              // 0x0010 (size: 0xC)
+    ERigVMTransformSpace Space;                                                       // 0x001C (size: 0x1)
+    bool bInitial;                                                                    // 0x001D (size: 0x1)
+    FQuat Value;                                                                      // 0x0020 (size: 0x20)
+    float Weight;                                                                     // 0x0040 (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x0044 (size: 0x1)
+    FCachedRigElement CachedIndex;                                                    // 0x0048 (size: 0x20)
 
-}; // Size: 0x1C0
+}; // Size: 0x70
 
 struct FRigUnit_SetRotatorAnimationChannel : public FRigUnit_SetAnimationChannelBase
 {
-    FRotator Value;                                                                   // 0x0180 (size: 0x18)
+    FRotator Value;                                                                   // 0x0038 (size: 0x18)
 
-}; // Size: 0x1A0
+}; // Size: 0x50
+
+struct FRigUnit_SetRotatorAnimationChannelFromItem : public FRigUnit_SetAnimationChannelBaseFromItem
+{
+    FRotator Value;                                                                   // 0x0020 (size: 0x18)
+
+}; // Size: 0x38
 
 struct FRigUnit_SetScale : public FRigUnitMutable
 {
-    FRigElementKey Item;                                                              // 0x0160 (size: 0xC)
-    ERigVMTransformSpace Space;                                                       // 0x016C (size: 0x1)
-    bool bInitial;                                                                    // 0x016D (size: 0x1)
-    FVector Scale;                                                                    // 0x0170 (size: 0x18)
-    float Weight;                                                                     // 0x0188 (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x018C (size: 0x1)
-    FCachedRigElement CachedIndex;                                                    // 0x0190 (size: 0x20)
+    FRigElementKey Item;                                                              // 0x0010 (size: 0xC)
+    ERigVMTransformSpace Space;                                                       // 0x001C (size: 0x1)
+    bool bInitial;                                                                    // 0x001D (size: 0x1)
+    FVector Scale;                                                                    // 0x0020 (size: 0x18)
+    float Weight;                                                                     // 0x0038 (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x003C (size: 0x1)
+    FCachedRigElement CachedIndex;                                                    // 0x0040 (size: 0x20)
 
-}; // Size: 0x1B0
+}; // Size: 0x60
 
 struct FRigUnit_SetShapeTransform : public FRigUnitMutable
 {
-    FName Control;                                                                    // 0x0160 (size: 0x8)
-    FTransform Transform;                                                             // 0x0170 (size: 0x60)
-    FCachedRigElement CachedControlIndex;                                             // 0x01D0 (size: 0x20)
+    FName Control;                                                                    // 0x0010 (size: 0x8)
+    FTransform Transform;                                                             // 0x0020 (size: 0x60)
+    FCachedRigElement CachedControlIndex;                                             // 0x0080 (size: 0x20)
 
-}; // Size: 0x1F0
+}; // Size: 0xA0
 
 struct FRigUnit_SetSpaceInitialTransform : public FRigUnitMutable
 {
-    FName SpaceName;                                                                  // 0x0160 (size: 0x8)
-    FTransform Transform;                                                             // 0x0170 (size: 0x60)
-    FTransform Result;                                                                // 0x01D0 (size: 0x60)
-    ERigVMTransformSpace Space;                                                       // 0x0230 (size: 0x1)
-    FCachedRigElement CachedSpaceIndex;                                               // 0x0238 (size: 0x20)
+    FName SpaceName;                                                                  // 0x0010 (size: 0x8)
+    FTransform Transform;                                                             // 0x0020 (size: 0x60)
+    FTransform Result;                                                                // 0x0080 (size: 0x60)
+    ERigVMTransformSpace Space;                                                       // 0x00E0 (size: 0x1)
+    FCachedRigElement CachedSpaceIndex;                                               // 0x00E8 (size: 0x20)
 
-}; // Size: 0x260
+}; // Size: 0x110
 
 struct FRigUnit_SetSpaceTransform : public FRigUnitMutable
 {
-    FName Space;                                                                      // 0x0160 (size: 0x8)
-    float Weight;                                                                     // 0x0168 (size: 0x4)
-    FTransform Transform;                                                             // 0x0170 (size: 0x60)
-    ERigVMTransformSpace SpaceType;                                                   // 0x01D0 (size: 0x1)
-    FCachedRigElement CachedSpaceIndex;                                               // 0x01D8 (size: 0x20)
+    FName Space;                                                                      // 0x0010 (size: 0x8)
+    float Weight;                                                                     // 0x0018 (size: 0x4)
+    FTransform Transform;                                                             // 0x0020 (size: 0x60)
+    ERigVMTransformSpace SpaceType;                                                   // 0x0080 (size: 0x1)
+    FCachedRigElement CachedSpaceIndex;                                               // 0x0088 (size: 0x20)
 
-}; // Size: 0x200
+}; // Size: 0xB0
 
 struct FRigUnit_SetTransform : public FRigUnitMutable
 {
-    FRigElementKey Item;                                                              // 0x0160 (size: 0xC)
-    ERigVMTransformSpace Space;                                                       // 0x016C (size: 0x1)
-    bool bInitial;                                                                    // 0x016D (size: 0x1)
-    FTransform Value;                                                                 // 0x0170 (size: 0x60)
-    float Weight;                                                                     // 0x01D0 (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x01D4 (size: 0x1)
-    FCachedRigElement CachedIndex;                                                    // 0x01D8 (size: 0x20)
+    FRigElementKey Item;                                                              // 0x0010 (size: 0xC)
+    ERigVMTransformSpace Space;                                                       // 0x001C (size: 0x1)
+    bool bInitial;                                                                    // 0x001D (size: 0x1)
+    FTransform Value;                                                                 // 0x0020 (size: 0x60)
+    float Weight;                                                                     // 0x0080 (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x0084 (size: 0x1)
+    FCachedRigElement CachedIndex;                                                    // 0x0088 (size: 0x20)
 
-}; // Size: 0x200
+}; // Size: 0xB0
 
 struct FRigUnit_SetTransformAnimationChannel : public FRigUnit_SetAnimationChannelBase
 {
-    FTransform Value;                                                                 // 0x0180 (size: 0x60)
+    FTransform Value;                                                                 // 0x0040 (size: 0x60)
 
-}; // Size: 0x1E0
+}; // Size: 0xA0
+
+struct FRigUnit_SetTransformAnimationChannelFromItem : public FRigUnit_SetAnimationChannelBaseFromItem
+{
+    FTransform Value;                                                                 // 0x0020 (size: 0x60)
+
+}; // Size: 0x80
 
 struct FRigUnit_SetTransformArray : public FRigUnitMutable
 {
-    FRigElementKeyCollection Items;                                                   // 0x0160 (size: 0x10)
-    ERigVMTransformSpace Space;                                                       // 0x0170 (size: 0x1)
-    bool bInitial;                                                                    // 0x0171 (size: 0x1)
-    TArray<FTransform> Transforms;                                                    // 0x0178 (size: 0x10)
-    float Weight;                                                                     // 0x0188 (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x018C (size: 0x1)
-    TArray<FCachedRigElement> CachedIndex;                                            // 0x0190 (size: 0x10)
+    FRigElementKeyCollection Items;                                                   // 0x0010 (size: 0x10)
+    ERigVMTransformSpace Space;                                                       // 0x0020 (size: 0x1)
+    bool bInitial;                                                                    // 0x0021 (size: 0x1)
+    TArray<FTransform> Transforms;                                                    // 0x0028 (size: 0x10)
+    float Weight;                                                                     // 0x0038 (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x003C (size: 0x1)
+    TArray<FCachedRigElement> CachedIndex;                                            // 0x0040 (size: 0x10)
 
-}; // Size: 0x1A0
+}; // Size: 0x50
 
 struct FRigUnit_SetTransformItemArray : public FRigUnitMutable
 {
-    TArray<FRigElementKey> Items;                                                     // 0x0160 (size: 0x10)
-    ERigVMTransformSpace Space;                                                       // 0x0170 (size: 0x1)
-    bool bInitial;                                                                    // 0x0171 (size: 0x1)
-    TArray<FTransform> Transforms;                                                    // 0x0178 (size: 0x10)
-    float Weight;                                                                     // 0x0188 (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x018C (size: 0x1)
-    TArray<FCachedRigElement> CachedIndex;                                            // 0x0190 (size: 0x10)
+    TArray<FRigElementKey> Items;                                                     // 0x0010 (size: 0x10)
+    ERigVMTransformSpace Space;                                                       // 0x0020 (size: 0x1)
+    bool bInitial;                                                                    // 0x0021 (size: 0x1)
+    TArray<FTransform> Transforms;                                                    // 0x0028 (size: 0x10)
+    float Weight;                                                                     // 0x0038 (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x003C (size: 0x1)
+    TArray<FCachedRigElement> CachedIndex;                                            // 0x0040 (size: 0x10)
 
-}; // Size: 0x1A0
+}; // Size: 0x50
 
 struct FRigUnit_SetTranslation : public FRigUnitMutable
 {
-    FRigElementKey Item;                                                              // 0x0160 (size: 0xC)
-    ERigVMTransformSpace Space;                                                       // 0x016C (size: 0x1)
-    bool bInitial;                                                                    // 0x016D (size: 0x1)
-    FVector Value;                                                                    // 0x0170 (size: 0x18)
-    float Weight;                                                                     // 0x0188 (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x018C (size: 0x1)
-    FCachedRigElement CachedIndex;                                                    // 0x0190 (size: 0x20)
+    FRigElementKey Item;                                                              // 0x0010 (size: 0xC)
+    ERigVMTransformSpace Space;                                                       // 0x001C (size: 0x1)
+    bool bInitial;                                                                    // 0x001D (size: 0x1)
+    FVector Value;                                                                    // 0x0020 (size: 0x18)
+    float Weight;                                                                     // 0x0038 (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x003C (size: 0x1)
+    FCachedRigElement CachedIndex;                                                    // 0x0040 (size: 0x20)
 
-}; // Size: 0x1B0
+}; // Size: 0x60
 
 struct FRigUnit_SetVector2DAnimationChannel : public FRigUnit_SetAnimationChannelBase
 {
-    FVector2D Value;                                                                  // 0x0180 (size: 0x10)
+    FVector2D Value;                                                                  // 0x0038 (size: 0x10)
 
-}; // Size: 0x190
+}; // Size: 0x48
+
+struct FRigUnit_SetVector2DAnimationChannelFromItem : public FRigUnit_SetAnimationChannelBaseFromItem
+{
+    FVector2D Value;                                                                  // 0x0020 (size: 0x10)
+
+}; // Size: 0x30
 
 struct FRigUnit_SetVectorAnimationChannel : public FRigUnit_SetAnimationChannelBase
 {
-    FVector Value;                                                                    // 0x0180 (size: 0x18)
+    FVector Value;                                                                    // 0x0038 (size: 0x18)
 
-}; // Size: 0x1A0
+}; // Size: 0x50
+
+struct FRigUnit_SetVectorAnimationChannelFromItem : public FRigUnit_SetAnimationChannelBaseFromItem
+{
+    FVector Value;                                                                    // 0x0020 (size: 0x18)
+
+}; // Size: 0x38
 
 struct FRigUnit_SetupShapeLibraryFromUserData : public FRigUnitMutable
 {
-    FString Namespace;                                                                // 0x0160 (size: 0x10)
-    FString Path;                                                                     // 0x0170 (size: 0x10)
-    FString LibraryName;                                                              // 0x0180 (size: 0x10)
-    bool ReplaceExisting;                                                             // 0x0190 (size: 0x1)
-    bool LogShapeLibraries;                                                           // 0x0191 (size: 0x1)
+    FString Namespace;                                                                // 0x0010 (size: 0x10)
+    FString Path;                                                                     // 0x0020 (size: 0x10)
+    FString LibraryName;                                                              // 0x0030 (size: 0x10)
+    bool LogShapeLibraries;                                                           // 0x0040 (size: 0x1)
 
-}; // Size: 0x1A0
+}; // Size: 0x48
 
 struct FRigUnit_ShapeExists : public FRigUnit
 {
@@ -3914,31 +4749,31 @@ struct FRigUnit_ShapeExists : public FRigUnit
 
 struct FRigUnit_SlideChain : public FRigUnit_HighlevelBaseMutable
 {
-    FName StartBone;                                                                  // 0x0160 (size: 0x8)
-    FName EndBone;                                                                    // 0x0168 (size: 0x8)
-    float SlideAmount;                                                                // 0x0170 (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x0174 (size: 0x1)
-    FRigUnit_SlideChain_WorkData WorkData;                                            // 0x0178 (size: 0x48)
+    FName StartBone;                                                                  // 0x0010 (size: 0x8)
+    FName EndBone;                                                                    // 0x0018 (size: 0x8)
+    float SlideAmount;                                                                // 0x0020 (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x0024 (size: 0x1)
+    FRigUnit_SlideChain_WorkData WorkData;                                            // 0x0028 (size: 0x48)
 
-}; // Size: 0x1C0
+}; // Size: 0x70
 
 struct FRigUnit_SlideChainItemArray : public FRigUnit_HighlevelBaseMutable
 {
-    TArray<FRigElementKey> Items;                                                     // 0x0160 (size: 0x10)
-    float SlideAmount;                                                                // 0x0170 (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x0174 (size: 0x1)
-    FRigUnit_SlideChain_WorkData WorkData;                                            // 0x0178 (size: 0x48)
+    TArray<FRigElementKey> Items;                                                     // 0x0010 (size: 0x10)
+    float SlideAmount;                                                                // 0x0020 (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x0024 (size: 0x1)
+    FRigUnit_SlideChain_WorkData WorkData;                                            // 0x0028 (size: 0x48)
 
-}; // Size: 0x1C0
+}; // Size: 0x70
 
 struct FRigUnit_SlideChainPerItem : public FRigUnit_HighlevelBaseMutable
 {
-    FRigElementKeyCollection Items;                                                   // 0x0160 (size: 0x10)
-    float SlideAmount;                                                                // 0x0170 (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x0174 (size: 0x1)
-    FRigUnit_SlideChain_WorkData WorkData;                                            // 0x0178 (size: 0x48)
+    FRigElementKeyCollection Items;                                                   // 0x0010 (size: 0x10)
+    float SlideAmount;                                                                // 0x0020 (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x0024 (size: 0x1)
+    FRigUnit_SlideChain_WorkData WorkData;                                            // 0x0028 (size: 0x48)
 
-}; // Size: 0x1C0
+}; // Size: 0x70
 
 struct FRigUnit_SlideChain_WorkData
 {
@@ -3965,8 +4800,9 @@ struct FRigUnit_SphereTraceByObjectTypes : public FRigUnit
     bool bHit;                                                                        // 0x004C (size: 0x1)
     FVector HitLocation;                                                              // 0x0050 (size: 0x18)
     FVector HitNormal;                                                                // 0x0068 (size: 0x18)
+    FRigUnit_SphereTrace_WorkData WorkData;                                           // 0x0080 (size: 0x38)
 
-}; // Size: 0x80
+}; // Size: 0xB8
 
 struct FRigUnit_SphereTraceByTraceChannel : public FRigUnit
 {
@@ -3977,8 +4813,9 @@ struct FRigUnit_SphereTraceByTraceChannel : public FRigUnit
     bool bHit;                                                                        // 0x0040 (size: 0x1)
     FVector HitLocation;                                                              // 0x0048 (size: 0x18)
     FVector HitNormal;                                                                // 0x0060 (size: 0x18)
+    FRigUnit_SphereTrace_WorkData WorkData;                                           // 0x0078 (size: 0x38)
 
-}; // Size: 0x78
+}; // Size: 0xB0
 
 struct FRigUnit_SphereTraceWorld : public FRigUnit
 {
@@ -3989,59 +4826,69 @@ struct FRigUnit_SphereTraceWorld : public FRigUnit
     bool bHit;                                                                        // 0x0040 (size: 0x1)
     FVector HitLocation;                                                              // 0x0048 (size: 0x18)
     FVector HitNormal;                                                                // 0x0060 (size: 0x18)
+    FRigUnit_SphereTrace_WorkData WorkData;                                           // 0x0078 (size: 0x38)
 
-}; // Size: 0x78
+}; // Size: 0xB0
+
+struct FRigUnit_SphereTrace_WorkData
+{
+    uint32 Hash;                                                                      // 0x0000 (size: 0x4)
+    bool bHit;                                                                        // 0x0004 (size: 0x1)
+    FVector HitLocation;                                                              // 0x0008 (size: 0x18)
+    FVector HitNormal;                                                                // 0x0020 (size: 0x18)
+
+}; // Size: 0x38
 
 struct FRigUnit_SphericalPoseReader : public FRigUnit_HighlevelBaseMutable
 {
-    float OutputParam;                                                                // 0x0160 (size: 0x4)
-    FRigElementKey DriverItem;                                                        // 0x0164 (size: 0xC)
-    FVector DriverAxis;                                                               // 0x0170 (size: 0x18)
-    FVector RotationOffset;                                                           // 0x0188 (size: 0x18)
-    float ActiveRegionSize;                                                           // 0x01A0 (size: 0x4)
-    FRegionScaleFactors ActiveRegionScaleFactors;                                     // 0x01A4 (size: 0x10)
-    float FalloffSize;                                                                // 0x01B4 (size: 0x4)
-    FRegionScaleFactors FalloffRegionScaleFactors;                                    // 0x01B8 (size: 0x10)
-    bool FlipWidthScaling;                                                            // 0x01C8 (size: 0x1)
-    bool FlipHeightScaling;                                                           // 0x01C9 (size: 0x1)
-    FRigElementKey OptionalParentItem;                                                // 0x01CC (size: 0xC)
-    FSphericalPoseReaderDebugSettings Debug;                                          // 0x01D8 (size: 0x10)
-    FSphericalRegion InnerRegion;                                                     // 0x01E8 (size: 0x14)
-    FSphericalRegion OuterRegion;                                                     // 0x01FC (size: 0x14)
-    FVector DriverNormal;                                                             // 0x0210 (size: 0x18)
-    FVector Driver2D;                                                                 // 0x0228 (size: 0x18)
-    FCachedRigElement DriverCache;                                                    // 0x0240 (size: 0x20)
-    FCachedRigElement OptionalParentCache;                                            // 0x0260 (size: 0x20)
-    FTransform LocalDriverTransformInit;                                              // 0x0280 (size: 0x60)
-    FVector CachedRotationOffset;                                                     // 0x02E0 (size: 0x18)
-    bool bCachedInitTransforms;                                                       // 0x02F8 (size: 0x1)
+    float OutputParam;                                                                // 0x0010 (size: 0x4)
+    FRigElementKey DriverItem;                                                        // 0x0014 (size: 0xC)
+    FVector DriverAxis;                                                               // 0x0020 (size: 0x18)
+    FVector RotationOffset;                                                           // 0x0038 (size: 0x18)
+    float ActiveRegionSize;                                                           // 0x0050 (size: 0x4)
+    FRegionScaleFactors ActiveRegionScaleFactors;                                     // 0x0054 (size: 0x10)
+    float FalloffSize;                                                                // 0x0064 (size: 0x4)
+    FRegionScaleFactors FalloffRegionScaleFactors;                                    // 0x0068 (size: 0x10)
+    bool FlipWidthScaling;                                                            // 0x0078 (size: 0x1)
+    bool FlipHeightScaling;                                                           // 0x0079 (size: 0x1)
+    FRigElementKey OptionalParentItem;                                                // 0x007C (size: 0xC)
+    FSphericalPoseReaderDebugSettings Debug;                                          // 0x0088 (size: 0x10)
+    FSphericalRegion InnerRegion;                                                     // 0x0098 (size: 0x14)
+    FSphericalRegion OuterRegion;                                                     // 0x00AC (size: 0x14)
+    FVector DriverNormal;                                                             // 0x00C0 (size: 0x18)
+    FVector Driver2D;                                                                 // 0x00D8 (size: 0x18)
+    FCachedRigElement DriverCache;                                                    // 0x00F0 (size: 0x20)
+    FCachedRigElement OptionalParentCache;                                            // 0x0110 (size: 0x20)
+    FTransform LocalDriverTransformInit;                                              // 0x0130 (size: 0x60)
+    FVector CachedRotationOffset;                                                     // 0x0190 (size: 0x18)
+    bool bCachedInitTransforms;                                                       // 0x01A8 (size: 0x1)
 
-}; // Size: 0x300
+}; // Size: 0x1B0
 
 struct FRigUnit_SpringIK : public FRigUnit_HighlevelBaseMutable
 {
-    FName StartBone;                                                                  // 0x0160 (size: 0x8)
-    FName EndBone;                                                                    // 0x0168 (size: 0x8)
-    float HierarchyStrength;                                                          // 0x0170 (size: 0x4)
-    float EffectorStrength;                                                           // 0x0174 (size: 0x4)
-    float EffectorRatio;                                                              // 0x0178 (size: 0x4)
-    float RootStrength;                                                               // 0x017C (size: 0x4)
-    float RootRatio;                                                                  // 0x0180 (size: 0x4)
-    float Damping;                                                                    // 0x0184 (size: 0x4)
-    FVector PoleVector;                                                               // 0x0188 (size: 0x18)
-    bool bFlipPolePlane;                                                              // 0x01A0 (size: 0x1)
-    EControlRigVectorKind PoleVectorKind;                                             // 0x01A1 (size: 0x1)
-    FName PoleVectorSpace;                                                            // 0x01A4 (size: 0x8)
-    FVector PrimaryAxis;                                                              // 0x01B0 (size: 0x18)
-    FVector SecondaryAxis;                                                            // 0x01C8 (size: 0x18)
-    bool bLiveSimulation;                                                             // 0x01E0 (size: 0x1)
-    int32 Iterations;                                                                 // 0x01E4 (size: 0x4)
-    bool bLimitLocalPosition;                                                         // 0x01E8 (size: 0x1)
-    bool bPropagateToChildren;                                                        // 0x01E9 (size: 0x1)
-    FRigUnit_SpringIK_DebugSettings DebugSettings;                                    // 0x01F0 (size: 0x80)
-    FRigUnit_SpringIK_WorkData WorkData;                                              // 0x0270 (size: 0xB8)
+    FName StartBone;                                                                  // 0x0010 (size: 0x8)
+    FName EndBone;                                                                    // 0x0018 (size: 0x8)
+    float HierarchyStrength;                                                          // 0x0020 (size: 0x4)
+    float EffectorStrength;                                                           // 0x0024 (size: 0x4)
+    float EffectorRatio;                                                              // 0x0028 (size: 0x4)
+    float RootStrength;                                                               // 0x002C (size: 0x4)
+    float RootRatio;                                                                  // 0x0030 (size: 0x4)
+    float Damping;                                                                    // 0x0034 (size: 0x4)
+    FVector PoleVector;                                                               // 0x0038 (size: 0x18)
+    bool bFlipPolePlane;                                                              // 0x0050 (size: 0x1)
+    EControlRigVectorKind PoleVectorKind;                                             // 0x0051 (size: 0x1)
+    FName PoleVectorSpace;                                                            // 0x0054 (size: 0x8)
+    FVector PrimaryAxis;                                                              // 0x0060 (size: 0x18)
+    FVector SecondaryAxis;                                                            // 0x0078 (size: 0x18)
+    bool bLiveSimulation;                                                             // 0x0090 (size: 0x1)
+    int32 Iterations;                                                                 // 0x0094 (size: 0x4)
+    bool bLimitLocalPosition;                                                         // 0x0098 (size: 0x1)
+    bool bPropagateToChildren;                                                        // 0x0099 (size: 0x1)
+    FRigUnit_SpringIK_DebugSettings DebugSettings;                                    // 0x00A0 (size: 0x80)
+    FRigUnit_SpringIK_WorkData WorkData;                                              // 0x0120 (size: 0xB8)
 
-}; // Size: 0x330
+}; // Size: 0x1E0
 
 struct FRigUnit_SpringIK_DebugSettings
 {
@@ -4138,7 +4985,7 @@ struct FRigUnit_SpringInterpVectorV2 : public FRigVMFunction_SimBase
 
 struct FRigUnit_StartProfilingTimer : public FRigVMFunction_DebugBaseMutable
 {
-}; // Size: 0x100
+}; // Size: 0x18
 
 struct FRigUnit_Subtract_FloatFloat : public FRigUnit_BinaryFloatOp
 {
@@ -4150,12 +4997,12 @@ struct FRigUnit_Subtract_VectorVector : public FRigUnit_BinaryVectorOp
 
 struct FRigUnit_SwitchParent : public FRigUnit_DynamicHierarchyBaseMutable
 {
-    ERigSwitchParentMode Mode;                                                        // 0x0160 (size: 0x1)
-    FRigElementKey Child;                                                             // 0x0164 (size: 0xC)
-    FRigElementKey Parent;                                                            // 0x0170 (size: 0xC)
-    bool bMaintainGlobal;                                                             // 0x017C (size: 0x1)
+    ERigSwitchParentMode Mode;                                                        // 0x0010 (size: 0x1)
+    FRigElementKey Child;                                                             // 0x0014 (size: 0xC)
+    FRigElementKey Parent;                                                            // 0x0020 (size: 0xC)
+    bool bMaintainGlobal;                                                             // 0x002C (size: 0x1)
 
-}; // Size: 0x180
+}; // Size: 0x30
 
 struct FRigUnit_ToRigSpace_Location : public FRigUnit
 {
@@ -4210,27 +5057,27 @@ struct FRigUnit_ToWorldSpace_Transform : public FRigUnit
 
 struct FRigUnit_TransformConstraint : public FRigUnit_HighlevelBaseMutable
 {
-    FName bone;                                                                       // 0x0160 (size: 0x8)
-    ETransformSpaceMode BaseTransformSpace;                                           // 0x0168 (size: 0x1)
-    FTransform BaseTransform;                                                         // 0x0170 (size: 0x60)
-    FName BaseBone;                                                                   // 0x01D0 (size: 0x8)
-    TArray<FConstraintTarget> Targets;                                                // 0x01D8 (size: 0x10)
-    bool bUseInitialTransforms;                                                       // 0x01E8 (size: 0x1)
-    FRigUnit_TransformConstraint_WorkData WorkData;                                   // 0x01F0 (size: 0x60)
+    FName bone;                                                                       // 0x0010 (size: 0x8)
+    ETransformSpaceMode BaseTransformSpace;                                           // 0x0018 (size: 0x1)
+    FTransform BaseTransform;                                                         // 0x0020 (size: 0x60)
+    FName BaseBone;                                                                   // 0x0080 (size: 0x8)
+    TArray<FConstraintTarget> Targets;                                                // 0x0088 (size: 0x10)
+    bool bUseInitialTransforms;                                                       // 0x0098 (size: 0x1)
+    FRigUnit_TransformConstraint_WorkData WorkData;                                   // 0x00A0 (size: 0x60)
 
-}; // Size: 0x250
+}; // Size: 0x100
 
 struct FRigUnit_TransformConstraintPerItem : public FRigUnit_HighlevelBaseMutable
 {
-    FRigElementKey Item;                                                              // 0x0160 (size: 0xC)
-    ETransformSpaceMode BaseTransformSpace;                                           // 0x016C (size: 0x1)
-    FTransform BaseTransform;                                                         // 0x0170 (size: 0x60)
-    FRigElementKey BaseItem;                                                          // 0x01D0 (size: 0xC)
-    TArray<FConstraintTarget> Targets;                                                // 0x01E0 (size: 0x10)
-    bool bUseInitialTransforms;                                                       // 0x01F0 (size: 0x1)
-    FRigUnit_TransformConstraint_WorkData WorkData;                                   // 0x01F8 (size: 0x60)
+    FRigElementKey Item;                                                              // 0x0010 (size: 0xC)
+    ETransformSpaceMode BaseTransformSpace;                                           // 0x001C (size: 0x1)
+    FTransform BaseTransform;                                                         // 0x0020 (size: 0x60)
+    FRigElementKey BaseItem;                                                          // 0x0080 (size: 0xC)
+    TArray<FConstraintTarget> Targets;                                                // 0x0090 (size: 0x10)
+    bool bUseInitialTransforms;                                                       // 0x00A0 (size: 0x1)
+    FRigUnit_TransformConstraint_WorkData WorkData;                                   // 0x00A8 (size: 0x60)
 
-}; // Size: 0x260
+}; // Size: 0x110
 
 struct FRigUnit_TransformConstraint_WorkData
 {
@@ -4241,28 +5088,28 @@ struct FRigUnit_TransformConstraint_WorkData
 
 struct FRigUnit_TwistBones : public FRigUnit_HighlevelBaseMutable
 {
-    FName StartBone;                                                                  // 0x0160 (size: 0x8)
-    FName EndBone;                                                                    // 0x0168 (size: 0x8)
-    FVector TwistAxis;                                                                // 0x0170 (size: 0x18)
-    FVector PoleAxis;                                                                 // 0x0188 (size: 0x18)
-    ERigVMAnimEasingType TwistEaseType;                                               // 0x01A0 (size: 0x1)
-    float Weight;                                                                     // 0x01A4 (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x01A8 (size: 0x1)
-    FRigUnit_TwistBones_WorkData WorkData;                                            // 0x01B0 (size: 0x30)
+    FName StartBone;                                                                  // 0x0010 (size: 0x8)
+    FName EndBone;                                                                    // 0x0018 (size: 0x8)
+    FVector TwistAxis;                                                                // 0x0020 (size: 0x18)
+    FVector PoleAxis;                                                                 // 0x0038 (size: 0x18)
+    ERigVMAnimEasingType TwistEaseType;                                               // 0x0050 (size: 0x1)
+    float Weight;                                                                     // 0x0054 (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x0058 (size: 0x1)
+    FRigUnit_TwistBones_WorkData WorkData;                                            // 0x0060 (size: 0x30)
 
-}; // Size: 0x1E0
+}; // Size: 0x90
 
 struct FRigUnit_TwistBonesPerItem : public FRigUnit_HighlevelBaseMutable
 {
-    FRigElementKeyCollection Items;                                                   // 0x0160 (size: 0x10)
-    FVector TwistAxis;                                                                // 0x0170 (size: 0x18)
-    FVector PoleAxis;                                                                 // 0x0188 (size: 0x18)
-    ERigVMAnimEasingType TwistEaseType;                                               // 0x01A0 (size: 0x1)
-    float Weight;                                                                     // 0x01A4 (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x01A8 (size: 0x1)
-    FRigUnit_TwistBones_WorkData WorkData;                                            // 0x01B0 (size: 0x30)
+    FRigElementKeyCollection Items;                                                   // 0x0010 (size: 0x10)
+    FVector TwistAxis;                                                                // 0x0020 (size: 0x18)
+    FVector PoleAxis;                                                                 // 0x0038 (size: 0x18)
+    ERigVMAnimEasingType TwistEaseType;                                               // 0x0050 (size: 0x1)
+    float Weight;                                                                     // 0x0054 (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x0058 (size: 0x1)
+    FRigUnit_TwistBones_WorkData WorkData;                                            // 0x0060 (size: 0x30)
 
-}; // Size: 0x1E0
+}; // Size: 0x90
 
 struct FRigUnit_TwistBones_WorkData
 {
@@ -4274,81 +5121,81 @@ struct FRigUnit_TwistBones_WorkData
 
 struct FRigUnit_TwoBoneIKFK : public FRigUnitMutable
 {
-    FName StartJoint;                                                                 // 0x0160 (size: 0x8)
-    FName EndJoint;                                                                   // 0x0168 (size: 0x8)
-    FVector PoleTarget;                                                               // 0x0170 (size: 0x18)
-    float Spin;                                                                       // 0x0188 (size: 0x4)
-    FTransform EndEffector;                                                           // 0x0190 (size: 0x60)
-    float IKBlend;                                                                    // 0x01F0 (size: 0x4)
-    FTransform StartJointFKTransform;                                                 // 0x0200 (size: 0x60)
-    FTransform MidJointFKTransform;                                                   // 0x0260 (size: 0x60)
-    FTransform EndJointFKTransform;                                                   // 0x02C0 (size: 0x60)
-    float PreviousFKIKBlend;                                                          // 0x0320 (size: 0x4)
-    FTransform StartJointIKTransform;                                                 // 0x0330 (size: 0x60)
-    FTransform MidJointIKTransform;                                                   // 0x0390 (size: 0x60)
-    FTransform EndJointIKTransform;                                                   // 0x03F0 (size: 0x60)
-    int32 StartJointIndex;                                                            // 0x0450 (size: 0x4)
-    int32 MidJointIndex;                                                              // 0x0454 (size: 0x4)
-    int32 EndJointIndex;                                                              // 0x0458 (size: 0x4)
-    float UpperLimbLength;                                                            // 0x045C (size: 0x4)
-    float LowerLimbLength;                                                            // 0x0460 (size: 0x4)
-    bool bIsInitialized;                                                              // 0x0464 (size: 0x1)
+    FName StartJoint;                                                                 // 0x0010 (size: 0x8)
+    FName EndJoint;                                                                   // 0x0018 (size: 0x8)
+    FVector PoleTarget;                                                               // 0x0020 (size: 0x18)
+    float Spin;                                                                       // 0x0038 (size: 0x4)
+    FTransform EndEffector;                                                           // 0x0040 (size: 0x60)
+    float IKBlend;                                                                    // 0x00A0 (size: 0x4)
+    FTransform StartJointFKTransform;                                                 // 0x00B0 (size: 0x60)
+    FTransform MidJointFKTransform;                                                   // 0x0110 (size: 0x60)
+    FTransform EndJointFKTransform;                                                   // 0x0170 (size: 0x60)
+    float PreviousFKIKBlend;                                                          // 0x01D0 (size: 0x4)
+    FTransform StartJointIKTransform;                                                 // 0x01E0 (size: 0x60)
+    FTransform MidJointIKTransform;                                                   // 0x0240 (size: 0x60)
+    FTransform EndJointIKTransform;                                                   // 0x02A0 (size: 0x60)
+    int32 StartJointIndex;                                                            // 0x0300 (size: 0x4)
+    int32 MidJointIndex;                                                              // 0x0304 (size: 0x4)
+    int32 EndJointIndex;                                                              // 0x0308 (size: 0x4)
+    float UpperLimbLength;                                                            // 0x030C (size: 0x4)
+    float LowerLimbLength;                                                            // 0x0310 (size: 0x4)
+    bool bIsInitialized;                                                              // 0x0314 (size: 0x1)
 
-}; // Size: 0x470
+}; // Size: 0x320
 
 struct FRigUnit_TwoBoneIKSimple : public FRigUnit_HighlevelBaseMutable
 {
-    FName BoneA;                                                                      // 0x0160 (size: 0x8)
-    FName BoneB;                                                                      // 0x0168 (size: 0x8)
-    FName EffectorBone;                                                               // 0x0170 (size: 0x8)
-    FTransform Effector;                                                              // 0x0180 (size: 0x60)
-    FVector PrimaryAxis;                                                              // 0x01E0 (size: 0x18)
-    FVector SecondaryAxis;                                                            // 0x01F8 (size: 0x18)
-    float SecondaryAxisWeight;                                                        // 0x0210 (size: 0x4)
-    FVector PoleVector;                                                               // 0x0218 (size: 0x18)
-    EControlRigVectorKind PoleVectorKind;                                             // 0x0230 (size: 0x1)
-    FName PoleVectorSpace;                                                            // 0x0234 (size: 0x8)
-    bool bEnableStretch;                                                              // 0x023C (size: 0x1)
-    float StretchStartRatio;                                                          // 0x0240 (size: 0x4)
-    float StretchMaximumRatio;                                                        // 0x0244 (size: 0x4)
-    float Weight;                                                                     // 0x0248 (size: 0x4)
-    float BoneALength;                                                                // 0x024C (size: 0x4)
-    float BoneBLength;                                                                // 0x0250 (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x0254 (size: 0x1)
-    FRigUnit_TwoBoneIKSimple_DebugSettings DebugSettings;                             // 0x0260 (size: 0x70)
-    FCachedRigElement CachedBoneAIndex;                                               // 0x02D0 (size: 0x20)
-    FCachedRigElement CachedBoneBIndex;                                               // 0x02F0 (size: 0x20)
-    FCachedRigElement CachedEffectorBoneIndex;                                        // 0x0310 (size: 0x20)
-    FCachedRigElement CachedPoleVectorSpaceIndex;                                     // 0x0330 (size: 0x20)
+    FName BoneA;                                                                      // 0x0010 (size: 0x8)
+    FName BoneB;                                                                      // 0x0018 (size: 0x8)
+    FName EffectorBone;                                                               // 0x0020 (size: 0x8)
+    FTransform Effector;                                                              // 0x0030 (size: 0x60)
+    FVector PrimaryAxis;                                                              // 0x0090 (size: 0x18)
+    FVector SecondaryAxis;                                                            // 0x00A8 (size: 0x18)
+    float SecondaryAxisWeight;                                                        // 0x00C0 (size: 0x4)
+    FVector PoleVector;                                                               // 0x00C8 (size: 0x18)
+    EControlRigVectorKind PoleVectorKind;                                             // 0x00E0 (size: 0x1)
+    FName PoleVectorSpace;                                                            // 0x00E4 (size: 0x8)
+    bool bEnableStretch;                                                              // 0x00EC (size: 0x1)
+    float StretchStartRatio;                                                          // 0x00F0 (size: 0x4)
+    float StretchMaximumRatio;                                                        // 0x00F4 (size: 0x4)
+    float Weight;                                                                     // 0x00F8 (size: 0x4)
+    float BoneALength;                                                                // 0x00FC (size: 0x4)
+    float BoneBLength;                                                                // 0x0100 (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x0104 (size: 0x1)
+    FRigUnit_TwoBoneIKSimple_DebugSettings DebugSettings;                             // 0x0110 (size: 0x70)
+    FCachedRigElement CachedBoneAIndex;                                               // 0x0180 (size: 0x20)
+    FCachedRigElement CachedBoneBIndex;                                               // 0x01A0 (size: 0x20)
+    FCachedRigElement CachedEffectorBoneIndex;                                        // 0x01C0 (size: 0x20)
+    FCachedRigElement CachedPoleVectorSpaceIndex;                                     // 0x01E0 (size: 0x20)
 
-}; // Size: 0x350
+}; // Size: 0x200
 
 struct FRigUnit_TwoBoneIKSimplePerItem : public FRigUnit_HighlevelBaseMutable
 {
-    FRigElementKey ItemA;                                                             // 0x0160 (size: 0xC)
-    FRigElementKey ItemB;                                                             // 0x016C (size: 0xC)
-    FRigElementKey EffectorItem;                                                      // 0x0178 (size: 0xC)
-    FTransform Effector;                                                              // 0x0190 (size: 0x60)
-    FVector PrimaryAxis;                                                              // 0x01F0 (size: 0x18)
-    FVector SecondaryAxis;                                                            // 0x0208 (size: 0x18)
-    float SecondaryAxisWeight;                                                        // 0x0220 (size: 0x4)
-    FVector PoleVector;                                                               // 0x0228 (size: 0x18)
-    EControlRigVectorKind PoleVectorKind;                                             // 0x0240 (size: 0x1)
-    FRigElementKey PoleVectorSpace;                                                   // 0x0244 (size: 0xC)
-    bool bEnableStretch;                                                              // 0x0250 (size: 0x1)
-    float StretchStartRatio;                                                          // 0x0254 (size: 0x4)
-    float StretchMaximumRatio;                                                        // 0x0258 (size: 0x4)
-    float Weight;                                                                     // 0x025C (size: 0x4)
-    float ItemALength;                                                                // 0x0260 (size: 0x4)
-    float ItemBLength;                                                                // 0x0264 (size: 0x4)
-    bool bPropagateToChildren;                                                        // 0x0268 (size: 0x1)
-    FRigUnit_TwoBoneIKSimple_DebugSettings DebugSettings;                             // 0x0270 (size: 0x70)
-    FCachedRigElement CachedItemAIndex;                                               // 0x02E0 (size: 0x20)
-    FCachedRigElement CachedItemBIndex;                                               // 0x0300 (size: 0x20)
-    FCachedRigElement CachedEffectorItemIndex;                                        // 0x0320 (size: 0x20)
-    FCachedRigElement CachedPoleVectorSpaceIndex;                                     // 0x0340 (size: 0x20)
+    FRigElementKey ItemA;                                                             // 0x0010 (size: 0xC)
+    FRigElementKey ItemB;                                                             // 0x001C (size: 0xC)
+    FRigElementKey EffectorItem;                                                      // 0x0028 (size: 0xC)
+    FTransform Effector;                                                              // 0x0040 (size: 0x60)
+    FVector PrimaryAxis;                                                              // 0x00A0 (size: 0x18)
+    FVector SecondaryAxis;                                                            // 0x00B8 (size: 0x18)
+    float SecondaryAxisWeight;                                                        // 0x00D0 (size: 0x4)
+    FVector PoleVector;                                                               // 0x00D8 (size: 0x18)
+    EControlRigVectorKind PoleVectorKind;                                             // 0x00F0 (size: 0x1)
+    FRigElementKey PoleVectorSpace;                                                   // 0x00F4 (size: 0xC)
+    bool bEnableStretch;                                                              // 0x0100 (size: 0x1)
+    float StretchStartRatio;                                                          // 0x0104 (size: 0x4)
+    float StretchMaximumRatio;                                                        // 0x0108 (size: 0x4)
+    float Weight;                                                                     // 0x010C (size: 0x4)
+    float ItemALength;                                                                // 0x0110 (size: 0x4)
+    float ItemBLength;                                                                // 0x0114 (size: 0x4)
+    bool bPropagateToChildren;                                                        // 0x0118 (size: 0x1)
+    FRigUnit_TwoBoneIKSimple_DebugSettings DebugSettings;                             // 0x0120 (size: 0x70)
+    FCachedRigElement CachedItemAIndex;                                               // 0x0190 (size: 0x20)
+    FCachedRigElement CachedItemBIndex;                                               // 0x01B0 (size: 0x20)
+    FCachedRigElement CachedEffectorItemIndex;                                        // 0x01D0 (size: 0x20)
+    FCachedRigElement CachedPoleVectorSpaceIndex;                                     // 0x01F0 (size: 0x20)
 
-}; // Size: 0x360
+}; // Size: 0x210
 
 struct FRigUnit_TwoBoneIKSimpleTransforms : public FRigUnit_HighlevelBase
 {
@@ -4398,10 +5245,10 @@ struct FRigUnit_UnaryQuaternionOp : public FRigUnit
 
 struct FRigUnit_UnsetCurveValue : public FRigUnitMutable
 {
-    FName Curve;                                                                      // 0x0160 (size: 0x8)
-    FCachedRigElement CachedCurveIndex;                                               // 0x0168 (size: 0x20)
+    FName Curve;                                                                      // 0x0010 (size: 0x8)
+    FCachedRigElement CachedCurveIndex;                                               // 0x0018 (size: 0x20)
 
-}; // Size: 0x190
+}; // Size: 0x38
 
 struct FRigUnit_VisualDebugQuat : public FRigUnit_DebugBase
 {
@@ -4445,39 +5292,51 @@ struct FRigUnit_VisualDebugTransformItemSpace : public FRigUnit_DebugBase
 
 struct FRigUnit_VisualDebugVector : public FRigUnit_DebugBase
 {
-    FVector Value;                                                                    // 0x0008 (size: 0x18)
-    bool bEnabled;                                                                    // 0x0020 (size: 0x1)
-    ERigUnitVisualDebugPointMode Mode;                                                // 0x0021 (size: 0x1)
-    FLinearColor Color;                                                               // 0x0024 (size: 0x10)
-    float Thickness;                                                                  // 0x0034 (size: 0x4)
-    float Scale;                                                                      // 0x0038 (size: 0x4)
-    FName BoneSpace;                                                                  // 0x003C (size: 0x8)
+    FVector Value;                                                                    // 0x0010 (size: 0x18)
+    bool bEnabled;                                                                    // 0x0028 (size: 0x1)
+    ERigUnitVisualDebugPointMode Mode;                                                // 0x0029 (size: 0x1)
+    FLinearColor Color;                                                               // 0x002C (size: 0x10)
+    float Thickness;                                                                  // 0x003C (size: 0x4)
+    float Scale;                                                                      // 0x0040 (size: 0x4)
+    FName BoneSpace;                                                                  // 0x0044 (size: 0x8)
 
-}; // Size: 0x48
+}; // Size: 0x50
 
 struct FRigUnit_VisualDebugVectorItemSpace : public FRigUnit_DebugBase
 {
-    FVector Value;                                                                    // 0x0008 (size: 0x18)
-    bool bEnabled;                                                                    // 0x0020 (size: 0x1)
-    ERigUnitVisualDebugPointMode Mode;                                                // 0x0021 (size: 0x1)
-    FLinearColor Color;                                                               // 0x0024 (size: 0x10)
-    float Thickness;                                                                  // 0x0034 (size: 0x4)
-    float Scale;                                                                      // 0x0038 (size: 0x4)
-    FRigElementKey Space;                                                             // 0x003C (size: 0xC)
+    FVector Value;                                                                    // 0x0010 (size: 0x18)
+    bool bEnabled;                                                                    // 0x0028 (size: 0x1)
+    ERigUnitVisualDebugPointMode Mode;                                                // 0x0029 (size: 0x1)
+    FLinearColor Color;                                                               // 0x002C (size: 0x10)
+    float Thickness;                                                                  // 0x003C (size: 0x4)
+    float Scale;                                                                      // 0x0040 (size: 0x4)
+    FRigElementKey Space;                                                             // 0x0044 (size: 0xC)
 
-}; // Size: 0x48
+}; // Size: 0x50
 
 struct FRigVectorArrayMetadata : public FRigBaseMetadata
 {
-    TArray<FVector> Value;                                                            // 0x0028 (size: 0x10)
+    TArray<FVector> Value;                                                            // 0x0020 (size: 0x10)
 
-}; // Size: 0x38
+}; // Size: 0x30
 
 struct FRigVectorMetadata : public FRigBaseMetadata
 {
-    FVector Value;                                                                    // 0x0028 (size: 0x18)
+    FVector Value;                                                                    // 0x0020 (size: 0x18)
 
-}; // Size: 0x40
+}; // Size: 0x38
+
+struct FSampleTrackHost
+{
+}; // Size: 0x10
+
+struct FSampleTrackMemoryData
+{
+    TArray<uint8> Buffer;                                                             // 0x0000 (size: 0x10)
+    TArray<FName> Names;                                                              // 0x0010 (size: 0x10)
+    TArray<FString> ObjectPaths;                                                      // 0x0020 (size: 0x10)
+
+}; // Size: 0x30
 
 struct FSpaceControlNameAndChannel
 {
@@ -4507,37 +5366,38 @@ struct FStructReference
 
 class AControlRigControlActor : public AActor
 {
-    class AActor* ActorToTrack;                                                       // 0x0298 (size: 0x8)
-    TSubclassOf<class UControlRig> ControlRigClass;                                   // 0x02A0 (size: 0x8)
-    bool bRefreshOnTick;                                                              // 0x02A8 (size: 0x1)
-    bool bIsSelectable;                                                               // 0x02A9 (size: 0x1)
-    class UMaterialInterface* MaterialOverride;                                       // 0x02B0 (size: 0x8)
-    FString ColorParameter;                                                           // 0x02B8 (size: 0x10)
-    bool bCastShadows;                                                                // 0x02C8 (size: 0x1)
-    class USceneComponent* ActorRootComponent;                                        // 0x02D0 (size: 0x8)
-    TSoftObjectPtr<UControlRig> ControlRig;                                           // 0x02D8 (size: 0x28)
-    TArray<FName> ControlNames;                                                       // 0x0300 (size: 0x10)
-    TArray<FTransform> ShapeTransforms;                                               // 0x0310 (size: 0x10)
-    TArray<class UStaticMeshComponent*> Components;                                   // 0x0320 (size: 0x10)
-    TArray<class UMaterialInstanceDynamic*> Materials;                                // 0x0330 (size: 0x10)
-    FName ColorParameterName;                                                         // 0x0340 (size: 0x8)
+    class AActor* ActorToTrack;                                                       // 0x02A8 (size: 0x8)
+    TSubclassOf<class UControlRig> ControlRigClass;                                   // 0x02B0 (size: 0x8)
+    bool bRefreshOnTick;                                                              // 0x02B8 (size: 0x1)
+    bool bIsSelectable;                                                               // 0x02B9 (size: 0x1)
+    class UMaterialInterface* MaterialOverride;                                       // 0x02C0 (size: 0x8)
+    FString ColorParameter;                                                           // 0x02C8 (size: 0x10)
+    bool bCastShadows;                                                                // 0x02D8 (size: 0x1)
+    class USceneComponent* ActorRootComponent;                                        // 0x02E0 (size: 0x8)
+    TSoftObjectPtr<class UControlRig> ControlRig;                                     // 0x02E8 (size: 0x28)
+    TArray<FName> ControlNames;                                                       // 0x0310 (size: 0x10)
+    TArray<FTransform> ShapeTransforms;                                               // 0x0320 (size: 0x10)
+    TArray<UStaticMeshComponent*> Components;                                         // 0x0330 (size: 0x10)
+    TArray<UMaterialInstanceDynamic*> Materials;                                      // 0x0340 (size: 0x10)
+    FName ColorParameterName;                                                         // 0x0350 (size: 0x8)
 
     void ResetControlActor();
     void Refresh();
     void Clear();
-}; // Size: 0x348
+}; // Size: 0x358
 
 class AControlRigShapeActor : public AActor
 {
-    class USceneComponent* ActorRootComponent;                                        // 0x0298 (size: 0x8)
-    class UStaticMeshComponent* StaticMeshComponent;                                  // 0x02A0 (size: 0x8)
-    uint32 ControlRigIndex;                                                           // 0x02A8 (size: 0x4)
-    TWeakObjectPtr<class UControlRig> ControlRig;                                     // 0x02AC (size: 0x8)
-    FName ControlName;                                                                // 0x02B4 (size: 0x8)
-    FName ShapeName;                                                                  // 0x02BC (size: 0x8)
-    FName ColorParameterName;                                                         // 0x02C4 (size: 0x8)
-    uint8 bSelected;                                                                  // 0x02DC (size: 0x1)
-    uint8 bHovered;                                                                   // 0x02DC (size: 0x1)
+    class USceneComponent* ActorRootComponent;                                        // 0x02B0 (size: 0x8)
+    class UStaticMeshComponent* StaticMeshComponent;                                  // 0x02B8 (size: 0x8)
+    uint32 ControlRigIndex;                                                           // 0x02C0 (size: 0x4)
+    TWeakObjectPtr<class UControlRig> ControlRig;                                     // 0x02C4 (size: 0x8)
+    FName ControlName;                                                                // 0x02CC (size: 0x8)
+    FName ShapeName;                                                                  // 0x02D4 (size: 0x8)
+    FName ColorParameterName;                                                         // 0x02DC (size: 0x8)
+    FCachedRigElement CachedIndex;                                                    // 0x0360 (size: 0x20)
+    uint8 bSelected;                                                                  // 0x0380 (size: 0x1)
+    uint8 bHovered;                                                                   // 0x0380 (size: 0x1)
 
     void SetSelected(bool bInSelected);
     void SetSelectable(bool bInSelectable);
@@ -4553,30 +5413,47 @@ class AControlRigShapeActor : public AActor
     bool IsHovered();
     bool IsEnabled();
     FTransform GetGlobalTransform();
-}; // Size: 0x2E0
+}; // Size: 0x3A0
+
+class IRigHierarchyProvider : public IInterface
+{
+}; // Size: 0x28
 
 class UAdditiveControlRig : public UControlRig
 {
-}; // Size: 0x620
+}; // Size: 0xB80
+
+class UAnimNodeControlRigLibrary : public UBlueprintFunctionLibrary
+{
+
+    FControlRigReference SetControlRigClass(const FControlRigReference& Node, TSubclassOf<class UControlRig> ControlRigClass);
+    void ConvertToControlRigPure(const FAnimNodeReference& Node, FControlRigReference& ControlRig, bool& Result);
+    FControlRigReference ConvertToControlRig(const FAnimNodeReference& Node, EAnimNodeReferenceConversionResult& Result);
+}; // Size: 0x28
 
 class UControlRig : public URigVMHost
 {
-    ERigExecutionType ExecutionType;                                                  // 0x0340 (size: 0x1)
-    FRigHierarchySettings HierarchySettings;                                          // 0x0344 (size: 0x4)
-    TMap<class FRigElementKey, class FRigControlElementCustomization> ControlCustomizations; // 0x0348 (size: 0x50)
-    class URigHierarchy* DynamicHierarchy;                                            // 0x0398 (size: 0x8)
-    TArray<TSoftObjectPtr<UControlRigShapeLibrary>> ShapeLibraries;                   // 0x03A0 (size: 0x10)
-    TMap<class FString, class FString> ShapeLibraryNameMap;                           // 0x03B0 (size: 0x50)
-    class UAnimationDataSourceRegistry* DataSourceRegistry;                           // 0x0418 (size: 0x8)
-    FRigInfluenceMapPerEvent Influences;                                              // 0x04B0 (size: 0x60)
-    class UControlRig* InteractionRig;                                                // 0x0510 (size: 0x8)
-    TSubclassOf<class UControlRig> InteractionRigClass;                               // 0x0518 (size: 0x8)
-    FControlRigOnControlSelected_BP OnControlSelected_BP;                             // 0x05F0 (size: 0x1)
+    TArray<UControlRigOverrideAsset*> OverrideAssets;                                 // 0x02A8 (size: 0x10)
+    ERigExecutionType ExecutionType;                                                  // 0x02B9 (size: 0x1)
+    FRigHierarchySettings HierarchySettings;                                          // 0x02BC (size: 0x8)
+    TMap<FRigElementKey, FRigControlElementCustomization> ControlCustomizations;      // 0x02C8 (size: 0x50)
+    class URigHierarchy* DynamicHierarchy;                                            // 0x0318 (size: 0x8)
+    TArray<TSoftObjectPtr<class UControlRigShapeLibrary>> ShapeLibraries;             // 0x0320 (size: 0x10)
+    TMap<FString, FString> ShapeLibraryNameMap;                                       // 0x0330 (size: 0x50)
+    FRigVMExtendedExecuteContext RigVMExtendedExecuteContext;                         // 0x0390 (size: 0x240)
+    class UAnimationDataSourceRegistry* DataSourceRegistry;                           // 0x05D8 (size: 0x8)
+    FRigInfluenceMapPerEvent Influences;                                              // 0x0688 (size: 0x60)
+    TMap<FName, UDataAssetLink*> ExternalVariableDataAssetLinks;                      // 0x07A0 (size: 0x50)
+    FControlRigOnControlSelected_BP OnControlSelected_BP;                             // 0x08C0 (size: 0x1)
     void OnControlSelectedBP(class UControlRig* Rig, const FRigControlElement& Control, bool bSelected);
+    bool bIsAdditive;                                                                 // 0x08F0 (size: 0x1)
+    FRigModuleSettings RigModuleSettings;                                             // 0x0AD0 (size: 0x80)
+    FString RigModulePrefix;                                                          // 0x0B50 (size: 0x10)
 
+    bool SupportsBackwardsSolve();
     void SetInteractionRigClass(TSubclassOf<class UControlRig> InInteractionRigClass);
     void SetInteractionRig(class UControlRig* InInteractionRig);
-    void SelectControl(const FName& InControlName, bool bSelect);
+    void SelectControl(const FName& InControlName, bool bSelect, bool bSetupUndo);
     void RequestConstruction();
     void OnControlSelectedBP__DelegateSignature(class UControlRig* Rig, const FRigControlElement& Control, bool bSelected);
     bool IsControlSelected(const FName& InControlName);
@@ -4584,48 +5461,48 @@ class UControlRig : public URigVMHost
     class UControlRig* GetInteractionRig();
     class AActor* GetHostingActor();
     class URigHierarchy* GetHierarchy();
-    TArray<class UControlRig*> FindControlRigs(class UObject* Outer, TSubclassOf<class UControlRig> OptionalClass);
+    TArray<UControlRig*> FindControlRigs(class UObject* Outer, TSubclassOf<class UControlRig> OptionalClass);
     TArray<FName> CurrentControlSelection();
-    class UTransformableControlHandle* CreateTransformableControlHandle(class UObject* Outer, const FName& ControlName);
-    bool ClearControlSelection();
-}; // Size: 0x610
+    class UTransformableControlHandle* CreateTransformableControlHandle(const FName& ControlName);
+    bool ClearControlSelection(bool bSetupUndo);
+}; // Size: 0xB70
 
 class UControlRigAnimInstance : public UAnimInstance
 {
-}; // Size: 0x350
+}; // Size: 0x3E0
 
 class UControlRigBlueprintGeneratedClass : public URigVMBlueprintGeneratedClass
 {
-}; // Size: 0x390
+}; // Size: 0x388
 
 class UControlRigComponent : public UPrimitiveComponent
 {
-    TSubclassOf<class UControlRig> ControlRigClass;                                   // 0x0570 (size: 0x8)
-    FControlRigComponentOnPreInitializeDelegate OnPreInitializeDelegate;              // 0x0578 (size: 0x10)
+    TSubclassOf<class UControlRig> ControlRigClass;                                   // 0x0520 (size: 0x8)
+    FControlRigComponentOnPreInitializeDelegate OnPreInitializeDelegate;              // 0x0528 (size: 0x10)
     void ControlRigComponentDelegate(class UControlRigComponent* Component);
-    FControlRigComponentOnPostInitializeDelegate OnPostInitializeDelegate;            // 0x0588 (size: 0x10)
+    FControlRigComponentOnPostInitializeDelegate OnPostInitializeDelegate;            // 0x0538 (size: 0x10)
     void ControlRigComponentDelegate(class UControlRigComponent* Component);
-    FControlRigComponentOnPreConstructionDelegate OnPreConstructionDelegate;          // 0x0598 (size: 0x10)
+    FControlRigComponentOnPreConstructionDelegate OnPreConstructionDelegate;          // 0x0548 (size: 0x10)
     void ControlRigComponentDelegate(class UControlRigComponent* Component);
-    FControlRigComponentOnPostConstructionDelegate OnPostConstructionDelegate;        // 0x05A8 (size: 0x10)
+    FControlRigComponentOnPostConstructionDelegate OnPostConstructionDelegate;        // 0x0558 (size: 0x10)
     void ControlRigComponentDelegate(class UControlRigComponent* Component);
-    FControlRigComponentOnPreForwardsSolveDelegate OnPreForwardsSolveDelegate;        // 0x05B8 (size: 0x10)
+    FControlRigComponentOnPreForwardsSolveDelegate OnPreForwardsSolveDelegate;        // 0x0568 (size: 0x10)
     void ControlRigComponentDelegate(class UControlRigComponent* Component);
-    FControlRigComponentOnPostForwardsSolveDelegate OnPostForwardsSolveDelegate;      // 0x05C8 (size: 0x10)
+    FControlRigComponentOnPostForwardsSolveDelegate OnPostForwardsSolveDelegate;      // 0x0578 (size: 0x10)
     void ControlRigComponentDelegate(class UControlRigComponent* Component);
-    TArray<FControlRigComponentMappedElement> UserDefinedElements;                    // 0x05D8 (size: 0x10)
-    TArray<FControlRigComponentMappedElement> MappedElements;                         // 0x05E8 (size: 0x10)
-    bool bEnableLazyEvaluation;                                                       // 0x05F8 (size: 0x1)
-    float LazyEvaluationPositionThreshold;                                            // 0x05FC (size: 0x4)
-    float LazyEvaluationRotationThreshold;                                            // 0x0600 (size: 0x4)
-    float LazyEvaluationScaleThreshold;                                               // 0x0604 (size: 0x4)
-    bool bResetTransformBeforeTick;                                                   // 0x0608 (size: 0x1)
-    bool bResetInitialsBeforeConstruction;                                            // 0x0609 (size: 0x1)
-    bool bUpdateRigOnTick;                                                            // 0x060A (size: 0x1)
-    bool bUpdateInEditor;                                                             // 0x060B (size: 0x1)
-    bool bDrawBones;                                                                  // 0x060C (size: 0x1)
-    bool bShowDebugDrawing;                                                           // 0x060D (size: 0x1)
-    class UControlRig* ControlRig;                                                    // 0x0610 (size: 0x8)
+    TArray<FControlRigComponentMappedElement> UserDefinedElements;                    // 0x0588 (size: 0x10)
+    TArray<FControlRigComponentMappedElement> MappedElements;                         // 0x0598 (size: 0x10)
+    bool bEnableLazyEvaluation;                                                       // 0x05A8 (size: 0x1)
+    float LazyEvaluationPositionThreshold;                                            // 0x05AC (size: 0x4)
+    float LazyEvaluationRotationThreshold;                                            // 0x05B0 (size: 0x4)
+    float LazyEvaluationScaleThreshold;                                               // 0x05B4 (size: 0x4)
+    bool bResetTransformBeforeTick;                                                   // 0x05B8 (size: 0x1)
+    bool bResetInitialsBeforeConstruction;                                            // 0x05B9 (size: 0x1)
+    bool bUpdateRigOnTick;                                                            // 0x05BA (size: 0x1)
+    bool bUpdateInEditor;                                                             // 0x05BB (size: 0x1)
+    bool bDrawBones;                                                                  // 0x05BC (size: 0x1)
+    bool bShowDebugDrawing;                                                           // 0x05BD (size: 0x1)
+    class UControlRig* ControlRig;                                                    // 0x05C0 (size: 0x8)
 
     void Update(float DeltaTime);
     void SetObjectBinding(class UObject* InObjectToBind);
@@ -4670,11 +5547,11 @@ class UControlRigComponent : public UPrimitiveComponent
     bool DoesElementExist(FName Name, ERigElementType ElementType);
     void ClearMappedElements();
     bool CanExecute();
-    void AddMappedSkeletalMesh(class USkeletalMeshComponent* SkeletalMeshComponent, TArray<FControlRigComponentMappedBone> Bones, TArray<FControlRigComponentMappedCurve> Curves);
+    void AddMappedSkeletalMesh(class USkeletalMeshComponent* SkeletalMeshComponent, TArray<FControlRigComponentMappedBone> Bones, TArray<FControlRigComponentMappedCurve> Curves, const EControlRigComponentMapDirection InDirection);
     void AddMappedElements(TArray<FControlRigComponentMappedElement> NewMappedElements);
     void AddMappedComponents(TArray<FControlRigComponentMappedComponent> Components);
-    void AddMappedCompleteSkeletalMesh(class USkeletalMeshComponent* SkeletalMeshComponent);
-}; // Size: 0x6D0
+    void AddMappedCompleteSkeletalMesh(class USkeletalMeshComponent* SkeletalMeshComponent, const EControlRigComponentMapDirection InDirection);
+}; // Size: 0x6C0
 
 class UControlRigEditorSettings : public URigVMEditorSettings
 {
@@ -4682,7 +5559,7 @@ class UControlRigEditorSettings : public URigVMEditorSettings
 
 class UControlRigLayerInstance : public UAnimInstance
 {
-}; // Size: 0x350
+}; // Size: 0x3E0
 
 class UControlRigNumericalValidationPass : public UControlRigValidationPass
 {
@@ -4699,20 +5576,20 @@ class UControlRigNumericalValidationPass : public UControlRigValidationPass
 
 }; // Size: 0xC0
 
-class UControlRigObjectHolder : public UObject
+class UControlRigOverrideAsset : public UObject
 {
-    TArray<class UObject*> Objects;                                                   // 0x0028 (size: 0x10)
+    FControlRigOverrideContainer Overrides;                                           // 0x0028 (size: 0x158)
 
-}; // Size: 0x38
+}; // Size: 0x198
 
 class UControlRigPoseAsset : public UObject
 {
     FControlRigControlPose Pose;                                                      // 0x0028 (size: 0x60)
 
-    void SelectControls(class UControlRig* InControlRig, bool bDoMirror);
+    void SelectControls(class UControlRig* InControlRig, bool bDoMirror, bool bClearSelection);
     void SavePose(class UControlRig* InControlRig, bool bUseAll);
     void ReplaceControlName(const FName& CurrentName, const FName& NewName);
-    void PastePose(class UControlRig* InControlRig, bool bDoKey, bool bDoMirror);
+    void PastePose(class UControlRig* InControlRig, bool bDoKey, bool bDoMirror, bool bDoAdditive);
     void GetCurrentPose(class UControlRig* InControlRig, FControlRigControlPose& OutPose);
     TArray<FName> GetControlNames();
     bool DoesMirrorMatch(class UControlRig* ControlRig, const FName& ControlName);
@@ -4733,6 +5610,35 @@ class UControlRigPoseProjectSettings : public UObject
 
 }; // Size: 0x38
 
+class UControlRigReplay : public UObject
+{
+    FText Description;                                                                // 0x0028 (size: 0x10)
+    FSoftObjectPath ControlRigObjectPath;                                             // 0x0038 (size: 0x20)
+    FSoftObjectPath PreviewSkeletalMeshObjectPath;                                    // 0x0058 (size: 0x20)
+    FControlRigReplayTracks InputTracks;                                              // 0x0078 (size: 0x178)
+    FControlRigReplayTracks OutputTracks;                                             // 0x01F0 (size: 0x178)
+    double Tolerance;                                                                 // 0x0368 (size: 0x8)
+    bool bValidateHierarchyTopology;                                                  // 0x0370 (size: 0x1)
+    bool bValidatePose;                                                               // 0x0371 (size: 0x1)
+    bool bValidateMetadata;                                                           // 0x0372 (size: 0x1)
+    bool bValidateVariables;                                                          // 0x0373 (size: 0x1)
+    TArray<int32> FramesToSkip;                                                       // 0x0378 (size: 0x10)
+    bool EnableTest;                                                                  // 0x0388 (size: 0x1)
+
+    bool StopReplay();
+    bool StopRecording();
+    bool StartReplay(class UControlRig* InControlRig, EControlRigReplayPlaybackMode InMode);
+    bool StartRecording(class UControlRig* InControlRig);
+    void SetPlaybackMode(EControlRigReplayPlaybackMode InMode);
+    bool PauseReplay();
+    bool IsReplaying();
+    bool IsRecording();
+    bool IsPaused();
+    FVector2D GetTimeRange();
+    EControlRigReplayPlaybackMode GetPlaybackMode();
+    class UControlRigReplay* CreateNewAsset(FString InDesiredPackagePath, FString InBlueprintPathName, UClass* InAssetClass);
+}; // Size: 0x3E8
+
 class UControlRigSettings : public UDeveloperSettings
 {
 }; // Size: 0x38
@@ -4740,8 +5646,8 @@ class UControlRigSettings : public UDeveloperSettings
 class UControlRigShapeLibrary : public UObject
 {
     FControlRigShapeDefinition DefaultShape;                                          // 0x0030 (size: 0xA0)
-    TSoftObjectPtr<UMaterial> DefaultMaterial;                                        // 0x00D0 (size: 0x28)
-    TSoftObjectPtr<UMaterial> XRayMaterial;                                           // 0x00F8 (size: 0x28)
+    TSoftObjectPtr<class UMaterial> DefaultMaterial;                                  // 0x00D0 (size: 0x28)
+    TSoftObjectPtr<class UMaterial> XRayMaterial;                                     // 0x00F8 (size: 0x28)
     FName MaterialColorParameter;                                                     // 0x0120 (size: 0x8)
     TArray<FControlRigShapeDefinition> Shapes;                                        // 0x0128 (size: 0x10)
 
@@ -4749,32 +5655,23 @@ class UControlRigShapeLibrary : public UObject
 
 class UControlRigShapeLibraryLink : public UNameSpacedUserData
 {
-    class UControlRigShapeLibrary* ShapeLibrary;                                      // 0x0100 (size: 0x8)
-    TArray<FName> ShapeNames;                                                         // 0x0108 (size: 0x10)
+    TSoftObjectPtr<class UControlRigShapeLibrary> ShapeLibrary;                       // 0x0100 (size: 0x28)
+    TArray<FName> ShapeNames;                                                         // 0x0128 (size: 0x10)
+    class UControlRigShapeLibrary* ShapeLibraryCached;                                // 0x0138 (size: 0x8)
 
-    void SetShapeLibrary(class UControlRigShapeLibrary* InShapeLibrary);
-    class UControlRigShapeLibrary* GetShapeLibrary();
-}; // Size: 0x118
+    void SetShapeLibrary(TSoftObjectPtr<class UControlRigShapeLibrary> InShapeLibrary);
+    TSoftObjectPtr<class UControlRigShapeLibrary> GetShapeLibrary();
+}; // Size: 0x140
 
-class UControlRigTestData : public UObject
+class UControlRigTestData : public UControlRigReplay
 {
-    FSoftObjectPath ControlRigObjectPath;                                             // 0x0028 (size: 0x20)
-    FControlRigTestDataFrame Initial;                                                 // 0x0048 (size: 0x90)
-    TArray<FControlRigTestDataFrame> InputFrames;                                     // 0x00D8 (size: 0x10)
-    TArray<FControlRigTestDataFrame> OutputFrames;                                    // 0x00E8 (size: 0x10)
-    TArray<int32> FramesToSkip;                                                       // 0x00F8 (size: 0x10)
-    double Tolerance;                                                                 // 0x0108 (size: 0x8)
+    FControlRigTestDataFrame Initial;                                                 // 0x03E8 (size: 0x108)
+    TArray<FControlRigTestDataFrame> InputFrames;                                     // 0x04F0 (size: 0x10)
+    TArray<FControlRigTestDataFrame> OutputFrames;                                    // 0x0500 (size: 0x10)
+    TArray<FName> EventQueue;                                                         // 0x0510 (size: 0x10)
 
-    bool SetupReplay(class UControlRig* InControlRig, bool bGroundTruth);
-    void ReleaseReplay();
-    bool Record(class UControlRig* InControlRig, double InRecordingDuration);
-    bool IsReplaying();
-    bool IsRecording();
-    FVector2D GetTimeRange(bool bInput);
-    EControlRigTestDataPlaybackMode GetPlaybackMode();
     int32 GetFrameIndexForTime(double InSeconds, bool bInput);
-    class UControlRigTestData* CreateNewAsset(FString InDesiredPackagePath, FString InBlueprintPathName);
-}; // Size: 0x150
+}; // Size: 0x528
 
 class UControlRigTransformWorkflowOptions : public UControlRigWorkflowOptions
 {
@@ -4789,7 +5686,7 @@ class UControlRigValidationPass : public UObject
 
 class UControlRigValidator : public UObject
 {
-    TArray<class UControlRigValidationPass*> Passes;                                  // 0x0028 (size: 0x10)
+    TArray<UControlRigValidationPass*> Passes;                                        // 0x0028 (size: 0x10)
 
 }; // Size: 0x68
 
@@ -4807,48 +5704,118 @@ class UDefault__ControlRigBlueprintGeneratedClass
 
 class UFKControlRig : public UControlRig
 {
-    TArray<bool> IsControlActive;                                                     // 0x0610 (size: 0x10)
-    EControlRigFKRigExecuteMode ApplyMode;                                            // 0x0620 (size: 0x1)
+    TArray<bool> IsControlActive;                                                     // 0x0B70 (size: 0x10)
+    EControlRigFKRigExecuteMode ApplyMode;                                            // 0x0B80 (size: 0x1)
 
-}; // Size: 0x650
+}; // Size: 0xBB0
+
+class UModularRig : public UControlRig
+{
+    TArray<FRigModuleInstance> Modules;                                               // 0x0B70 (size: 0x10)
+    FModularRigSettings ModularRigSettings;                                           // 0x0BA0 (size: 0x1)
+    FModularRigModel ModularRigModel;                                                 // 0x0BA8 (size: 0x100)
+    TArray<FRigModuleExecutionElement> ExecutionQueue;                                // 0x0CA8 (size: 0x10)
+
+    FString GetParentPathForBP(FString InModulePath);
+    FName GetParentModuleNameForBP(FName InModuleName);
+    class UControlRig* GetModuleRigByName(FName InModuleName);
+    class UControlRig* GetModuleRig(FString InModulePath);
+    TArray<FString> GetModulePaths();
+    TArray<FName> GetModuleNames();
+    TArray<FName> GetEventsForModuleByName(FName InModuleName);
+    TArray<FName> GetEventsForModule(FString InModulePath);
+    TArray<FName> GetEventsForAllModules();
+    bool ExecuteEventOnModuleForBP(FName InEvent, FString InModulePath);
+    bool ExecuteEventOnModuleByNameForBP(FName InEvent, FName InModuleName);
+    TArray<FName> ExecuteEventOnAllModules(FName InEvent);
+}; // Size: 0xD10
+
+class UModularRigController : public UObject
+{
+
+    bool UnBindModuleVariable(const FName& InModuleName, const FName& InVariableName, bool bSetupUndo);
+    bool SwapModulesOfClass(TSubclassOf<class UControlRig> InOldClass, TSubclassOf<class UControlRig> InNewClass, bool bSetupUndo);
+    bool SwapModuleClass(const FName& InModuleName, TSubclassOf<class UControlRig> InNewClass, bool bSetupUndo);
+    bool SetModuleSelection(const TArray<FName>& InModuleNames);
+    bool SetConfigValueInModule(const FName& InModuleName, const FName& InVariableName, FString InValue, bool bSetupUndo);
+    bool SelectModule(const FName& InModuleName, const bool InSelected);
+    bool ResetConfigValueInModule(const FName& InModuleName, FString InPath, bool bClearOverride, bool bSetupUndo);
+    bool ReparentModule(const FName& InModuleName, const FName& InNewParentModuleName, bool bSetupUndo);
+    FName RenameModule(const FName& InModuleName, const FName& InNewName, bool bSetupUndo);
+    FName MirrorModule(const FName& InModuleName, const FRigVMMirrorSettings& InSettings, bool bSetupUndo);
+    bool ImportModuleSettingsFromString(FString InContent, TArray<FName> InOptionalModuleNames, bool bSetupUndo);
+    TArray<FName> GetSelectedModules();
+    FRigModuleReference GetModuleReference(FName InModuleName);
+    TArray<FRigElementKey> GetConnectorsForModule(FName InModuleName);
+    TArray<FName> GetAllModules();
+    FString ExportModuleSettingsToString(TArray<FName> InModuleNames);
+    TArray<FRigElementKey> DisconnectCyclicConnectors(bool bSetupUndo);
+    bool DisconnectConnector(const FRigElementKey& InConnectorKey, bool bDisconnectSubModules, bool bSetupUndo);
+    bool DeselectModule(const FName& InModuleName);
+    bool DeleteModule(const FName& InModuleName, bool bSetupUndo);
+    bool ConnectConnectorToElements(const FRigElementKey& InConnectorKey, const TArray<FRigElementKey>& InTargetKeys, bool bSetupUndo, bool bAutoResolveOtherConnectors, bool bCheckValidConnection);
+    bool ConnectConnectorToElement(const FRigElementKey& InConnectorKey, const FRigElementKey& InTargetKey, bool bSetupUndo, bool bAutoResolveOtherConnectors, bool bCheckValidConnection);
+    bool CanConnectConnectorToElements(const FRigElementKey& InConnectorKey, const TArray<FRigElementKey>& InTargetKeys, FText& OutErrorMessage);
+    bool CanConnectConnectorToElement(const FRigElementKey& InConnectorKey, const FRigElementKey& InTargetKey, FText& OutErrorMessage);
+    bool BindModuleVariable(const FName& InModuleName, const FName& InVariableName, FString InSourcePath, bool bSetupUndo);
+    bool AutoConnectSecondaryConnectors(const TArray<FRigElementKey>& InConnectorKeys, bool bReplaceExistingConnections, bool bSetupUndo);
+    bool AutoConnectModules(const TArray<FName>& InModuleNames, bool bReplaceExistingConnections, bool bSetupUndo);
+    bool AddTargetToArrayConnector(const FRigElementKey& InConnectorKey, const FRigElementKey& InTargetKey, bool bSetupUndo, bool bAutoResolveOtherConnectors, bool bCheckValidConnection);
+    FName AddModule(const FName& InModuleName, TSubclassOf<class UControlRig> InClass, const FName& InParentModuleName, bool bSetupUndo);
+}; // Size: 0x50
+
+class UModularRigRuleManager : public UObject
+{
+}; // Size: 0x30
+
+class UMovieSceneControlRigParameterEvaluatorSystem : public UMovieSceneEntitySystem
+{
+    class UMovieScenePiecewiseDoubleBlenderSystem* DoubleBlenderSystem;               // 0x0240 (size: 0x8)
+
+}; // Size: 0x248
 
 class UMovieSceneControlRigParameterSection : public UMovieSceneParameterSection
 {
-    class UControlRig* ControlRig;                                                    // 0x01A0 (size: 0x8)
-    TSubclassOf<class UControlRig> ControlRigClass;                                   // 0x01A8 (size: 0x8)
-    TArray<bool> ControlsMask;                                                        // 0x01B0 (size: 0x10)
-    FMovieSceneTransformMask TransformMask;                                           // 0x01C0 (size: 0x4)
-    FMovieSceneFloatChannel Weight;                                                   // 0x01C8 (size: 0x110)
-    TMap<class FName, class FChannelMapInfo> ControlChannelMap;                       // 0x02D8 (size: 0x50)
-    TArray<FEnumParameterNameAndCurve> EnumParameterNamesAndCurves;                   // 0x0328 (size: 0x10)
-    TArray<FIntegerParameterNameAndCurve> IntegerParameterNamesAndCurves;             // 0x0338 (size: 0x10)
-    TArray<FSpaceControlNameAndChannel> SpaceChannels;                                // 0x0348 (size: 0x10)
-    TArray<FConstraintAndActiveChannel> ConstraintsChannels;                          // 0x0358 (size: 0x10)
+    class UControlRig* ControlRig;                                                    // 0x01B8 (size: 0x8)
+    TSubclassOf<class UControlRig> ControlRigClass;                                   // 0x01C0 (size: 0x8)
+    TArray<bool> ControlsMask;                                                        // 0x01C8 (size: 0x10)
+    TSet<FName> ControlNameMask;                                                      // 0x01D8 (size: 0x50)
+    FMovieSceneTransformMask TransformMask;                                           // 0x0228 (size: 0x4)
+    FMovieSceneFloatChannel Weight;                                                   // 0x0230 (size: 0x110)
+    TMap<FName, FChannelMapInfo> ControlChannelMap;                                   // 0x0340 (size: 0x50)
+    TArray<FEnumParameterNameAndCurve> EnumParameterNamesAndCurves;                   // 0x0390 (size: 0x10)
+    TArray<FIntegerParameterNameAndCurve> IntegerParameterNamesAndCurves;             // 0x03A0 (size: 0x10)
+    TArray<FSpaceControlNameAndChannel> SpaceChannels;                                // 0x03B0 (size: 0x10)
+    TArray<FConstraintAndActiveChannel> ConstraintsChannels;                          // 0x03C0 (size: 0x10)
 
-}; // Size: 0x3D0
+}; // Size: 0x440
 
 class UMovieSceneControlRigParameterTrack : public UMovieSceneNameableTrack
 {
-    class UControlRig* ControlRig;                                                    // 0x00D8 (size: 0x8)
-    class UMovieSceneSection* SectionToKey;                                           // 0x00E0 (size: 0x8)
-    TArray<class UMovieSceneSection*> Sections;                                       // 0x00E8 (size: 0x10)
-    FName TrackName;                                                                  // 0x00F8 (size: 0x8)
-    TMap<class FName, class FControlRotationOrder> ControlsRotationOrder;             // 0x0100 (size: 0x50)
+    TMap<FName, TWeakObjectPtr<class UMovieSceneSection>> SectionToKeyPerControl;     // 0x0128 (size: 0x50)
+    class UControlRig* ControlRig;                                                    // 0x01B0 (size: 0x8)
+    class UMovieSceneSection* SectionToKey;                                           // 0x01B8 (size: 0x8)
+    TArray<UMovieSceneSection*> Sections;                                             // 0x01C0 (size: 0x10)
+    FName TrackName;                                                                  // 0x01D0 (size: 0x8)
+    TMap<FName, FControlRotationOrder> ControlsRotationOrder;                         // 0x01D8 (size: 0x50)
+    int32 PriorityOrder;                                                              // 0x0228 (size: 0x4)
+    FInstancedPropertyBag ControlRigSettingsOverrides;                                // 0x0230 (size: 0x10)
+    TMap<TWeakObjectPtr<class UWorld>, UControlRig*> GameWorldControlRigs;            // 0x0240 (size: 0x50)
 
-}; // Size: 0x150
+}; // Size: 0x290
 
 class URigHierarchy : public UObject
 {
     FRigHierarchyModifiedEventDynamic ModifiedEventDynamic;                           // 0x0040 (size: 0x10)
     void RigHierarchyModifiedDynamicEvent(ERigHierarchyNotification NotifType, class URigHierarchy* Hierarchy, FRigElementKey subject);
-    uint16 TopologyVersion;                                                           // 0x0098 (size: 0x2)
-    uint16 MetadataVersion;                                                           // 0x009A (size: 0x2)
-    uint16 MetadataTagVersion;                                                        // 0x009C (size: 0x2)
-    bool bEnableDirtyPropagation;                                                     // 0x009E (size: 0x1)
-    int32 TransformStackIndex;                                                        // 0x0138 (size: 0x4)
-    class URigHierarchyController* HierarchyController;                               // 0x01B0 (size: 0x8)
-    TMap<class FRigElementKey, class FRigElementKey> PreviousNameMap;                 // 0x0210 (size: 0x50)
-    class URigHierarchy* HierarchyForCacheValidation;                                 // 0x02E0 (size: 0x8)
+    uint32 TopologyVersion;                                                           // 0x00A8 (size: 0x4)
+    uint32 MetadataVersion;                                                           // 0x00AC (size: 0x4)
+    uint16 MetadataTagVersion;                                                        // 0x00B0 (size: 0x2)
+    bool bEnableDirtyPropagation;                                                     // 0x00B2 (size: 0x1)
+    int32 TransformStackIndex;                                                        // 0x02AC (size: 0x4)
+    class URigHierarchyController* HierarchyController;                               // 0x0328 (size: 0x8)
+    class UModularRigRuleManager* RuleManager;                                        // 0x0338 (size: 0x8)
+    class URigHierarchy* HierarchyForCacheValidation;                                 // 0x04D0 (size: 0x8)
 
     void UnsetCurveValueByIndex(int32 InElementIndex, bool bSetupUndo);
     void UnsetCurveValue(FRigElementKey InKey, bool bSetupUndo);
@@ -4900,15 +5867,21 @@ class URigHierarchy : public UObject
     void SetControlPreferredEulerAngles(FRigElementKey InKey, const FVector& InEulerAngles, EEulerRotationOrder InRotationOrder, bool bInitial, bool bFixEulerFlips);
     void SetControlOffsetTransformByIndex(int32 InElementIndex, FTransform InTransform, bool bInitial, bool bAffectChildren, bool bSetupUndo, bool bPrintPythonCommands);
     void SetControlOffsetTransform(FRigElementKey InKey, FTransform InTransform, bool bInitial, bool bAffectChildren, bool bSetupUndo, bool bPrintPythonCommands);
+    void SetConnectorSettingsByIndex(int32 InElementIndex, FRigConnectorSettings InSettings, bool bSetupUndo, bool bForce, bool bPrintPythonCommands);
+    void SetConnectorSettings(FRigElementKey InKey, FRigConnectorSettings InSettings, bool bSetupUndo, bool bForce, bool bPrintPythonCommands);
     bool SetBoolMetadata(FRigElementKey InItem, FName InMetadataName, bool InValue);
     bool SetBoolArrayMetadata(FRigElementKey InItem, FName InMetadataName, TArray<bool> InValue);
     void SendAutoKeyEvent(FRigElementKey InElement, float InOffsetInSeconds, bool bAsynchronous);
+    TArray<FRigElementKey> RestoreSocketsFromStates(TArray<FRigSocketState> InStates, bool bSetupUndoRedo);
+    TArray<FRigElementKey> RestoreConnectorsFromStates(TArray<FRigConnectorState> InStates, bool bSetupUndoRedo);
     void ResetToDefault();
     void ResetPoseToInitial(ERigElementType InTypeFilter);
     void ResetCurveValues();
     void Reset();
     bool RemoveMetadata(FRigElementKey InItem, FName InMetadataName);
     bool RemoveAllMetadata(FRigElementKey InItem);
+    int32 NumTopLevelComponents();
+    int32 NumComponents(FRigElementKey InElement);
     int32 Num();
     FRigControlValue MakeControlValueFromVector2D(FVector2D InValue);
     FRigControlValue MakeControlValueFromVector(FVector InValue);
@@ -4927,6 +5900,7 @@ class URigHierarchy : public UObject
     bool IsCurveValueSetByIndex(int32 InElementIndex);
     bool IsCurveValueSet(FRigElementKey InKey);
     bool IsControllerAvailable();
+    bool IsComponentSelected(FRigComponentKey InKey);
     bool HasTag(FRigElementKey InItem, FName InTag);
     FVector GetVectorMetadata(FRigElementKey InItem, FName InMetadataName, FVector DefaultValue);
     FVector GetVectorFromControlValue(FRigControlValue InValue);
@@ -4936,13 +5910,21 @@ class URigHierarchy : public UObject
     FTransform GetTransformMetadata(FRigElementKey InItem, FName InMetadataName, FTransform DefaultValue);
     FTransform GetTransformFromControlValue(FRigControlValue InValue);
     TArray<FTransform> GetTransformArrayMetadata(FRigElementKey InItem, FName InMetadataName);
+    class UScriptStruct* GetTopLevelComponentType(int32 InTopLevelComponentIndex);
+    FName GetTopLevelComponentName(int32 InTopLevelComponentIndex);
+    TArray<FRigComponentKey> GetTopLevelComponentKeys();
+    FRigComponentKey GetTopLevelComponentKey(int32 InTopLevelComponentIndex);
+    FString GetTopLevelComponentContent(int32 InTopLevelComponentIndex);
     TArray<FName> GetTags(FRigElementKey InItem);
+    TArray<FRigSocketState> GetSocketStates();
+    TArray<FRigElementKey> GetSocketKeys(bool bTraverse);
     TArray<FRigElementKey> GetSelectedKeys(ERigElementType InTypeFilter);
+    TArray<FRigHierarchyKey> GetSelectedHierarchyKeys_ForBlueprint();
+    class UModularRigRuleManager* GetRuleManager(bool bCreateIfNeeded);
     FRotator GetRotatorMetadata(FRigElementKey InItem, FName InMetadataName, FRotator DefaultValue);
     FRotator GetRotatorFromControlValue(FRigControlValue InValue);
     TArray<FRotator> GetRotatorArrayMetadata(FRigElementKey InItem, FName InMetadataName);
     TArray<FRigElementKey> GetRootElementKeys();
-    TArray<FRigElementKey> GetRigidBodyKeys(bool bTraverse);
     FRigElementKey GetRigElementKeyMetadata(FRigElementKey InItem, FName InMetadataName, FRigElementKey DefaultValue);
     TArray<FRigElementKey> GetRigElementKeyArrayMetadata(FRigElementKey InItem, FName InMetadataName);
     TArray<FRigElementKey> GetReferenceKeys(bool bTraverse);
@@ -4950,7 +5932,9 @@ class URigHierarchy : public UObject
     TArray<FQuat> GetQuatArrayMetadata(FRigElementKey InItem, FName InMetadataName);
     FRigElementKey GetPreviousParent(const FRigElementKey& InKey);
     FName GetPreviousName(const FRigElementKey& InKey);
-    FRigPose GetPose(bool bInitial);
+    FRigHierarchyKey GetPreviousHierarchyParent(const FRigHierarchyKey& InKey);
+    FName GetPreviousHierarchyName(const FRigHierarchyKey& InKey);
+    FRigPose GetPose(bool bInitial, bool bIncludeTransientControls);
     TArray<FRigElementWeight> GetParentWeightArray(FRigElementKey InChild, bool bInitial);
     FRigElementWeight GetParentWeight(FRigElementKey InChild, FRigElementKey InParent, bool bInitial);
     FTransform GetParentTransformByIndex(int32 InElementIndex, bool bInitial);
@@ -4958,8 +5942,15 @@ class URigHierarchy : public UObject
     TArray<FRigElementKey> GetParents(FRigElementKey InKey, bool bRecursive);
     int32 GetNumberOfParents(FRigElementKey InKey);
     TArray<FRigElementKey> GetNullKeys(bool bTraverse);
+    FName GetNameSpaceFName(FRigElementKey InItem);
+    FString GetNameSpace(FRigElementKey InItem);
     FName GetNameMetadata(FRigElementKey InItem, FName InMetadataName, FName DefaultValue);
     TArray<FName> GetNameArrayMetadata(FRigElementKey InItem, FName InMetadataName);
+    FString GetModulePrefix(FRigElementKey InItem);
+    FName GetModulePathFName(FRigElementKey InItem);
+    FString GetModulePath(FRigElementKey InItem);
+    FString GetModuleName(FRigElementKey InItem);
+    FName GetModuleFName(FRigElementKey InItem);
     ERigMetadataType GetMetadataType(FRigElementKey InItem, FName InMetadataName);
     TArray<FName> GetMetadataNames(FRigElementKey InItem);
     FTransform GetLocalTransformByIndex(int32 InElementIndex, bool bInitial);
@@ -5000,60 +5991,90 @@ class URigHierarchy : public UObject
     FVector GetControlPreferredEulerAngles(FRigElementKey InKey, EEulerRotationOrder InRotationOrder, bool bInitial);
     class URigHierarchyController* GetController(bool bCreateIfNeeded);
     TArray<FRigElementKey> GetControlKeys(bool bTraverse);
+    TArray<FRigConnectorState> GetConnectorStates();
+    TArray<FRigElementKey> GetConnectorKeys(bool bTraverse);
+    class UScriptStruct* GetComponentType(FRigElementKey InElement, int32 InComponentIndex);
+    FName GetComponentName(FRigElementKey InElement, int32 InComponentIndex);
+    TArray<FRigComponentKey> GetComponentKeys(FRigElementKey InElement);
+    FRigComponentKey GetComponentKey(FRigElementKey InElement, int32 InComponentIndex);
+    FString GetComponentContent(FRigElementKey InElement, int32 InComponentIndex);
     TArray<FRigElementKey> GetChildren(FRigElementKey InKey, bool bRecursive);
     bool GetBoolMetadata(FRigElementKey InItem, FName InMetadataName, bool DefaultValue);
     TArray<bool> GetBoolArrayMetadata(FRigElementKey InItem, FName InMetadataName);
     TArray<FRigElementKey> GetBoneKeys(bool bTraverse);
     TArray<FRigElementKey> GetAllKeys_ForBlueprint(bool bTraverse);
+    TArray<FRigComponentKey> GetAllComponentKeys();
     FRigNullElement FindNull_ForBlueprintOnly(const FRigElementKey& InKey);
     FRigControlElement FindControl_ForBlueprintOnly(const FRigElementKey& InKey);
     FRigBoneElement FindBone_ForBlueprintOnly(const FRigElementKey& InKey);
     void CopyPose(class URigHierarchy* InHierarchy, bool bCurrent, bool bInitial, bool bWeights, bool bMatchPoseInGlobalIfNeeded);
     void CopyHierarchy(class URigHierarchy* InHierarchy);
     bool Contains_ForBlueprint(FRigElementKey InKey);
-}; // Size: 0x380
+}; // Size: 0x5F0
 
 class URigHierarchyController : public UObject
 {
     bool bReportWarningsAndErrors;                                                    // 0x0028 (size: 0x1)
-    TWeakObjectPtr<class URigHierarchy> Hierarchy;                                    // 0x002C (size: 0x8)
 
-    bool SetSelection(const TArray<FRigElementKey>& InKeys, bool bPrintPythonCommand);
+    bool SetSelection(const TArray<FRigElementKey>& InKeys, bool bPrintPythonCommand, bool bSetupUndo);
     bool SetParent(FRigElementKey InChild, FRigElementKey InParent, bool bMaintainGlobalTransform, bool bSetupUndo, bool bPrintPythonCommand);
+    bool SetHierarchySelection(const TArray<FRigHierarchyKey>& InKeys, bool bPrintPythonCommand, bool bSetupUndo);
     void SetHierarchy(class URigHierarchy* InHierarchy);
     FName SetDisplayName(FRigElementKey InControl, FName InDisplayName, bool bRenameElement, bool bSetupUndo, bool bPrintPythonCommand);
     bool SetControlSettings(FRigElementKey InKey, FRigControlSettings InSettings, bool bSetupUndo);
-    bool SelectElement(FRigElementKey InKey, bool bSelect, bool bClearSelection);
+    bool SetComponentSelection(const TArray<FRigComponentKey>& InKeys, bool bPrintPythonCommand);
+    bool SetComponentContent(FRigComponentKey InComponent, FString InContent, bool bSetupUndo, bool bPrintPythonCommand);
+    bool SetAvailableSpaceLabel(FRigElementKey InControl, FRigElementKey InSpace, FName InDisplayLabel, bool bSetupUndo, bool bPrintPythonCommand);
+    bool SetAvailableSpaceIndex(FRigElementKey InControl, FRigElementKey InSpace, int32 InIndex, bool bSetupUndo, bool bPrintPythonCommand);
+    bool SelectHierarchyKey(FRigHierarchyKey InKey, bool bSelect, bool bClearSelection, bool bSetupUndo);
+    bool SelectElement(FRigElementKey InKey, bool bSelect, bool bClearSelection, bool bSetupUndo);
+    bool SelectComponent(FRigComponentKey InKey, bool bSelect, bool bClearSelection, bool bSetupUndo);
+    FRigComponentKey ReparentComponent(FRigComponentKey InComponentKey, FRigElementKey InParentElementKey, bool bSetupUndo, bool bPrintPythonCommand, bool bClearSelection);
     bool ReorderElement(FRigElementKey InElement, int32 InIndex, bool bSetupUndo, bool bPrintPythonCommand);
     FRigElementKey RenameElement(FRigElementKey InElement, FName InName, bool bSetupUndo, bool bPrintPythonCommand, bool bClearSelection);
+    FRigComponentKey RenameComponent(FRigComponentKey InComponent, FName InName, bool bSetupUndo, bool bPrintPythonCommand, bool bClearSelection);
     bool RemoveParent(FRigElementKey InChild, FRigElementKey InParent, bool bMaintainGlobalTransform, bool bSetupUndo, bool bPrintPythonCommand);
     bool RemoveElement(FRigElementKey InElement, bool bSetupUndo, bool bPrintPythonCommand);
+    bool RemoveComponent(FRigComponentKey InComponent, bool bSetupUndo, bool bPrintPythonCommand);
+    bool RemoveChannelHost(FRigElementKey InChannel, FRigElementKey InHost, bool bSetupUndo, bool bPrintPythonCommand);
+    bool RemoveAvailableSpace(FRigElementKey InControl, FRigElementKey InSpace, bool bSetupUndo, bool bPrintPythonCommand);
     bool RemoveAllParents(FRigElementKey InChild, bool bMaintainGlobalTransform, bool bSetupUndo, bool bPrintPythonCommand);
     TArray<FRigElementKey> MirrorElements(TArray<FRigElementKey> InKeys, FRigVMMirrorSettings InSettings, bool bSelectNewElements, bool bSetupUndo, bool bPrintPythonCommands);
+    TArray<FRigElementKey> ImportSocketsFromSkeletalMesh(class USkeletalMesh* InSkeletalMesh, const FName& InNameSpace, bool bReplaceExistingSockets, bool bRemoveObsoleteSockets, bool bSelectSockets, bool bSetupUndo, bool bPrintPythonCommand);
+    TArray<FRigElementKey> ImportPreviewSkeletalMesh(class USkeletalMesh* InSkeletalMesh, bool bReplaceExistingBones, bool bRemoveObsoleteBones, bool bSelectBones, bool bSetupUndo);
     TArray<FRigElementKey> ImportFromText(FString InContent, bool bReplaceExistingElements, bool bSelectNewElements, bool bSetupUndo, bool bPrintPythonCommands);
+    TArray<FRigElementKey> ImportCurvesFromSkeletalMesh(class USkeletalMesh* InSkeletalMesh, FName InNameSpace, bool bSelectCurves, bool bSetupUndo, bool bPrintPythonCommand);
     TArray<FRigElementKey> ImportCurves(class USkeleton* InSkeleton, FName InNameSpace, bool bSelectCurves, bool bSetupUndo, bool bPrintPythonCommand);
+    TArray<FRigElementKey> ImportBonesFromSkeletalMesh(class USkeletalMesh* InSkeletalMesh, const FName& InNameSpace, bool bReplaceExistingBones, bool bRemoveObsoleteBones, bool bSelectBones, bool bSetupUndo, bool bPrintPythonCommand);
     TArray<FRigElementKey> ImportBones(class USkeleton* InSkeleton, FName InNameSpace, bool bReplaceExistingBones, bool bRemoveObsoleteBones, bool bSelectBones, bool bSetupUndo, bool bPrintPythonCommand);
     class URigHierarchy* GetHierarchy();
     FRigControlSettings GetControlSettings(FRigElementKey InKey);
     FString ExportToText(TArray<FRigElementKey> InKeys);
     FString ExportSelectionToText();
     TArray<FRigElementKey> DuplicateElements(TArray<FRigElementKey> InKeys, bool bSelectNewElements, bool bSetupUndo, bool bPrintPythonCommands);
+    bool DeselectHierarchyKey(FRigHierarchyKey InKey, bool bSetupUndo);
     bool DeselectElement(FRigElementKey InKey);
-    bool ClearSelection();
-    FRigElementKey AddRigidBody(FName InName, FRigElementKey InParent, FRigRigidBodySettings InSettings, FTransform InLocalTransform, bool bSetupUndo, bool bPrintPythonCommand);
-    bool AddParent(FRigElementKey InChild, FRigElementKey InParent, float InWeight, bool bMaintainGlobalTransform, bool bSetupUndo);
+    bool DeselectComponent(FRigComponentKey InKey);
+    bool ClearSelection(bool bSetupUndo);
+    FRigComponentKey AddTopLevelComponent(class UScriptStruct* InComponentStruct, FName InName, FString InContent, bool bSetupUndo, bool bPrintPythonCommand);
+    FRigElementKey AddSocket(FName InName, FRigElementKey InParent, FTransform InTransform, bool bTransformInGlobal, const FLinearColor& InColor, FString InDescription, bool bSetupUndo, bool bPrintPythonCommand);
+    bool AddParent(FRigElementKey InChild, FRigElementKey InParent, float InWeight, bool bMaintainGlobalTransform, FName InDisplayLabel, bool bSetupUndo);
     FRigElementKey AddNull(FName InName, FRigElementKey InParent, FTransform InTransform, bool bTransformInGlobal, bool bSetupUndo, bool bPrintPythonCommand);
     FRigElementKey AddCurve(FName InName, float InValue, bool bSetupUndo, bool bPrintPythonCommand);
     FRigElementKey AddControl_ForBlueprint(FName InName, FRigElementKey InParent, FRigControlSettings InSettings, FRigControlValue InValue, bool bSetupUndo, bool bPrintPythonCommand);
+    FRigElementKey AddConnector(FName InName, FRigConnectorSettings InSettings, bool bSetupUndo, bool bPrintPythonCommand);
+    FRigComponentKey AddComponent(class UScriptStruct* InComponentStruct, FName InName, FRigElementKey InElement, FString InContent, bool bSetupUndo, bool bPrintPythonCommand);
+    bool AddChannelHost(FRigElementKey InChannel, FRigElementKey InHost, bool bSetupUndo, bool bPrintPythonCommand);
     FRigElementKey AddBone(FName InName, FRigElementKey InParent, FTransform InTransform, bool bTransformInGlobal, ERigBoneType InBoneType, bool bSetupUndo, bool bPrintPythonCommand);
+    bool AddAvailableSpace(FRigElementKey InControl, FRigElementKey InSpace, FName InDisplayLabel, bool bSetupUndo, bool bPrintPythonCommand);
     FRigElementKey AddAnimationChannel_ForBlueprint(FName InName, FRigElementKey InParentControl, FRigControlSettings InSettings, bool bSetupUndo, bool bPrintPythonCommand);
-}; // Size: 0xA0
+}; // Size: 0x80
 
 class UTransformableControlHandle : public UTransformableHandle
 {
-    TSoftObjectPtr<UControlRig> ControlRig;                                           // 0x0058 (size: 0x28)
-    FName ControlName;                                                                // 0x0080 (size: 0x8)
+    TSoftObjectPtr<class UControlRig> ControlRig;                                     // 0x0060 (size: 0x28)
+    FName ControlName;                                                                // 0x0088 (size: 0x8)
 
-}; // Size: 0x88
+}; // Size: 0x140
 
 #endif

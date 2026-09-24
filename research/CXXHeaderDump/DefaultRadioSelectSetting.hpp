@@ -3,6 +3,6 @@
 
 class UDefaultRadioSelectSetting_C : public URadioSelectSetting
 {
-}; // Size: 0x340
+}; // Size: 0x3C0
 
 #endif

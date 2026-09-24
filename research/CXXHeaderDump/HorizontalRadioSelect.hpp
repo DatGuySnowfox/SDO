@@ -3,6 +3,6 @@
 
 class UHorizontalRadioSelect_C : public URadioSelect
 {
-}; // Size: 0x300
+}; // Size: 0x380
 
 #endif

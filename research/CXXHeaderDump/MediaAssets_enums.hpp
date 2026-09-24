@@ -40,6 +40,12 @@ enum class EMediaTextureVisibleMipsTiles {
     EMediaTextureVisibleMipsTiles_MAX = 3,
 };
 
+enum class EMediaTimeRangeBPType {
+    Absolute = 0,
+    Current = 1,
+    EMediaTimeRangeBPType_MAX = 2,
+};
+
 enum class EMediaVideoCaptureDeviceFilter {
     None = 0,
     Card = 1,
@@ -64,11 +70,5 @@ enum MediaTextureOrientation {
     MTORI_CW180 = 2,
     MTORI_CW270 = 3,
     MTORI_MAX = 4,
-};
-
-enum MediaTextureOutputFormat {
-    MTOF_Default = 0,
-    MTOF_SRGB_LINOUT = 1,
-    MTOF_MAX = 2,
 };
 

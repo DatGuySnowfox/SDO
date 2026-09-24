@@ -3,8 +3,8 @@
 
 class ABP_Animal_C : public ABP_AI_C
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0690 (size: 0x8)
-    class USD_AIComponent_C* SD_AIComponent;                                          // 0x0698 (size: 0x8)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0660 (size: 0x8)
+    class USD_AIComponent_C* SD_AIComponent;                                          // 0x0668 (size: 0x8)
 
     void AI Is Dead?(bool& Dead);
     void AI Can Interact?(bool& Can Interact);
@@ -23,6 +23,6 @@ class ABP_Animal_C : public ABP_AI_C
     void AI Camera Activate(bool Activate);
     void AI Block(TEnumAsByte<E_BlockType::Type> Block Type, class AActor* Block Attacker);
     void ExecuteUbergraph_BP_Animal(int32 EntryPoint);
-}; // Size: 0x6A0
+}; // Size: 0x670
 
 #endif

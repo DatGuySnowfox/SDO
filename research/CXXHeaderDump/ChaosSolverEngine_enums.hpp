@@ -1,3 +1,17 @@
+enum class EChaosVDRemoteSessionAttributes {
+    None = 0,
+    SupportsDataChannelChange = 1,
+    CanExpire = 2,
+    IsMultiSessionWrapper = 4,
+    EChaosVDRemoteSessionAttributes_MAX = 5,
+};
+
+enum class EChaosVDRemoteSessionReadyState {
+    Ready = 0,
+    Busy = 1,
+    EChaosVDRemoteSessionReadyState_MAX = 2,
+};
+
 enum class EClusterConnectionTypeEnum {
     Chaos_PointImplicit = 0,
     Chaos_DelaunayTriangulation = 1,

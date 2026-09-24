@@ -3,6 +3,6 @@
 
 class UTextStyle_NarrativeButtonHovered_C : public UCommonTextStyle
 {
-}; // Size: 0x1B0
+}; // Size: 0x190
 
 #endif

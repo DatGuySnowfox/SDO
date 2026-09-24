@@ -3,6 +3,6 @@
 
 class ABP_ToughnessBookPickup_C : public ABP_StaticMeshPickup_C
 {
-}; // Size: 0x310
+}; // Size: 0x320
 
 #endif

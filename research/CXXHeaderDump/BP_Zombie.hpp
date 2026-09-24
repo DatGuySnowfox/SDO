@@ -3,6 +3,6 @@
 
 class ABP_Zombie_C : public ABP_MainEnemy_C
 {
-}; // Size: 0x68B
+}; // Size: 0x65B
 
 #endif

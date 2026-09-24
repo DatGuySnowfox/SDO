@@ -9,7 +9,7 @@ class IBP_JigCharacterInterface_C : public IInterface
     void CancelExfil();
     void StartExfil(double Time);
     void InitiateGameSave();
-    void GetTraceActorsToIgnore(TArray<class AActor*>& Actors);
+    void GetTraceActorsToIgnore(TArray<AActor*>& Actors);
     void OnClientDataRequested(TArray<FGuid>& ActionbarUIDs, bool& Result);
     void OnSpecialContainerattachmentUpdated(class UJSI_Slot_C* ItemRef, bool& Result);
     void OnLoadSavedDataRequested(bool& Result);

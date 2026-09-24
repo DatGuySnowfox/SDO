@@ -19,7 +19,8 @@ namespace Enum_BuildingSnapTypes {
         NewEnumerator15 = 16,
         NewEnumerator13 = 17,
         NewEnumerator18 = 18,
-        Enum_MAX = 19,
+        NewEnumerator19 = 19,
+        Enum_MAX = 20,
     };
 }
 

@@ -25,10 +25,10 @@ struct FResonanceAudioReverbPluginSettings
 
 class AResonanceAudioDirectivityVisualizer : public AActor
 {
-    class UMaterial* Material;                                                        // 0x0308 (size: 0x8)
-    class UResonanceAudioSpatializationSourceSettings* Settings;                      // 0x0310 (size: 0x8)
+    class UMaterial* Material;                                                        // 0x0318 (size: 0x8)
+    class UResonanceAudioSpatializationSourceSettings* Settings;                      // 0x0320 (size: 0x8)
 
-}; // Size: 0x318
+}; // Size: 0x328
 
 class UResonanceAudioBlueprintFunctionLibrary : public UBlueprintFunctionLibrary
 {

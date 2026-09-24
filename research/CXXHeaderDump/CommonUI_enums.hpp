@@ -1,3 +1,9 @@
+enum class ECommonButtonAcceptKeyHandling {
+    Ignore = 0,
+    TriggerClick = 1,
+    ECommonButtonAcceptKeyHandling_MAX = 2,
+};
+
 enum class ECommonNumericType {
     Number = 0,
     Percentage = 1,
@@ -14,6 +20,15 @@ enum class ECommonSwitcherTransition {
     ECommonSwitcherTransition_MAX = 4,
 };
 
+enum class ECommonSwitcherTransitionFallbackStrategy {
+    None = 0,
+    Previous = 1,
+    Next = 2,
+    First = 3,
+    Last = 4,
+    ECommonSwitcherTransitionFallbackStrategy_MAX = 5,
+};
+
 enum class EInputActionState {
     Enabled = 0,
     Disabled = 1,
@@ -27,6 +42,12 @@ enum class ERichTextInlineIconDisplayMode {
     TextOnly = 1,
     IconAndText = 2,
     MAX = 3,
+};
+
+enum class ERotatorDirection {
+    Right = 0,
+    Left = 1,
+    ERotatorDirection_MAX = 2,
 };
 
 enum class ETransitionCurve {

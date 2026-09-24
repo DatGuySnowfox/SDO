@@ -3,6 +3,6 @@
 
 class ABuildable_WoodenWallDoor2_C : public ABuildable_WoodenWallDoor_C
 {
-}; // Size: 0x548
+}; // Size: 0x558
 
 #endif

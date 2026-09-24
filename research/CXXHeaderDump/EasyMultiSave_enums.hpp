@@ -21,7 +21,15 @@ enum class EDataLoadType {
     DATA_Level = 0,
     DATA_Player = 1,
     DATA_Object = 2,
-    DATA_MAX = 3,
+    DATA_Collection = 3,
+    DATA_MAX = 4,
+};
+
+enum class EDeleteSlotType {
+    Full = 0,
+    Player = 1,
+    Level = 2,
+    EDeleteSlotType_MAX = 3,
 };
 
 enum class EFileSaveMethod {
@@ -30,17 +38,27 @@ enum class EFileSaveMethod {
     FM_MAX = 2,
 };
 
+enum class EFileValidity {
+    FILE_VALID = 0,
+    FILE_MISSING = 1,
+    FILE_INVALID = 2,
+    FILE_INCOMPATIBLE = 3,
+    FILE_MAX = 4,
+};
+
+enum class EIntegrityCheckResult {
+    Success = 0,
+    VersionMismatch = 1,
+    Invalid = 2,
+    Unknown = 3,
+    EIntegrityCheckResult_MAX = 4,
+};
+
 enum class ELoadMethod {
     LM_Default = 0,
     LM_Deferred = 1,
     LM_Thread = 2,
     LM_MAX = 3,
-};
-
-enum class ELoadTypeFlags {
-    LF_Player = 0,
-    LF_Level = 1,
-    LF_MAX = 2,
 };
 
 enum class ELoadedStateMod {
@@ -73,16 +91,29 @@ enum class EOldPackageEngine {
 
 enum class EPrepareType {
     PT_Default = 0,
-    PT_RuntimeOnly = 1,
-    PT_FullReload = 2,
-    PT_MAX = 3,
+    PT_FullReload = 1,
+    PT_MAX = 2,
+};
+
+enum class EResetCustomSaveType {
+    Full = 0,
+    ClearMemory = 1,
+    ResetDefault = 2,
+    EResetCustomSaveType_MAX = 3,
 };
 
 enum class ESaveErrorType {
     ER_Player = 0,
     ER_Level = 1,
     ER_Object = 2,
-    ER_MAX = 3,
+    ER_Collection = 3,
+    ER_MAX = 4,
+};
+
+enum class ESaveEventType {
+    PreSave = 0,
+    PostSave = 1,
+    ESaveEventType_MAX = 2,
 };
 
 enum class ESaveFileCheckType {
@@ -100,23 +131,23 @@ enum class ESaveGameMode {
     MODE_MAX = 3,
 };
 
+enum class ESaveObjectType {
+    SaveGameOnly = 0,
+    CompleteObject = 1,
+    ESaveObjectType_MAX = 2,
+};
+
 enum class ESaveTypeFlags {
-    SF_Player = 0,
-    SF_Level = 1,
-    SF_MAX = 2,
+    None = 0,
+    SF_Player = 1,
+    SF_Level = 2,
+    ESaveTypeFlags_MAX = 3,
 };
 
 enum class EThumbnailImageFormat {
     Png = 0,
     Jpeg = 1,
     EThumbnailImageFormat_MAX = 2,
-};
-
-enum class EUpdateActorResult {
-    RES_Success = 0,
-    RES_Skip = 1,
-    RES_ShouldSpawnNewActor = 2,
-    RES_MAX = 3,
 };
 
 enum class EWorldPartitionInit {

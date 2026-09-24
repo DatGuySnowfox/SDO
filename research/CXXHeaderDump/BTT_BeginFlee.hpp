@@ -9,7 +9,7 @@ class UBTT_BeginFlee_C : public UBTTask_BlueprintBase
     class UEnvQueryInstanceBlueprintWrapper* Flee EQS;                                // 0x00C0 (size: 0x8)
     FVector Last Location;                                                            // 0x00C8 (size: 0x18)
 
-    void SortFleeArray(TArray<class AActor*>& Actors);
+    void SortFleeArray(TArray<AActor*>& Actors);
     void Check If Seen(bool& Seen, class AActor*& Actor);
     void EQS Done(class UEnvQueryInstanceBlueprintWrapper* QueryInstance, TEnumAsByte<EEnvQueryStatus::Type> QueryStatus);
     void ReceiveAbortAI(class AAIController* OwnerController, class APawn* ControlledPawn);

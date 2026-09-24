@@ -3,8 +3,8 @@
 
 class UDEPRECATED_ImgMediaPlaybackComponent : public UActorComponent
 {
-    float LODBias;                                                                    // 0x00A0 (size: 0x4)
+    float LODBias;                                                                    // 0x00B8 (size: 0x4)
 
-}; // Size: 0xC8
+}; // Size: 0xE0
 
 #endif

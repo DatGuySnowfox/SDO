@@ -14,7 +14,7 @@ struct FAudioParameter
     TArray<float> ArrayFloatParam;                                                    // 0x0030 (size: 0x10)
     TArray<bool> ArrayBoolParam;                                                      // 0x0040 (size: 0x10)
     TArray<int32> ArrayIntParam;                                                      // 0x0050 (size: 0x10)
-    TArray<class UObject*> ArrayObjectParam;                                          // 0x0060 (size: 0x10)
+    TArray<UObject*> ArrayObjectParam;                                                // 0x0060 (size: 0x10)
     TArray<FString> ArrayStringParam;                                                 // 0x0070 (size: 0x10)
     EAudioParameterType ParamType;                                                    // 0x0080 (size: 0x1)
     FName TypeName;                                                                   // 0x0084 (size: 0x8)
@@ -27,6 +27,28 @@ struct FSoundGeneratorOutput
 
 }; // Size: 0x8
 
+struct FSoundWaveCloudStreamingPlatformProjectSettings
+{
+    ESoundWaveCloudStreamingPlatformProjectEnableType EnablementSetting;              // 0x0000 (size: 0x1)
+
+}; // Size: 0x1
+
+struct FSoundWaveCloudStreamingPlatformSettings
+{
+    ESoundWaveCloudStreamingPlatformEnableType EnablementSetting;                     // 0x0000 (size: 0x1)
+
+}; // Size: 0x1
+
+struct FSoundWaveCuePoint
+{
+    int32 CuePointID;                                                                 // 0x0000 (size: 0x4)
+    FString Label;                                                                    // 0x0008 (size: 0x10)
+    int64 FramePosition;                                                              // 0x0018 (size: 0x8)
+    int64 FrameLength;                                                                // 0x0020 (size: 0x8)
+    bool bIsLoopRegion;                                                               // 0x0028 (size: 0x1)
+
+}; // Size: 0x30
+
 class IAudioParameterControllerInterface : public IInterface
 {
 
@@ -35,7 +57,7 @@ class IAudioParameterControllerInterface : public IInterface
     void SetStringArrayParameter(FName InName, const TArray<FString>& InValue);
     void SetParameters_Blueprint(const TArray<FAudioParameter>& InParameters);
     void SetObjectParameter(FName InName, class UObject* InValue);
-    void SetObjectArrayParameter(FName InName, const TArray<class UObject*>& InValue);
+    void SetObjectArrayParameter(FName InName, const TArray<UObject*>& InValue);
     void SetIntParameter(FName InName, int32 inInt);
     void SetIntArrayParameter(FName InName, const TArray<int32>& InValue);
     void SetFloatParameter(FName InName, float InFloat);
@@ -45,13 +67,15 @@ class IAudioParameterControllerInterface : public IInterface
     void ResetParameters();
 }; // Size: 0x28
 
-class UAudioCodecEncoderSettings : public UObject
+class IAudioPropertiesSheetAssetUserInterface : public IInterface
 {
-    int32 Version;                                                                    // 0x0028 (size: 0x4)
-
-}; // Size: 0x30
+}; // Size: 0x28
 
 class UAudioEndpointSettingsBase : public UObject
+{
+}; // Size: 0x28
+
+class UAudioPropertiesSheetAssetBase : public UObject
 {
 }; // Size: 0x28
 
@@ -103,7 +127,7 @@ class UWaveformTransformationBase : public UObject
 
 class UWaveformTransformationChain : public UObject
 {
-    TArray<class UWaveformTransformationBase*> Transformations;                       // 0x0028 (size: 0x10)
+    TArray<UWaveformTransformationBase*> Transformations;                             // 0x0028 (size: 0x10)
 
 }; // Size: 0x38
 

@@ -3,14 +3,15 @@
 
 class UMovieSceneTakeSection : public UMovieSceneSection
 {
-    FMovieSceneIntegerChannel HoursCurve;                                             // 0x00F0 (size: 0x100)
-    FMovieSceneIntegerChannel MinutesCurve;                                           // 0x01F0 (size: 0x100)
-    FMovieSceneIntegerChannel SecondsCurve;                                           // 0x02F0 (size: 0x100)
-    FMovieSceneIntegerChannel FramesCurve;                                            // 0x03F0 (size: 0x100)
-    FMovieSceneFloatChannel SubFramesCurve;                                           // 0x04F0 (size: 0x110)
-    FMovieSceneStringChannel Slate;                                                   // 0x0600 (size: 0x110)
+    FMovieSceneIntegerChannel HoursCurve;                                             // 0x0108 (size: 0x108)
+    FMovieSceneIntegerChannel MinutesCurve;                                           // 0x0210 (size: 0x108)
+    FMovieSceneIntegerChannel SecondsCurve;                                           // 0x0318 (size: 0x108)
+    FMovieSceneIntegerChannel FramesCurve;                                            // 0x0420 (size: 0x108)
+    FMovieSceneFloatChannel SubFramesCurve;                                           // 0x0528 (size: 0x110)
+    FMovieSceneFloatChannel RateCurve;                                                // 0x0638 (size: 0x110)
+    FMovieSceneStringChannel Slate;                                                   // 0x0748 (size: 0x110)
 
-}; // Size: 0x710
+}; // Size: 0x858
 
 class UMovieSceneTakeSettings : public UObject
 {
@@ -19,14 +20,15 @@ class UMovieSceneTakeSettings : public UObject
     FString SecondsName;                                                              // 0x0048 (size: 0x10)
     FString FramesName;                                                               // 0x0058 (size: 0x10)
     FString SubFramesName;                                                            // 0x0068 (size: 0x10)
-    FString SlateName;                                                                // 0x0078 (size: 0x10)
+    FString RateName;                                                                 // 0x0078 (size: 0x10)
+    FString SlateName;                                                                // 0x0088 (size: 0x10)
 
-}; // Size: 0x88
+}; // Size: 0x98
 
 class UMovieSceneTakeTrack : public UMovieSceneNameableTrack
 {
-    TArray<class UMovieSceneSection*> Sections;                                       // 0x0098 (size: 0x10)
+    TArray<UMovieSceneSection*> Sections;                                             // 0x0110 (size: 0x10)
 
-}; // Size: 0xA8
+}; // Size: 0x120
 
 #endif

@@ -118,19 +118,19 @@ struct FAnimNode_BlendListBase : public FAnimNode_Base
 {
     TArray<FPoseLink> BlendPose;                                                      // 0x0010 (size: 0x10)
 
-}; // Size: 0x48
+}; // Size: 0x50
 
 struct FAnimNode_BlendListByBool : public FAnimNode_BlendListBase
 {
-}; // Size: 0x48
+}; // Size: 0x50
 
 struct FAnimNode_BlendListByEnum : public FAnimNode_BlendListBase
 {
-}; // Size: 0x48
+}; // Size: 0x50
 
 struct FAnimNode_BlendListByInt : public FAnimNode_BlendListBase
 {
-}; // Size: 0x48
+}; // Size: 0x50
 
 struct FAnimNode_BlendSpaceEvaluator : public FAnimNode_BlendSpacePlayer
 {
@@ -170,8 +170,9 @@ struct FAnimNode_BlendSpacePlayer_Standalone : public FAnimNode_BlendSpacePlayer
 {
     FName GroupName;                                                                  // 0x0068 (size: 0x8)
     TEnumAsByte<EAnimGroupRole::Type> GroupRole;                                      // 0x0070 (size: 0x1)
-    EAnimSyncMethod Method;                                                           // 0x0071 (size: 0x1)
-    bool bIgnoreForRelevancyTest;                                                     // 0x0072 (size: 0x1)
+    bool bOverridePositionWhenJoiningSyncGroupAsLeader;                               // 0x0071 (size: 0x1)
+    EAnimSyncMethod Method;                                                           // 0x0072 (size: 0x1)
+    bool bIgnoreForRelevancyTest;                                                     // 0x0073 (size: 0x1)
     float X;                                                                          // 0x0074 (size: 0x4)
     float Y;                                                                          // 0x0078 (size: 0x4)
     float PlayRate;                                                                   // 0x007C (size: 0x4)
@@ -308,36 +309,40 @@ struct FAnimNode_HandIKRetargeting : public FAnimNode_SkeletalControlBase
     FBoneReference RightHandIK;                                                       // 0x00E8 (size: 0x10)
     FBoneReference LeftHandIK;                                                        // 0x00F8 (size: 0x10)
     TArray<FBoneReference> IKBonesToMove;                                             // 0x0108 (size: 0x10)
-    float HandFKWeight;                                                               // 0x0118 (size: 0x4)
+    FVector PerAxisAlpha;                                                             // 0x0118 (size: 0x18)
+    float HandFKWeight;                                                               // 0x0130 (size: 0x4)
 
-}; // Size: 0x120
+}; // Size: 0x138
 
 struct FAnimNode_LayeredBoneBlend : public FAnimNode_Base
 {
     FPoseLink BasePose;                                                               // 0x0010 (size: 0x10)
     TArray<FPoseLink> BlendPoses;                                                     // 0x0020 (size: 0x10)
     ELayeredBoneBlendMode BlendMode;                                                  // 0x0030 (size: 0x1)
-    TArray<class UBlendProfile*> BlendMasks;                                          // 0x0038 (size: 0x10)
+    TArray<UBlendProfile*> BlendMasks;                                                // 0x0038 (size: 0x10)
     TArray<FInputBlendPose> LayerSetup;                                               // 0x0048 (size: 0x10)
     TArray<float> BlendWeights;                                                       // 0x0058 (size: 0x10)
-    bool bMeshSpaceRotationBlend;                                                     // 0x0068 (size: 0x1)
-    bool bMeshSpaceScaleBlend;                                                        // 0x0069 (size: 0x1)
-    TEnumAsByte<ECurveBlendOption::Type> CurveBlendOption;                            // 0x006A (size: 0x1)
-    bool bBlendRootMotionBasedOnRootBone;                                             // 0x006B (size: 0x1)
-    int32 LODThreshold;                                                               // 0x0070 (size: 0x4)
-    TArray<FPerBoneBlendWeight> PerBoneBlendWeights;                                  // 0x0078 (size: 0x10)
-    FGuid SkeletonGuid;                                                               // 0x0088 (size: 0x10)
-    FGuid VirtualBoneGuid;                                                            // 0x0098 (size: 0x10)
+    TArray<FPerBoneBlendWeight> PerBoneBlendWeights;                                  // 0x0088 (size: 0x10)
+    FGuid SkeletonGuid;                                                               // 0x00B8 (size: 0x10)
+    FGuid VirtualBoneGuid;                                                            // 0x00C8 (size: 0x10)
+    int32 LODThreshold;                                                               // 0x00DC (size: 0x4)
+    bool bMeshSpaceRotationBlend;                                                     // 0x00E0 (size: 0x1)
+    bool bRootSpaceRotationBlend;                                                     // 0x00E1 (size: 0x1)
+    bool bMeshSpaceScaleBlend;                                                        // 0x00E2 (size: 0x1)
+    TEnumAsByte<ECurveBlendOption::Type> CurveBlendOption;                            // 0x00E3 (size: 0x1)
+    bool bBlendRootMotionBasedOnRootBone;                                             // 0x00E4 (size: 0x1)
 
-}; // Size: 0xF0
+}; // Size: 0xE8
 
 struct FAnimNode_LegIK : public FAnimNode_SkeletalControlBase
 {
     float ReachPrecision;                                                             // 0x00C8 (size: 0x4)
     int32 MaxIterations;                                                              // 0x00CC (size: 0x4)
-    TArray<FAnimLegIKDefinition> LegsDefinition;                                      // 0x00D0 (size: 0x10)
+    float SoftPercentLength;                                                          // 0x00D0 (size: 0x4)
+    float SoftAlpha;                                                                  // 0x00D4 (size: 0x4)
+    TArray<FAnimLegIKDefinition> LegsDefinition;                                      // 0x00D8 (size: 0x10)
 
-}; // Size: 0xF8
+}; // Size: 0x100
 
 struct FAnimNode_LookAt : public FAnimNode_SkeletalControlBase
 {
@@ -437,39 +442,39 @@ struct FAnimNode_ObserveBone : public FAnimNode_SkeletalControlBase
 
 struct FAnimNode_PoseBlendNode : public FAnimNode_PoseHandler
 {
-    FPoseLink SourcePose;                                                             // 0x0098 (size: 0x10)
-    EAlphaBlendOption BlendOption;                                                    // 0x00A8 (size: 0x1)
-    class UCurveFloat* CustomCurve;                                                   // 0x00B0 (size: 0x8)
+    FPoseLink SourcePose;                                                             // 0x00A0 (size: 0x10)
+    EAlphaBlendOption BlendOption;                                                    // 0x00B0 (size: 0x1)
+    class UCurveFloat* CustomCurve;                                                   // 0x00B8 (size: 0x8)
 
-}; // Size: 0xD0
+}; // Size: 0xD8
 
 struct FAnimNode_PoseByName : public FAnimNode_PoseHandler
 {
-    FName PoseName;                                                                   // 0x0098 (size: 0x8)
-    float PoseWeight;                                                                 // 0x00A0 (size: 0x4)
+    FName PoseName;                                                                   // 0x00A0 (size: 0x8)
+    float PoseWeight;                                                                 // 0x00A8 (size: 0x4)
 
-}; // Size: 0xB0
+}; // Size: 0xB8
 
 struct FAnimNode_PoseDriver : public FAnimNode_PoseHandler
 {
-    FPoseLink SourcePose;                                                             // 0x0098 (size: 0x10)
-    TArray<FBoneReference> SourceBones;                                               // 0x00A8 (size: 0x10)
-    FBoneReference EvalSpaceBone;                                                     // 0x00B8 (size: 0x10)
-    bool bEvalFromRefPose;                                                            // 0x00C8 (size: 0x1)
-    TArray<FBoneReference> OnlyDriveBones;                                            // 0x00D0 (size: 0x10)
-    TArray<FPoseDriverTarget> PoseTargets;                                            // 0x00E0 (size: 0x10)
-    FRBFParams RBFParams;                                                             // 0x00F0 (size: 0x38)
-    EPoseDriverSource DriveSource;                                                    // 0x0128 (size: 0x1)
-    EPoseDriverOutput DriveOutput;                                                    // 0x0129 (size: 0x1)
-    int32 LODThreshold;                                                               // 0x016C (size: 0x4)
+    FPoseLink SourcePose;                                                             // 0x00A0 (size: 0x10)
+    TArray<FBoneReference> SourceBones;                                               // 0x00B0 (size: 0x10)
+    FBoneReference EvalSpaceBone;                                                     // 0x00C0 (size: 0x10)
+    bool bEvalFromRefPose;                                                            // 0x00D0 (size: 0x1)
+    TArray<FBoneReference> OnlyDriveBones;                                            // 0x00D8 (size: 0x10)
+    TArray<FPoseDriverTarget> PoseTargets;                                            // 0x00E8 (size: 0x10)
+    FRBFParams RBFParams;                                                             // 0x00F8 (size: 0x38)
+    EPoseDriverSource DriveSource;                                                    // 0x0130 (size: 0x1)
+    EPoseDriverOutput DriveOutput;                                                    // 0x0131 (size: 0x1)
+    int32 LODThreshold;                                                               // 0x0174 (size: 0x4)
 
-}; // Size: 0x1A0
+}; // Size: 0x1A8
 
 struct FAnimNode_PoseHandler : public FAnimNode_AssetPlayerBase
 {
     class UPoseAsset* PoseAsset;                                                      // 0x0038 (size: 0x8)
 
-}; // Size: 0x98
+}; // Size: 0xA0
 
 struct FAnimNode_PoseSnapshot : public FAnimNode_Base
 {
@@ -498,28 +503,30 @@ struct FAnimNode_ResetRoot : public FAnimNode_SkeletalControlBase
 struct FAnimNode_RigidBody : public FAnimNode_SkeletalControlBase
 {
     class UPhysicsAsset* OverridePhysicsAsset;                                        // 0x00C8 (size: 0x8)
-    FVector OverrideWorldGravity;                                                     // 0x01F8 (size: 0x18)
-    FVector ExternalForce;                                                            // 0x0210 (size: 0x18)
-    FVector ComponentLinearAccScale;                                                  // 0x0228 (size: 0x18)
-    FVector ComponentLinearVelScale;                                                  // 0x0240 (size: 0x18)
-    FVector ComponentAppliedLinearAccClamp;                                           // 0x0258 (size: 0x18)
-    FSimSpaceSettings SimSpaceSettings;                                               // 0x0270 (size: 0x60)
-    float CachedBoundsScale;                                                          // 0x02D0 (size: 0x4)
-    FBoneReference BaseBoneRef;                                                       // 0x02D4 (size: 0x10)
-    TEnumAsByte<ECollisionChannel> OverlapChannel;                                    // 0x02E4 (size: 0x1)
-    ESimulationSpace SimulationSpace;                                                 // 0x02E5 (size: 0x1)
-    bool bForceDisableCollisionBetweenConstraintBodies;                               // 0x02E6 (size: 0x1)
-    bool bUseExternalClothCollision;                                                  // 0x02E7 (size: 0x1)
-    uint8 bEnableWorldGeometry;                                                       // 0x02E9 (size: 0x1)
-    uint8 bOverrideWorldGravity;                                                      // 0x02E9 (size: 0x1)
-    uint8 bTransferBoneVelocities;                                                    // 0x02E9 (size: 0x1)
-    uint8 bFreezeIncomingPoseOnStart;                                                 // 0x02E9 (size: 0x1)
-    uint8 bClampLinearTranslationLimitToRefPose;                                      // 0x02E9 (size: 0x1)
-    float WorldSpaceMinimumScale;                                                     // 0x02EC (size: 0x4)
-    float EvaluationResetTime;                                                        // 0x02F0 (size: 0x4)
-    ESimulationTiming SimulationTiming;                                               // 0x02F5 (size: 0x1)
+    bool bDefaultToSkeletalMeshPhysicsAsset;                                          // 0x00D0 (size: 0x1)
+    bool bUseLocalLODThresholdOnly;                                                   // 0x0208 (size: 0x1)
+    FVector OverrideWorldGravity;                                                     // 0x0210 (size: 0x18)
+    FVector ExternalForce;                                                            // 0x0228 (size: 0x18)
+    FVector ComponentLinearAccScale;                                                  // 0x0240 (size: 0x18)
+    FVector ComponentLinearVelScale;                                                  // 0x0258 (size: 0x18)
+    FVector ComponentAppliedLinearAccClamp;                                           // 0x0270 (size: 0x18)
+    FSimSpaceSettings SimSpaceSettings;                                               // 0x0288 (size: 0x68)
+    float CachedBoundsScale;                                                          // 0x02F0 (size: 0x4)
+    FBoneReference BaseBoneRef;                                                       // 0x02F4 (size: 0x10)
+    TEnumAsByte<ECollisionChannel> OverlapChannel;                                    // 0x0304 (size: 0x1)
+    ESimulationSpace SimulationSpace;                                                 // 0x0305 (size: 0x1)
+    bool bForceDisableCollisionBetweenConstraintBodies;                               // 0x0306 (size: 0x1)
+    bool bUseExternalClothCollision;                                                  // 0x0307 (size: 0x1)
+    uint8 bEnableWorldGeometry;                                                       // 0x0309 (size: 0x1)
+    uint8 bOverrideWorldGravity;                                                      // 0x0309 (size: 0x1)
+    uint8 bTransferBoneVelocities;                                                    // 0x0309 (size: 0x1)
+    uint8 bFreezeIncomingPoseOnStart;                                                 // 0x0309 (size: 0x1)
+    uint8 bClampLinearTranslationLimitToRefPose;                                      // 0x0309 (size: 0x1)
+    float WorldSpaceMinimumScale;                                                     // 0x030C (size: 0x4)
+    float EvaluationResetTime;                                                        // 0x0310 (size: 0x4)
+    ESimulationTiming SimulationTiming;                                               // 0x0315 (size: 0x1)
 
-}; // Size: 0x950
+}; // Size: 0x930
 
 struct FAnimNode_RotateRootBone : public FAnimNode_Base
 {
@@ -600,12 +607,14 @@ struct FAnimNode_SequenceEvaluator_Standalone : public FAnimNode_SequenceEvaluat
     bool bIgnoreForRelevancyTest;                                                     // 0x004A (size: 0x1)
     class UAnimSequenceBase* Sequence;                                                // 0x0050 (size: 0x8)
     float ExplicitTime;                                                               // 0x0058 (size: 0x4)
-    bool bShouldLoop;                                                                 // 0x005C (size: 0x1)
-    bool bTeleportToExplicitTime;                                                     // 0x005D (size: 0x1)
-    TEnumAsByte<ESequenceEvalReinit::Type> ReinitializationBehavior;                  // 0x005E (size: 0x1)
-    float StartPosition;                                                              // 0x0060 (size: 0x4)
+    bool bUseExplicitFrame;                                                           // 0x005C (size: 0x1)
+    int32 ExplicitFrame;                                                              // 0x0060 (size: 0x4)
+    bool bShouldLoop;                                                                 // 0x0064 (size: 0x1)
+    bool bTeleportToExplicitTime;                                                     // 0x0065 (size: 0x1)
+    TEnumAsByte<ESequenceEvalReinit::Type> ReinitializationBehavior;                  // 0x0066 (size: 0x1)
+    float StartPosition;                                                              // 0x0068 (size: 0x4)
 
-}; // Size: 0x68
+}; // Size: 0x70
 
 struct FAnimNode_SkeletalControlBase : public FAnimNode_Base
 {
@@ -645,7 +654,7 @@ struct FAnimNode_SplineIK : public FAnimNode_SkeletalControlBase
     float Stretch;                                                                    // 0x0140 (size: 0x4)
     float Offset;                                                                     // 0x0144 (size: 0x4)
 
-}; // Size: 0x270
+}; // Size: 0x260
 
 struct FAnimNode_SpringBone : public FAnimNode_SkeletalControlBase
 {
@@ -735,6 +744,7 @@ struct FAnimNode_TwoWayBlend : public FAnimNode_Base
     EAnimAlphaInputType AlphaInputType;                                               // 0x0030 (size: 0x1)
     uint8 bAlphaBoolEnabled;                                                          // 0x0031 (size: 0x1)
     uint8 bResetChildOnActivation;                                                    // 0x0031 (size: 0x1)
+    uint8 bAlwaysUpdateChildren;                                                      // 0x0031 (size: 0x1)
     float Alpha;                                                                      // 0x0034 (size: 0x4)
     FInputScaleBias AlphaScaleBias;                                                   // 0x0038 (size: 0x8)
     FInputAlphaBoolBlend AlphaBoolBlend;                                              // 0x0040 (size: 0x48)
@@ -789,7 +799,7 @@ struct FAnimPhysSphericalLimit
 
 struct FAnimSequencerInstanceProxy : public FAnimInstanceProxy
 {
-}; // Size: 0xB60
+}; // Size: 0xC00
 
 struct FAnimationStateMachineReference : public FAnimNodeReference
 {
@@ -853,6 +863,14 @@ struct FLayeredBoneBlendReference : public FAnimNodeReference
 }; // Size: 0x10
 
 struct FLinkedAnimGraphReference : public FAnimNodeReference
+{
+}; // Size: 0x10
+
+struct FMirrorAnimNodeReference : public FAnimNodeReference
+{
+}; // Size: 0x10
+
+struct FModifyCurveAnimNodeReference : public FAnimNodeReference
 {
 }; // Size: 0x10
 
@@ -936,6 +954,10 @@ struct FReferenceBoneFrame
 
 }; // Size: 0x30
 
+struct FRigidBodyAnimNodeReference : public FAnimNodeReference
+{
+}; // Size: 0x10
+
 struct FRotationLimit
 {
     FVector LimitMin;                                                                 // 0x0000 (size: 0x18)
@@ -975,15 +997,16 @@ struct FSimSpaceSettings
 {
     float WorldAlpha;                                                                 // 0x0000 (size: 0x4)
     float VelocityScaleZ;                                                             // 0x0004 (size: 0x4)
-    float MaxLinearVelocity;                                                          // 0x0008 (size: 0x4)
-    float MaxAngularVelocity;                                                         // 0x000C (size: 0x4)
-    float MaxLinearAcceleration;                                                      // 0x0010 (size: 0x4)
-    float MaxAngularAcceleration;                                                     // 0x0014 (size: 0x4)
-    FVector ExternalLinearDragV;                                                      // 0x0018 (size: 0x18)
-    FVector ExternalLinearVelocity;                                                   // 0x0030 (size: 0x18)
-    FVector ExternalAngularVelocity;                                                  // 0x0048 (size: 0x18)
+    float DampingAlpha;                                                               // 0x0008 (size: 0x4)
+    float MaxLinearVelocity;                                                          // 0x000C (size: 0x4)
+    float MaxAngularVelocity;                                                         // 0x0010 (size: 0x4)
+    float MaxLinearAcceleration;                                                      // 0x0014 (size: 0x4)
+    float MaxAngularAcceleration;                                                     // 0x0018 (size: 0x4)
+    FVector ExternalLinearDragV;                                                      // 0x0020 (size: 0x18)
+    FVector ExternalLinearVelocity;                                                   // 0x0038 (size: 0x18)
+    FVector ExternalAngularVelocity;                                                  // 0x0050 (size: 0x18)
 
-}; // Size: 0x60
+}; // Size: 0x68
 
 struct FSkeletalControlReference : public FAnimNodeReference
 {
@@ -1003,6 +1026,13 @@ struct FWarpingVectorValue
 
 }; // Size: 0x20
 
+class ISequencerAnimationOverride : public IInterface
+{
+
+    TArray<FName> GetSequencerAnimSlotNames();
+    bool AllowsCinematicOverride();
+}; // Size: 0x28
+
 class ISequencerAnimationSupport : public IInterface
 {
 }; // Size: 0x28
@@ -1010,6 +1040,7 @@ class ISequencerAnimationSupport : public IInterface
 class UAnimExecutionContextLibrary : public UBlueprintFunctionLibrary
 {
 
+    bool IsActive(const FAnimExecutionContext& Context);
     float GetDeltaTime(const FAnimUpdateContext& Context);
     float GetCurrentWeight(const FAnimUpdateContext& Context);
     FAnimNodeReference GetAnimNodeReference(class UAnimInstance* Instance, int32 Index);
@@ -1018,6 +1049,14 @@ class UAnimExecutionContextLibrary : public UBlueprintFunctionLibrary
     FAnimPoseContext ConvertToPoseContext(const FAnimExecutionContext& Context, EAnimExecutionContextConversionResult& Result);
     FAnimInitializationContext ConvertToInitializationContext(const FAnimExecutionContext& Context, EAnimExecutionContextConversionResult& Result);
     FAnimComponentSpacePoseContext ConvertToComponentSpacePoseContext(const FAnimExecutionContext& Context, EAnimExecutionContextConversionResult& Result);
+}; // Size: 0x28
+
+class UAnimNodeRigidBodyLibrary : public UBlueprintFunctionLibrary
+{
+
+    FRigidBodyAnimNodeReference SetOverridePhysicsAsset(const FRigidBodyAnimNodeReference& Node, class UPhysicsAsset* PhysicsAsset);
+    void ConvertToRigidBodyAnimNodePure(const FAnimNodeReference& Node, FRigidBodyAnimNodeReference& RigidBodyAnimNode, bool& Result);
+    FRigidBodyAnimNodeReference ConvertToRigidBodyAnimNode(const FAnimNodeReference& Node, EAnimNodeReferenceConversionResult& Result);
 }; // Size: 0x28
 
 class UAnimNotify_PlayMontageNotify : public UAnimNotify
@@ -1034,7 +1073,7 @@ class UAnimNotify_PlayMontageNotifyWindow : public UAnimNotifyState
 
 class UAnimSequencerInstance : public UAnimInstance
 {
-}; // Size: 0x350
+}; // Size: 0x3E0
 
 class UAnimationStateMachineLibrary : public UBlueprintFunctionLibrary
 {
@@ -1121,6 +1160,30 @@ class ULinkedAnimGraphLibrary : public UBlueprintFunctionLibrary
     FLinkedAnimGraphReference ConvertToLinkedAnimGraph(const FAnimNodeReference& Node, EAnimNodeReferenceConversionResult& Result);
 }; // Size: 0x28
 
+class UMirrorAnimLibrary : public UBlueprintFunctionLibrary
+{
+
+    FMirrorAnimNodeReference SetMirrorTransitionBlendTime(const FMirrorAnimNodeReference& MirrorNode, float InBlendTime);
+    FMirrorAnimNodeReference SetMirror(const FMirrorAnimNodeReference& MirrorNode, bool bInMirror);
+    float GetMirrorTransitionBlendTime(const FMirrorAnimNodeReference& MirrorNode);
+    class UMirrorDataTable* GetMirrorDataTable(const FMirrorAnimNodeReference& MirrorNode);
+    bool GetMirror(const FMirrorAnimNodeReference& MirrorNode);
+    void ConvertToMirrorNodePure(const FAnimNodeReference& Node, FMirrorAnimNodeReference& MirrorNode, bool& Result);
+    FMirrorAnimNodeReference ConvertToMirrorNode(const FAnimNodeReference& Node, EAnimNodeReferenceConversionResult& Result);
+}; // Size: 0x28
+
+class UModifyCurveAnimLibrary : public UBlueprintFunctionLibrary
+{
+
+    FModifyCurveAnimNodeReference SetCurveMap(const FModifyCurveAnimNodeReference& ModifyCurveNode, const TMap<FName, float>& InCurveMap);
+    FModifyCurveAnimNodeReference SetApplyMode(const FModifyCurveAnimNodeReference& ModifyCurveNode, EModifyCurveApplyMode InMode);
+    FModifyCurveAnimNodeReference SetAlpha(const FModifyCurveAnimNodeReference& ModifyCurveNode, float InAlpha);
+    EModifyCurveApplyMode GetApplyMode(const FModifyCurveAnimNodeReference& ModifyCurveNode);
+    float GetAlpha(const FModifyCurveAnimNodeReference& ModifyCurveNode);
+    void ConvertToModifyCurveNodePure(const FAnimNodeReference& Node, FModifyCurveAnimNodeReference& ModifyCurveNode, bool& Result);
+    FModifyCurveAnimNodeReference ConvertToModifyCurveNode(const FAnimNodeReference& Node, EAnimNodeReferenceConversionResult& Result);
+}; // Size: 0x28
+
 class UPlayMontageCallbackProxy : public UObject
 {
     FPlayMontageCallbackProxyOnCompleted OnCompleted;                                 // 0x0028 (size: 0x10)
@@ -1138,7 +1201,7 @@ class UPlayMontageCallbackProxy : public UObject
     void OnNotifyBeginReceived(FName NotifyName, const FBranchingPointNotifyPayload& BranchingPointNotifyPayload);
     void OnMontageEnded(class UAnimMontage* Montage, bool bInterrupted);
     void OnMontageBlendingOut(class UAnimMontage* Montage, bool bInterrupted);
-    class UPlayMontageCallbackProxy* CreateProxyObjectForPlayMontage(class USkeletalMeshComponent* InSkeletalMeshComponent, class UAnimMontage* MontageToPlay, float PlayRate, float StartingPosition, FName StartingSection);
+    class UPlayMontageCallbackProxy* CreateProxyObjectForPlayMontage(class USkeletalMeshComponent* InSkeletalMeshComponent, class UAnimMontage* MontageToPlay, float PlayRate, float StartingPosition, FName StartingSection, bool bShouldStopAllMontages);
 }; // Size: 0xA8
 
 class USequenceEvaluatorLibrary : public UBlueprintFunctionLibrary
@@ -1147,6 +1210,7 @@ class USequenceEvaluatorLibrary : public UBlueprintFunctionLibrary
     FSequenceEvaluatorReference SetSequenceWithInertialBlending(const FAnimUpdateContext& UpdateContext, const FSequenceEvaluatorReference& SequenceEvaluator, class UAnimSequenceBase* Sequence, float BlendTime);
     FSequenceEvaluatorReference SetSequence(const FSequenceEvaluatorReference& SequenceEvaluator, class UAnimSequenceBase* Sequence);
     FSequenceEvaluatorReference SetExplicitTime(const FSequenceEvaluatorReference& SequenceEvaluator, float Time);
+    FSequenceEvaluatorReference SetExplicitFrame(const FSequenceEvaluatorReference& SequenceEvaluator, int32 Frame);
     class UAnimSequenceBase* GetSequence(const FSequenceEvaluatorReference& SequenceEvaluator);
     float GetAccumulatedTime(const FSequenceEvaluatorReference& SequenceEvaluator);
     void ConvertToSequenceEvaluatorPure(const FAnimNodeReference& Node, FSequenceEvaluatorReference& SequenceEvaluator, bool& Result);

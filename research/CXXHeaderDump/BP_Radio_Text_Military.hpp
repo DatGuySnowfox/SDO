@@ -3,6 +3,6 @@
 
 class ABP_Radio_Text_Military_C : public ABP_Radio_Text_C
 {
-}; // Size: 0x2EC
+}; // Size: 0x2FC
 
 #endif

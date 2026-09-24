@@ -14,10 +14,10 @@ class USD_GameInstance_C : public UGameInstance
     bool GameStarted?;                                                                // 0x01F2 (size: 0x1)
     FName CurrentLevel;                                                               // 0x01F4 (size: 0x8)
     FSD_GameInstance_CPlayerSpawnedInLevel PlayerSpawnedInLevel;                      // 0x0200 (size: 0x10)
-    void PlayerSpawnedInLevel();
+    void PlayerSpawnedInLevel(bool Save?);
     bool AllowSaving?;                                                                // 0x0210 (size: 0x1)
-    TSubclassOf<class AActor> Class;                                                  // 0x0218 (size: 0x8)
 
+    void Tutorial_SpawnPlayer();
     void Debug_SpawnCamera();
     void Debug_SpawnPlayer(int32 Index, bool SpawnStartingItems?);
     void GameMode_SpawnPlayer();
@@ -30,7 +30,12 @@ class USD_GameInstance_C : public UGameInstance
     void ChangedUpscalingMethod(int32 NewValue);
     void ChangedUpscalingQuality(int32 NewValue);
     void ChangedAMDFrameGen(bool NewValue);
+    void CustomEvent(float NewValue);
+    void ChangedColorBlindMode(int32 NewValue);
+    void SharpnessCallback(float NewValue);
+    void GammaCallback(float NewValue);
     void GamepadIconsChanged(FString NewValue);
+    void VehicleVolumeChanged(float NewValue);
     void RadioMusicVolumeChanged(float NewValue);
     void UIVolumeChanged(float NewValue);
     void EffectsVolumeChanged(float NewValue);
@@ -42,9 +47,9 @@ class USD_GameInstance_C : public UGameInstance
     void Event_Fog(bool NewValue);
     void Event_VolFog();
     void ExecuteUbergraph_SD_GameInstance(int32 EntryPoint);
-    void PlayerSpawnedInLevel__DelegateSignature();
+    void PlayerSpawnedInLevel__DelegateSignature(bool Save?);
     void PlayerRespawned__DelegateSignature();
     void SmoothLoadLevel__DelegateSignature(FName LevelName);
-}; // Size: 0x220
+}; // Size: 0x211
 
 #endif

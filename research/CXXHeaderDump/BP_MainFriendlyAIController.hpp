@@ -3,6 +3,6 @@
 
 class ABP_MainFriendlyAIController_C : public ADetourCrowdAIController
 {
-}; // Size: 0x3C0
+}; // Size: 0x3C8
 
 #endif

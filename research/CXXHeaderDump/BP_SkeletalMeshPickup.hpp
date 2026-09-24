@@ -3,10 +3,10 @@
 
 class ABP_SkeletalMeshPickup_C : public ASkeletalMeshActor
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0318 (size: 0x8)
-    class UBP_JigPickupComponent_C* BP_JigPickupComponent;                            // 0x0320 (size: 0x8)
-    class UBP_JigMultiplayer_C* BP_JigMultiplayer;                                    // 0x0328 (size: 0x8)
-    TMap<class FGameplayTag, class FText> InteractOptions;                            // 0x0330 (size: 0x50)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0328 (size: 0x8)
+    class UBP_JigPickupComponent_C* BP_JigPickupComponent;                            // 0x0330 (size: 0x8)
+    class UBP_JigComponent_C* BP_JigMultiplayer;                                      // 0x0338 (size: 0x8)
+    TMap<FGameplayTag, FText> InteractOptions;                                        // 0x0340 (size: 0x50)
 
     void JigMP_OnMainContainerItemRemoved(FGuid FromContainerUID, FGuid ItemUID, FName ContainerName, FRepItemInfo ItemRemovedInfo, bool& Result);
     void JigMP_OnMainContainerItemAdded(FGuid ToContainerUID, FGuid ItemUID, FName ToContainerName, FRepItemInfo ItemInfo, FName FromMain, bool& Result, class AActor*& ActorRef);
@@ -23,12 +23,12 @@ class ABP_SkeletalMeshPickup_C : public ASkeletalMeshActor
     void JigMP_OnContainersSwap(class UJSIContainer_C* Container1, class UJSIContainer_C* Container2, bool& Result);
     void JigMP_GetLootWidget(class UWidget*& Result, bool& Valid?);
     void GetJigMultiplayerComponent(class UActorComponent*& JigComp);
-    void GetItemInfo(class UJigsawItem_DataAsset_C*& Info, int32& Count, FS_RandomStatsConfig& RandomStatsConfig, TMap<class FString, class FString>& CustomData);
+    void GetItemInfo(class UJigsawItem_DataAsset_C*& Info, int32& Count, FS_RandomStatsConfig& RandomStatsConfig, TMap<FString, FString>& CustomData);
     void JigCanInteract(bool& Result);
     void JigSetCanInteract(bool CanInteract, bool EnablePhysics, bool& Result);
     void SetPickupCount(int32 NewCount, bool& Result);
     void OnRequestServerInteract(class AActor* Actor, FGameplayTag Option, FS_JigPayload Payload, bool& Result);
-    void GetInteractOptions(TMap<class FGameplayTag, class FText>& Options);
+    void GetInteractOptions(TMap<FGameplayTag, FText>& Options);
     void GetMainSceneComp(class USceneComponent*& Comp);
     void OnStopExecuteInteract(class AActor* InteractingActor);
     void OnServerExecuteInteract(FGameplayTag Option, class AActor* ByActor, FS_JigPayload Payload);
@@ -39,8 +39,8 @@ class ABP_SkeletalMeshPickup_C : public ASkeletalMeshActor
     void SetInteractOption(FGameplayTag Option);
     void OnExecuteInteract(class AActor* InteractingActor, FGameplayTag Option);
     void OnEndInteract();
-    void OnBeginInteract(class AActor* InteractingActor, const TMap<class FGameplayTag, class FText> Options);
+    void OnBeginInteract(class AActor* InteractingActor, const TMap<FGameplayTag, FText> Options);
     void ExecuteUbergraph_BP_SkeletalMeshPickup(int32 EntryPoint);
-}; // Size: 0x380
+}; // Size: 0x390
 
 #endif

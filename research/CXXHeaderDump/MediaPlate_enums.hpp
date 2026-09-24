@@ -6,6 +6,15 @@ enum class EMediaPlateEventState {
     Reverse = 4,
     Forward = 5,
     Rewind = 6,
-    MAX = 7,
+    Next = 7,
+    Previous = 8,
+    MAX = 9,
+};
+
+enum class EMediaPlateResourceType {
+    Playlist = 0,
+    External = 1,
+    Asset = 2,
+    EMediaPlateResourceType_MAX = 3,
 };
 

@@ -3,9 +3,9 @@
 
 class UWBP_NarrativeActivatableWidget_C : public UNarrativeActivatableWidget
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0420 (size: 0x8)
-    bool DeactivateOnBack;                                                            // 0x0428 (size: 0x1)
-    bool AutoFocusDesiredTargetOnActivate;                                            // 0x0429 (size: 0x1)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x04B8 (size: 0x8)
+    bool DeactivateOnBack;                                                            // 0x04C0 (size: 0x1)
+    bool AutoFocusDesiredTargetOnActivate;                                            // 0x04C1 (size: 0x1)
 
     void RegisterActions();
     void HandleFocus();
@@ -14,6 +14,6 @@ class UWBP_NarrativeActivatableWidget_C : public UNarrativeActivatableWidget
     void BP_OnDeactivated();
     void Construct();
     void ExecuteUbergraph_WBP_NarrativeActivatableWidget(int32 EntryPoint);
-}; // Size: 0x42A
+}; // Size: 0x4C2
 
 #endif

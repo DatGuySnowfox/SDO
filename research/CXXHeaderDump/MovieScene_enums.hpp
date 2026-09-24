@@ -10,7 +10,14 @@ enum class EMovieSceneBlendType {
     Additive = 2,
     Relative = 4,
     AdditiveFromBase = 8,
-    EMovieSceneBlendType_MAX = 9,
+    Override = 16,
+    EMovieSceneBlendType_MAX = 17,
+};
+
+enum class EMovieSceneBreadcrumbMode {
+    Sparse = 0,
+    Dense = 1,
+    EMovieSceneBreadcrumbMode_MAX = 2,
 };
 
 enum class EMovieSceneBuiltInEasing {
@@ -49,10 +56,37 @@ enum class EMovieSceneCompletionMode {
     EMovieSceneCompletionMode_MAX = 3,
 };
 
+enum class EMovieSceneCompletionModeOverride {
+    None = 0,
+    ForceKeepState = 1,
+    ForceRestoreState = 2,
+    EMovieSceneCompletionModeOverride_MAX = 3,
+};
+
+enum class EMovieSceneConditionCheckFrequency {
+    Once = 0,
+    OnTick = 1,
+    EMovieSceneConditionCheckFrequency_MAX = 2,
+};
+
+enum class EMovieSceneConditionScope {
+    Global = 0,
+    Binding = 1,
+    OwnerObject = 2,
+    EMovieSceneConditionScope_MAX = 3,
+};
+
 enum class EMovieSceneEvaluationType {
     FrameLocked = 0,
     WithSubFrames = 1,
     EMovieSceneEvaluationType_MAX = 2,
+};
+
+enum class EMovieSceneGroupConditionOperator {
+    And = 0,
+    Or = 1,
+    Xor = 2,
+    EMovieSceneGroupConditionOperator_MAX = 3,
 };
 
 enum class EMovieSceneKeyInterpolation {
@@ -88,7 +122,17 @@ enum class EMovieScenePositionType {
     Frame = 0,
     Time = 1,
     MarkedFrame = 2,
-    EMovieScenePositionType_MAX = 3,
+    Timecode = 3,
+    EMovieScenePositionType_MAX = 4,
+};
+
+enum class EMovieSceneSequenceCompilerMask {
+    Hierarchy = 1,
+    EvaluationTemplate = 2,
+    EvaluationTemplateField = 4,
+    EntityComponentField = 8,
+    None = 0,
+    EMovieSceneSequenceCompilerMask_MAX = 16,
 };
 
 enum class EMovieSceneSequenceFlags {
@@ -97,7 +141,7 @@ enum class EMovieSceneSequenceFlags {
     BlockingEvaluation = 2,
     DynamicWeighting = 4,
     InheritedFlags = 1,
-    EMovieSceneSequenceFlags_MAX = 5,
+    EMovieSceneSequenceFlags_MAX = 8,
 };
 
 enum class EMovieSceneServerClientMask {
@@ -115,7 +159,33 @@ enum class EMovieSceneSubSectionFlags {
     IgnoreHierarchicalBias = 4,
     BlendHierarchicalBias = 8,
     AnyRestoreStateOverride = 3,
-    EMovieSceneSubSectionFlags_MAX = 9,
+    EMovieSceneSubSectionFlags_MAX = 16,
+};
+
+enum class EMovieSceneTimeUnit {
+    DisplayRate = 0,
+    TickResolution = 1,
+    EMovieSceneTimeUnit_MAX = 2,
+};
+
+enum class EMovieSceneTimeWarpType {
+    FixedPlayRate = 0,
+    Custom = 1,
+    FixedTime = 2,
+    FrameRate = 3,
+    Loop = 4,
+    Clamp = 5,
+    LoopFloat = 6,
+    ClampFloat = 7,
+    EMovieSceneTimeWarpType_MAX = 8,
+};
+
+enum class ENavigationToolItemFlags {
+    None = 0,
+    IgnorePendingKill = 1,
+    PendingRemoval = 2,
+    Expanded = 4,
+    ENavigationToolItemFlags_MAX = 5,
 };
 
 enum class ESectionEvaluationFlags {

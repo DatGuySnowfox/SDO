@@ -3,6 +3,6 @@
 
 class AAirdropContainer_Military_C : public AMaster_AirdropContainer_C
 {
-}; // Size: 0x348
+}; // Size: 0x358
 
 #endif

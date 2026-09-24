@@ -18,13 +18,20 @@ enum class EInterchangeMaterialImportOption {
     EInterchangeMaterialImportOption_MAX = 2,
 };
 
-enum class EInterchangeMaterialXShaders {
-    StandardSurface = 0,
-    StandardSurfaceTransmission = 1,
-    SurfaceUnlit = 2,
-    UsdPreviewSurface = 3,
-    MaxShaderCount = 4,
-    EInterchangeMaterialXShaders_MAX = 5,
+enum class EInterchangeMaterialSearchLocation {
+    Local = 0,
+    UnderParent = 1,
+    UnderRoot = 2,
+    AllAssets = 3,
+    DoNotSearch = 4,
+    EInterchangeMaterialSearchLocation_MAX = 5,
+};
+
+enum class EInterchangeSceneHierarchyType {
+    CreateLevelActors = 0,
+    CreateLevelInstanceActor = 1,
+    CreatePackedActor = 2,
+    EInterchangeSceneHierarchyType_MAX = 3,
 };
 
 enum class EInterchangeVertexColorImportOption {

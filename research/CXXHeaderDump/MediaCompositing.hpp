@@ -22,49 +22,51 @@ struct FMovieSceneMediaSectionParams
     bool bLooping;                                                                    // 0x0048 (size: 0x1)
     FFrameNumber StartFrameOffset;                                                    // 0x004C (size: 0x4)
     FMovieSceneFloatChannel ProxyTextureBlend;                                        // 0x0050 (size: 0x110)
+    FMediaSourceCacheSettings CacheSettings;                                          // 0x0160 (size: 0x8)
 
-}; // Size: 0x160
+}; // Size: 0x168
 
 struct FMovieSceneMediaSectionTemplate : public FMovieSceneEvalTemplate
 {
-    FMovieSceneMediaSectionParams Params;                                             // 0x0020 (size: 0x160)
-    class UMovieSceneMediaSection* MediaSection;                                      // 0x0180 (size: 0x8)
+    FMovieSceneMediaSectionParams Params;                                             // 0x0020 (size: 0x168)
+    class UMovieSceneMediaSection* MediaSection;                                      // 0x0188 (size: 0x8)
 
-}; // Size: 0x188
+}; // Size: 0x190
 
 class UMovieSceneMediaPlayerPropertySection : public UMovieSceneSection
 {
-    class UMediaSource* MediaSource;                                                  // 0x00F0 (size: 0x8)
-    bool bLoop;                                                                       // 0x00F8 (size: 0x1)
+    class UMediaSource* MediaSource;                                                  // 0x0108 (size: 0x8)
+    bool bLoop;                                                                       // 0x0110 (size: 0x1)
 
-}; // Size: 0x100
+}; // Size: 0x118
 
 class UMovieSceneMediaPlayerPropertyTrack : public UMovieScenePropertyTrack
 {
-}; // Size: 0xD0
+}; // Size: 0x148
 
 class UMovieSceneMediaSection : public UMovieSceneSection
 {
-    class UMediaSource* MediaSource;                                                  // 0x00F0 (size: 0x8)
-    int32 MediaSourceProxyIndex;                                                      // 0x00F8 (size: 0x4)
-    bool bLooping;                                                                    // 0x00FC (size: 0x1)
-    FFrameNumber StartFrameOffset;                                                    // 0x0100 (size: 0x4)
-    class UMediaTexture* MediaTexture;                                                // 0x0108 (size: 0x8)
-    class UMediaSoundComponent* MediaSoundComponent;                                  // 0x0110 (size: 0x8)
-    bool bUseExternalMediaPlayer;                                                     // 0x0118 (size: 0x1)
-    class UMediaPlayer* ExternalMediaPlayer;                                          // 0x0120 (size: 0x8)
-    FMediaSourceCacheSettings CacheSettings;                                          // 0x0128 (size: 0x8)
-    int32 TextureIndex;                                                               // 0x0130 (size: 0x4)
-    bool bHasMediaPlayerProxy;                                                        // 0x0134 (size: 0x1)
-    FMovieSceneBoolChannel ChannelCanPlayerBeOpen;                                    // 0x0138 (size: 0x100)
-    FMovieSceneObjectBindingID MediaSourceProxyBindingID;                             // 0x0238 (size: 0x18)
+    class UMediaSource* MediaSource;                                                  // 0x0108 (size: 0x8)
+    int32 MediaSourceProxyIndex;                                                      // 0x0110 (size: 0x4)
+    bool bLooping;                                                                    // 0x0114 (size: 0x1)
+    FFrameNumber StartFrameOffset;                                                    // 0x0118 (size: 0x4)
+    class UMediaTexture* MediaTexture;                                                // 0x0120 (size: 0x8)
+    class UMediaSoundComponent* MediaSoundComponent;                                  // 0x0128 (size: 0x8)
+    bool bUseExternalMediaPlayer;                                                     // 0x0130 (size: 0x1)
+    class UMediaPlayer* ExternalMediaPlayer;                                          // 0x0138 (size: 0x8)
+    FMediaSourceCacheSettings CacheSettings;                                          // 0x0140 (size: 0x8)
+    int32 TextureIndex;                                                               // 0x0148 (size: 0x4)
+    bool bHasMediaPlayerProxy;                                                        // 0x014C (size: 0x1)
+    FMovieSceneBoolChannel ChannelCanPlayerBeOpen;                                    // 0x0150 (size: 0x108)
+    FMovieSceneObjectBindingID MediaSourceProxyBindingID;                             // 0x0258 (size: 0x18)
 
-}; // Size: 0x250
+}; // Size: 0x270
 
 class UMovieSceneMediaTrack : public UMovieSceneNameableTrack
 {
-    TArray<class UMovieSceneSection*> MediaSections;                                  // 0x00A0 (size: 0x10)
+    bool bSynchronousScrubbing;                                                       // 0x0118 (size: 0x1)
+    TArray<UMovieSceneSection*> MediaSections;                                        // 0x0120 (size: 0x10)
 
-}; // Size: 0xB0
+}; // Size: 0x130
 
 #endif

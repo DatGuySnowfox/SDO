@@ -3,6 +3,6 @@
 
 class ABP_RandomCivilian_Female_C : public ABP_RandomCivilian_C
 {
-}; // Size: 0x758
+}; // Size: 0x728
 
 #endif

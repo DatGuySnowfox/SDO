@@ -25,14 +25,14 @@ struct FMovieSceneGeometryCollectionSectionTemplateParameters : public FMovieSce
 
 class UMovieSceneGeometryCollectionSection : public UMovieSceneSection
 {
-    FMovieSceneGeometryCollectionParams Params;                                       // 0x00F0 (size: 0x38)
+    FMovieSceneGeometryCollectionParams Params;                                       // 0x0108 (size: 0x38)
 
-}; // Size: 0x128
+}; // Size: 0x140
 
 class UMovieSceneGeometryCollectionTrack : public UMovieSceneNameableTrack
 {
-    TArray<class UMovieSceneSection*> AnimationSections;                              // 0x00A0 (size: 0x10)
+    TArray<UMovieSceneSection*> AnimationSections;                                    // 0x0118 (size: 0x10)
 
-}; // Size: 0xB0
+}; // Size: 0x128
 
 #endif

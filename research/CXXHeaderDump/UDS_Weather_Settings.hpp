@@ -13,7 +13,7 @@ class UUDS_Weather_Settings_C : public UPrimaryDataAsset
     double Material Wetness;                                                          // 0x0068 (size: 0x8)
     double Material Snow Coverage;                                                    // 0x0070 (size: 0x8)
     double Material Dust Coverage;                                                    // 0x0078 (size: 0x8)
-    TSoftObjectPtr<UTexture2D> Icon Texture;                                          // 0x0080 (size: 0x28)
+    TSoftObjectPtr<class UTexture2D> Icon Texture;                                    // 0x0080 (size: 0x28)
     FName User Friendly Name;                                                         // 0x00A8 (size: 0x8)
     TMap<UUDS_Weather_Settings_C*, double> State Sources;                             // 0x00B0 (size: 0x50)
 

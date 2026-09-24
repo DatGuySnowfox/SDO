@@ -7,9 +7,11 @@ struct FCameraFilmbackSettings
 {
     float SensorWidth;                                                                // 0x0000 (size: 0x4)
     float SensorHeight;                                                               // 0x0004 (size: 0x4)
-    float SensorAspectRatio;                                                          // 0x0008 (size: 0x4)
+    float SensorHorizontalOffset;                                                     // 0x0008 (size: 0x4)
+    float SensorVerticalOffset;                                                       // 0x000C (size: 0x4)
+    float SensorAspectRatio;                                                          // 0x0010 (size: 0x4)
 
-}; // Size: 0xC
+}; // Size: 0x14
 
 struct FCameraFocusSettings
 {
@@ -39,7 +41,7 @@ struct FCameraLookatTrackingSettings
     uint8 bEnableLookAtTracking;                                                      // 0x0000 (size: 0x1)
     uint8 bDrawDebugLookAtTrackingPosition;                                           // 0x0000 (size: 0x1)
     float LookAtTrackingInterpSpeed;                                                  // 0x0004 (size: 0x4)
-    TSoftObjectPtr<AActor> ActorToTrack;                                              // 0x0020 (size: 0x28)
+    TSoftObjectPtr<class AActor> ActorToTrack;                                        // 0x0020 (size: 0x28)
     FVector RelativeOffset;                                                           // 0x0048 (size: 0x18)
     uint8 bAllowRoll;                                                                 // 0x0060 (size: 0x1)
 
@@ -47,7 +49,7 @@ struct FCameraLookatTrackingSettings
 
 struct FCameraTrackingFocusSettings
 {
-    TSoftObjectPtr<AActor> ActorToTrack;                                              // 0x0000 (size: 0x28)
+    TSoftObjectPtr<class AActor> ActorToTrack;                                        // 0x0000 (size: 0x28)
     FVector RelativeOffset;                                                           // 0x0028 (size: 0x18)
     uint8 bDrawDebugTrackingFocusPoint;                                               // 0x0040 (size: 0x1)
 
@@ -56,9 +58,10 @@ struct FCameraTrackingFocusSettings
 struct FNamedFilmbackPreset
 {
     FString Name;                                                                     // 0x0000 (size: 0x10)
-    FCameraFilmbackSettings FilmbackSettings;                                         // 0x0010 (size: 0xC)
+    FText DisplayName;                                                                // 0x0010 (size: 0x10)
+    FCameraFilmbackSettings FilmbackSettings;                                         // 0x0020 (size: 0x14)
 
-}; // Size: 0x20
+}; // Size: 0x38
 
 struct FNamedLensPreset
 {
@@ -82,55 +85,55 @@ struct FPlateCropSettings
 
 class ACameraRig_Crane : public AActor
 {
-    float CranePitch;                                                                 // 0x0298 (size: 0x4)
-    float CraneYaw;                                                                   // 0x029C (size: 0x4)
-    float CraneArmLength;                                                             // 0x02A0 (size: 0x4)
-    bool bLockMountPitch;                                                             // 0x02A4 (size: 0x1)
-    bool bLockMountYaw;                                                               // 0x02A5 (size: 0x1)
-    class USceneComponent* TransformComponent;                                        // 0x02A8 (size: 0x8)
-    class USceneComponent* CraneYawControl;                                           // 0x02B0 (size: 0x8)
-    class USceneComponent* CranePitchControl;                                         // 0x02B8 (size: 0x8)
-    class USceneComponent* CraneCameraMount;                                          // 0x02C0 (size: 0x8)
+    float CranePitch;                                                                 // 0x02A8 (size: 0x4)
+    float CraneYaw;                                                                   // 0x02AC (size: 0x4)
+    float CraneArmLength;                                                             // 0x02B0 (size: 0x4)
+    bool bLockMountPitch;                                                             // 0x02B4 (size: 0x1)
+    bool bLockMountYaw;                                                               // 0x02B5 (size: 0x1)
+    class USceneComponent* TransformComponent;                                        // 0x02B8 (size: 0x8)
+    class USceneComponent* CraneYawControl;                                           // 0x02C0 (size: 0x8)
+    class USceneComponent* CranePitchControl;                                         // 0x02C8 (size: 0x8)
+    class USceneComponent* CraneCameraMount;                                          // 0x02D0 (size: 0x8)
 
-}; // Size: 0x2C8
+}; // Size: 0x2D8
 
 class ACameraRig_Rail : public AActor
 {
-    float CurrentPositionOnRail;                                                      // 0x0298 (size: 0x4)
-    bool bLockOrientationToRail;                                                      // 0x029C (size: 0x1)
-    class USceneComponent* TransformComponent;                                        // 0x02A0 (size: 0x8)
-    class USplineComponent* RailSplineComponent;                                      // 0x02A8 (size: 0x8)
-    class USceneComponent* RailCameraMount;                                           // 0x02B0 (size: 0x8)
+    float CurrentPositionOnRail;                                                      // 0x02A8 (size: 0x4)
+    bool bLockOrientationToRail;                                                      // 0x02AC (size: 0x1)
+    class USceneComponent* TransformComponent;                                        // 0x02B0 (size: 0x8)
+    class USplineComponent* RailSplineComponent;                                      // 0x02B8 (size: 0x8)
+    class USceneComponent* RailCameraMount;                                           // 0x02C0 (size: 0x8)
 
     class USplineComponent* GetRailSplineComponent();
-}; // Size: 0x2B8
+}; // Size: 0x2C8
 
 class ACineCameraActor : public ACameraActor
 {
-    FCameraLookatTrackingSettings LookatTrackingSettings;                             // 0x09A0 (size: 0x68)
+    FCameraLookatTrackingSettings LookatTrackingSettings;                             // 0x0A30 (size: 0x68)
 
     class UCineCameraComponent* GetCineCameraComponent();
-}; // Size: 0xA20
+}; // Size: 0xAB0
 
 class UCineCameraComponent : public UCameraComponent
 {
-    FCameraFilmbackSettings FilmbackSettings;                                         // 0x0A30 (size: 0xC)
-    FCameraFilmbackSettings Filmback;                                                 // 0x0A3C (size: 0xC)
-    FCameraLensSettings LensSettings;                                                 // 0x0A48 (size: 0x1C)
-    FCameraFocusSettings FocusSettings;                                               // 0x0A68 (size: 0x60)
-    FPlateCropSettings CropSettings;                                                  // 0x0AC8 (size: 0x4)
-    float CurrentFocalLength;                                                         // 0x0ACC (size: 0x4)
-    float CurrentAperture;                                                            // 0x0AD0 (size: 0x4)
-    float CurrentFocusDistance;                                                       // 0x0AD4 (size: 0x4)
-    uint8 bOverride_CustomNearClippingPlane;                                          // 0x0AD8 (size: 0x1)
-    float CustomNearClippingPlane;                                                    // 0x0ADC (size: 0x4)
-    TArray<FNamedFilmbackPreset> FilmbackPresets;                                     // 0x0AE8 (size: 0x10)
-    TArray<FNamedLensPreset> LensPresets;                                             // 0x0AF8 (size: 0x10)
-    FString DefaultFilmbackPresetName;                                                // 0x0B08 (size: 0x10)
-    FString DefaultFilmbackPreset;                                                    // 0x0B18 (size: 0x10)
-    FString DefaultLensPresetName;                                                    // 0x0B28 (size: 0x10)
-    float DefaultLensFocalLength;                                                     // 0x0B38 (size: 0x4)
-    float DefaultLensFStop;                                                           // 0x0B3C (size: 0x4)
+    FCameraFilmbackSettings FilmbackSettings;                                         // 0x0A80 (size: 0x14)
+    FCameraFilmbackSettings Filmback;                                                 // 0x0A94 (size: 0x14)
+    FCameraLensSettings LensSettings;                                                 // 0x0AA8 (size: 0x1C)
+    FCameraFocusSettings FocusSettings;                                               // 0x0AC8 (size: 0x60)
+    FPlateCropSettings CropSettings;                                                  // 0x0B28 (size: 0x4)
+    float CurrentFocalLength;                                                         // 0x0B2C (size: 0x4)
+    float CurrentAperture;                                                            // 0x0B30 (size: 0x4)
+    float CurrentFocusDistance;                                                       // 0x0B34 (size: 0x4)
+    uint8 bOverride_CustomNearClippingPlane;                                          // 0x0B38 (size: 0x1)
+    float CustomNearClippingPlane;                                                    // 0x0B3C (size: 0x4)
+    TArray<FNamedFilmbackPreset> FilmbackPresets;                                     // 0x0B48 (size: 0x10)
+    TArray<FNamedLensPreset> LensPresets;                                             // 0x0B58 (size: 0x10)
+    FString DefaultFilmbackPresetName;                                                // 0x0B68 (size: 0x10)
+    FString DefaultFilmbackPreset;                                                    // 0x0B78 (size: 0x10)
+    FString DefaultLensPresetName;                                                    // 0x0B88 (size: 0x10)
+    float DefaultLensFocalLength;                                                     // 0x0B98 (size: 0x4)
+    float DefaultLensFStop;                                                           // 0x0B9C (size: 0x4)
 
     void SetLensSettings(const FCameraLensSettings& NewLensSettings);
     void SetLensPresetByName(FString InPresetName);
@@ -142,15 +145,17 @@ class UCineCameraComponent : public UCameraComponent
     void SetCurrentAperture(const float NewCurrentAperture);
     void SetCropSettings(const FPlateCropSettings& NewCropSettings);
     void SetCropPresetByName(FString InPresetName);
+    float GetVerticalProjectionOffset();
     float GetVerticalFieldOfView();
     TArray<FNamedLensPreset> GetLensPresetsCopy();
     FString GetLensPresetName();
+    float GetHorizontalProjectionOffset();
     float GetHorizontalFieldOfView();
     TArray<FNamedFilmbackPreset> GetFilmbackPresetsCopy();
     FString GetFilmbackPresetName();
     FString GetDefaultFilmbackPresetName();
     FString GetCropPresetName();
-}; // Size: 0xB40
+}; // Size: 0xBA0
 
 class UCineCameraSettings : public UDeveloperSettings
 {

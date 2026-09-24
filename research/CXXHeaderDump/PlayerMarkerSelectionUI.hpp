@@ -3,27 +3,27 @@
 
 class UPlayerMarkerSelectionUI_C : public UUserWidget
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02C0 (size: 0x8)
-    class UButton* Button_Animal;                                                     // 0x02C8 (size: 0x8)
-    class UButton* Button_Black;                                                      // 0x02D0 (size: 0x8)
-    class UButton* Button_Blue;                                                       // 0x02D8 (size: 0x8)
-    class UButton* Button_Cross;                                                      // 0x02E0 (size: 0x8)
-    class UButton* Button_Down;                                                       // 0x02E8 (size: 0x8)
-    class UButton* Button_Home;                                                       // 0x02F0 (size: 0x8)
-    class UButton* Button_Left;                                                       // 0x02F8 (size: 0x8)
-    class UButton* Button_Marker1;                                                    // 0x0300 (size: 0x8)
-    class UButton* Button_Marker2;                                                    // 0x0308 (size: 0x8)
-    class UButton* Button_Red;                                                        // 0x0310 (size: 0x8)
-    class UButton* Button_Right;                                                      // 0x0318 (size: 0x8)
-    class UButton* Button_Skull;                                                      // 0x0320 (size: 0x8)
-    class UButton* Button_Tent;                                                       // 0x0328 (size: 0x8)
-    class UButton* Button_Up;                                                         // 0x0330 (size: 0x8)
-    class UButton* Button_Vehicle;                                                    // 0x0338 (size: 0x8)
-    class UButton* Button_White;                                                      // 0x0340 (size: 0x8)
-    class USettingRowSmall_C* SettingRowSmall;                                        // 0x0348 (size: 0x8)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0340 (size: 0x8)
+    class USlider* Slider_168;                                                        // 0x0348 (size: 0x8)
     class UTextBlock* SizeText;                                                       // 0x0350 (size: 0x8)
-    class USlider* Slider_168;                                                        // 0x0358 (size: 0x8)
-    class UBPC_MinimapSystem_C* Map;                                                  // 0x0360 (size: 0x8)
+    class USettingRowSmall_C* SettingRowSmall;                                        // 0x0358 (size: 0x8)
+    class UButton* Button_White;                                                      // 0x0360 (size: 0x8)
+    class UButton* Button_Vehicle;                                                    // 0x0368 (size: 0x8)
+    class UButton* Button_Up;                                                         // 0x0370 (size: 0x8)
+    class UButton* Button_Tent;                                                       // 0x0378 (size: 0x8)
+    class UButton* Button_Skull;                                                      // 0x0380 (size: 0x8)
+    class UButton* Button_Right;                                                      // 0x0388 (size: 0x8)
+    class UButton* Button_Red;                                                        // 0x0390 (size: 0x8)
+    class UButton* Button_Marker2;                                                    // 0x0398 (size: 0x8)
+    class UButton* Button_Marker1;                                                    // 0x03A0 (size: 0x8)
+    class UButton* Button_Left;                                                       // 0x03A8 (size: 0x8)
+    class UButton* Button_Home;                                                       // 0x03B0 (size: 0x8)
+    class UButton* Button_Down;                                                       // 0x03B8 (size: 0x8)
+    class UButton* Button_Cross;                                                      // 0x03C0 (size: 0x8)
+    class UButton* Button_Blue;                                                       // 0x03C8 (size: 0x8)
+    class UButton* Button_Black;                                                      // 0x03D0 (size: 0x8)
+    class UButton* Button_Animal;                                                     // 0x03D8 (size: 0x8)
+    class UBPC_MinimapSystem_C* Map;                                                  // 0x03E0 (size: 0x8)
 
     void BndEvt__PlayerMarkerSelectionUI_Button_Skull_K2Node_ComponentBoundEvent_1_OnButtonClickedEvent__DelegateSignature();
     void BndEvt__PlayerMarkerSelectionUI_Button_Animal_K2Node_ComponentBoundEvent_2_OnButtonClickedEvent__DelegateSignature();
@@ -46,6 +46,6 @@ class UPlayerMarkerSelectionUI_C : public UUserWidget
     void BndEvt__PlayerMarkerSelectionUI_Slider_168_K2Node_ComponentBoundEvent_16_OnFloatValueChangedEvent__DelegateSignature(float Value);
     void Event_Marker(bool NewValue);
     void ExecuteUbergraph_PlayerMarkerSelectionUI(int32 EntryPoint);
-}; // Size: 0x368
+}; // Size: 0x3E8
 
 #endif

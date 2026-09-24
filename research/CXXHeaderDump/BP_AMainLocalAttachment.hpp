@@ -3,14 +3,14 @@
 
 class ABP_AMainLocalAttachment_C : public AActor
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0298 (size: 0x8)
-    class UStaticMeshComponent* StaticMesh;                                           // 0x02A0 (size: 0x8)
-    class USceneComponent* DefaultSceneRoot;                                          // 0x02A8 (size: 0x8)
-    FGuid AttachmentUID;                                                              // 0x02B0 (size: 0x10)
-    class UJigsawItem_DataAsset_C* Attachment Info;                                   // 0x02C0 (size: 0x8)
-    FGameplayTag ActivateState;                                                       // 0x02C8 (size: 0x8)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02A8 (size: 0x8)
+    class UStaticMeshComponent* StaticMesh;                                           // 0x02B0 (size: 0x8)
+    class USceneComponent* DefaultSceneRoot;                                          // 0x02B8 (size: 0x8)
+    FGuid AttachmentUID;                                                              // 0x02C0 (size: 0x10)
+    class UJigsawItem_DataAsset_C* Attachment Info;                                   // 0x02D0 (size: 0x8)
+    FGameplayTag ActivateState;                                                       // 0x02D8 (size: 0x8)
 
-    void Jig_GetAttachmentArrayByType(FGameplayTag Type, TArray<class ABP_AMainLocalAttachment_C*>& Attachment, bool& Found);
+    void Jig_GetAttachmentArrayByType(FGameplayTag Type, TArray<ABP_AMainLocalAttachment_C*>& Attachment, bool& Found);
     void Jig_GetAvailableAttachmentStates(FGameplayTagContainer& States);
     void Jig_GetAttachmentActiveState(FGameplayTag& Result);
     void Jig_GetPendingMag(bool FindMagIfNoPending?, class ABP_AMainLocalAttachment_C*& MagRef);
@@ -34,6 +34,6 @@ class ABP_AMainLocalAttachment_C : public AActor
     void Jig_SetAttachmentState(const TArray<FGuid>& UID, FGameplayTag NewState, bool PreExecuteClientSide?);
     void Jig_OnMontageNotify(FName NotifyName);
     void ExecuteUbergraph_BP_AMainLocalAttachment(int32 EntryPoint);
-}; // Size: 0x2D0
+}; // Size: 0x2E0
 
 #endif

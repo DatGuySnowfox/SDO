@@ -3,14 +3,14 @@
 
 class UBP_CustomDialogueOption_C : public UUserWidget
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02C0 (size: 0x8)
-    class UWidgetAnimation* PopIn;                                                    // 0x02C8 (size: 0x8)
-    class UButton* ReplyButton;                                                       // 0x02D0 (size: 0x8)
-    class URichTextBlock* ReplyTxt;                                                   // 0x02D8 (size: 0x8)
-    class UTextBlock* SelectorIcon;                                                   // 0x02E0 (size: 0x8)
-    class UDialogueNode_Player* PlayerReply;                                          // 0x02E8 (size: 0x8)
-    class UBP_CustomNarrativeDefaultUI_C* OwningWidget;                               // 0x02F0 (size: 0x8)
-    FLinearColor AlreadySelectedColor;                                                // 0x02F8 (size: 0x10)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0340 (size: 0x8)
+    class UTextBlock* SelectorIcon;                                                   // 0x0348 (size: 0x8)
+    class URichTextBlock* ReplyTxt;                                                   // 0x0350 (size: 0x8)
+    class UButton* ReplyButton;                                                       // 0x0358 (size: 0x8)
+    class UWidgetAnimation* PopIn;                                                    // 0x0360 (size: 0x8)
+    class UDialogueNode_Player* PlayerReply;                                          // 0x0368 (size: 0x8)
+    class UBP_CustomNarrativeDefaultUI_C* OwningWidget;                               // 0x0370 (size: 0x8)
+    FLinearColor AlreadySelectedColor;                                                // 0x0378 (size: 0x10)
 
     void SetSelection(bool Selected);
     void BndEvt__BP_DialogueOption_ReplyButton_K2Node_ComponentBoundEvent_0_OnButtonClickedEvent__DelegateSignature();
@@ -20,6 +20,6 @@ class UBP_CustomDialogueOption_C : public UUserWidget
     void BndEvt__BP_DialogueOption_ReplyButton_K2Node_ComponentBoundEvent_2_OnButtonHoverEvent__DelegateSignature();
     void Construct();
     void ExecuteUbergraph_BP_CustomDialogueOption(int32 EntryPoint);
-}; // Size: 0x308
+}; // Size: 0x388
 
 #endif

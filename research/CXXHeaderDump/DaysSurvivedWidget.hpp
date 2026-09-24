@@ -3,15 +3,15 @@
 
 class UDaysSurvivedWidget_C : public UUserWidget
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02C0 (size: 0x8)
-    class UWidgetAnimation* FadeOut;                                                  // 0x02C8 (size: 0x8)
-    class UTextBlock* Name;                                                           // 0x02D0 (size: 0x8)
-    FString FullText;                                                                 // 0x02D8 (size: 0x10)
-    FString DisplayText;                                                              // 0x02E8 (size: 0x10)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0340 (size: 0x8)
+    class UTextBlock* Name;                                                           // 0x0348 (size: 0x8)
+    class UWidgetAnimation* FadeOut;                                                  // 0x0350 (size: 0x8)
+    FString FullText;                                                                 // 0x0358 (size: 0x10)
+    FString DisplayText;                                                              // 0x0368 (size: 0x10)
 
     void Event_Survived();
     void FadeOutFinished();
     void ExecuteUbergraph_DaysSurvivedWidget(int32 EntryPoint);
-}; // Size: 0x2F8
+}; // Size: 0x378
 
 #endif

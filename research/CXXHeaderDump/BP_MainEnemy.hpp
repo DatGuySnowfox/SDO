@@ -3,6 +3,6 @@
 
 class ABP_MainEnemy_C : public ABP_Human_C
 {
-}; // Size: 0x68B
+}; // Size: 0x65B
 
 #endif

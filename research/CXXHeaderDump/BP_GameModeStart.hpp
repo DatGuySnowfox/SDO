@@ -3,6 +3,6 @@
 
 class ABP_GameModeStart_C : public APlayerStart
 {
-}; // Size: 0x2C8
+}; // Size: 0x2D8
 
 #endif

@@ -3,6 +3,6 @@
 
 class ABP_M2010Pickup_C : public ABP_FirearmPickup_C
 {
-}; // Size: 0x410
+}; // Size: 0x420
 
 #endif

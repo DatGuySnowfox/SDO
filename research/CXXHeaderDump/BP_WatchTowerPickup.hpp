@@ -3,6 +3,6 @@
 
 class ABP_WatchTowerPickup_C : public ABP_BuildablePickup_C
 {
-}; // Size: 0x318
+}; // Size: 0x328
 
 #endif

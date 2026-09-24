@@ -3,12 +3,12 @@
 
 class ABP_SurroundeadGameMode_C : public AGameModeBase
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0338 (size: 0x8)
-    class USceneComponent* DefaultSceneRoot;                                          // 0x0340 (size: 0x8)
-    bool Autosave;                                                                    // 0x0348 (size: 0x1)
-    class UDiscordRpc* DiscordRpc;                                                    // 0x0350 (size: 0x8)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0340 (size: 0x8)
+    class USceneComponent* DefaultSceneRoot;                                          // 0x0348 (size: 0x8)
+    bool Autosave;                                                                    // 0x0350 (size: 0x1)
+    class UObject* DiscordRPC;                                                        // 0x0358 (size: 0x8)
 
-    void ResetStats();
+    void ResetStats(bool ResetSaved?);
     void AutoSaveGame();
     void ReceiveBeginPlay();
     void ReceiveEndPlay(TEnumAsByte<EEndPlayReason::Type> EndPlayReason);
@@ -17,6 +17,6 @@ class ABP_SurroundeadGameMode_C : public AGameModeBase
     void Event_AutoSave();
     void EventSave(bool NewValue);
     void ExecuteUbergraph_BP_SurroundeadGameMode(int32 EntryPoint);
-}; // Size: 0x358
+}; // Size: 0x360
 
 #endif

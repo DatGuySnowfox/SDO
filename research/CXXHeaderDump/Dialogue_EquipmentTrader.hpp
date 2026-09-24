@@ -3,9 +3,6 @@
 
 class UDialogue_EquipmentTrader_C : public UDialogue
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x03B0 (size: 0x8)
-
-    void ExecuteUbergraph_Dialogue_EquipmentTrader(int32 EntryPoint);
-}; // Size: 0x3B8
+}; // Size: 0x410
 
 #endif

@@ -14,6 +14,7 @@ struct FInterchangeMeshPayLoadKey
 {
     FString UniqueID;                                                                 // 0x0000 (size: 0x10)
     EInterchangeMeshPayLoadType Type;                                                 // 0x0010 (size: 0x1)
+    int32 FrameNumber;                                                                // 0x0014 (size: 0x4)
 
 }; // Size: 0x18
 
@@ -27,15 +28,15 @@ class UInterchangeAnimationTrackBaseNode : public UInterchangeBaseNode
 class UInterchangeAnimationTrackNode : public UInterchangeAnimationTrackBaseNode
 {
 
-    bool SetCustomTargetedProperty(const int32& TargetedProperty);
+    bool SetCustomPropertyTrack(EInterchangePropertyTracks PropertyTrack);
     bool SetCustomFrameCount(const int32& AttributeValue);
     bool SetCustomAnimationPayloadKey(FString InUniqueId, const EInterchangeAnimationPayLoadType& InType);
     bool SetCustomActorDependencyUid(FString DependencyUid);
-    bool GetCustomTargetedProperty(int32& TargetedProperty);
+    bool GetCustomPropertyTrack(EInterchangePropertyTracks& PropertyTrack);
     bool GetCustomFrameCount(int32& AttributeValue);
     bool GetCustomAnimationPayloadKey(FInterchangeAnimationPayLoadKey& AnimationPayLoadKey);
     bool GetCustomActorDependencyUid(FString& DependencyUid);
-}; // Size: 0xC0
+}; // Size: 0xD0
 
 class UInterchangeAnimationTrackSetInstanceNode : public UInterchangeAnimationTrackBaseNode
 {
@@ -75,6 +76,21 @@ class UInterchangeBaseLightNode : public UInterchangeBaseNode
     bool GetCustomIntensity(float& AttributeValue);
 }; // Size: 0xA0
 
+class UInterchangeDecalMaterialNode : public UInterchangeShaderNode
+{
+}; // Size: 0x90
+
+class UInterchangeDecalNode : public UInterchangeBaseNode
+{
+
+    bool SetCustomSortOrder(const int32& AttributeValue);
+    bool SetCustomDecalSize(const FVector& AttributeValue);
+    bool SetCustomDecalMaterialPathName(FString AttributeValue);
+    bool GetCustomSortOrder(int32& AttributeValue);
+    bool GetCustomDecalSize(FVector& AttributeValue);
+    bool GetCustomDecalMaterialPathName(FString& AttributeValue);
+}; // Size: 0x90
+
 class UInterchangeDirectionalLightNode : public UInterchangeBaseLightNode
 {
 }; // Size: 0xA0
@@ -86,16 +102,35 @@ class UInterchangeFunctionCallShaderNode : public UInterchangeShaderNode
     bool GetCustomMaterialFunction(FString& AttributeValue);
 }; // Size: 0x80
 
+class UInterchangeGeometryCacheNode : public UInterchangeMeshNode
+{
+
+    bool SetCustomStartFrame(const int32& AttributeValue);
+    bool SetCustomHasConstantTopology(const bool& AttributeValue);
+    bool SetCustomFrameRate(const double& AttributeValue);
+    bool SetCustomEndFrame(const int32& AttributeValue);
+    bool GetCustomStartFrame(int32& AttributeValue);
+    bool GetCustomHasConstantTopology(bool& AttributeValue);
+    bool GetCustomFrameRate(double& AttributeValue);
+    bool GetCustomEndFrame(int32& AttributeValue);
+}; // Size: 0x238
+
 class UInterchangeLightNode : public UInterchangeBaseLightNode
 {
 
+    bool SetCustomUseIESBrightness(const bool& AttributeValue, bool bAddApplyDelegate);
+    bool SetCustomRotation(const FRotator& AttributeValue, bool bAddApplyDelegate);
     bool SetCustomIntensityUnits(const EInterchangeLightUnits& AttributeValue);
     bool SetCustomIESTexture(FString AttributeValue);
+    bool SetCustomIESBrightnessScale(const float& AttributeValue, bool bAddApplyDelegate);
     bool SetCustomAttenuationRadius(float AttributeValue);
+    bool GetCustomUseIESBrightness(bool& AttributeValue);
+    bool GetCustomRotation(FRotator& AttributeValue);
     bool GetCustomIntensityUnits(EInterchangeLightUnits& AttributeValue);
     bool GetCustomIESTexture(FString& AttributeValue);
+    bool GetCustomIESBrightnessScale(float& AttributeValue);
     bool GetCustomAttenuationRadius(float& AttributeValue);
-}; // Size: 0xD0
+}; // Size: 0x100
 
 class UInterchangeMaterialInstanceNode : public UInterchangeBaseNode
 {
@@ -110,6 +145,13 @@ class UInterchangeMaterialInstanceNode : public UInterchangeBaseNode
     bool AddTextureParameterValue(FString ParameterName, FString AttributeValue);
     bool AddStaticSwitchParameterValue(FString ParameterName, bool AttributeValue);
     bool AddScalarParameterValue(FString ParameterName, float AttributeValue);
+}; // Size: 0x70
+
+class UInterchangeMaterialReferenceNode : public UInterchangeBaseNode
+{
+
+    bool SetCustomContentPath(FString AttributeValue);
+    bool GetCustomContentPath(FString& AttributeValue);
 }; // Size: 0x70
 
 class UInterchangeMeshNode : public UInterchangeBaseNode
@@ -131,6 +173,7 @@ class UInterchangeMeshNode : public UInterchangeBaseNode
     bool SetCustomHasVertexColor(const bool& AttributeValue);
     bool SetCustomHasVertexBinormal(const bool& AttributeValue);
     bool SetCustomHasSmoothGroup(const bool& AttributeValue);
+    bool SetCustomCollisionType(EInterchangeMeshCollision AttributeValue);
     bool SetCustomBoundingBox(const FBox& AttributeValue);
     bool RemoveSlotMaterialDependencyUid(FString SlotName);
     bool RemoveSkeletonDependencyUid(FString DependencyUid);
@@ -139,7 +182,7 @@ class UInterchangeMeshNode : public UInterchangeBaseNode
     bool IsSkinnedMesh();
     bool IsMorphTarget();
     bool GetSlotMaterialDependencyUid(FString SlotName, FString& OutMaterialDependency);
-    void GetSlotMaterialDependencies(TMap<class FString, class FString>& OutMaterialDependencies);
+    void GetSlotMaterialDependencies(TMap<FString, FString>& OutMaterialDependencies);
     void GetSkeletonDependency(const int32 Index, FString& OutDependency);
     void GetSkeletonDependencies(TArray<FString>& OutDependencies);
     int32 GetSkeletonDependeciesCount();
@@ -158,8 +201,9 @@ class UInterchangeMeshNode : public UInterchangeBaseNode
     bool GetCustomHasVertexColor(bool& AttributeValue);
     bool GetCustomHasVertexBinormal(bool& AttributeValue);
     bool GetCustomHasSmoothGroup(bool& AttributeValue);
+    bool GetCustomCollisionType(EInterchangeMeshCollision& AttributeValue);
     bool GetCustomBoundingBox(FBox& AttributeValue);
-}; // Size: 0x1E8
+}; // Size: 0x1F8
 
 class UInterchangePhysicalCameraNode : public UInterchangeBaseNode
 {
@@ -181,7 +225,7 @@ class UInterchangePointLightNode : public UInterchangeLightNode
     bool SetCustomLightFalloffExponent(float AttributeValue);
     bool GetCustomUseInverseSquaredFalloff(bool& AttributeValue);
     bool GetCustomLightFalloffExponent(float& AttributeValue);
-}; // Size: 0xF0
+}; // Size: 0x120
 
 class UInterchangeRectLightNode : public UInterchangeLightNode
 {
@@ -190,19 +234,25 @@ class UInterchangeRectLightNode : public UInterchangeLightNode
     bool SetCustomSourceHeight(float AttributeValue);
     bool GetCustomSourceWidth(float& AttributeValue);
     bool GetCustomSourceHeight(float& AttributeValue);
-}; // Size: 0xF0
+}; // Size: 0x120
 
 class UInterchangeSceneNode : public UInterchangeBaseNode
 {
 
     bool SetSlotMaterialDependencyUid(FString SlotName, FString MaterialDependencyUid);
     bool SetMorphTargetCurveWeight(FString MorphTargetName, const float& Weight);
+    void SetGlobalBindPoseReferenceForMeshUIDs(const TMap<FString, FMatrix>& GlobalBindPoseReferenceForMeshUIDs);
     bool SetCustomTimeZeroLocalTransform(const class UInterchangeBaseNodeContainer* BaseNodeContainer, const FTransform& AttributeValue, bool bResetCache);
+    bool SetCustomPivotNodeTransform(const FTransform& AttributeValue);
     bool SetCustomLocalTransform(const class UInterchangeBaseNodeContainer* BaseNodeContainer, const FTransform& AttributeValue, bool bResetCache);
+    bool SetCustomHasBindPose(const bool& bHasBindPose);
     bool SetCustomGeometricTransform(const FTransform& AttributeValue);
+    bool SetCustomComponentVisibility(bool bInIsVisible);
     bool SetCustomBindPoseLocalTransform(const class UInterchangeBaseNodeContainer* BaseNodeContainer, const FTransform& AttributeValue, bool bResetCache);
     bool SetCustomAssetInstanceUid(FString AttributeValue);
     bool SetCustomAnimationAssetUidToPlay(FString AttributeValue);
+    bool SetCustomActorVisibility(bool bInIsVisible);
+    bool SetAnimationCurveTypeForCurveName(FString CurveName, const EInterchangeAnimationPayLoadType& AnimationCurveType);
     bool RemoveSpecializedType(FString SpecializedType);
     bool RemoveSlotMaterialDependencyUid(FString SlotName);
     bool IsSpecializedTypeContains(FString SpecializedType);
@@ -210,19 +260,25 @@ class UInterchangeSceneNode : public UInterchangeBaseNode
     int32 GetSpecializedTypeCount();
     void GetSpecializedType(const int32 Index, FString& OutSpecializedType);
     bool GetSlotMaterialDependencyUid(FString SlotName, FString& OutMaterialDependency);
-    void GetSlotMaterialDependencies(TMap<class FString, class FString>& OutMaterialDependencies);
+    void GetSlotMaterialDependencies(TMap<FString, FString>& OutMaterialDependencies);
     void GetMorphTargetCurveWeights(TMap<FString, float>& OutMorphTargetCurveWeights);
+    bool GetGlobalBindPoseReferenceForMeshUID(FString MeshUid, FMatrix& GlobalBindPoseReference);
     bool GetCustomTimeZeroLocalTransform(FTransform& AttributeValue);
     bool GetCustomTimeZeroGlobalTransform(const class UInterchangeBaseNodeContainer* BaseNodeContainer, const FTransform& GlobalOffsetTransform, FTransform& AttributeValue, bool bForceRecache);
+    bool GetCustomPivotNodeTransform(FTransform& AttributeValue);
     bool GetCustomLocalTransform(FTransform& AttributeValue);
+    bool GetCustomHasBindPose(bool& bHasBindPose);
     bool GetCustomGlobalTransform(const class UInterchangeBaseNodeContainer* BaseNodeContainer, const FTransform& GlobalOffsetTransform, FTransform& AttributeValue, bool bForceRecache);
     bool GetCustomGeometricTransform(FTransform& AttributeValue);
+    bool GetCustomComponentVisibility(bool& bOutIsVisible);
     bool GetCustomBindPoseLocalTransform(FTransform& AttributeValue);
     bool GetCustomBindPoseGlobalTransform(const class UInterchangeBaseNodeContainer* BaseNodeContainer, const FTransform& GlobalOffsetTransform, FTransform& AttributeValue, bool bForceRecache);
     bool GetCustomAssetInstanceUid(FString& AttributeValue);
     bool GetCustomAnimationAssetUidToPlay(FString& AttributeValue);
+    bool GetCustomActorVisibility(bool& bOutIsVisible);
+    bool GetAnimationCurveTypeForCurveName(FString CurveName, EInterchangeAnimationPayLoadType& OutCurveAnimationType);
     bool AddSpecializedType(FString SpecializedType);
-}; // Size: 0x320
+}; // Size: 0x490
 
 class UInterchangeSceneVariantSetsNode : public UInterchangeBaseNode
 {
@@ -242,27 +298,37 @@ class UInterchangeShaderGraphNode : public UInterchangeShaderNode
     bool SetCustomScreenSpaceReflections(const bool& AttributeValue);
     bool SetCustomOpacityMaskClipValue(const float& AttributeValue, bool bAddApplyDelegate);
     bool SetCustomIsAShaderFunction(const bool& AttributeValue);
+    bool SetCustomDisplacementCenterMode(float AttributeValue);
+    bool SetCustomBlendMode(int32 AttributeValue);
     bool GetCustomTwoSidedTransmission(bool& AttributeValue);
     bool GetCustomTwoSided(bool& AttributeValue);
     bool GetCustomScreenSpaceReflections(bool& AttributeValue);
     bool GetCustomOpacityMaskClipValue(float& AttributeValue);
     bool GetCustomIsAShaderFunction(bool& AttributeValue);
-}; // Size: 0xC0
+    bool GetCustomDisplacementCenterMode(float& AttributeValue);
+    bool GetCustomBlendMode(int32& AttributeValue);
+}; // Size: 0xE0
 
 class UInterchangeShaderNode : public UInterchangeBaseNode
 {
 
     bool SetCustomShaderType(FString AttributeValue);
     bool GetCustomShaderType(FString& AttributeValue);
+    bool AddStringInput(FString InputName, FString AttributeValue, bool bIsAParameter);
+    bool AddLinearColorInput(FString InputName, const FLinearColor& AttributeValue, bool bIsAParameter);
+    bool AddFloatInput(FString InputName, const float& AttributeValue, bool bIsAParameter);
 }; // Size: 0x70
 
 class UInterchangeShaderPortsAPI : public UObject
 {
 
     FString MakeInputValueKey(FString InputName);
+    FString MakeInputParameterKey(FString InputName);
     FString MakeInputName(FString InputKey);
     FString MakeInputConnectionKey(FString InputName);
+    bool IsAParameter(FString AttributeKey);
     bool IsAnInput(FString AttributeKey);
+    bool HasParameter(const class UInterchangeBaseNode* InterchangeNode, const FName& InInputName);
     bool HasInput(const class UInterchangeBaseNode* InterchangeNode, const FName& InInputName);
     bool GetInputConnection(const class UInterchangeBaseNode* InterchangeNode, FString InputName, FString& OutExpressionUid, FString& OutputName);
     void GatherInputs(const class UInterchangeBaseNode* InterchangeNode, TArray<FString>& OutInputNames);
@@ -274,19 +340,33 @@ class UInterchangeShaderPortsAPI : public UObject
 class UInterchangeSkeletalAnimationTrackNode : public UInterchangeAnimationTrackBaseNode
 {
 
+    bool SetCustomSourceTimelineAnimationStopTime(const double& StopTime);
+    bool SetCustomSourceTimelineAnimationStartTime(const double& StartTime);
     bool SetCustomSkeletonNodeUid(FString AttributeValue);
     bool SetCustomAnimationStopTime(const double& StopTime);
     bool SetCustomAnimationStartTime(const double& StartTime);
     bool SetCustomAnimationSampleRate(const double& SampleRate);
     bool SetAnimationPayloadKeyForSceneNodeUid(FString SceneNodeUid, FString InUniqueId, const EInterchangeAnimationPayLoadType& InType);
     bool SetAnimationPayloadKeyForMorphTargetNodeUid(FString MorphTargetNodeUid, FString InUniqueId, const EInterchangeAnimationPayLoadType& InType);
-    void GetSceneNodeAnimationPayloadKeys(TMap<class FString, class FString>& OutSceneNodeAnimationPayloadKeyUids, TMap<FString, uint8>& OutSceneNodeAnimationPayloadKeyTypes);
-    void GetMorphTargetNodeAnimationPayloadKeys(TMap<class FString, class FString>& OutMorphTargetNodeAnimationPayloadKeyUids, TMap<FString, uint8>& OutMorphTargetNodeAnimationPayloadKeyTypes);
+    bool IsNodeAnimatedWithBakedCurve(FString SceneNodeUid);
+    void GetSceneNodeAnimationPayloadKeys(TMap<FString, FString>& OutSceneNodeAnimationPayloadKeyUids, TMap<FString, uint8>& OutSceneNodeAnimationPayloadKeyTypes);
+    void GetMorphTargetNodeAnimationPayloadKeys(TMap<FString, FString>& OutMorphTargetNodeAnimationPayloadKeyUids, TMap<FString, uint8>& OutMorphTargetNodeAnimationPayloadKeyTypes);
+    bool GetCustomSourceTimelineAnimationStopTime(double& StopTime);
+    bool GetCustomSourceTimelineAnimationStartTime(double& StartTime);
     bool GetCustomSkeletonNodeUid(FString& AttributeValue);
     bool GetCustomAnimationStopTime(double& StopTime);
     bool GetCustomAnimationStartTime(double& StartTime);
     bool GetCustomAnimationSampleRate(double& SampleRate);
-}; // Size: 0x290
+}; // Size: 0x2B0
+
+class UInterchangeSpecularProfileNode : public UInterchangeBaseNode
+{
+
+    bool SetCustomTexture(FString TextureUid);
+    bool SetCustomFormat(uint8 Format);
+    bool GetCustomTexture(FString& TextureUid);
+    bool GetCustomFormat(uint8& Format);
+}; // Size: 0x80
 
 class UInterchangeSpotLightNode : public UInterchangePointLightNode
 {
@@ -295,7 +375,7 @@ class UInterchangeSpotLightNode : public UInterchangePointLightNode
     bool SetCustomInnerConeAngle(float AttributeValue);
     bool GetCustomOuterConeAngle(float& AttributeValue);
     bool GetCustomInnerConeAngle(float& AttributeValue);
-}; // Size: 0x110
+}; // Size: 0x140
 
 class UInterchangeStandardCameraNode : public UInterchangeBaseNode
 {
@@ -316,7 +396,7 @@ class UInterchangeStandardCameraNode : public UInterchangeBaseNode
 
 class UInterchangeTexture2DArrayNode : public UInterchangeTextureNode
 {
-}; // Size: 0x90
+}; // Size: 0xA0
 
 class UInterchangeTexture2DNode : public UInterchangeTextureNode
 {
@@ -326,23 +406,23 @@ class UInterchangeTexture2DNode : public UInterchangeTextureNode
     TMap<int32, FString> GetSourceBlocks();
     bool GetCustomWrapV(EInterchangeTextureWrapMode& AttributeValue);
     bool GetCustomWrapU(EInterchangeTextureWrapMode& AttributeValue);
-}; // Size: 0x128
+}; // Size: 0x138
 
 class UInterchangeTextureBlurNode : public UInterchangeTexture2DNode
 {
-}; // Size: 0x128
+}; // Size: 0x138
 
 class UInterchangeTextureCubeArrayNode : public UInterchangeTextureNode
 {
-}; // Size: 0x90
+}; // Size: 0xA0
 
 class UInterchangeTextureCubeNode : public UInterchangeTextureNode
 {
-}; // Size: 0x90
+}; // Size: 0xA0
 
 class UInterchangeTextureLightProfileNode : public UInterchangeTextureNode
 {
-}; // Size: 0x90
+}; // Size: 0xA0
 
 class UInterchangeTextureNode : public UInterchangeBaseNode
 {
@@ -350,18 +430,20 @@ class UInterchangeTextureNode : public UInterchangeBaseNode
     void SetPayLoadKey(FString PayloadKey);
     bool SetCustomSRGB(const bool& AttributeValue);
     bool SetCustomFilter(const EInterchangeTextureFilterMode& AttributeValue);
+    bool SetCustomColorSpace(const EInterchangeTextureColorSpace& AttributeValue);
     bool SetCustombFlipGreenChannel(const bool& AttributeValue);
     bool GetCustomSRGB(bool& AttributeValue);
     bool GetCustomFilter(EInterchangeTextureFilterMode& AttributeValue);
+    bool GetCustomColorSpace(EInterchangeTextureColorSpace& AttributeValue);
     bool GetCustombFlipGreenChannel(bool& AttributeValue);
-}; // Size: 0x90
+}; // Size: 0xA0
 
 class UInterchangeTransformAnimationTrackNode : public UInterchangeAnimationTrackNode
 {
 
     bool SetCustomUsedChannels(const int32& AttributeValue);
     bool GetCustomUsedChannels(int32& AttributeValue);
-}; // Size: 0xD0
+}; // Size: 0xE0
 
 class UInterchangeVariantSetNode : public UInterchangeBaseNode
 {
@@ -377,8 +459,43 @@ class UInterchangeVariantSetNode : public UInterchangeBaseNode
     bool AddCustomDependencyUid(FString DependencyUid);
 }; // Size: 0xA0
 
+class UInterchangeVolumeGridNode : public UInterchangeBaseNode
+{
+
+    bool SetCustomNumComponents(const int32& NumComponents);
+    bool SetCustomGridTransform(const FTransform& AttributeValue);
+    bool SetCustomGridActiveDimensions(const FIntVector& AttributeValue);
+    bool SetCustomGridActiveAABBMin(const FIntVector& AttributeValue);
+    bool SetCustomGridActiveAABBMax(const FIntVector& AttributeValue);
+    bool SetCustomElementType(const EVolumeGridElementType& AttributeValue);
+    bool GetCustomNumComponents(int32& NumComponents);
+    bool GetCustomGridTransform(FTransform& AttributeValue);
+    bool GetCustomGridActiveDimensions(FIntVector& AttributeValue);
+    bool GetCustomGridActiveAABBMin(FIntVector& AttributeValue);
+    bool GetCustomGridActiveAABBMax(FIntVector& AttributeValue);
+    bool GetCustomElementType(EVolumeGridElementType& AttributeValue);
+}; // Size: 0xC0
+
+class UInterchangeVolumeNode : public UInterchangeBaseNode
+{
+
+    bool SetCustomFileName(FString AttributeValue);
+    bool SetCustomAnimationID(FString AttributeValue);
+    bool RemoveCustomGridDependency(FString DependencyUid);
+    bool RemoveCustomFrameIndexInAnimation(int32 Index);
+    void GetCustomGridDependency(const int32 Index, FString& OutDependency);
+    int32 GetCustomGridDependeciesCount();
+    void GetCustomGridDependecies(TArray<FString>& OutDependencies);
+    void GetCustomFrameIndicesInAnimation(TArray<int32>& OutAnimationIndices);
+    void GetCustomFrameIndexInAnimation(int32 IndexIndex, int32& OutIndex);
+    bool GetCustomFileName(FString& AttributeValue);
+    bool GetCustomAnimationID(FString& AttributeValue);
+    bool AddCustomGridDependency(FString DependencyUid);
+    bool AddCustomFrameIndexInAnimation(int32 Index);
+}; // Size: 0xC0
+
 class UInterchangeVolumeTextureNode : public UInterchangeTextureNode
 {
-}; // Size: 0x90
+}; // Size: 0xA0
 
 #endif

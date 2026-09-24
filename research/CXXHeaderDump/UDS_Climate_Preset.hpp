@@ -24,9 +24,9 @@ class UUDS_Climate_Preset_C : public UPrimaryDataAsset
     double Summer Snowfall (mm);                                                      // 0x00C0 (size: 0x8)
     double Autumn Snowfall (mm);                                                      // 0x00C8 (size: 0x8)
     double Dust/Sand Present;                                                         // 0x00D0 (size: 0x8)
-    FText Data Source;                                                                // 0x00D8 (size: 0x18)
+    FText Data Source;                                                                // 0x00D8 (size: 0x10)
 
     void Return Temperature Range in Scale(TEnumAsByte<UDS_TemperatureType::Type> Scale, int32 Season, double& Low, double& High);
-}; // Size: 0xF0
+}; // Size: 0xE8
 
 #endif

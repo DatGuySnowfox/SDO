@@ -3,9 +3,9 @@
 
 class USquareProgressBar_C : public UUserWidget
 {
-    class UImage* ProgressBar;                                                        // 0x02C0 (size: 0x8)
+    class UImage* ProgressBar;                                                        // 0x0340 (size: 0x8)
 
     void SetPercent(float Value);
-}; // Size: 0x2C8
+}; // Size: 0x348
 
 #endif

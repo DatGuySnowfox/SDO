@@ -109,12 +109,10 @@ struct FSourceEffectBitCrusherBaseSettings
 
 struct FSourceEffectBitCrusherSettings
 {
-    float CrushedSampleRate;                                                          // 0x0000 (size: 0x4)
-    FSoundModulationDestinationSettings SampleRateModulation;                         // 0x0008 (size: 0x58)
-    float CrushedBits;                                                                // 0x0060 (size: 0x4)
-    FSoundModulationDestinationSettings BitModulation;                                // 0x0068 (size: 0x58)
+    FSoundModulationDestinationSettings SampleRateModulation;                         // 0x0000 (size: 0x58)
+    FSoundModulationDestinationSettings BitModulation;                                // 0x0058 (size: 0x58)
 
-}; // Size: 0xC0
+}; // Size: 0xB0
 
 struct FSourceEffectChorusBaseSettings
 {
@@ -167,8 +165,9 @@ struct FSourceEffectDynamicsProcessorSettings
     float OutputGainDb;                                                               // 0x0020 (size: 0x4)
     uint8 bStereoLinked;                                                              // 0x0024 (size: 0x1)
     uint8 bAnalogMode;                                                                // 0x0024 (size: 0x1)
+    uint8 bBypass;                                                                    // 0x0028 (size: 0x1)
 
-}; // Size: 0x28
+}; // Size: 0x2C
 
 struct FSourceEffectEQBand
 {
@@ -260,7 +259,7 @@ struct FSourceEffectMotionFilterSettings
     float MotionFilterMix;                                                            // 0x0004 (size: 0x4)
     FSourceEffectIndividualFilterSettings FilterASettings;                            // 0x0008 (size: 0xC)
     FSourceEffectIndividualFilterSettings FilterBSettings;                            // 0x0014 (size: 0xC)
-    TMap<class ESourceEffectMotionFilterModDestination, class FSourceEffectMotionFilterModulationSettings> ModulationMappings; // 0x0020 (size: 0x50)
+    TMap<ESourceEffectMotionFilterModDestination, FSourceEffectMotionFilterModulationSettings> ModulationMappings; // 0x0020 (size: 0x50)
     float DryVolumeDb;                                                                // 0x0070 (size: 0x4)
 
 }; // Size: 0x78
@@ -427,26 +426,26 @@ struct FSynth1PatchCable
 
 struct FSynth2DSliderStyle : public FSlateWidgetStyle
 {
-    FSlateBrush NormalThumbImage;                                                     // 0x0010 (size: 0xD0)
-    FSlateBrush DisabledThumbImage;                                                   // 0x00E0 (size: 0xD0)
-    FSlateBrush NormalBarImage;                                                       // 0x01B0 (size: 0xD0)
-    FSlateBrush DisabledBarImage;                                                     // 0x0280 (size: 0xD0)
-    FSlateBrush BackgroundImage;                                                      // 0x0350 (size: 0xD0)
-    float BarThickness;                                                               // 0x0420 (size: 0x4)
+    FSlateBrush NormalThumbImage;                                                     // 0x0010 (size: 0xB0)
+    FSlateBrush DisabledThumbImage;                                                   // 0x00C0 (size: 0xB0)
+    FSlateBrush NormalBarImage;                                                       // 0x0170 (size: 0xB0)
+    FSlateBrush DisabledBarImage;                                                     // 0x0220 (size: 0xB0)
+    FSlateBrush BackgroundImage;                                                      // 0x02D0 (size: 0xB0)
+    float BarThickness;                                                               // 0x0380 (size: 0x4)
 
-}; // Size: 0x430
+}; // Size: 0x390
 
 struct FSynthKnobStyle : public FSlateWidgetStyle
 {
-    FSlateBrush LargeKnob;                                                            // 0x0010 (size: 0xD0)
-    FSlateBrush LargeKnobOverlay;                                                     // 0x00E0 (size: 0xD0)
-    FSlateBrush MediumKnob;                                                           // 0x01B0 (size: 0xD0)
-    FSlateBrush MediumKnobOverlay;                                                    // 0x0280 (size: 0xD0)
-    float MinValueAngle;                                                              // 0x0350 (size: 0x4)
-    float MaxValueAngle;                                                              // 0x0354 (size: 0x4)
-    ESynthKnobSize KnobSize;                                                          // 0x0358 (size: 0x1)
+    FSlateBrush LargeKnob;                                                            // 0x0010 (size: 0xB0)
+    FSlateBrush LargeKnobOverlay;                                                     // 0x00C0 (size: 0xB0)
+    FSlateBrush MediumKnob;                                                           // 0x0170 (size: 0xB0)
+    FSlateBrush MediumKnobOverlay;                                                    // 0x0220 (size: 0xB0)
+    float MinValueAngle;                                                              // 0x02D0 (size: 0x4)
+    float MaxValueAngle;                                                              // 0x02D4 (size: 0x4)
+    ESynthKnobSize KnobSize;                                                          // 0x02D8 (size: 0x1)
 
-}; // Size: 0x360
+}; // Size: 0x2E0
 
 struct FSynthSlateStyle : public FSlateWidgetStyle
 {
@@ -479,14 +478,14 @@ class UAudioImpulseResponse : public UObject
 
 class UEnvelopeFollowerListener : public UActorComponent
 {
-    FEnvelopeFollowerListenerOnEnvelopeFollowerUpdate OnEnvelopeFollowerUpdate;       // 0x00A0 (size: 0x10)
+    FEnvelopeFollowerListenerOnEnvelopeFollowerUpdate OnEnvelopeFollowerUpdate;       // 0x00B8 (size: 0x10)
     void OnEnvelopeFollowerUpdate(float EnvelopeValue);
 
-}; // Size: 0xC0
+}; // Size: 0xD8
 
 class UGranularSynth : public USynthComponent
 {
-    class USoundWave* GranulatedSoundWave;                                            // 0x0900 (size: 0x8)
+    class USoundWave* GranulatedSoundWave;                                            // 0x08A0 (size: 0x8)
 
     void SetSustainGain(const float SustainGain);
     void SetSoundWave(class USoundWave* InSoundWave);
@@ -508,11 +507,11 @@ class UGranularSynth : public USynthComponent
     bool IsLoaded();
     float GetSampleDuration();
     float GetCurrentPlayheadTime();
-}; // Size: 0xCE0
+}; // Size: 0xC90
 
 class UModularSynthComponent : public USynthComponent
 {
-    int32 VoiceCount;                                                                 // 0x0900 (size: 0x4)
+    int32 VoiceCount;                                                                 // 0x08A0 (size: 0x4)
 
     void SetSynthPreset(const FModularSynthPreset& SynthPreset);
     void SetSustainGain(float SustainGain);
@@ -573,7 +572,7 @@ class UModularSynthComponent : public USynthComponent
     void NoteOn(const float Note, const int32 Velocity, const float Duration);
     void NoteOff(const float Note, const bool bAllNotesOff, const bool bKillAllNotes);
     FPatchId CreatePatch(const ESynth1PatchSource PatchSource, const TArray<FSynth1PatchCable>& PatchCables, const bool bEnableByDefault);
-}; // Size: 0xFD0
+}; // Size: 0xFA0
 
 class UModularSynthLibrary : public UBlueprintFunctionLibrary
 {
@@ -600,7 +599,7 @@ class UMonoWaveTableSynthPreset : public UObject
 
 class USourceEffectBitCrusherPreset : public USoundEffectSourcePreset
 {
-    FSourceEffectBitCrusherSettings Settings;                                         // 0x0150 (size: 0xC0)
+    FSourceEffectBitCrusherSettings Settings;                                         // 0x0140 (size: 0xB0)
 
     void SetSettings(const FSourceEffectBitCrusherBaseSettings& Settings);
     void SetSampleRateModulators(const TSet<USoundModulatorBase*>& InModulators);
@@ -610,7 +609,7 @@ class USourceEffectBitCrusherPreset : public USoundEffectSourcePreset
     void SetBits(float Bits);
     void SetBitModulators(const TSet<USoundModulatorBase*>& InModulators);
     void SetBitModulator(const class USoundModulatorBase* Modulator);
-}; // Size: 0x210
+}; // Size: 0x1F0
 
 class USourceEffectChorusPreset : public USoundEffectSourcePreset
 {
@@ -651,10 +650,10 @@ class USourceEffectConvolutionReverbPreset : public USoundEffectSourcePreset
 
 class USourceEffectDynamicsProcessorPreset : public USoundEffectSourcePreset
 {
-    FSourceEffectDynamicsProcessorSettings Settings;                                  // 0x00B8 (size: 0x28)
+    FSourceEffectDynamicsProcessorSettings Settings;                                  // 0x00BC (size: 0x2C)
 
     void SetSettings(const FSourceEffectDynamicsProcessorSettings& InSettings);
-}; // Size: 0xE0
+}; // Size: 0xE8
 
 class USourceEffectEQPreset : public USoundEffectSourcePreset
 {
@@ -833,29 +832,29 @@ class USubmixEffectTapDelayPreset : public USoundEffectSubmixPreset
 
 class USynth2DSlider : public UWidget
 {
-    float ValueX;                                                                     // 0x0180 (size: 0x4)
-    float ValueY;                                                                     // 0x0184 (size: 0x4)
-    FSynth2DSliderValueXDelegate ValueXDelegate;                                      // 0x0188 (size: 0x10)
+    float ValueX;                                                                     // 0x0168 (size: 0x4)
+    float ValueY;                                                                     // 0x016C (size: 0x4)
+    FSynth2DSliderValueXDelegate ValueXDelegate;                                      // 0x0170 (size: 0x10)
     float GetFloat();
-    FSynth2DSliderValueYDelegate ValueYDelegate;                                      // 0x0198 (size: 0x10)
+    FSynth2DSliderValueYDelegate ValueYDelegate;                                      // 0x0180 (size: 0x10)
     float GetFloat();
-    FSynth2DSliderStyle WidgetStyle;                                                  // 0x01B0 (size: 0x430)
-    FLinearColor SliderHandleColor;                                                   // 0x05E0 (size: 0x10)
-    bool IndentHandle;                                                                // 0x05F0 (size: 0x1)
-    bool Locked;                                                                      // 0x05F1 (size: 0x1)
-    float StepSize;                                                                   // 0x05F4 (size: 0x4)
-    bool IsFocusable;                                                                 // 0x05F8 (size: 0x1)
-    FSynth2DSliderOnMouseCaptureBegin OnMouseCaptureBegin;                            // 0x0600 (size: 0x10)
+    FSynth2DSliderStyle WidgetStyle;                                                  // 0x0190 (size: 0x390)
+    FLinearColor SliderHandleColor;                                                   // 0x0520 (size: 0x10)
+    bool IndentHandle;                                                                // 0x0530 (size: 0x1)
+    bool Locked;                                                                      // 0x0531 (size: 0x1)
+    float StepSize;                                                                   // 0x0534 (size: 0x4)
+    bool IsFocusable;                                                                 // 0x0538 (size: 0x1)
+    FSynth2DSliderOnMouseCaptureBegin OnMouseCaptureBegin;                            // 0x0540 (size: 0x10)
     void OnMouseCaptureBeginEventSynth2D();
-    FSynth2DSliderOnMouseCaptureEnd OnMouseCaptureEnd;                                // 0x0610 (size: 0x10)
+    FSynth2DSliderOnMouseCaptureEnd OnMouseCaptureEnd;                                // 0x0550 (size: 0x10)
     void OnMouseCaptureEndEventSynth2D();
-    FSynth2DSliderOnControllerCaptureBegin OnControllerCaptureBegin;                  // 0x0620 (size: 0x10)
+    FSynth2DSliderOnControllerCaptureBegin OnControllerCaptureBegin;                  // 0x0560 (size: 0x10)
     void OnControllerCaptureBeginEventSynth2D();
-    FSynth2DSliderOnControllerCaptureEnd OnControllerCaptureEnd;                      // 0x0630 (size: 0x10)
+    FSynth2DSliderOnControllerCaptureEnd OnControllerCaptureEnd;                      // 0x0570 (size: 0x10)
     void OnControllerCaptureEndEventSynth2D();
-    FSynth2DSliderOnValueChangedX OnValueChangedX;                                    // 0x0640 (size: 0x10)
+    FSynth2DSliderOnValueChangedX OnValueChangedX;                                    // 0x0580 (size: 0x10)
     void OnFloatValueChangedEventSynth2D(float Value);
-    FSynth2DSliderOnValueChangedY OnValueChangedY;                                    // 0x0650 (size: 0x10)
+    FSynth2DSliderOnValueChangedY OnValueChangedY;                                    // 0x0590 (size: 0x10)
     void OnFloatValueChangedEventSynth2D(float Value);
 
     void SetValue(FVector2D InValue);
@@ -864,15 +863,15 @@ class USynth2DSlider : public UWidget
     void SetLocked(bool InValue);
     void SetIndentHandle(bool InValue);
     FVector2D GetValue();
-}; // Size: 0x670
+}; // Size: 0x5B0
 
 class USynthComponentMonoWaveTable : public USynthComponent
 {
-    FSynthComponentMonoWaveTableOnTableAltered OnTableAltered;                        // 0x0900 (size: 0x10)
+    FSynthComponentMonoWaveTableOnTableAltered OnTableAltered;                        // 0x08A0 (size: 0x10)
     void OnTableAltered(int32 TableIndex);
-    FSynthComponentMonoWaveTableOnNumTablesChanged OnNumTablesChanged;                // 0x0910 (size: 0x10)
+    FSynthComponentMonoWaveTableOnNumTablesChanged OnNumTablesChanged;                // 0x08B0 (size: 0x10)
     void NumTablesChanged();
-    class UMonoWaveTableSynthPreset* CurrentPreset;                                   // 0x0920 (size: 0x8)
+    class UMonoWaveTableSynthPreset* CurrentPreset;                                   // 0x08C0 (size: 0x8)
 
     void SetWaveTablePosition(float InPosition);
     void SetSustainPedalState(bool InSustainPedalState);
@@ -918,57 +917,57 @@ class USynthComponentMonoWaveTable : public USynthComponent
     int32 GetMaxTableIndex();
     TArray<float> GetKeyFrameValuesForTable(float TableIndex);
     float GetCurveTangent(int32 TableIndex);
-}; // Size: 0x1050
+}; // Size: 0xFF0
 
 class USynthComponentToneGenerator : public USynthComponent
 {
-    float Frequency;                                                                  // 0x0900 (size: 0x4)
-    float Volume;                                                                     // 0x0904 (size: 0x4)
-    FRuntimeFloatCurve DistanceAttenuationCurve;                                      // 0x0908 (size: 0x88)
-    FVector2D DistanceRange;                                                          // 0x0990 (size: 0x10)
-    float AttenuationDbAtMaxRange;                                                    // 0x09A0 (size: 0x4)
+    float Frequency;                                                                  // 0x08A0 (size: 0x4)
+    float Volume;                                                                     // 0x08A4 (size: 0x4)
+    FRuntimeFloatCurve DistanceAttenuationCurve;                                      // 0x08A8 (size: 0x88)
+    FVector2D DistanceRange;                                                          // 0x0930 (size: 0x10)
+    float AttenuationDbAtMaxRange;                                                    // 0x0940 (size: 0x4)
 
     void SetVolume(float InVolume);
     void SetFrequency(float InFrequency);
-}; // Size: 0x9F0
+}; // Size: 0x990
 
 class USynthKnob : public UWidget
 {
-    float Value;                                                                      // 0x0180 (size: 0x4)
-    float StepSize;                                                                   // 0x0184 (size: 0x4)
-    float MouseSpeed;                                                                 // 0x0188 (size: 0x4)
-    float MouseFineTuneSpeed;                                                         // 0x018C (size: 0x4)
-    uint8 ShowTooltipInfo;                                                            // 0x0190 (size: 0x1)
-    FText ParameterName;                                                              // 0x0198 (size: 0x18)
-    FText ParameterUnits;                                                             // 0x01B0 (size: 0x18)
-    FSynthKnobValueDelegate ValueDelegate;                                            // 0x01C8 (size: 0x10)
+    float Value;                                                                      // 0x0168 (size: 0x4)
+    float StepSize;                                                                   // 0x016C (size: 0x4)
+    float MouseSpeed;                                                                 // 0x0170 (size: 0x4)
+    float MouseFineTuneSpeed;                                                         // 0x0174 (size: 0x4)
+    uint8 ShowTooltipInfo;                                                            // 0x0178 (size: 0x1)
+    FText ParameterName;                                                              // 0x0180 (size: 0x10)
+    FText ParameterUnits;                                                             // 0x0190 (size: 0x10)
+    FSynthKnobValueDelegate ValueDelegate;                                            // 0x01A0 (size: 0x10)
     float GetFloat();
-    FSynthKnobStyle WidgetStyle;                                                      // 0x01E0 (size: 0x360)
-    bool Locked;                                                                      // 0x0540 (size: 0x1)
-    bool IsFocusable;                                                                 // 0x0541 (size: 0x1)
-    FSynthKnobOnMouseCaptureBegin OnMouseCaptureBegin;                                // 0x0548 (size: 0x10)
+    FSynthKnobStyle WidgetStyle;                                                      // 0x01B0 (size: 0x2E0)
+    bool Locked;                                                                      // 0x0490 (size: 0x1)
+    bool IsFocusable;                                                                 // 0x0491 (size: 0x1)
+    FSynthKnobOnMouseCaptureBegin OnMouseCaptureBegin;                                // 0x0498 (size: 0x10)
     void OnMouseCaptureBeginEvent();
-    FSynthKnobOnMouseCaptureEnd OnMouseCaptureEnd;                                    // 0x0558 (size: 0x10)
+    FSynthKnobOnMouseCaptureEnd OnMouseCaptureEnd;                                    // 0x04A8 (size: 0x10)
     void OnMouseCaptureEndEvent();
-    FSynthKnobOnControllerCaptureBegin OnControllerCaptureBegin;                      // 0x0568 (size: 0x10)
+    FSynthKnobOnControllerCaptureBegin OnControllerCaptureBegin;                      // 0x04B8 (size: 0x10)
     void OnControllerCaptureBeginEvent();
-    FSynthKnobOnControllerCaptureEnd OnControllerCaptureEnd;                          // 0x0578 (size: 0x10)
+    FSynthKnobOnControllerCaptureEnd OnControllerCaptureEnd;                          // 0x04C8 (size: 0x10)
     void OnControllerCaptureEndEvent();
-    FSynthKnobOnValueChanged OnValueChanged;                                          // 0x0588 (size: 0x10)
+    FSynthKnobOnValueChanged OnValueChanged;                                          // 0x04D8 (size: 0x10)
     void OnFloatValueChangedEvent(float Value);
 
     void SetValue(float InValue);
     void SetStepSize(float InValue);
     void SetLocked(bool InValue);
     float GetValue();
-}; // Size: 0x5B0
+}; // Size: 0x500
 
 class USynthSamplePlayer : public USynthComponent
 {
-    class USoundWave* SoundWave;                                                      // 0x0900 (size: 0x8)
-    FSynthSamplePlayerOnSampleLoaded OnSampleLoaded;                                  // 0x0908 (size: 0x10)
+    class USoundWave* SoundWave;                                                      // 0x08A0 (size: 0x8)
+    FSynthSamplePlayerOnSampleLoaded OnSampleLoaded;                                  // 0x08A8 (size: 0x10)
     void OnSampleLoaded();
-    FSynthSamplePlayerOnSamplePlaybackProgress OnSamplePlaybackProgress;              // 0x0918 (size: 0x10)
+    FSynthSamplePlayerOnSamplePlaybackProgress OnSamplePlaybackProgress;              // 0x08B8 (size: 0x10)
     void OnSamplePlaybackProgress(float ProgressPercent, float ProgressTimeSeconds);
 
     void SetSoundWave(class USoundWave* InSoundWave);
@@ -980,7 +979,7 @@ class USynthSamplePlayer : public USynthComponent
     float GetSampleDuration();
     float GetCurrentPlaybackProgressTime();
     float GetCurrentPlaybackProgressPercent();
-}; // Size: 0xA30
+}; // Size: 0x9D0
 
 class USynthesisUtilitiesBlueprintFunctionLibrary : public UBlueprintFunctionLibrary
 {

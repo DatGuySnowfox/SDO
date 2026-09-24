@@ -3,8 +3,8 @@
 
 class ABP_EventMaster_C : public AActor
 {
-    class USceneComponent* DefaultSceneRoot;                                          // 0x0298 (size: 0x8)
+    class USceneComponent* DefaultSceneRoot;                                          // 0x02A8 (size: 0x8)
 
-}; // Size: 0x2A0
+}; // Size: 0x2B0
 
 #endif

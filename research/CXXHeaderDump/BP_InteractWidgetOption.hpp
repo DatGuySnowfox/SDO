@@ -3,12 +3,12 @@
 
 class UBP_InteractWidgetOption_C : public UUserWidget
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02C0 (size: 0x8)
-    class UBorder* Option;                                                            // 0x02C8 (size: 0x8)
-    class UTextBlock* txt;                                                            // 0x02D0 (size: 0x8)
-    FText OptionName;                                                                 // 0x02D8 (size: 0x18)
-    FGameplayTag OptionTag;                                                           // 0x02F0 (size: 0x8)
-    FBP_InteractWidgetOption_COnSelected OnSelected;                                  // 0x02F8 (size: 0x10)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0340 (size: 0x8)
+    class UTextBlock* txt;                                                            // 0x0348 (size: 0x8)
+    class UBorder* Option;                                                            // 0x0350 (size: 0x8)
+    FText OptionName;                                                                 // 0x0358 (size: 0x10)
+    FGameplayTag OptionTag;                                                           // 0x0368 (size: 0x8)
+    FBP_InteractWidgetOption_COnSelected OnSelected;                                  // 0x0370 (size: 0x10)
     void OnSelected(class UBP_InteractWidgetOption_C* Option);
 
     FEventReply OnMouseButtonDown(FGeometry MyGeometry, const FPointerEvent& MouseEvent);
@@ -17,6 +17,6 @@ class UBP_InteractWidgetOption_C : public UUserWidget
     void Construct();
     void ExecuteUbergraph_BP_InteractWidgetOption(int32 EntryPoint);
     void OnSelected__DelegateSignature(class UBP_InteractWidgetOption_C* Option);
-}; // Size: 0x308
+}; // Size: 0x380
 
 #endif

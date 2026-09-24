@@ -3,6 +3,6 @@
 
 class ABP_KeycardDoor_Child_C : public ABP_KeycardDoor_C
 {
-}; // Size: 0x313
+}; // Size: 0x323
 
 #endif

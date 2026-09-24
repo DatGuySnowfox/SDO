@@ -146,7 +146,7 @@ struct FTransformNoScale
 
 class UAnimationDataSourceRegistry : public UObject
 {
-    TMap<class FName, class TWeakObjectPtr<UObject>> DataSources;                     // 0x0028 (size: 0x50)
+    TMap<FName, TWeakObjectPtr<class UObject>> DataSources;                           // 0x0028 (size: 0x50)
 
 }; // Size: 0x78
 

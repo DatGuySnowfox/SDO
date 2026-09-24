@@ -11,22 +11,22 @@ struct FAutoSettingData
 
 struct FSettingOption
 {
-    FText Label;                                                                      // 0x0000 (size: 0x18)
-    FString Value;                                                                    // 0x0018 (size: 0x10)
+    FText Label;                                                                      // 0x0000 (size: 0x10)
+    FString Value;                                                                    // 0x0010 (size: 0x10)
 
-}; // Size: 0x28
+}; // Size: 0x20
 
 class UAutoSettingWidget : public UUserWidget
 {
-    FName CVarName;                                                                   // 0x02C0 (size: 0x8)
-    TSubclassOf<class USettingValueMask> ValueMask;                                   // 0x02C8 (size: 0x8)
-    bool bAutoSave;                                                                   // 0x02D0 (size: 0x1)
-    bool bAutoApply;                                                                  // 0x02D1 (size: 0x1)
-    FGameplayTagContainer SettingTags;                                                // 0x02D8 (size: 0x20)
-    FString CurrentValue;                                                             // 0x02F8 (size: 0x10)
-    bool bHasUnappliedChange;                                                         // 0x0308 (size: 0x1)
-    bool bHasUnsavedChange;                                                           // 0x0309 (size: 0x1)
-    bool bUpdatingSettingSelection;                                                   // 0x030A (size: 0x1)
+    FName CVarName;                                                                   // 0x0340 (size: 0x8)
+    TSubclassOf<class USettingValueMask> ValueMask;                                   // 0x0348 (size: 0x8)
+    bool bAutoSave;                                                                   // 0x0350 (size: 0x1)
+    bool bAutoApply;                                                                  // 0x0351 (size: 0x1)
+    FGameplayTagContainer SettingTags;                                                // 0x0358 (size: 0x20)
+    FString CurrentValue;                                                             // 0x0378 (size: 0x10)
+    bool bHasUnappliedChange;                                                         // 0x0388 (size: 0x1)
+    bool bHasUnsavedChange;                                                           // 0x0389 (size: 0x1)
+    bool bUpdatingSettingSelection;                                                   // 0x038A (size: 0x1)
 
     void UpdateSelection(FString Value);
     void Save();
@@ -35,7 +35,7 @@ class UAutoSettingWidget : public UUserWidget
     void Cancel();
     void ApplySettingValue(FString Value, bool bSaveIfPossible);
     void Apply();
-}; // Size: 0x310
+}; // Size: 0x390
 
 class UAutoSettingsConfig : public UDeveloperSettings
 {
@@ -50,7 +50,7 @@ class UCVarChangeListener : public UObject
 
 class UCVarChangeListenerManager : public UObject
 {
-    TMap<class FName, class UCVarChangeListener*> Listeners;                          // 0x0028 (size: 0x50)
+    TMap<FName, UCVarChangeListener*> Listeners;                                      // 0x0028 (size: 0x50)
 
     void AddStringCVarCallbackStatic(FName Name, FAddStringCVarCallbackStaticChangedCallback ChangedCallback, bool CallbackImmediately);
     void AddIntCVarCallbackStatic(FName Name, FAddIntCVarCallbackStaticChangedCallback ChangedCallback, bool CallbackImmediately);
@@ -60,17 +60,17 @@ class UCVarChangeListenerManager : public UObject
 
 class UCheckBoxSetting : public UToggleSetting
 {
-    class UCheckBox* CheckBox;                                                        // 0x0310 (size: 0x8)
+    class UCheckBox* CheckBox;                                                        // 0x0390 (size: 0x8)
 
     void CheckBoxStateChanged(bool IsChecked);
-}; // Size: 0x318
+}; // Size: 0x398
 
 class UComboBoxSetting : public USelectSetting
 {
-    class UComboBoxString* ComboBox;                                                  // 0x0330 (size: 0x8)
+    class UComboBoxString* ComboBox;                                                  // 0x03B0 (size: 0x8)
 
     void ComboBoxSelectionChanged(FString SelectedItem, TEnumAsByte<ESelectInfo::Type> SelectionType);
-}; // Size: 0x338
+}; // Size: 0x3B8
 
 class UConsoleUtils : public UBlueprintFunctionLibrary
 {
@@ -88,21 +88,21 @@ class UConsoleUtils : public UBlueprintFunctionLibrary
 
 class UNativeSliderSetting : public USliderSetting
 {
-    class USlider* Slider;                                                            // 0x0318 (size: 0x8)
-    bool bMouseCaptureInProgress;                                                     // 0x0320 (size: 0x1)
+    class USlider* Slider;                                                            // 0x0398 (size: 0x8)
+    bool bMouseCaptureInProgress;                                                     // 0x03A0 (size: 0x1)
 
     void SliderValueChanged(float NewValue);
     void SliderMouseCaptureEnd();
     void SliderMouseCaptureBegin();
-}; // Size: 0x328
+}; // Size: 0x3A8
 
 class URadioButton : public UUserWidget
 {
-    FRadioButtonOnSelected OnSelected;                                                // 0x02C0 (size: 0x10)
+    FRadioButtonOnSelected OnSelected;                                                // 0x0340 (size: 0x10)
     void RadioSelectedSignature(FString Value);
-    FText Label;                                                                      // 0x02D0 (size: 0x18)
-    FString Value;                                                                    // 0x02E8 (size: 0x10)
-    bool Selected;                                                                    // 0x02F8 (size: 0x1)
+    FText Label;                                                                      // 0x0350 (size: 0x10)
+    FString Value;                                                                    // 0x0360 (size: 0x10)
+    bool Selected;                                                                    // 0x0370 (size: 0x1)
 
     void UpdateSelected(bool InSelected);
     void UpdateLabel(const FText& InLabel);
@@ -113,32 +113,32 @@ class URadioButton : public UUserWidget
     FString GetValue();
     bool GetSelected();
     FText GetLabel();
-}; // Size: 0x300
+}; // Size: 0x378
 
 class URadioSelect : public UUserWidget
 {
-    TArray<FSettingOption> Options;                                                   // 0x02C0 (size: 0x10)
-    TSubclassOf<class URadioButton> RadioButtonClass;                                 // 0x02D0 (size: 0x8)
-    FRadioSelectSelectionChangedEvent SelectionChangedEvent;                          // 0x02D8 (size: 0x10)
+    TArray<FSettingOption> Options;                                                   // 0x0340 (size: 0x10)
+    TSubclassOf<class URadioButton> RadioButtonClass;                                 // 0x0350 (size: 0x8)
+    FRadioSelectSelectionChangedEvent SelectionChangedEvent;                          // 0x0358 (size: 0x10)
     void RadioSelectedSignature(FString Value);
-    class UPanelWidget* ButtonContainer;                                              // 0x02E8 (size: 0x8)
-    TArray<class URadioButton*> RadioButtons;                                         // 0x02F0 (size: 0x10)
+    class UPanelWidget* ButtonContainer;                                              // 0x0368 (size: 0x8)
+    TArray<URadioButton*> RadioButtons;                                               // 0x0370 (size: 0x10)
 
     void SetOptions(TArray<FSettingOption> InOptions);
     void Select(FString Value);
     void OnButtonCreated(class URadioButton* Button, class UPanelSlot* NewSlot);
-    TArray<class URadioButton*> GetRadioButtonWidgets();
+    TArray<URadioButton*> GetRadioButtonWidgets();
     TArray<FSettingOption> GetOptions();
     void ButtonSelected(FString Value);
-}; // Size: 0x300
+}; // Size: 0x380
 
 class URadioSelectSetting : public USelectSetting
 {
-    TSubclassOf<class URadioButton> RadioButtonClass;                                 // 0x0330 (size: 0x8)
-    class URadioSelect* RadioSelect;                                                  // 0x0338 (size: 0x8)
+    TSubclassOf<class URadioButton> RadioButtonClass;                                 // 0x03B0 (size: 0x8)
+    class URadioSelect* RadioSelect;                                                  // 0x03B8 (size: 0x8)
 
     void RadioSelectionChanged(FString Value);
-}; // Size: 0x340
+}; // Size: 0x3C0
 
 class UResolutionOptionFactory : public USettingOptionFactory
 {
@@ -154,19 +154,19 @@ class UResolutionValueMask : public USettingValueMask
 
 class USelectSetting : public UAutoSettingWidget
 {
-    TArray<FSettingOption> Options;                                                   // 0x0310 (size: 0x10)
-    TSubclassOf<class USettingOptionFactory> OptionFactory;                           // 0x0320 (size: 0x8)
-    bool bUpdatingSettingOptions;                                                     // 0x0328 (size: 0x1)
+    TArray<FSettingOption> Options;                                                   // 0x0390 (size: 0x10)
+    TSubclassOf<class USettingOptionFactory> OptionFactory;                           // 0x03A0 (size: 0x8)
+    bool bUpdatingSettingOptions;                                                     // 0x03A8 (size: 0x1)
 
     void UpdateOptions(const TArray<FSettingOption>& InOptions);
     void RegenerateOptions();
-}; // Size: 0x330
+}; // Size: 0x3B0
 
 class USettingContainerUtils : public UBlueprintFunctionLibrary
 {
 
     void SaveChildSettings(class UUserWidget* UserWidget, class UWidget* Parent);
-    TArray<class UAutoSettingWidget*> GetChildSettings(class UUserWidget* UserWidget, class UWidget* Parent);
+    TArray<UAutoSettingWidget*> GetChildSettings(class UUserWidget* UserWidget, class UWidget* Parent);
     bool DoesAnyChildSettingHaveUnsavedChange(class UUserWidget* UserWidget, class UWidget* Parent);
     bool DoesAnyChildSettingHaveUnappliedChange(class UUserWidget* UserWidget, class UWidget* Parent);
     void CancelChildSettings(class UUserWidget* UserWidget, class UWidget* Parent);
@@ -208,8 +208,8 @@ class USettingsManager : public UEngineSubsystem
 
 class USliderSetting : public UAutoSettingWidget
 {
-    float LeftValue;                                                                  // 0x0310 (size: 0x4)
-    float RightValue;                                                                 // 0x0314 (size: 0x4)
+    float LeftValue;                                                                  // 0x0390 (size: 0x4)
+    float RightValue;                                                                 // 0x0394 (size: 0x4)
 
     void UpdateSliderValue(float NormalizedValue, float RawValue);
     void SliderValueUpdated(float NormalizedValue);
@@ -218,13 +218,13 @@ class USliderSetting : public UAutoSettingWidget
     void OnSliderValueUpdated(float NormalizedValue, float RawValue);
     float NormalizedValueToRaw(float NormalizedValue);
     float ClampRawValue(float RawValue);
-}; // Size: 0x318
+}; // Size: 0x398
 
 class USpinner : public UUserWidget
 {
-    TArray<FSettingOption> Options;                                                   // 0x02C0 (size: 0x10)
-    bool bAllowWrapping;                                                              // 0x02D0 (size: 0x1)
-    FSpinnerSelectionChangedEvent SelectionChangedEvent;                              // 0x02D8 (size: 0x10)
+    TArray<FSettingOption> Options;                                                   // 0x0340 (size: 0x10)
+    bool bAllowWrapping;                                                              // 0x0350 (size: 0x1)
+    FSpinnerSelectionChangedEvent SelectionChangedEvent;                              // 0x0358 (size: 0x10)
     void SpinnerSelectionChanged(FString Value);
 
     void SelectValue(FString Value);
@@ -236,21 +236,21 @@ class USpinner : public UUserWidget
     bool HasValidNext();
     FSettingOption GetCurrentOption();
     int32 GetCurrentIndex();
-}; // Size: 0x2F0
+}; // Size: 0x370
 
 class USpinnerSetting : public USelectSetting
 {
-    class USpinner* Spinner;                                                          // 0x0330 (size: 0x8)
+    class USpinner* Spinner;                                                          // 0x03B0 (size: 0x8)
 
     void SpinnerSelectionChanged(FString Value);
-}; // Size: 0x338
+}; // Size: 0x3B8
 
 class UToggleSetting : public UAutoSettingWidget
 {
 
     void UpdateToggleState(bool State);
     void ToggleStateUpdated(bool State);
-}; // Size: 0x310
+}; // Size: 0x390
 
 class UWindowModeValueMask : public USettingValueMask
 {

@@ -63,16 +63,16 @@ struct FMotionProcessInput
 
 struct FRigUnit_FullbodyIK : public FRigUnit_HighlevelBaseMutable
 {
-    FRigElementKey Root;                                                              // 0x0160 (size: 0xC)
-    TArray<FFBIKEndEffector> Effectors;                                               // 0x0170 (size: 0x10)
-    TArray<FFBIKConstraintOption> Constraints;                                        // 0x0180 (size: 0x10)
-    FSolverInput SolverProperty;                                                      // 0x0190 (size: 0x24)
-    FMotionProcessInput MotionProperty;                                               // 0x01B4 (size: 0x2)
-    bool bPropagateToChildren;                                                        // 0x01B6 (size: 0x1)
-    FFBIKDebugOption DebugOption;                                                     // 0x01C0 (size: 0x80)
-    FRigUnit_FullbodyIK_WorkData WorkData;                                            // 0x0240 (size: 0x198)
+    FRigElementKey Root;                                                              // 0x0010 (size: 0xC)
+    TArray<FFBIKEndEffector> Effectors;                                               // 0x0020 (size: 0x10)
+    TArray<FFBIKConstraintOption> Constraints;                                        // 0x0030 (size: 0x10)
+    FSolverInput SolverProperty;                                                      // 0x0040 (size: 0x24)
+    FMotionProcessInput MotionProperty;                                               // 0x0064 (size: 0x2)
+    bool bPropagateToChildren;                                                        // 0x0066 (size: 0x1)
+    FFBIKDebugOption DebugOption;                                                     // 0x0070 (size: 0x80)
+    FRigUnit_FullbodyIK_WorkData WorkData;                                            // 0x00F0 (size: 0x198)
 
-}; // Size: 0x3E0
+}; // Size: 0x290
 
 struct FRigUnit_FullbodyIK_WorkData
 {

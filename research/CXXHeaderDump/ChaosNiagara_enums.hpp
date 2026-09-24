@@ -50,6 +50,15 @@ enum class ELocationZToSpawnEnum {
     ChaosNiagara_Max = 4,
 };
 
+enum class ENDIGeometryCollection_SourceMode {
+    Default = 0,
+    Source = 1,
+    AttachParent = 2,
+    DefaultCollectionOnly = 3,
+    ParameterBinding = 4,
+    ENDIGeometryCollection_MAX = 5,
+};
+
 enum class ERandomVelocityGenerationTypeEnum {
     ChaosNiagara_RandomVelocityGenerationType_RandomDistribution = 0,
     ChaosNiagara_RandomVelocityGenerationType_RandomDistributionWithStreamers = 1,

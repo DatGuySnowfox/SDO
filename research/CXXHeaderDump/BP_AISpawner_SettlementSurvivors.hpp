@@ -3,6 +3,6 @@
 
 class ABP_AISpawner_SettlementSurvivors_C : public ABP_AISpawner_Master_C
 {
-}; // Size: 0x411
+}; // Size: 0x421
 
 #endif

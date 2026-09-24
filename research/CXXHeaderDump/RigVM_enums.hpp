@@ -90,7 +90,8 @@ namespace ERigVMClampSpatialMode {
         Plane = 0,
         Cylinder = 1,
         Sphere = 2,
-        ERigVMClampSpatialMode_MAX = 3,
+        Capsule = 3,
+        ERigVMClampSpatialMode_MAX = 4,
     };
 }
 
@@ -230,10 +231,12 @@ enum class ERigVMOpCode {
     InvokeEntry = 99,
     JumpToBranch = 100,
     Execute = 101,
-    Invalid = 102,
+    RunInstructions = 102,
+    SetupTraits = 103,
+    Invalid = 104,
     FirstArrayOpCode = 83,
     LastArrayOpCode = 98,
-    ERigVMOpCode_MAX = 103,
+    ERigVMOpCode_MAX = 105,
 };
 
 enum class ERigVMParameterType {
@@ -279,7 +282,8 @@ enum class ERigVMUserWorkflowType {
     NodeContext = 1,
     PinContext = 2,
     OnPinDefaultChanged = 4,
-    All = 7,
-    ERigVMUserWorkflowType_MAX = 8,
+    NodeContextButton = 8,
+    All = 15,
+    ERigVMUserWorkflowType_MAX = 16,
 };
 

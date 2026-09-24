@@ -96,7 +96,7 @@ struct FSwapAudioOutputResult
 
 class UAudioBusSubsystem : public UAudioEngineSubsystem
 {
-}; // Size: 0x90
+}; // Size: 0x108
 
 class UAudioDeviceNotificationSubsystem : public UEngineSubsystem
 {
@@ -122,6 +122,7 @@ class UAudioGenerator : public UObject
 class UAudioMixerBlueprintLibrary : public UBlueprintFunctionLibrary
 {
 
+    void UnregisterAudioBusFromSubmix(const class UObject* WorldContextObject, class USoundSubmix* SoundSubmix, class UAudioBus* AudioBus);
     float TrimAudioCache(float InMegabytesToFree);
     void SwapAudioOutputDevice(const class UObject* WorldContextObject, FString NewDeviceId, const FSwapAudioOutputDeviceOnCompletedDeviceSwap& OnCompletedDeviceSwap);
     class USoundWave* StopRecordingOutput(const class UObject* WorldContextObject, EAudioRecordingExportType ExportType, FString Name, FString Path, class USoundSubmix* SubmixToRecord, class USoundWave* ExistingSoundWaveToOverwrite);
@@ -130,7 +131,7 @@ class UAudioMixerBlueprintLibrary : public UBlueprintFunctionLibrary
     void StartRecordingOutput(const class UObject* WorldContextObject, float ExpectedDuration, class USoundSubmix* SubmixToRecord);
     void StartAudioBus(const class UObject* WorldContextObject, class UAudioBus* AudioBus);
     void StartAnalyzingOutput(const class UObject* WorldContextObject, class USoundSubmix* SubmixToAnalyze, EFFTSize FFTSize, EFFTPeakInterpolationMethod InterpolationMethod, EFFTWindowType WindowType, float HopSize, EAudioSpectrumType SpectrumType);
-    void SetSubmixEffectChainOverride(const class UObject* WorldContextObject, class USoundSubmix* SoundSubmix, TArray<class USoundEffectSubmixPreset*> SubmixEffectPresetChain, float FadeTimeSec);
+    void SetSubmixEffectChainOverride(const class UObject* WorldContextObject, class USoundSubmix* SoundSubmix, TArray<USoundEffectSubmixPreset*> SubmixEffectPresetChain, float FadeTimeSec);
     void SetBypassSourceEffectChainEntry(const class UObject* WorldContextObject, class USoundEffectSourcePresetChain* PresetChain, int32 EntryIndex, bool bBypassed);
     void ResumeRecordingOutput(const class UObject* WorldContextObject, class USoundSubmix* SubmixToPause);
     void ReplaceSubmixEffect(const class UObject* WorldContextObject, class USoundSubmix* InSoundSubmix, int32 SubmixChainIndex, class USoundEffectSubmixPreset* SubmixEffectPreset);
@@ -141,6 +142,7 @@ class UAudioMixerBlueprintLibrary : public UBlueprintFunctionLibrary
     void RemoveSubmixEffect(const class UObject* WorldContextObject, class USoundSubmix* SoundSubmix, class USoundEffectSubmixPreset* SubmixEffectPreset);
     void RemoveSourceEffectFromPresetChain(const class UObject* WorldContextObject, class USoundEffectSourcePresetChain* PresetChain, int32 EntryIndex);
     void RemoveMasterSubmixEffect(const class UObject* WorldContextObject, class USoundEffectSubmixPreset* SubmixEffectPreset);
+    void RegisterAudioBusToSubmix(const class UObject* WorldContextObject, class USoundSubmix* SoundSubmix, class UAudioBus* AudioBus);
     void PrimeSoundForPlayback(class USoundWave* SoundWave, const FPrimeSoundForPlaybackOnLoadCompletion OnLoadCompletion);
     void PrimeSoundCueForPlayback(class USoundCue* SoundCue);
     void PauseRecordingOutput(const class UObject* WorldContextObject, class USoundSubmix* SubmixToPause);
@@ -192,11 +194,12 @@ class UQuartzClockHandle : public UObject
     FQuartzTransportTimeStamp GetCurrentTimestamp(const class UObject* WorldContextObject);
     float GetBeatsPerMinute(const class UObject* WorldContextObject);
     float GetBeatProgressPercent(EQuartzCommandQuantization QuantizationBoundary, float PhaseOffset, float MsOffset);
-}; // Size: 0x1F0
+}; // Size: 0x208
 
 class UQuartzSubsystem : public UTickableWorldSubsystem
 {
 
+    void SetQuartzSubsystemTickableWhenPaused(const bool bInTickableWhenPaused);
     bool IsQuartzEnabled();
     bool IsClockRunning(const class UObject* WorldContextObject, FName ClockName);
     float GetRoundTripMinLatency(const class UObject* WorldContextObject);
@@ -216,7 +219,19 @@ class UQuartzSubsystem : public UTickableWorldSubsystem
     void DeleteClockByName(const class UObject* WorldContextObject, FName ClockName);
     void DeleteClockByHandle(const class UObject* WorldContextObject, class UQuartzClockHandle*& InClockHandle);
     class UQuartzClockHandle* CreateNewClock(const class UObject* WorldContextObject, FName ClockName, FQuartzClockSettings InSettings, bool bOverrideSettingsIfClockExists, bool bUseAudioEngineClockManager);
-}; // Size: 0x60
+}; // Size: 0x68
+
+class UScrubbedSound : public USoundWave
+{
+    class USoundWave* SoundWaveToScrub;                                               // 0x0430 (size: 0x8)
+
+    void SetSoundWave(class USoundWave* InSoundWave);
+    void SetPlayheadTime(float InPlayheadTimeSeconds);
+    void SetIsScrubbingWhileStationary(bool bInScrubWhileStationary);
+    void SetIsScrubbing(bool bInIsScrubbing);
+    void SetGrainDurationRange(const FVector2D& InGrainDurationRangeSeconds);
+    float GetPlayheadTime();
+}; // Size: 0x438
 
 class USubmixEffectDynamicsProcessorPreset : public USoundEffectSubmixPreset
 {
@@ -245,32 +260,32 @@ class USubmixEffectSubmixEQPreset : public USoundEffectSubmixPreset
 
 class USynthComponent : public USceneComponent
 {
-    uint8 bAutoDestroy;                                                               // 0x02A0 (size: 0x1)
-    uint8 bStopWhenOwnerDestroyed;                                                    // 0x02A0 (size: 0x1)
-    uint8 bAllowSpatialization;                                                       // 0x02A0 (size: 0x1)
-    uint8 bOverrideAttenuation;                                                       // 0x02A0 (size: 0x1)
-    uint8 bEnableBusSends;                                                            // 0x02A4 (size: 0x1)
-    uint8 bEnableBaseSubmix;                                                          // 0x02A4 (size: 0x1)
-    uint8 bEnableSubmixSends;                                                         // 0x02A4 (size: 0x1)
-    class USoundAttenuation* AttenuationSettings;                                     // 0x02A8 (size: 0x8)
-    FSoundAttenuationSettings AttenuationOverrides;                                   // 0x02B0 (size: 0x3D0)
-    class USoundConcurrency* ConcurrencySettings;                                     // 0x0680 (size: 0x8)
-    TSet<USoundConcurrency*> ConcurrencySet;                                          // 0x0688 (size: 0x50)
-    FSoundModulationDefaultRoutingSettings ModulationRouting;                         // 0x06D8 (size: 0x168)
-    class USoundClass* SoundClass;                                                    // 0x0840 (size: 0x8)
-    class USoundEffectSourcePresetChain* SourceEffectChain;                           // 0x0848 (size: 0x8)
-    class USoundSubmixBase* SoundSubmix;                                              // 0x0850 (size: 0x8)
-    TArray<FSoundSubmixSendInfo> SoundSubmixSends;                                    // 0x0858 (size: 0x10)
-    TArray<FSoundSourceBusSendInfo> BusSends;                                         // 0x0868 (size: 0x10)
-    TArray<FSoundSourceBusSendInfo> PreEffectBusSends;                                // 0x0878 (size: 0x10)
-    uint8 bIsUISound;                                                                 // 0x0888 (size: 0x1)
-    uint8 bIsPreviewSound;                                                            // 0x0888 (size: 0x1)
-    int32 EnvelopeFollowerAttackTime;                                                 // 0x088C (size: 0x4)
-    int32 EnvelopeFollowerReleaseTime;                                                // 0x0890 (size: 0x4)
-    FSynthComponentOnAudioEnvelopeValue OnAudioEnvelopeValue;                         // 0x0898 (size: 0x10)
+    uint8 bAutoDestroy;                                                               // 0x0240 (size: 0x1)
+    uint8 bStopWhenOwnerDestroyed;                                                    // 0x0240 (size: 0x1)
+    uint8 bAllowSpatialization;                                                       // 0x0240 (size: 0x1)
+    uint8 bOverrideAttenuation;                                                       // 0x0240 (size: 0x1)
+    uint8 bEnableBusSends;                                                            // 0x0244 (size: 0x1)
+    uint8 bEnableBaseSubmix;                                                          // 0x0244 (size: 0x1)
+    uint8 bEnableSubmixSends;                                                         // 0x0244 (size: 0x1)
+    class USoundAttenuation* AttenuationSettings;                                     // 0x0248 (size: 0x8)
+    FSoundAttenuationSettings AttenuationOverrides;                                   // 0x0250 (size: 0x3D0)
+    class USoundConcurrency* ConcurrencySettings;                                     // 0x0620 (size: 0x8)
+    TSet<USoundConcurrency*> ConcurrencySet;                                          // 0x0628 (size: 0x50)
+    FSoundModulationDefaultRoutingSettings ModulationRouting;                         // 0x0678 (size: 0x168)
+    class USoundClass* SoundClass;                                                    // 0x07E0 (size: 0x8)
+    class USoundEffectSourcePresetChain* SourceEffectChain;                           // 0x07E8 (size: 0x8)
+    class USoundSubmixBase* SoundSubmix;                                              // 0x07F0 (size: 0x8)
+    TArray<FSoundSubmixSendInfo> SoundSubmixSends;                                    // 0x07F8 (size: 0x10)
+    TArray<FSoundSourceBusSendInfo> BusSends;                                         // 0x0808 (size: 0x10)
+    TArray<FSoundSourceBusSendInfo> PreEffectBusSends;                                // 0x0818 (size: 0x10)
+    uint8 bIsUISound;                                                                 // 0x0828 (size: 0x1)
+    uint8 bIsPreviewSound;                                                            // 0x0828 (size: 0x1)
+    int32 EnvelopeFollowerAttackTime;                                                 // 0x082C (size: 0x4)
+    int32 EnvelopeFollowerReleaseTime;                                                // 0x0830 (size: 0x4)
+    FSynthComponentOnAudioEnvelopeValue OnAudioEnvelopeValue;                         // 0x0838 (size: 0x10)
     void OnSynthEnvelopeValue(const float EnvelopeValue);
-    class USynthSound* Synth;                                                         // 0x08C8 (size: 0x8)
-    class UAudioComponent* AudioComponent;                                            // 0x08D0 (size: 0x8)
+    class USynthSound* Synth;                                                         // 0x0868 (size: 0x8)
+    class UAudioComponent* AudioComponent;                                            // 0x0870 (size: 0x8)
 
     void Stop();
     void Start();
@@ -289,12 +304,12 @@ class USynthComponent : public USceneComponent
     void FadeOut(float FadeOutDuration, float FadeVolumeLevel, const EAudioFaderCurve FadeCurve);
     void FadeIn(float FadeInDuration, float FadeVolumeLevel, float StartTime, const EAudioFaderCurve FadeCurve);
     void AdjustVolume(float AdjustVolumeDuration, float AdjustVolumeLevel, const EAudioFaderCurve FadeCurve);
-}; // Size: 0x900
+}; // Size: 0x8A0
 
 class USynthSound : public USoundWaveProcedural
 {
-    TWeakObjectPtr<class USynthComponent> OwningSynthComponent;                       // 0x0480 (size: 0x8)
+    TWeakObjectPtr<class USynthComponent> OwningSynthComponent;                       // 0x0450 (size: 0x8)
 
-}; // Size: 0x4A0
+}; // Size: 0x470
 
 #endif

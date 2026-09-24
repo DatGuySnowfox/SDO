@@ -41,28 +41,28 @@ struct FControlInputs : public FVehicleInputs
 
 }; // Size: 0x20
 
-struct FNetworkVehicleInputs : public FNetworkPhysicsDatas
+struct FNetworkVehicleInputs : public FNetworkPhysicsData
 {
-    FControlInputs VehicleInputs;                                                     // 0x0018 (size: 0x20)
-    float TransmissionChangeTime;                                                     // 0x0038 (size: 0x4)
-    int32 TransmissionCurrentGear;                                                    // 0x003C (size: 0x4)
-    int32 TransmissionTargetGear;                                                     // 0x0040 (size: 0x4)
+    FControlInputs VehicleInputs;                                                     // 0x0028 (size: 0x20)
+    float TransmissionChangeTime;                                                     // 0x0048 (size: 0x4)
+    int32 TransmissionCurrentGear;                                                    // 0x004C (size: 0x4)
+    int32 TransmissionTargetGear;                                                     // 0x0050 (size: 0x4)
 
-}; // Size: 0x48
+}; // Size: 0x58
 
-struct FNetworkVehicleStates : public FNetworkPhysicsDatas
+struct FNetworkVehicleStates : public FNetworkPhysicsData
 {
-    FVector StateLastVelocity;                                                        // 0x0018 (size: 0x18)
-    TArray<float> WheelsOmega;                                                        // 0x0030 (size: 0x10)
-    TArray<float> WheelsAngularPosition;                                              // 0x0040 (size: 0x10)
-    TArray<float> SuspensionLastDisplacement;                                         // 0x0050 (size: 0x10)
-    TArray<float> SuspensionLastSpringLength;                                         // 0x0060 (size: 0x10)
-    TArray<float> SuspensionAveragedLength;                                           // 0x0070 (size: 0x10)
-    TArray<int32> SuspensionAveragedCount;                                            // 0x0080 (size: 0x10)
-    TArray<int32> SuspensionAveragedNum;                                              // 0x0090 (size: 0x10)
-    float EngineOmega;                                                                // 0x00A0 (size: 0x4)
+    FVector StateLastVelocity;                                                        // 0x0028 (size: 0x18)
+    TArray<float> WheelsOmega;                                                        // 0x0040 (size: 0x10)
+    TArray<float> WheelsAngularPosition;                                              // 0x0050 (size: 0x10)
+    TArray<float> SuspensionLastDisplacement;                                         // 0x0060 (size: 0x10)
+    TArray<float> SuspensionLastSpringLength;                                         // 0x0070 (size: 0x10)
+    TArray<float> SuspensionAveragedLength;                                           // 0x0080 (size: 0x10)
+    TArray<int32> SuspensionAveragedCount;                                            // 0x0090 (size: 0x10)
+    TArray<int32> SuspensionAveragedNum;                                              // 0x00A0 (size: 0x10)
+    float EngineOmega;                                                                // 0x00B0 (size: 0x4)
 
-}; // Size: 0xA8
+}; // Size: 0xB8
 
 struct FVehicleAerofoilConfig
 {
@@ -81,7 +81,7 @@ struct FVehicleAerofoilConfig
 
 struct FVehicleAnimationInstanceProxy : public FAnimInstanceProxy
 {
-}; // Size: 0x720
+}; // Size: 0x7C0
 
 struct FVehicleDifferentialConfig
 {
@@ -242,64 +242,64 @@ struct FWheeledSnaphotData : public FBaseSnapshotData
 
 class AWheeledVehiclePawn : public APawn
 {
-    class USkeletalMeshComponent* Mesh;                                               // 0x0320 (size: 0x8)
-    class UChaosVehicleMovementComponent* VehicleMovementComponent;                   // 0x0328 (size: 0x8)
+    class USkeletalMeshComponent* Mesh;                                               // 0x0328 (size: 0x8)
+    class UChaosVehicleMovementComponent* VehicleMovementComponent;                   // 0x0330 (size: 0x8)
 
-}; // Size: 0x330
+}; // Size: 0x338
 
 class UChaosVehicleMovementComponent : public UPawnMovementComponent
 {
-    uint8 bReverseAsBrake;                                                            // 0x0158 (size: 0x1)
-    uint8 bThrottleAsBrake;                                                           // 0x0158 (size: 0x1)
-    float Mass;                                                                       // 0x015C (size: 0x4)
-    bool bEnableCenterOfMassOverride;                                                 // 0x0160 (size: 0x1)
-    FVector CenterOfMassOverride;                                                     // 0x0168 (size: 0x18)
-    float ChassisWidth;                                                               // 0x0180 (size: 0x4)
-    float ChassisHeight;                                                              // 0x0184 (size: 0x4)
-    float DragCoefficient;                                                            // 0x0188 (size: 0x4)
-    float DownforceCoefficient;                                                       // 0x018C (size: 0x4)
-    float DragArea;                                                                   // 0x0190 (size: 0x4)
-    float DebugDragMagnitude;                                                         // 0x0194 (size: 0x4)
-    FVector InertiaTensorScale;                                                       // 0x0198 (size: 0x18)
-    float SleepThreshold;                                                             // 0x01B0 (size: 0x4)
-    float SleepSlopeLimit;                                                            // 0x01B4 (size: 0x4)
-    TArray<FVehicleAerofoilConfig> Aerofoils;                                         // 0x01B8 (size: 0x10)
-    TArray<FVehicleThrustConfig> Thrusters;                                           // 0x01C8 (size: 0x10)
-    FVehicleTorqueControlConfig TorqueControl;                                        // 0x01D8 (size: 0x40)
-    FVehicleTargetRotationControlConfig TargetRotationControl;                        // 0x0218 (size: 0x58)
-    FVehicleStabilizeControlConfig StabilizeControl;                                  // 0x0270 (size: 0x18)
-    uint8 bRawHandbrakeInput;                                                         // 0x028C (size: 0x1)
-    uint8 bRawGearUpInput;                                                            // 0x028C (size: 0x1)
-    uint8 bRawGearDownInput;                                                          // 0x028C (size: 0x1)
-    uint8 bWasAvoidanceUpdated;                                                       // 0x0290 (size: 0x1)
-    uint8 bParkEnabled;                                                               // 0x0294 (size: 0x1)
-    class UNetworkPhysicsComponent* NetworkPhysicsComponent;                          // 0x0298 (size: 0x8)
-    FVehicleReplicatedState ReplicatedState;                                          // 0x02D8 (size: 0x28)
-    float RawSteeringInput;                                                           // 0x0304 (size: 0x4)
-    float RawThrottleInput;                                                           // 0x0308 (size: 0x4)
-    float RawBrakeInput;                                                              // 0x030C (size: 0x4)
-    float RawPitchInput;                                                              // 0x0310 (size: 0x4)
-    float RawRollInput;                                                               // 0x0314 (size: 0x4)
-    float RawYawInput;                                                                // 0x0318 (size: 0x4)
-    float SteeringInput;                                                              // 0x031C (size: 0x4)
-    float ThrottleInput;                                                              // 0x0320 (size: 0x4)
-    float BrakeInput;                                                                 // 0x0324 (size: 0x4)
-    float PitchInput;                                                                 // 0x0328 (size: 0x4)
-    float RollInput;                                                                  // 0x032C (size: 0x4)
-    float YawInput;                                                                   // 0x0330 (size: 0x4)
-    float HandbrakeInput;                                                             // 0x0334 (size: 0x4)
-    bool bRequiresControllerForInputs;                                                // 0x0338 (size: 0x1)
-    float IdleBrakeInput;                                                             // 0x033C (size: 0x4)
-    float StopThreshold;                                                              // 0x0340 (size: 0x4)
-    float WrongDirectionThreshold;                                                    // 0x0344 (size: 0x4)
-    FVehicleInputRateConfig ThrottleInputRate;                                        // 0x0348 (size: 0x98)
-    FVehicleInputRateConfig BrakeInputRate;                                           // 0x03E0 (size: 0x98)
-    FVehicleInputRateConfig SteeringInputRate;                                        // 0x0478 (size: 0x98)
-    FVehicleInputRateConfig HandbrakeInputRate;                                       // 0x0510 (size: 0x98)
-    FVehicleInputRateConfig PitchInputRate;                                           // 0x05A8 (size: 0x98)
-    FVehicleInputRateConfig RollInputRate;                                            // 0x0640 (size: 0x98)
-    FVehicleInputRateConfig YawInputRate;                                             // 0x06D8 (size: 0x98)
-    class AController* OverrideController;                                            // 0x0908 (size: 0x8)
+    uint8 bReverseAsBrake;                                                            // 0x0188 (size: 0x1)
+    uint8 bThrottleAsBrake;                                                           // 0x0188 (size: 0x1)
+    float Mass;                                                                       // 0x018C (size: 0x4)
+    bool bEnableCenterOfMassOverride;                                                 // 0x0190 (size: 0x1)
+    FVector CenterOfMassOverride;                                                     // 0x0198 (size: 0x18)
+    float ChassisWidth;                                                               // 0x01B0 (size: 0x4)
+    float ChassisHeight;                                                              // 0x01B4 (size: 0x4)
+    float DragCoefficient;                                                            // 0x01B8 (size: 0x4)
+    float DownforceCoefficient;                                                       // 0x01BC (size: 0x4)
+    float DragArea;                                                                   // 0x01C0 (size: 0x4)
+    float DebugDragMagnitude;                                                         // 0x01C4 (size: 0x4)
+    FVector InertiaTensorScale;                                                       // 0x01C8 (size: 0x18)
+    float SleepThreshold;                                                             // 0x01E0 (size: 0x4)
+    float SleepSlopeLimit;                                                            // 0x01E4 (size: 0x4)
+    TArray<FVehicleAerofoilConfig> Aerofoils;                                         // 0x01E8 (size: 0x10)
+    TArray<FVehicleThrustConfig> Thrusters;                                           // 0x01F8 (size: 0x10)
+    FVehicleTorqueControlConfig TorqueControl;                                        // 0x0208 (size: 0x40)
+    FVehicleTargetRotationControlConfig TargetRotationControl;                        // 0x0248 (size: 0x58)
+    FVehicleStabilizeControlConfig StabilizeControl;                                  // 0x02A0 (size: 0x18)
+    uint8 bRawHandbrakeInput;                                                         // 0x02BC (size: 0x1)
+    uint8 bRawGearUpInput;                                                            // 0x02BC (size: 0x1)
+    uint8 bRawGearDownInput;                                                          // 0x02BC (size: 0x1)
+    uint8 bWasAvoidanceUpdated;                                                       // 0x02C0 (size: 0x1)
+    uint8 bParkEnabled;                                                               // 0x02C4 (size: 0x1)
+    class UNetworkPhysicsComponent* NetworkPhysicsComponent;                          // 0x02C8 (size: 0x8)
+    FVehicleReplicatedState ReplicatedState;                                          // 0x0308 (size: 0x28)
+    float RawSteeringInput;                                                           // 0x0334 (size: 0x4)
+    float RawThrottleInput;                                                           // 0x0338 (size: 0x4)
+    float RawBrakeInput;                                                              // 0x033C (size: 0x4)
+    float RawPitchInput;                                                              // 0x0340 (size: 0x4)
+    float RawRollInput;                                                               // 0x0344 (size: 0x4)
+    float RawYawInput;                                                                // 0x0348 (size: 0x4)
+    float SteeringInput;                                                              // 0x034C (size: 0x4)
+    float ThrottleInput;                                                              // 0x0350 (size: 0x4)
+    float BrakeInput;                                                                 // 0x0354 (size: 0x4)
+    float PitchInput;                                                                 // 0x0358 (size: 0x4)
+    float RollInput;                                                                  // 0x035C (size: 0x4)
+    float YawInput;                                                                   // 0x0360 (size: 0x4)
+    float HandbrakeInput;                                                             // 0x0364 (size: 0x4)
+    bool bRequiresControllerForInputs;                                                // 0x0368 (size: 0x1)
+    float IdleBrakeInput;                                                             // 0x036C (size: 0x4)
+    float StopThreshold;                                                              // 0x0370 (size: 0x4)
+    float WrongDirectionThreshold;                                                    // 0x0374 (size: 0x4)
+    FVehicleInputRateConfig ThrottleInputRate;                                        // 0x0378 (size: 0x98)
+    FVehicleInputRateConfig BrakeInputRate;                                           // 0x0410 (size: 0x98)
+    FVehicleInputRateConfig SteeringInputRate;                                        // 0x04A8 (size: 0x98)
+    FVehicleInputRateConfig HandbrakeInputRate;                                       // 0x0540 (size: 0x98)
+    FVehicleInputRateConfig PitchInputRate;                                           // 0x05D8 (size: 0x98)
+    FVehicleInputRateConfig RollInputRate;                                            // 0x0670 (size: 0x98)
+    FVehicleInputRateConfig YawInputRate;                                             // 0x0708 (size: 0x98)
+    class AController* OverrideController;                                            // 0x0938 (size: 0x8)
 
     void SetYawInput(float Yaw);
     void SetUseAutomaticGears(bool bUseAuto);
@@ -330,7 +330,7 @@ class UChaosVehicleMovementComponent : public UPawnMovementComponent
     float GetBrakeInput();
     void EnableSelfRighting(bool InState);
     void DecreaseThrottleInput(float ThrottleDelta);
-}; // Size: 0x930
+}; // Size: 0x960
 
 class UChaosVehicleWheel : public UObject
 {
@@ -394,17 +394,17 @@ class UChaosVehicleWheel : public UObject
 
 class UChaosWheeledVehicleMovementComponent : public UChaosVehicleMovementComponent
 {
-    bool bSuspensionEnabled;                                                          // 0x0930 (size: 0x1)
-    bool bWheelFrictionEnabled;                                                       // 0x0931 (size: 0x1)
-    bool bLegacyWheelFrictionPosition;                                                // 0x0932 (size: 0x1)
-    TArray<FChaosWheelSetup> WheelSetups;                                             // 0x0938 (size: 0x10)
-    FCollisionResponseContainer WheelTraceCollisionResponses;                         // 0x0948 (size: 0x20)
-    bool bMechanicalSimEnabled;                                                       // 0x0968 (size: 0x1)
-    FVehicleEngineConfig EngineSetup;                                                 // 0x0970 (size: 0xC8)
-    FVehicleDifferentialConfig DifferentialSetup;                                     // 0x0A38 (size: 0x10)
-    FVehicleTransmissionConfig TransmissionSetup;                                     // 0x0A48 (size: 0x70)
-    FVehicleSteeringConfig SteeringSetup;                                             // 0x0AB8 (size: 0xD8)
-    TArray<class UChaosVehicleWheel*> Wheels;                                         // 0x0B90 (size: 0x10)
+    bool bSuspensionEnabled;                                                          // 0x0960 (size: 0x1)
+    bool bWheelFrictionEnabled;                                                       // 0x0961 (size: 0x1)
+    bool bLegacyWheelFrictionPosition;                                                // 0x0962 (size: 0x1)
+    TArray<FChaosWheelSetup> WheelSetups;                                             // 0x0968 (size: 0x10)
+    FCollisionResponseContainer WheelTraceCollisionResponses;                         // 0x0978 (size: 0x20)
+    bool bMechanicalSimEnabled;                                                       // 0x0998 (size: 0x1)
+    FVehicleEngineConfig EngineSetup;                                                 // 0x09A0 (size: 0xC8)
+    FVehicleDifferentialConfig DifferentialSetup;                                     // 0x0A68 (size: 0x10)
+    FVehicleTransmissionConfig TransmissionSetup;                                     // 0x0A78 (size: 0x70)
+    FVehicleSteeringConfig SteeringSetup;                                             // 0x0AE8 (size: 0xD8)
+    TArray<UChaosVehicleWheel*> Wheels;                                               // 0x0BC0 (size: 0x10)
 
     void SetWheelSlipGraphMultiplier(int32 WheelIndex, float Multiplier);
     void SetWheelRadius(int32 WheelIndex, float Radius);
@@ -442,13 +442,13 @@ class UChaosWheeledVehicleMovementComponent : public UChaosVehicleMovementCompon
     void BreakWheelStatus(const FWheelStatus& Status, bool& bInContact, FVector& ContactPoint, class UPhysicalMaterial*& PhysMaterial, float& NormalizedSuspensionLength, float& SpringForce, float& SlipAngle, bool& bIsSlipping, float& SlipMagnitude, bool& bIsSkidding, float& SkidMagnitude, FVector& SkidNormal, float& DriveTorque, float& BrakeTorque, bool& bABSActivated);
     void BreakWheelSnapshot(const FWheelSnapshot& Snapshot, float& SuspensionOffset, float& WheelRotationAngle, float& SteeringAngle, float& WheelRadius, float& WheelAngularVelocity);
     void BreakWheeledSnapshot(const FWheeledSnaphotData& Snapshot, FTransform& Transform, FVector& LinearVelocity, FVector& AngularVelocity, int32& SelectedGear, float& EngineRPM, TArray<FWheelSnapshot>& WheelSnapshots);
-}; // Size: 0xC50
+}; // Size: 0xC80
 
 class UVehicleAnimationInstance : public UAnimInstance
 {
-    class UChaosWheeledVehicleMovementComponent* WheeledVehicleComponent;             // 0x0A80 (size: 0x8)
+    class UChaosWheeledVehicleMovementComponent* WheeledVehicleComponent;             // 0x0BB0 (size: 0x8)
 
     class AWheeledVehiclePawn* GetVehicle();
-}; // Size: 0xA90
+}; // Size: 0xBC0
 
 #endif

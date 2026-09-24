@@ -3,39 +3,39 @@
 
 class UWB_Effect_C : public UUserWidget
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02C0 (size: 0x8)
-    class UWidgetAnimation* HighlightLoop;                                            // 0x02C8 (size: 0x8)
-    class UWidgetAnimation* FadeHighlight2;                                           // 0x02D0 (size: 0x8)
-    class UWidgetAnimation* FadeHighlight1;                                           // 0x02D8 (size: 0x8)
-    class UWidgetAnimation* FadeIn;                                                   // 0x02E0 (size: 0x8)
-    class UBorder* B_Content;                                                         // 0x02E8 (size: 0x8)
-    class UBorder* b_HighlightLoop;                                                   // 0x02F0 (size: 0x8)
-    class UBorder* B_Particle;                                                        // 0x02F8 (size: 0x8)
-    class UBorder* B_Punctiform;                                                      // 0x0300 (size: 0x8)
-    class UBorder* B_SoundEffect;                                                     // 0x0308 (size: 0x8)
-    class UBorder* B_Stretched;                                                       // 0x0310 (size: 0x8)
-    class UImage* ImagePunctiform;                                                    // 0x0318 (size: 0x8)
-    class UImage* ImageStretched;                                                     // 0x0320 (size: 0x8)
-    class UOverlay* OV_Particle;                                                      // 0x0328 (size: 0x8)
-    class UOverlay* OV_Particle_Container;                                            // 0x0330 (size: 0x8)
-    class UOverlay* OV_Punctiform;                                                    // 0x0338 (size: 0x8)
-    class UOverlay* OV_Punctiform_Scale;                                              // 0x0340 (size: 0x8)
-    class UOverlay* OV_Stretched_Scale;                                               // 0x0348 (size: 0x8)
-    class USizeBox* SB_Content;                                                       // 0x0350 (size: 0x8)
-    class USizeBox* SB_Particle;                                                      // 0x0358 (size: 0x8)
-    class UWidgetSwitcher* WS_EffectTextureType;                                      // 0x0360 (size: 0x8)
-    TEnumAsByte<EProgressBarFillType::Type> FillType;                                 // 0x0368 (size: 0x1)
-    double CurrentPercent;                                                            // 0x0370 (size: 0x8)
-    FS_Effects Effect;                                                                // 0x0378 (size: 0x88)
-    FVector2D Size;                                                                   // 0x0400 (size: 0x10)
-    double LastPercent;                                                               // 0x0410 (size: 0x8)
-    bool bIsDesignTime;                                                               // 0x0418 (size: 0x1)
-    bool IsActive;                                                                    // 0x0419 (size: 0x1)
-    class UAudioComponent* UIAudio;                                                   // 0x0420 (size: 0x8)
-    bool EffectActive;                                                                // 0x0428 (size: 0x1)
-    FWB_Effect_CStartProgressChangeColor StartProgressChangeColor;                    // 0x0430 (size: 0x10)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0340 (size: 0x8)
+    class UWidgetSwitcher* WS_EffectTextureType;                                      // 0x0348 (size: 0x8)
+    class USizeBox* SB_Particle;                                                      // 0x0350 (size: 0x8)
+    class USizeBox* SB_Content;                                                       // 0x0358 (size: 0x8)
+    class UOverlay* OV_Stretched_Scale;                                               // 0x0360 (size: 0x8)
+    class UOverlay* OV_Punctiform_Scale;                                              // 0x0368 (size: 0x8)
+    class UOverlay* OV_Punctiform;                                                    // 0x0370 (size: 0x8)
+    class UOverlay* OV_Particle_Container;                                            // 0x0378 (size: 0x8)
+    class UOverlay* OV_Particle;                                                      // 0x0380 (size: 0x8)
+    class UImage* ImageStretched;                                                     // 0x0388 (size: 0x8)
+    class UImage* ImagePunctiform;                                                    // 0x0390 (size: 0x8)
+    class UBorder* B_Stretched;                                                       // 0x0398 (size: 0x8)
+    class UBorder* B_SoundEffect;                                                     // 0x03A0 (size: 0x8)
+    class UBorder* B_Punctiform;                                                      // 0x03A8 (size: 0x8)
+    class UBorder* B_Particle;                                                        // 0x03B0 (size: 0x8)
+    class UBorder* b_HighlightLoop;                                                   // 0x03B8 (size: 0x8)
+    class UBorder* B_Content;                                                         // 0x03C0 (size: 0x8)
+    class UWidgetAnimation* FadeIn;                                                   // 0x03C8 (size: 0x8)
+    class UWidgetAnimation* FadeHighlight1;                                           // 0x03D0 (size: 0x8)
+    class UWidgetAnimation* FadeHighlight2;                                           // 0x03D8 (size: 0x8)
+    class UWidgetAnimation* HighlightLoop;                                            // 0x03E0 (size: 0x8)
+    TEnumAsByte<EProgressBarFillType::Type> FillType;                                 // 0x03E8 (size: 0x1)
+    double CurrentPercent;                                                            // 0x03F0 (size: 0x8)
+    FS_Effects Effect;                                                                // 0x03F8 (size: 0x88)
+    FVector2D Size;                                                                   // 0x0480 (size: 0x10)
+    double LastPercent;                                                               // 0x0490 (size: 0x8)
+    bool bIsDesignTime;                                                               // 0x0498 (size: 0x1)
+    bool IsActive;                                                                    // 0x0499 (size: 0x1)
+    class UAudioComponent* UIAudio;                                                   // 0x04A0 (size: 0x8)
+    bool EffectActive;                                                                // 0x04A8 (size: 0x1)
+    FWB_Effect_CStartProgressChangeColor StartProgressChangeColor;                    // 0x04B0 (size: 0x10)
     void StartProgressChangeColor(FLinearColor Color);
-    FWB_Effect_CStopProgressChangeColor StopProgressChangeColor;                      // 0x0440 (size: 0x10)
+    FWB_Effect_CStopProgressChangeColor StopProgressChangeColor;                      // 0x04C0 (size: 0x10)
     void StopProgressChangeColor();
 
     bool IsEffectTypeProgressChangeColor();
@@ -87,6 +87,6 @@ class UWB_Effect_C : public UUserWidget
     void ExecuteUbergraph_WB_Effect(int32 EntryPoint);
     void StopProgressChangeColor__DelegateSignature();
     void StartProgressChangeColor__DelegateSignature(FLinearColor Color);
-}; // Size: 0x450
+}; // Size: 0x4D0
 
 #endif

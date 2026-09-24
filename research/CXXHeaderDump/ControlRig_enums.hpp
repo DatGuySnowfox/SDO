@@ -30,6 +30,12 @@ enum class ECRSimSoftCollisionType {
     ECRSimSoftCollisionType_MAX = 3,
 };
 
+enum class EConnectorType {
+    Primary = 0,
+    Secondary = 1,
+    EConnectorType_MAX = 2,
+};
+
 enum class EConstraintInterpType {
     Average = 0,
     Shortest = 1,
@@ -88,6 +94,13 @@ enum class EControlRigModifyBoneMode {
     Max = 4,
 };
 
+enum class EControlRigReplayPlaybackMode {
+    Live = 0,
+    ReplayInputs = 1,
+    GroundTruth = 2,
+    Max = 3,
+};
+
 enum class EControlRigSetKey {
     DoNotCare = 0,
     Always = 1,
@@ -95,17 +108,41 @@ enum class EControlRigSetKey {
     EControlRigSetKey_MAX = 3,
 };
 
-enum class EControlRigTestDataPlaybackMode {
-    Live = 0,
-    ReplayInputs = 1,
-    GroundTruth = 2,
-    Max = 3,
-};
-
 enum class EControlRigVectorKind {
     Direction = 0,
     Location = 1,
     EControlRigVectorKind_MAX = 2,
+};
+
+enum class EElementNameDisplayMode {
+    AssetDefault = 0,
+    Auto = 1,
+    ForceShort = 2,
+    ForceLong = 3,
+    EElementNameDisplayMode_MAX = 4,
+};
+
+enum class EModularRigNotification {
+    ModuleAdded = 0,
+    ModuleRenamed = 1,
+    ModuleRemoved = 2,
+    ModuleReparented = 3,
+    ConnectionChanged = 4,
+    ModuleConfigValueChanged = 5,
+    ModuleShortNameChanged = 6,
+    InteractionBracketOpened = 7,
+    InteractionBracketClosed = 8,
+    InteractionBracketCanceled = 9,
+    ModuleClassChanged = 10,
+    ModuleSelected = 11,
+    ModuleDeselected = 12,
+    Max = 13,
+};
+
+enum class EModularRigResolveState {
+    Success = 0,
+    Error = 1,
+    Max = 2,
 };
 
 enum class EMovieSceneControlRigSpaceType {
@@ -160,7 +197,8 @@ enum class ERigControlType {
     Transform = 7,
     TransformNoScale = 8,
     EulerTransform = 9,
-    ERigControlType_MAX = 10,
+    ScaleFloat = 10,
+    ERigControlType_MAX = 11,
 };
 
 enum class ERigControlValueType {
@@ -177,6 +215,14 @@ enum class ERigControlVisibility {
     ERigControlVisibility_MAX = 2,
 };
 
+enum class ERigElementResolveState {
+    Unknown = 0,
+    InvalidTarget = 1,
+    PossibleTarget = 2,
+    DefaultTarget = 3,
+    Max = 4,
+};
+
 enum class ERigElementType {
     None = 0,
     Bone = 1,
@@ -184,12 +230,15 @@ enum class ERigElementType {
     Space = 2,
     Control = 4,
     Curve = 8,
-    RigidBody = 16,
+    Physics = 16,
     Reference = 32,
-    Last = 64,
-    All = 63,
-    ToResetAfterConstructionEvent = 13,
-    ERigElementType_MAX = 65,
+    Connector = 64,
+    Socket = 128,
+    First = 1,
+    Last = 128,
+    All = 239,
+    ToResetAfterConstructionEvent = 141,
+    ERigElementType_MAX = 240,
 };
 
 enum class ERigEvent {
@@ -222,7 +271,29 @@ enum class ERigHierarchyNotification {
     InteractionBracketOpened = 12,
     InteractionBracketClosed = 13,
     ElementReordered = 14,
-    Max = 15,
+    ConnectorSettingChanged = 15,
+    SocketColorChanged = 16,
+    SocketDescriptionChanged = 17,
+    SocketDesiredParentChanged = 18,
+    HierarchyCopied = 19,
+    ComponentAdded = 20,
+    ComponentRemoved = 21,
+    ComponentContentChanged = 22,
+    ComponentSelected = 23,
+    ComponentDeselected = 24,
+    ComponentRenamed = 25,
+    ComponentReparented = 26,
+    ShortNameChanged = 27,
+    Max = 28,
+};
+
+enum class ERigMetaDataNameSpace {
+    None = 0,
+    Self = 1,
+    Parent = 2,
+    Root = 3,
+    Last = 4,
+    ERigMetaDataNameSpace_MAX = 5,
 };
 
 enum class ERigMetadataType {
@@ -272,6 +343,16 @@ enum ERigTransformStackEntryType {
     CurveValue = 3,
     ERigTransformStackEntryType_MAX = 4,
 };
+
+namespace ERigTransformStorageType {
+    enum Type {
+        Pose = 0,
+        Offset = 1,
+        Shape = 2,
+        NumStorageTypes = 3,
+        ERigTransformStorageType_MAX = 4,
+    };
+}
 
 namespace ERigTransformType {
     enum Type {

@@ -65,6 +65,19 @@ enum ELandscapeGizmoType {
     LGT_MAX = 3,
 };
 
+enum class ELandscapeHLODMeshSourceLODPolicy {
+    AutomaticLOD = 0,
+    SpecificLOD = 1,
+    LowestDetailLOD = 2,
+    ELandscapeHLODMeshSourceLODPolicy_MAX = 3,
+};
+
+enum class ELandscapeHLODTextureSizePolicy {
+    AutomaticSize = 0,
+    SpecificSize = 1,
+    ELandscapeHLODTextureSizePolicy_MAX = 2,
+};
+
 enum class ELandscapeImportAlphamapType {
     Additive = 0,
     Layered = 1,
@@ -108,12 +121,18 @@ enum class ELandscapeResizeMode {
     ELandscapeResizeMode_MAX = 3,
 };
 
-enum ELandscapeSetupErrors {
-    LSE_None = 0,
-    LSE_NoLandscapeInfo = 1,
-    LSE_CollsionXY = 2,
-    LSE_NoLayerInfo = 3,
-    LSE_MAX = 4,
+enum class ELandscapeTextureType {
+    Unknown = 0,
+    Heightmap = 1,
+    Weightmap = 2,
+    ELandscapeTextureType_MAX = 3,
+};
+
+enum class ELandscapeTextureUsage {
+    Unknown = 0,
+    EditLayerData = 1,
+    FinalData = 2,
+    ELandscapeTextureUsage_MAX = 3,
 };
 
 enum class ELandscapeToolTargetType {
@@ -121,6 +140,7 @@ enum class ELandscapeToolTargetType {
     Weightmap = 1,
     Visibility = 2,
     Invalid = 3,
+    Count = 3,
     ELandscapeToolTargetType_MAX = 4,
 };
 

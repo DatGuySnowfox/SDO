@@ -3,6 +3,6 @@
 
 class ABuildable_Display_Plaque_C : public ABuildableMaster_Display_C
 {
-}; // Size: 0x4A1
+}; // Size: 0x4A9
 
 #endif

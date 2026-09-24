@@ -3,18 +3,24 @@
 
 #include "TypedElementRuntime_enums.hpp"
 
+struct FTypedElementAssetDataReferencedOptions
+{
+    bool bOnlyTopLevelAsset;                                                          // 0x0000 (size: 0x1)
+
+}; // Size: 0x1
+
 struct FTypedElementIsSelectedOptions
 {
     bool bAllowIndirect;                                                              // 0x0000 (size: 0x1)
 
-}; // Size: 0x1
+}; // Size: 0xC
 
 struct FTypedElementSelectionNormalizationOptions
 {
     bool bExpandGroups;                                                               // 0x0000 (size: 0x1)
     bool bFollowAttachment;                                                           // 0x0001 (size: 0x1)
 
-}; // Size: 0x2
+}; // Size: 0xC
 
 struct FTypedElementSelectionOptions
 {
@@ -22,9 +28,10 @@ struct FTypedElementSelectionOptions
     bool bAllowGroups;                                                                // 0x0001 (size: 0x1)
     bool bAllowLegacyNotifications;                                                   // 0x0002 (size: 0x1)
     bool bWarnIfLocked;                                                               // 0x0003 (size: 0x1)
-    ETypedElementChildInclusionMethod ChildElementInclusionMethod;                    // 0x0004 (size: 0x1)
+    bool bAllowSubRootSelection;                                                      // 0x0004 (size: 0x1)
+    ETypedElementChildInclusionMethod ChildElementInclusionMethod;                    // 0x0005 (size: 0x1)
 
-}; // Size: 0x5
+}; // Size: 0x10
 
 struct FTypedElementSelectionSetState
 {
@@ -91,7 +98,7 @@ class UTypedElementSelectionSet : public UObject
     bool HasSelectedElements(const TSubclassOf<class UInterface> InBaseInterfaceType);
     class UObject* GetTopSelectedObject(const UClass* InRequiredClass);
     FScriptTypedElementHandle GetSelectionElement(const FScriptTypedElementHandle& InElementHandle, const ETypedElementSelectionMethod InSelectionMethod);
-    TArray<class UObject*> GetSelectedObjects(const UClass* InRequiredClass);
+    TArray<UObject*> GetSelectedObjects(const UClass* InRequiredClass);
     int32 GetNumSelectedElements();
     FTypedElementSelectionSetState GetCurrentSelectionState();
     class UObject* GetBottomSelectedObject(const UClass* InRequiredClass);
@@ -103,7 +110,7 @@ class UTypedElementSelectionSet : public UObject
     bool CanSelectElement(const FScriptTypedElementHandle& InElementHandle, const FTypedElementSelectionOptions InSelectionOptions);
     bool CanDeselectElement(const FScriptTypedElementHandle& InElementHandle, const FTypedElementSelectionOptions InSelectionOptions);
     bool AllowSelectionModifiers(const FScriptTypedElementHandle& InElementHandle);
-}; // Size: 0x898
+}; // Size: 0x8A0
 
 class UTypedElementSelectionSetLibrary : public UObject
 {

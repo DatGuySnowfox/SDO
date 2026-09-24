@@ -3,36 +3,36 @@
 
 class UContainerWindowWidget_C : public UUserWidget
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02C0 (size: 0x8)
-    class UButton* CloseBtn;                                                          // 0x02C8 (size: 0x8)
-    class UTextBlock* ContainerName;                                                  // 0x02D0 (size: 0x8)
-    class UHorizontalBox* HorizontalBox_1;                                            // 0x02D8 (size: 0x8)
-    class UImage* Image_115;                                                          // 0x02E0 (size: 0x8)
-    class UBorder* MainBorder;                                                        // 0x02E8 (size: 0x8)
-    class UBorder* TitleBorder;                                                       // 0x02F0 (size: 0x8)
-    class UVerticalBox* VBox;                                                         // 0x02F8 (size: 0x8)
-    class UTextBlock* Weight;                                                         // 0x0300 (size: 0x8)
-    FText CName;                                                                      // 0x0308 (size: 0x18)
-    bool MouseBtnDown;                                                                // 0x0320 (size: 0x1)
-    FVector2D LastBtnPressLoc;                                                        // 0x0328 (size: 0x10)
-    FVector2D GeoClick;                                                               // 0x0338 (size: 0x10)
-    FKey KeyToClose;                                                                  // 0x0348 (size: 0x18)
-    class UJSI_Slot_C* ItemRef;                                                       // 0x0360 (size: 0x8)
-    FKey NoneKey;                                                                     // 0x0368 (size: 0x18)
-    class UCanvasPanelSlot* CanvasSlot;                                               // 0x0380 (size: 0x8)
-    class UBP_InspectorCanvas_C* CanvasBPRef;                                         // 0x0388 (size: 0x8)
-    double TotalWeight;                                                               // 0x0390 (size: 0x8)
-    FVector2D DefaultPos;                                                             // 0x0398 (size: 0x10)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0340 (size: 0x8)
+    class UTextBlock* Weight;                                                         // 0x0348 (size: 0x8)
+    class UVerticalBox* VBox;                                                         // 0x0350 (size: 0x8)
+    class UBorder* TitleBorder;                                                       // 0x0358 (size: 0x8)
+    class UBorder* MainBorder;                                                        // 0x0360 (size: 0x8)
+    class UImage* Image_115;                                                          // 0x0368 (size: 0x8)
+    class UHorizontalBox* HorizontalBox_1;                                            // 0x0370 (size: 0x8)
+    class UTextBlock* ContainerName;                                                  // 0x0378 (size: 0x8)
+    class UButton* CloseBtn;                                                          // 0x0380 (size: 0x8)
+    FText CName;                                                                      // 0x0388 (size: 0x10)
+    bool MouseBtnDown;                                                                // 0x0398 (size: 0x1)
+    FVector2D LastBtnPressLoc;                                                        // 0x03A0 (size: 0x10)
+    FVector2D GeoClick;                                                               // 0x03B0 (size: 0x10)
+    FKey KeyToClose;                                                                  // 0x03C0 (size: 0x18)
+    class UJSI_Slot_C* ItemRef;                                                       // 0x03D8 (size: 0x8)
+    FKey NoneKey;                                                                     // 0x03E0 (size: 0x18)
+    class UCanvasPanelSlot* CanvasSlot;                                               // 0x03F8 (size: 0x8)
+    class UBP_InspectorCanvas_C* CanvasBPRef;                                         // 0x0400 (size: 0x8)
+    double TotalWeight;                                                               // 0x0408 (size: 0x8)
+    FVector2D DefaultPos;                                                             // 0x0410 (size: 0x10)
 
     void GetLootContent(class UUserWidget*& Widget);
-    void GetValidReloadContainers(TArray<class UJSIContainer_C*>& Containers);
+    void GetValidReloadContainers(TArray<UJSIContainer_C*>& Containers);
     void SetActionbarFollower(class UJSI_Slot_C* JigRef, bool& Return);
     void GetAllAttachments(TArray<FName>& Attachments);
-    void GetListOfNonAddContainers(TArray<class UJSIContainer_C*>& Containers);
+    void GetListOfNonAddContainers(TArray<UJSIContainer_C*>& Containers);
     void GetJSIContainerByPlayerSlots(FGameplayTag Slot, class UJSIContainer_C*& Container, class UJSI_Slot_C*& EquippedItem, bool& IsPending?);
     void GetDropWidget(class UDropItemBackGwidget_C*& DropWRef);
     void GetContainerByAttachmentType(FGameplayTag Type, class UJSIContainer_C*& JigContainer, int32& ContainerIndex);
-    void GetListOfContainers(TArray<class UJSIContainer_C*>& Containers);
+    void GetListOfContainers(TArray<UJSIContainer_C*>& Containers);
     FVector2D GetPosInViewport();
     FVector2D GetPos(class UWidget* Target);
     void GetWeight();
@@ -53,6 +53,6 @@ class UContainerWindowWidget_C : public UUserWidget
     void SetActorOwner(class AActor* ActorRef);
     void SetContainerWindowLocation();
     void ExecuteUbergraph_ContainerWindowWidget(int32 EntryPoint);
-}; // Size: 0x3A8
+}; // Size: 0x420
 
 #endif

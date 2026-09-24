@@ -1,6 +1,8 @@
 #ifndef UE4SS_SDK_ClothingSystemRuntimeInterface_HPP
 #define UE4SS_SDK_ClothingSystemRuntimeInterface_HPP
 
+#include "ClothingSystemRuntimeInterface_enums.hpp"
+
 struct FClothCollisionData
 {
     TArray<FClothCollisionPrim_Sphere> Spheres;                                       // 0x0000 (size: 0x10)
@@ -45,8 +47,9 @@ struct FClothCollisionPrim_Sphere
 struct FClothCollisionPrim_SphereConnection
 {
     int32 SphereIndices;                                                              // 0x0000 (size: 0x8)
+    FVector OneSidedPlaneNormal;                                                      // 0x0008 (size: 0x18)
 
-}; // Size: 0x8
+}; // Size: 0x20
 
 struct FClothVertBoneData
 {
@@ -75,10 +78,9 @@ class UClothPhysicalMeshDataBase_Legacy : public UObject
 
 class UClothingAssetBase : public UObject
 {
-    FString ImportedFilePath;                                                         // 0x0028 (size: 0x10)
-    FGuid AssetGuid;                                                                  // 0x0038 (size: 0x10)
+    FGuid AssetGuid;                                                                  // 0x0028 (size: 0x10)
 
-}; // Size: 0x48
+}; // Size: 0x38
 
 class UClothingInteractor : public UObject
 {
@@ -90,9 +92,9 @@ class UClothingSimulationFactory : public UObject
 
 class UClothingSimulationInteractor : public UObject
 {
-    TMap<class FName, class UClothingInteractor*> ClothingInteractors;                // 0x0028 (size: 0x50)
+    TMap<FName, UClothingInteractor*> ClothingInteractors;                            // 0x0028 (size: 0x50)
 
-    void SetNumSubsteps(int32 NumSubsteps);
+    void SetNumSubsteps(int32 NumSubSteps);
     void SetNumIterations(int32 NumIterations);
     void SetMaxNumIterations(int32 MaxNumIterations);
     void SetAnimDriveSpringStiffness(float InStiffness);

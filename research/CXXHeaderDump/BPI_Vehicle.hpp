@@ -4,6 +4,8 @@
 class IBPI_Vehicle_C : public IInterface
 {
 
+    void OnEndTowingInteract(class AActor* Actor);
+    void OnBeginTowingInteract(class AActor* Actor);
     void GetVehicleMesh(class USkeletalMeshComponent*& SkelMesh);
     void OnEndStorageInteract(class AActor* Actor);
     void OnBeginStorageInteract(class AActor* Actor);

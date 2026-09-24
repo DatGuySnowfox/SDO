@@ -3,16 +3,16 @@
 
 class UJigContextMenuComp_C : public UActorComponent
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x00A0 (size: 0x8)
-    class UJigContextMenuCanvas_C* ContextMRef;                                       // 0x00A8 (size: 0x8)
-    FJigContextMenuComp_COnOptionSelected OnOptionSelected;                           // 0x00B0 (size: 0x10)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x00B8 (size: 0x8)
+    class UJigContextMenuCanvas_C* ContextMRef;                                       // 0x00C0 (size: 0x8)
+    FJigContextMenuComp_COnOptionSelected OnOptionSelected;                           // 0x00C8 (size: 0x10)
     void OnOptionSelected(FGameplayTag Option, class UJSI_Slot_C* ItemRef, class UJSIContainer_C* ContainerMother);
-    class UJSI_Slot_C* CurrentItemRef;                                                // 0x00C0 (size: 0x8)
-    class UActorComponent* LocalComp;                                                 // 0x00C8 (size: 0x8)
-    class UJSIContainer_C* RootContainer;                                             // 0x00D0 (size: 0x8)
-    class UBP_InspectorCanvas_C* InspectCanavs;                                       // 0x00D8 (size: 0x8)
-    TArray<FKey> KeysToListenTo;                                                      // 0x00E0 (size: 0x10)
-    class UJSI_Slot_C* ItemKeyListener;                                               // 0x00F0 (size: 0x8)
+    class UJSI_Slot_C* CurrentItemRef;                                                // 0x00D8 (size: 0x8)
+    class UActorComponent* LocalComp;                                                 // 0x00E0 (size: 0x8)
+    class UJSIContainer_C* RootContainer;                                             // 0x00E8 (size: 0x8)
+    class UBP_InspectorCanvas_C* InspectCanavs;                                       // 0x00F0 (size: 0x8)
+    TArray<FKey> KeysToListenTo;                                                      // 0x00F8 (size: 0x10)
+    class UJSI_Slot_C* ItemKeyListener;                                               // 0x0108 (size: 0x8)
 
     void ContextRepairAttachment();
     void ContextSmoke();
@@ -25,9 +25,6 @@ class UJigContextMenuComp_C : public UActorComponent
     void ContextRipClothing();
     void ContextReadBook();
     void ContextFillBottle();
-    void ContextConsumeDrink();
-    void ContextConsumeCanned();
-    void ContextConsumeNormal();
     void ContextConsume();
     void ContextPlaceItem(class UJSI_Slot_C* ItemRef, FGuid Guid);
     void ContextUseItem();
@@ -52,6 +49,6 @@ class UJigContextMenuComp_C : public UActorComponent
     void OnItemDestructEvent_Event_0();
     void ExecuteUbergraph_JigContextMenuComp(int32 EntryPoint);
     void OnOptionSelected__DelegateSignature(FGameplayTag Option, class UJSI_Slot_C* ItemRef, class UJSIContainer_C* ContainerMother);
-}; // Size: 0xF8
+}; // Size: 0x110
 
 #endif

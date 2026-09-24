@@ -101,6 +101,22 @@ enum EAdditiveBasePoseType {
     ABPT_MAX = 5,
 };
 
+namespace EAggCollisionShape {
+    enum Type {
+        Sphere = 0,
+        Box = 1,
+        Sphyl = 2,
+        Convex = 3,
+        TaperedCapsule = 4,
+        LevelSet = 5,
+        SkinnedLevelSet = 6,
+        MLLevelSet = 7,
+        SkinnedTriangleMesh = 8,
+        Unknown = 9,
+        EAggCollisionShape_MAX = 10,
+    };
+}
+
 enum class EAirAbsorptionMethod {
     Linear = 0,
     CustomCurve = 1,
@@ -129,9 +145,10 @@ enum class EAlphaBlendOption {
 namespace EAlphaChannelMode {
     enum Type {
         Disabled = 0,
+        Enabled = 1,
         LinearColorSpaceOnly = 1,
-        AllowThroughTonemapper = 2,
-        EAlphaChannelMode_MAX = 3,
+        AllowThroughTonemapper = 1,
+        EAlphaChannelMode_MAX = 2,
     };
 }
 
@@ -185,13 +202,15 @@ enum class EAnimDataModelNotifyType {
     CurveRenamed = 11,
     CurveScaled = 12,
     CurveColorChanged = 13,
-    AttributeAdded = 14,
-    AttributeRemoved = 15,
-    AttributeChanged = 16,
-    Populated = 17,
-    Reset = 18,
-    Invalid = 19,
-    EAnimDataModelNotifyType_MAX = 20,
+    CurveCommentChanged = 14,
+    AttributeAdded = 15,
+    AttributeRemoved = 16,
+    AttributeChanged = 17,
+    Populated = 18,
+    Reset = 19,
+    SkeletonChanged = 20,
+    Invalid = 21,
+    EAnimDataModelNotifyType_MAX = 22,
 };
 
 enum class EAnimExecutionContextConversionResult {
@@ -207,9 +226,16 @@ namespace EAnimGroupRole {
         AlwaysLeader = 2,
         TransitionLeader = 3,
         TransitionFollower = 4,
-        EAnimGroupRole_MAX = 5,
+        ExclusiveAlwaysLeader = 5,
+        EAnimGroupRole_MAX = 6,
     };
 }
+
+enum class EAnimInstanceLocatorFragmentType {
+    AnimInstance = 0,
+    PostProcessAnimInstance = 1,
+    EAnimInstanceLocatorFragmentType_MAX = 2,
+};
 
 enum class EAnimInterpolationType {
     Linear = 0,
@@ -231,7 +257,8 @@ enum class EAnimNodeDataFlags {
     HasInitialUpdateFunction = 1,
     HasBecomeRelevantFunction = 2,
     HasUpdateFunction = 4,
-    EAnimNodeDataFlags_MAX = 5,
+    AllFunctions = 7,
+    EAnimNodeDataFlags_MAX = 8,
 };
 
 enum class EAnimNodeReferenceConversionResult {
@@ -298,6 +325,12 @@ namespace EApplicationState {
     };
 }
 
+enum class EArraySortOrder {
+    Ascending = 0,
+    Descending = 1,
+    EArraySortOrder_MAX = 2,
+};
+
 enum EAspectRatioAxisConstraint {
     AspectRatio_MaintainYFOV = 0,
     AspectRatio_MaintainXFOV = 1,
@@ -354,7 +387,8 @@ enum class EAudioBusChannels {
     Quad = 3,
     FivePointOne = 5,
     SevenPointOne = 7,
-    EAudioBusChannels_MAX = 8,
+    MaxChannelCount = 8,
+    EAudioBusChannels_MAX = 9,
 };
 
 enum class EAudioComponentPlayState {
@@ -513,12 +547,17 @@ enum class EBlendSpacePerBoneBlendMode {
 };
 
 enum EBlendableLocation {
-    BL_AfterTonemapping = 0,
-    BL_BeforeTonemapping = 1,
-    BL_BeforeTranslucency = 2,
-    BL_ReplacingTonemapper = 3,
+    BL_SceneColorBeforeDOF = 2,
+    BL_SceneColorAfterDOF = 1,
+    BL_TranslucencyAfterDOF = 5,
     BL_SSRInput = 4,
-    BL_MAX = 5,
+    BL_SceneColorBeforeBloom = 6,
+    BL_ReplacingTonemapper = 3,
+    BL_SceneColorAfterTonemapping = 0,
+    BL_MAX = 7,
+    BL_BeforeTranslucency = 2,
+    BL_BeforeTonemapping = 1,
+    BL_AfterTonemapping = 0,
 };
 
 enum EBloomMethod {
@@ -532,13 +571,6 @@ enum class EBlueprintCompileMode {
     Development = 1,
     FinalRelease = 2,
     EBlueprintCompileMode_MAX = 3,
-};
-
-enum class EBlueprintNativizationFlag {
-    Disabled = 0,
-    Dependency = 1,
-    ExplicitlyEnabled = 2,
-    EBlueprintNativizationFlag_MAX = 3,
 };
 
 enum EBlueprintPinStyleType {
@@ -658,19 +690,19 @@ enum class ECameraShakeDurationType {
     ECameraShakeDurationType_MAX = 3,
 };
 
+enum class ECameraShakePatternUpdateResultFlags {
+    ApplyAsAbsolute = 1,
+    SkipAutoScale = 2,
+    SkipAutoPlaySpace = 4,
+    Default = 0,
+    ECameraShakePatternUpdateResultFlags_MAX = 5,
+};
+
 enum class ECameraShakePlaySpace {
     CameraLocal = 0,
     World = 1,
     UserDefined = 2,
     ECameraShakePlaySpace_MAX = 3,
-};
-
-enum class ECameraShakeUpdateResultFlags {
-    ApplyAsAbsolute = 1,
-    SkipAutoScale = 2,
-    SkipAutoPlaySpace = 4,
-    Default = 0,
-    ECameraShakeUpdateResultFlags_MAX = 5,
 };
 
 enum ECanBeCharacterBase {
@@ -748,6 +780,13 @@ enum ECloudStorageDelegate {
     CSD_DocumentWriteComplete = 5,
     CSD_DocumentConflictDetected = 6,
     CSD_MAX = 7,
+};
+
+enum class ECollectionScriptingShareType {
+    Local = 0,
+    Private = 1,
+    Shared = 2,
+    ECollectionScriptingShareType_MAX = 3,
 };
 
 enum ECollisionChannel {
@@ -881,14 +920,6 @@ enum class EConcurrencyVolumeScaleMode {
     EConcurrencyVolumeScaleMode_MAX = 3,
 };
 
-namespace EConstraintTransform {
-    enum Type {
-        Absolute = 0,
-        Relative = 1,
-        EConstraintTransform_MAX = 2,
-    };
-}
-
 enum class EConstraintTransformComponentFlags {
     None = 0,
     ChildPosition = 1,
@@ -920,14 +951,6 @@ enum class EContentBundleStatus {
     Unknown = -1,
     EContentBundleStatus_MAX = 4,
 };
-
-namespace EControlConstraint {
-    enum Type {
-        Orientation = 0,
-        Translation = 1,
-        MAX = 2,
-    };
-}
 
 namespace EControllerAnalogStick {
     enum Type {
@@ -1033,6 +1056,13 @@ enum EDataDrivenShaderPlatformInfoCondition {
     COND_Max = 2,
 };
 
+enum class EDataLayerLoadFilter {
+    None = 0,
+    ClientOnly = 1,
+    ServerOnly = 2,
+    EDataLayerLoadFilter_MAX = 3,
+};
+
 enum class EDataLayerRuntimeState {
     Unloaded = 0,
     Loaded = 1,
@@ -1054,6 +1084,18 @@ enum class EDataLayerType {
     Size = 3,
     EDataLayerType_MAX = 4,
 };
+
+namespace EDateTimeStyle {
+    enum Type {
+        Default = 0,
+        Short = 1,
+        Medium = 2,
+        Long = 3,
+        Full = 4,
+        Custom = 5,
+        EDateTimeStyle_MAX = 6,
+    };
+}
 
 enum EDecalBlendMode {
     DBM_Translucent = 0,
@@ -1079,21 +1121,21 @@ enum EDecalBlendMode {
 enum EDecompressionType {
     DTYPE_Setup = 0,
     DTYPE_Invalid = 1,
-    DTYPE_Preview = 2,
-    DTYPE_Native = 3,
-    DTYPE_RealTime = 4,
-    DTYPE_Procedural = 5,
-    DTYPE_Xenon = 6,
-    DTYPE_Streaming = 7,
-    DTYPE_MAX = 8,
+    DTYPE_RealTime = 2,
+    DTYPE_Procedural = 3,
+    DTYPE_Xenon = 4,
+    DTYPE_Streaming = 5,
+    DTYPE_MAX = 6,
 };
 
 enum class EDefaultAudioCompressionType {
     BinkAudio = 0,
     ADPCM = 1,
     PCM = 2,
-    PlatformSpecific = 3,
-    EDefaultAudioCompressionType_MAX = 4,
+    Opus = 3,
+    PlatformSpecific = 4,
+    RADAudio = 5,
+    EDefaultAudioCompressionType_MAX = 6,
 };
 
 namespace EDefaultBackBufferPixelFormat {
@@ -1137,6 +1179,14 @@ enum EDepthOfFieldMethod {
     DOFM_MAX = 3,
 };
 
+enum class EDerivativeStatus {
+    NotAware = 0,
+    NotValid = 1,
+    Zero = 2,
+    Valid = 3,
+    EDerivativeStatus_MAX = 4,
+};
+
 enum class EDetachmentRule {
     KeepRelative = 0,
     KeepWorld = 1,
@@ -1178,7 +1228,8 @@ namespace EDrawDebugItemType {
         Circle = 6,
         Cone = 7,
         InWorldMessage = 8,
-        EDrawDebugItemType_MAX = 9,
+        Capsule = 9,
+        EDrawDebugItemType_MAX = 10,
     };
 }
 
@@ -1206,9 +1257,8 @@ namespace EDynamicGlobalIlluminationMethod {
         None = 0,
         Lumen = 1,
         ScreenSpace = 2,
-        RayTraced = 3,
-        Plugin = 4,
-        EDynamicGlobalIlluminationMethod_MAX = 5,
+        Plugin = 3,
+        EDynamicGlobalIlluminationMethod_MAX = 4,
     };
 }
 
@@ -1246,6 +1296,14 @@ enum EEdGraphPinDirection {
     EGPD_Input = 0,
     EGPD_Output = 1,
     EGPD_MAX = 2,
+};
+
+enum class EEditorPropertyValueState {
+    Default = 0,
+    Overridden = 1,
+    NotFound = 2,
+    AccessDenied = 3,
+    EEditorPropertyValueState_MAX = 4,
 };
 
 enum EEmitterDynamicParameterValue {
@@ -1346,6 +1404,13 @@ enum EFilterInterpolationType {
     BSIT_MAX = 6,
 };
 
+enum class EFirstPersonPrimitiveType {
+    None = 0,
+    FirstPerson = 1,
+    WorldSpaceRepresentation = 2,
+    EFirstPersonPrimitiveType_MAX = 3,
+};
+
 namespace EFixedFoveationLevels {
     enum Type {
         Disabled = 0,
@@ -1356,6 +1421,14 @@ namespace EFixedFoveationLevels {
         EFixedFoveationLevels_MAX = 5,
     };
 }
+
+enum class EFloatToIntMode {
+    Truncate = 0,
+    Floor = 1,
+    Round = 2,
+    Ceil = 3,
+    EFloatToIntMode_MAX = 4,
+};
 
 enum class EFontCacheType {
     Offline = 0,
@@ -1544,6 +1617,8 @@ namespace EHardwareDeviceSupportedFeatures {
         Virtual = 2048,
         Microphone = 4096,
         Orientation = 8192,
+        Guitar = 16384,
+        Drums = 32768,
         CustomA = 16777216,
         CustomB = 33554432,
         CustomC = 67108864,
@@ -1713,6 +1788,14 @@ enum class ELevelInstanceCreationType {
     ELevelInstanceCreationType_MAX = 2,
 };
 
+enum class ELevelInstanceFlags {
+    None = 0,
+    IsInEditHierarchy = 1,
+    HasPropertyOverrides = 2,
+    HasEditablePropertyOverrides = 4,
+    ELevelInstanceFlags_MAX = 5,
+};
+
 enum class ELevelInstancePivotType {
     CenterMinZ = 0,
     Center = 1,
@@ -1729,6 +1812,22 @@ enum class ELevelInstanceRuntimeBehavior {
     ELevelInstanceRuntimeBehavior_MAX = 4,
 };
 
+enum class ELevelInstanceType {
+    None = 0,
+    LevelInstance = 1,
+    LevelInstanceEdit = 2,
+    LevelInstancePropertyOverride = 3,
+    ELevelInstanceType_MAX = 4,
+};
+
+namespace ELightFunctionAtlasPixelFormat {
+    enum Type {
+        LFAPF_R8 = 0,
+        LFAPF_R8G8B8 = 1,
+        LFAPF_MAX = 2,
+    };
+}
+
 enum ELightMapPaddingType {
     LMPT_NormalPadding = 0,
     LMPT_PrePadding = 1,
@@ -1741,7 +1840,8 @@ enum class ELightUnits {
     Candelas = 1,
     Lumens = 2,
     EV = 3,
-    ELightUnits_MAX = 4,
+    Nits = 4,
+    ELightUnits_MAX = 5,
 };
 
 enum ELightingBuildQuality {
@@ -1759,10 +1859,17 @@ enum class ELightmapType {
     ELightmapType_MAX = 3,
 };
 
-enum class ELocalFogMode {
-    LocalHeightFog = 0,
-    LocalSphereFog = 1,
-    ELocalFogMode_MAX = 2,
+enum class ELocalExposureMethod {
+    Bilateral = 0,
+    Fusion = 1,
+    ELocalExposureMethod_MAX = 2,
+};
+
+enum class ELocalPositionOrigin {
+    Instance = 0,
+    InstancePreSkinning = 1,
+    Primitive = 2,
+    ELocalPositionOrigin_MAX = 3,
 };
 
 enum ELocationBoneSocketSelectionMethod {
@@ -1791,15 +1898,23 @@ enum ELocationSkelVertSurfaceSource {
 
 enum class ELumenRayLightingMode {
     SurfaceCache = 0,
-    HitLighting = 2,
+    HitLightingForReflections = 2,
+    HitLighting = 1,
     ELumenRayLightingMode_MAX = 3,
 };
 
 enum class ELumenRayLightingModeOverride {
     Default = 0,
     SurfaceCache = 1,
-    HitLighting = 2,
-    ELumenRayLightingModeOverride_MAX = 3,
+    HitLightingForReflections = 2,
+    HitLighting = 3,
+    ELumenRayLightingModeOverride_MAX = 4,
+};
+
+enum class ELumenScreenTracingSource {
+    SceneColor = 0,
+    AntialiasedSceneColorWithTranslucency = 1,
+    ELumenScreenTracingSource_MAX = 2,
 };
 
 namespace ELumenSoftwareTracingMode {
@@ -1822,6 +1937,14 @@ namespace EMaterialAttributeBlend {
         UseA = 1,
         UseB = 2,
         EMaterialAttributeBlend_MAX = 3,
+    };
+}
+
+namespace EMaterialAttributeBlendFunction {
+    enum Type {
+        Horizontal = 0,
+        Vertical = 1,
+        EMaterialAttributeBlendFunction_MAX = 2,
     };
 }
 
@@ -1870,7 +1993,92 @@ enum EMaterialExposedViewProperty {
     MEVP_PreExposure = 12,
     MEVP_RuntimeVirtualTextureMaxLevel = 13,
     MEVP_ResolutionFraction = 14,
-    MEVP_MAX = 15,
+    MEVP_PostVolumeUserFlags = 15,
+    MEVP_FirstPersonFieldOfView = 16,
+    MEVP_FirstPersonTanHalfFieldOfView = 17,
+    MEVP_FirstPersonScale = 18,
+    MEVP_NearPlane = 19,
+    MEVP_MAX = 20,
+};
+
+enum EMaterialExpressionBoundsType {
+    MEILB_InstanceLocal = 0,
+    MEILB_ObjectLocal = 1,
+    MEILB_PreSkinnedLocal = 2,
+    MEILB_MAX = 3,
+};
+
+enum class EMaterialExpressionConvertType {
+    Scalar = 0,
+    Vector2 = 1,
+    Vector3 = 2,
+    Vector4 = 3,
+    EMaterialExpressionConvertType_MAX = 4,
+};
+
+enum class EMaterialExpressionOperatorKind {
+    BitwiseNot = 0,
+    Negate = 1,
+    Not = 2,
+    Abs = 3,
+    ACos = 4,
+    ACosh = 5,
+    ASin = 6,
+    ASinh = 7,
+    ATan = 8,
+    ATanh = 9,
+    Ceil = 10,
+    Cos = 11,
+    Cosh = 12,
+    Exponential = 13,
+    Exponential2 = 14,
+    Floor = 15,
+    Frac = 16,
+    IsFinite = 17,
+    IsInf = 18,
+    IsNan = 19,
+    Length = 20,
+    Logarithm = 21,
+    Logarithm10 = 22,
+    Logarithm2 = 23,
+    Round = 24,
+    Saturate = 25,
+    Sign = 26,
+    Sin = 27,
+    Sinh = 28,
+    Sqrt = 29,
+    Tan = 30,
+    Tanh = 31,
+    Truncate = 32,
+    Equals = 33,
+    GreaterThan = 34,
+    GreaterThanOrEquals = 35,
+    LessThan = 36,
+    LessThanOrEquals = 37,
+    NotEquals = 38,
+    And = 39,
+    Or = 40,
+    Add = 41,
+    Subtract = 42,
+    Multiply = 43,
+    Divide = 44,
+    Modulo = 45,
+    BitwiseAnd = 46,
+    BitwiseOr = 47,
+    BitShiftLeft = 48,
+    BitShiftRight = 49,
+    Cross = 50,
+    Distance = 51,
+    Dot = 52,
+    Fmod = 53,
+    Max = 54,
+    Min = 55,
+    Pow = 56,
+    Step = 57,
+    Clamp = 58,
+    Lerp = 59,
+    Select = 60,
+    Smoothstep = 61,
 };
 
 enum EMaterialFloatPrecisionMode {
@@ -1909,15 +2117,34 @@ enum EMaterialParameterAssociation {
     EMaterialParameterAssociation_MAX = 3,
 };
 
+enum class EMaterialParameterType {
+    Scalar = 0,
+    Vector = 1,
+    DoubleVector = 2,
+    Texture = 3,
+    TextureCollection = 4,
+    Font = 5,
+    RuntimeVirtualTexture = 6,
+    SparseVolumeTexture = 7,
+    StaticSwitch = 8,
+    NumRuntime = 9,
+    StaticComponentMask = 9,
+    Num = 10,
+    None = 255,
+    EMaterialParameterType_MAX = 256,
+};
+
 enum EMaterialPositionTransformSource {
     TRANSFORMPOSSOURCE_Local = 0,
     TRANSFORMPOSSOURCE_World = 1,
-    TRANSFORMPOSSOURCE_TranslatedWorld = 2,
-    TRANSFORMPOSSOURCE_View = 3,
-    TRANSFORMPOSSOURCE_Camera = 4,
-    TRANSFORMPOSSOURCE_Particle = 5,
-    TRANSFORMPOSSOURCE_Instance = 6,
-    TRANSFORMPOSSOURCE_MAX = 7,
+    TRANSFORMPOSSOURCE_PeriodicWorld = 2,
+    TRANSFORMPOSSOURCE_TranslatedWorld = 3,
+    TRANSFORMPOSSOURCE_FirstPersonTranslatedWorld = 4,
+    TRANSFORMPOSSOURCE_View = 5,
+    TRANSFORMPOSSOURCE_Camera = 6,
+    TRANSFORMPOSSOURCE_Particle = 7,
+    TRANSFORMPOSSOURCE_Instance = 8,
+    TRANSFORMPOSSOURCE_MAX = 9,
 };
 
 enum EMaterialProperty {
@@ -1988,6 +2215,14 @@ namespace EMaterialSceneAttributeInputMode {
     };
 }
 
+enum class EMaterialShaderFrequency {
+    Vertex = 1,
+    Pixel = 8,
+    Compute = 32,
+    Any = 41,
+    EMaterialShaderFrequency_MAX = 42,
+};
+
 enum EMaterialShadingModel {
     MSM_Unlit = 0,
     MSM_DefaultLit = 1,
@@ -2032,6 +2267,16 @@ enum EMaterialStencilCompare {
     MSC_MAX = 9,
 };
 
+enum EMaterialSubSurfaceType {
+    MSS_None = 0,
+    MSS_Wrap = 1,
+    MSS_TwoSidedWrap = 2,
+    MSS_Diffusion = 3,
+    MSS_DiffusionProfile = 4,
+    MSS_SimpleVolume = 5,
+    MSS_MAX = 6,
+};
+
 enum EMaterialTranslucencyPass {
     MTP_BeforeDOF = 0,
     MTP_AfterDOF = 1,
@@ -2061,7 +2306,50 @@ enum EMaterialUsage {
     MATUSAGE_Nanite = 18,
     MATUSAGE_VolumetricCloud = 19,
     MATUSAGE_HeterogeneousVolumes = 20,
-    MATUSAGE_MAX = 21,
+    MATUSAGE_MaterialCache = 21,
+    MATUSAGE_StaticMesh = 22,
+    MATUSAGE_MAX = 23,
+};
+
+enum class EMaterialValueTypeBridge {
+    Float1 = 1,
+    Float2 = 2,
+    Float3 = 4,
+    Float4 = 8,
+    Texture2D = 16,
+    TextureCube = 32,
+    Texture2DArray = 64,
+    TextureCubeArray = 128,
+    VolumeTexture = 256,
+    StaticBool = 512,
+    Unknown = 1024,
+    MaterialAttributes = 2048,
+    TextureExternal = 4096,
+    TextureVirtual = 8192,
+    SparseVolumeTexture = 16384,
+    VTPageTableResult = 32768,
+    ShadingModel = 65536,
+    Substrate = 131072,
+    LWCScalar = 262144,
+    LWCVector2 = 524288,
+    LWCVector3 = 1048576,
+    LWCVector4 = 2097152,
+    Execution = 4194304,
+    VoidStatement = 8388608,
+    Bool = 16777216,
+    UInt1 = 33554432,
+    UInt2 = 67108864,
+    UInt3 = 134217728,
+    UInt4 = 268435456,
+    TextureCollection = 536870912,
+    TextureMeshPaint = 1073741824,
+    TextureMaterialCache = 2147483648,
+    Texture = 3221238256,
+    Float = 15,
+    UInt = 503316480,
+    LWCType = 3932160,
+    Numeric = 20709391,
+    EMaterialValueTypeBridge_MAX = 4294967296,
 };
 
 enum EMaterialVectorCoordTransform {
@@ -2109,6 +2397,21 @@ namespace EMaxConcurrentResolutionRule {
         EMaxConcurrentResolutionRule_MAX = 8,
     };
 }
+
+namespace EMegaLightsShadowMethod {
+    enum Type {
+        Default = 0,
+        RayTracing = 1,
+        VirtualShadowMap = 2,
+        EMegaLightsShadowMethod_MAX = 3,
+    };
+}
+
+enum EMemoryUnitStandard {
+    IEC = 0,
+    SI = 1,
+    EMemoryUnitStandard_MAX = 2,
+};
 
 enum class EMeshApproximationBaseCappingType {
     NoBaseCapping = 0,
@@ -2263,24 +2566,12 @@ namespace EMobileFloatPrecisionMode {
     };
 }
 
-namespace EMobilePixelProjectedReflectionQuality {
-    enum Type {
-        Disabled = 0,
-        BestPerformance = 1,
-        BetterQuality = 2,
-        BestQuality = 3,
-        EMobilePixelProjectedReflectionQuality_MAX = 4,
-    };
-}
-
-namespace EMobilePlanarReflectionMode {
-    enum Type {
-        Usual = 0,
-        MobilePPRExclusive = 1,
-        MobilePPR = 2,
-        EMobilePlanarReflectionMode_MAX = 3,
-    };
-}
+enum EMobileLocalLightSetting {
+    LOCAL_LIGHTS_DISABLED = 0,
+    LOCAL_LIGHTS_ENABLED = 1,
+    LOCAL_LIGHTS_BUFFER = 2,
+    LOCAL_LIGHTS_MAX = 3,
+};
 
 namespace EMobileShadingPath {
     enum Type {
@@ -2399,6 +2690,12 @@ enum class ENaniteFallbackTarget {
     ENaniteFallbackTarget_MAX = 3,
 };
 
+enum class ENaniteGenerateFallback {
+    PlatformDefault = 0,
+    Enabled = 1,
+    ENaniteGenerateFallback_MAX = 2,
+};
+
 enum class ENaturalSoundFalloffMode {
     Continues = 0,
     Silent = 1,
@@ -2460,14 +2757,12 @@ enum class ENavigationInvokerPriority {
     MAX = 6,
 };
 
-namespace ENavigationOptionFlag {
-    enum Type {
-        Default = 0,
-        Enable = 1,
-        Disable = 2,
-        MAX = 3,
-    };
-}
+enum class ENavigationOptionFlag {
+    Default = 0,
+    Enable = 1,
+    Disable = 2,
+    MAX = 3,
+};
 
 namespace ENavigationQueryResult {
     enum Type {
@@ -2511,11 +2806,45 @@ namespace ENetworkLagState {
     };
 }
 
+enum class ENetworkMetricEnableMode {
+    EnableForAllReplication = 0,
+    EnableForIrisOnly = 1,
+    EnableForNonIrisOnly = 2,
+    ENetworkMetricEnableMode_MAX = 3,
+};
+
 enum class ENetworkSmoothingMode {
     Disabled = 0,
     Linear = 1,
     Exponential = 2,
     ENetworkSmoothingMode_MAX = 3,
+};
+
+enum ENeuralIndexType {
+    NIT_TextureIndex = 0,
+    NIT_BufferIndex = 1,
+    NIT_MAX = 2,
+};
+
+enum class ENeuralModelTileType {
+    OneByOne = 0,
+    TwoByTwo = 1,
+    FourByFour = 2,
+    EightByEight = 3,
+    Auto = 4,
+    ENeuralModelTileType_MAX = 5,
+};
+
+enum class ENeuralProfileFormat {
+    Type32 = 0,
+    Type16 = 1,
+    ENeuralProfileFormat_MAX = 2,
+};
+
+enum class ENeuralProfileRuntimeType {
+    NNERuntimeORTDml = 0,
+    NNERuntimeRDGHlsl = 1,
+    MAX = 2,
 };
 
 namespace ENodeAdvancedPins {
@@ -2666,6 +2995,13 @@ enum EOverlapFilterOption {
     OverlapFilter_MAX = 3,
 };
 
+enum class EOverrideBlockOnSlowStreaming {
+    NoOverride = 0,
+    Blocking = 1,
+    NotBlocking = 2,
+    EOverrideBlockOnSlowStreaming_MAX = 3,
+};
+
 enum class EPSCPoolMethod {
     None = 0,
     AutoRelease = 1,
@@ -2679,6 +3015,15 @@ enum class EPanningMethod {
     Linear = 0,
     EqualPower = 1,
     EPanningMethod_MAX = 2,
+};
+
+enum class EParameterCollectionTransformType {
+    Position = 0,
+    Vector = 1,
+    Projection = 2,
+    LocalToWorld = 3,
+    WorldToLocal = 4,
+    EParameterCollectionTransformType_MAX = 5,
 };
 
 enum EParticleAxisLock {
@@ -2889,6 +3234,13 @@ enum class EPhysicsAssetSolverType {
     EPhysicsAssetSolverType_MAX = 2,
 };
 
+enum class EPhysicsQueryKind {
+    Test = 0,
+    Single = 1,
+    Multi = 2,
+    EPhysicsQueryKind_MAX = 3,
+};
+
 enum class EPhysicsReplicationMode {
     Default = 0,
     PredictiveInterpolation = 1,
@@ -2954,6 +3306,12 @@ enum class EPingType {
     Count = 4,
 };
 
+enum EPixelDepthOffsetMode {
+    PDOM_Legacy = 0,
+    PDOM_AlongCameraVector = 1,
+    PDOM_MAX = 2,
+};
+
 enum class EPlaneConstraintAxisSetting {
     Custom = 0,
     X = 1,
@@ -2971,6 +3329,12 @@ enum EPlatformInterfaceDataType {
     PIDT_Object = 4,
     PIDT_Custom = 5,
     PIDT_MAX = 6,
+};
+
+enum class EPositionIncludedOffsets {
+    IncludeOffsets = 0,
+    ExcludeOffsets = 1,
+    EPositionIncludedOffsets_MAX = 2,
 };
 
 enum class EPositionOrigin {
@@ -3168,13 +3532,6 @@ enum class ERawCurveTrackTypes {
     RCT_MAX = 3,
 };
 
-enum class ERayTracingGlobalIlluminationType {
-    Disabled = 0,
-    BruteForce = 1,
-    FinalGather = 2,
-    ERayTracingGlobalIlluminationType_MAX = 3,
-};
-
 enum class ERayTracingGroupCullingPriority {
     CP_0_NEVER_CULL = 0,
     CP_1 = 1,
@@ -3200,8 +3557,7 @@ namespace EReflectionMethod {
         None = 0,
         Lumen = 1,
         ScreenSpace = 2,
-        RayTraced = 3,
-        EReflectionMethod_MAX = 4,
+        EReflectionMethod_MAX = 3,
     };
 }
 
@@ -3406,6 +3762,13 @@ enum ERoundingMode {
     ERoundingMode_MAX = 7,
 };
 
+enum class ERuntimePartitionCellBoundsMethod {
+    UseContent = 0,
+    UseCellBounds = 1,
+    UseMinContentCellBounds = 2,
+    ERuntimePartitionCellBoundsMethod_MAX = 3,
+};
+
 enum class ERuntimeVirtualTextureMainPassType {
     Never = 0,
     Exclusive = 1,
@@ -3413,16 +3776,25 @@ enum class ERuntimeVirtualTextureMainPassType {
     ERuntimeVirtualTextureMainPassType_MAX = 3,
 };
 
+enum class ERuntimeVirtualTextureMaterialQuality {
+    Low = 0,
+    Medium = 1,
+    High = 2,
+    Epic = 3,
+    ERuntimeVirtualTextureMaterialQuality_MAX = 4,
+};
+
 enum class ERuntimeVirtualTextureMaterialType {
     BaseColor = 0,
-    BaseColor_Normal_DEPRECATED = 1,
+    Mask4 = 1,
     BaseColor_Normal_Roughness = 2,
     BaseColor_Normal_Specular = 3,
     BaseColor_Normal_Specular_YCoCg = 4,
     BaseColor_Normal_Specular_Mask_YCoCg = 5,
     WorldHeight = 6,
-    Count = 7,
-    ERuntimeVirtualTextureMaterialType_MAX = 8,
+    Displacement = 7,
+    Count = 8,
+    ERuntimeVirtualTextureMaterialType_MAX = 9,
 };
 
 enum ERuntimeVirtualTextureMipValueMode {
@@ -3430,13 +3802,33 @@ enum ERuntimeVirtualTextureMipValueMode {
     RVTMVM_MipLevel = 1,
     RVTMVM_MipBias = 2,
     RVTMVM_RecalculateDerivatives = 3,
-    RVTMVM_MAX = 4,
+    RVTMVM_DerivativeUV = 4,
+    RVTMVM_DerivativeWorld = 5,
+    RVTMVM_MAX = 6,
 };
 
 enum ERuntimeVirtualTextureTextureAddressMode {
     RVTTA_Clamp = 0,
     RVTTA_Wrap = 1,
     RVTTA_MAX = 2,
+};
+
+enum class ERuntimeVirtualTextureUseStreamingMipsInEditorMode {
+    Never = 0,
+    PIEOnly = 1,
+    Always = 2,
+    ERuntimeVirtualTextureUseStreamingMipsInEditorMode_MAX = 3,
+};
+
+enum class ESRB {
+    Everyone = 0,
+    Everyone10Plus = 1,
+    Teen = 2,
+    Mature = 3,
+    AdultsOnly = 4,
+    RatingPending = 5,
+    RatingPending17Plus = 6,
+    ESRB_MAX = 7,
 };
 
 enum ESamplerSourceMode {
@@ -3473,6 +3865,13 @@ enum ESceneCaptureSource {
     SCS_FinalColorHDR = 8,
     SCS_FinalToneCurveHDR = 9,
     SCS_MAX = 10,
+};
+
+enum class ESceneCaptureUnlitViewmode {
+    Disabled = 0,
+    Capture = 1,
+    CaptureOrCustomRenderPass = 2,
+    ESceneCaptureUnlitViewmode_MAX = 3,
 };
 
 enum ESceneDepthPriorityGroup {
@@ -3513,7 +3912,15 @@ enum ESceneTextureId {
     PPI_Velocity = 28,
     PPI_WorldTangent = 29,
     PPI_Anisotropy = 30,
-    PPI_MAX = 31,
+    PPI_IsFirstPerson = 31,
+    PPI_UserSceneTexture0 = 32,
+    PPI_UserSceneTexture1 = 33,
+    PPI_UserSceneTexture2 = 34,
+    PPI_UserSceneTexture3 = 35,
+    PPI_UserSceneTexture4 = 36,
+    PPI_UserSceneTexture5 = 37,
+    PPI_UserSceneTexture6 = 38,
+    PPI_MAX = 39,
 };
 
 namespace EScreenOrientation {
@@ -3614,7 +4021,7 @@ enum class ESkeletalMeshAsyncProperties {
     RetargetBasePose = 8,
     RefBasesInvMatrix = 16,
     MeshClothingAssets = 32,
-    UseLegacyMeshDerivedDataKey = 64,
+    SourceModels = 64,
     HasActiveClothingAssets = 128,
     LODSettings = 256,
     HasVertexColors = 512,
@@ -3643,7 +4050,6 @@ enum class ESkeletalMeshAsyncProperties {
     NegativeBoundsExtension = 4294967296,
     PositiveBoundsExtension = 8589934592,
     ExtendedBounds = 17179869184,
-    HasBeenSimplified = 34359738368,
     EnablePerPolyCollision = 68719476736,
     BodySetup = 137438953472,
     MorphTargetIndexMap = 274877906944,
@@ -3667,8 +4073,9 @@ enum class ESkeletalMeshAsyncProperties {
     DefaultMeshDeformer = 72057594037927936,
     OverlayMaterial = 144115188075855872,
     OverlayMaterialMaxDrawDistance = 288230376151711744,
+    TargetMeshDeformers = 576460752303423488,
     All = -1,
-    ESkeletalMeshAsyncProperties_MAX = 288230376151711745,
+    ESkeletalMeshAsyncProperties_MAX = 576460752303423489,
 };
 
 enum class ESkeletalMeshVertexAttributeDataType {
@@ -3689,6 +4096,12 @@ enum class ESkinCacheUsage {
     Disabled = 255,
     Enabled = 1,
     ESkinCacheUsage_MAX = 256,
+};
+
+enum class ESkinWeightProfileLayer {
+    Primary = 0,
+    Secondary = 1,
+    ESkinWeightProfileLayer_MAX = 2,
 };
 
 enum class ESkyAtmosphereTransformMode {
@@ -3718,9 +4131,11 @@ enum class ESoundAssetCompressionType {
     BinkAudio = 0,
     ADPCM = 1,
     PCM = 2,
-    PlatformSpecific = 3,
-    ProjectDefined = 4,
-    ESoundAssetCompressionType_MAX = 5,
+    Opus = 3,
+    PlatformSpecific = 4,
+    ProjectDefined = 5,
+    RADAudio = 6,
+    ESoundAssetCompressionType_MAX = 7,
 };
 
 enum ESoundDistanceCalc {
@@ -3764,6 +4179,12 @@ enum ESoundSpatializationAlgorithm {
     SPATIALIZATION_Default = 0,
     SPATIALIZATION_HRTF = 1,
     SPATIALIZATION_MAX = 2,
+};
+
+enum class ESoundWaveCuePointOrigin {
+    WaveFile = 0,
+    MarkerTransformation = 1,
+    ESoundWaveCuePointOrigin_MAX = 2,
 };
 
 enum class ESoundWaveFFTSize {
@@ -3898,6 +4319,13 @@ enum EStandbyType {
     STDBY_MAX = 3,
 };
 
+enum class EStaticMeshPaintSupport {
+    Default = 0,
+    Enabled = 1,
+    Disabled = 2,
+    EStaticMeshPaintSupport_MAX = 3,
+};
+
 enum class EStaticMeshReductionTerimationCriterion {
     Triangles = 0,
     Vertices = 1,
@@ -3918,23 +4346,6 @@ enum EStereoLayerType {
     SLT_TrackerLocked = 1,
     SLT_FaceLocked = 2,
     SLT_MAX = 3,
-};
-
-enum EStrataShadingModel {
-    SSM_Unlit = 0,
-    SSM_DefaultLit = 1,
-    SSM_SubsurfaceLit = 2,
-    SSM_VolumetricFogCloud = 3,
-    SSM_Hair = 4,
-    SSM_Eye = 5,
-    SSM_Cloth = 6,
-    SSM_ClearCoat = 7,
-    SSM_SingleLayerWater = 8,
-    SSM_LightFunction = 9,
-    SSM_PostProcess = 10,
-    SSM_Decal = 11,
-    SSM_UI = 12,
-    SSM_NUM = 13,
 };
 
 enum class EStreamingSourcePriority {
@@ -3968,23 +4379,48 @@ enum EStreamingVolumeUsage {
     SVB_MAX = 5,
 };
 
+enum class EStripAnimDataOnDedicatedServerSettings {
+    UseProjectSetting = 0,
+    StripAnimDataOnDedicatedServer = 1,
+    DoNotStripAnimDataOnDedicatedServer = 2,
+    EStripAnimDataOnDedicatedServerSettings_MAX = 3,
+};
+
+enum class EStructUtilsResult {
+    Valid = 0,
+    NotValid = 1,
+    EStructUtilsResult_MAX = 2,
+};
+
 enum ESubUVBoundingVertexCount {
     BVC_FourVertices = 0,
     BVC_EightVertices = 1,
     BVC_MAX = 2,
 };
 
-enum class ESubmixSendMethod {
-    Linear = 0,
-    CustomCurve = 1,
-    Manual = 2,
-    ESubmixSendMethod_MAX = 3,
-};
-
 enum class ESubmixSendStage {
     PostDistanceAttenuation = 0,
     PreDistanceAttenuation = 1,
     ESubmixSendStage_MAX = 2,
+};
+
+enum class ESubsurfaceImplementationTechniqueHint {
+    SIH_AFIS = 0,
+    SIH_Separable = 1,
+    SIH_MAX = 2,
+};
+
+enum class ESubtitleTiming {
+    InternallyTimed = 0,
+    ExternallyTimed = 1,
+    ESubtitleTiming_MAX = 2,
+};
+
+enum class ESubtitleType {
+    Subtitle = 0,
+    ClosedCaption = 1,
+    AudioDescription = 2,
+    ESubtitleType_MAX = 3,
 };
 
 namespace ESuggestProjVelocityTraceOption {
@@ -4009,6 +4445,25 @@ enum class ESyncOption {
     Passive = 1,
     Disabled = 2,
     ESyncOption_MAX = 3,
+};
+
+enum class ESyncPointActivationRules {
+    Invalid = 0,
+    AlwaysActivate = 1,
+    WaitForTrigger = 2,
+    WaitForAllWork = 3,
+    ActivateForAnyWork = 4,
+    ESyncPointActivationRules_MAX = 5,
+};
+
+enum class ESyncPointEventType {
+    Invalid = 0,
+    SimpleEvent = 1,
+    GameThreadTask = 2,
+    GameThreadTask_HighPriority = 3,
+    WorkerThreadTask = 4,
+    WorkerThreadTask_HighPriority = 5,
+    ESyncPointEventType_MAX = 6,
 };
 
 enum class ETeleportType {
@@ -4041,6 +4496,23 @@ enum class ETextGender {
     ETextGender_MAX = 3,
 };
 
+enum class ETextImportTestFlags {
+    Default = 0,
+    FlagA = 1,
+    FlagB = 2,
+    FlagC = 4,
+    FlagD = 8,
+    FlagE = 16,
+    TestStructDefault = 32,
+    ETextImportTestFlags_MAX = 64,
+};
+
+enum class ETextureAvailability {
+    GPU = 0,
+    CPU = 1,
+    ETextureAvailability_MAX = 2,
+};
+
 enum class ETextureChromaticAdaptationMethod {
     TCAM_None = 0,
     TCAM_Bradford = 1,
@@ -4060,6 +4532,15 @@ enum class ETextureClass {
     Other2DNoSource = 8,
     OtherUnknown = 9,
     ETextureClass_MAX = 10,
+};
+
+enum class ETextureCollectionMemberType {
+    Texture2D = 0,
+    TextureCube = 1,
+    Texture2DArray = 2,
+    TextureCubeArray = 3,
+    TextureVolume = 4,
+    Max = 5,
 };
 
 enum ETextureColorChannel {
@@ -4140,6 +4621,15 @@ enum class ETextureEncodeSpeedOverride {
     ETextureEncodeSpeedOverride_MAX = 256,
 };
 
+enum ETextureGatherMode {
+    TGM_None = 0,
+    TGM_Red = 1,
+    TGM_Green = 2,
+    TGM_Blue = 3,
+    TGM_Alpha = 4,
+    TGM_MAX = 5,
+};
+
 enum ETextureLossyCompressionAmount {
     TLCA_Default = 0,
     TLCA_None = 1,
@@ -4178,7 +4668,10 @@ namespace ETexturePowerOfTwoSetting {
         None = 0,
         PadToPowerOfTwo = 1,
         PadToSquarePowerOfTwo = 2,
-        ETexturePowerOfTwoSetting_MAX = 3,
+        StretchToPowerOfTwo = 3,
+        StretchToSquarePowerOfTwo = 4,
+        ResizeToSpecificResolution = 5,
+        ETexturePowerOfTwoSetting_MAX = 6,
     };
 }
 
@@ -4195,6 +4688,14 @@ enum ETextureRenderTargetFormat {
     RTF_RGBA32f = 9,
     RTF_RGB10A2 = 10,
     RTF_MAX = 11,
+};
+
+enum class ETextureRenderTargetSampleCount {
+    RTSC_1 = 0,
+    RTSC_2 = 1,
+    RTSC_4 = 2,
+    RTSC_8 = 3,
+    RTSC_MAX = 4,
 };
 
 enum class ETextureSamplerFilter {
@@ -4221,7 +4722,9 @@ enum ETextureSourceCompressionFormat {
     TSCF_None = 0,
     TSCF_PNG = 1,
     TSCF_JPEG = 2,
-    TSCF_MAX = 3,
+    TSCF_UEJPEG = 3,
+    TSCF_UEDELTA = 4,
+    TSCF_MAX = 5,
 };
 
 enum class ETextureSourceEncoding {
@@ -4259,8 +4762,6 @@ enum ETextureSourceFormat {
     TSF_R16F = 10,
     TSF_R32F = 11,
     TSF_MAX = 12,
-    TSF_RGBA8 = 6,
-    TSF_RGBE8 = 7,
 };
 
 enum class ETextureUniversalTiling {
@@ -4280,6 +4781,12 @@ enum ETickingGroup {
     TG_LastDemotable = 6,
     TG_NewlySpawned = 7,
     TG_MAX = 8,
+};
+
+enum class ETileOverlapResolveType {
+    Ignore = 0,
+    Feathering = 1,
+    ETileOverlapResolveType_MAX = 2,
 };
 
 enum class ETimeStretchCurveMapping {
@@ -4439,8 +4946,10 @@ enum ETranslucencyLightingMode {
 
 enum class ETranslucencyType {
     Raster = 0,
+    RayTraced_Deprecated = 1,
     RayTracing = 1,
-    ETranslucencyType_MAX = 2,
+    RayTraced = 2,
+    ETranslucencyType_MAX = 3,
 };
 
 namespace ETranslucentSortPolicy {
@@ -4529,14 +5038,6 @@ enum class EUpdateRateShiftBucket {
     ShiftBucket5 = 5,
     ShiftBucketMax = 6,
     EUpdateRateShiftBucket_MAX = 7,
-};
-
-enum EUserDefinedStructureStatus {
-    UDSS_UpToDate = 0,
-    UDSS_Dirty = 1,
-    UDSS_Error = 2,
-    UDSS_Duplicate = 3,
-    UDSS_MAX = 4,
 };
 
 enum class EVectorCurveChannel {
@@ -4630,13 +5131,16 @@ enum EViewModeIndex {
     VMI_PathTracing = 27,
     VMI_RayTracingDebug = 28,
     VMI_VisualizeNanite = 29,
-    VMI_VirtualTexturePendingMips = 30,
+    VMI_VisualizeVirtualTexture = 30,
     VMI_VisualizeLumen = 31,
     VMI_VisualizeVirtualShadowMap = 32,
     VMI_VisualizeGPUSkinCache = 33,
     VMI_VisualizeSubstrate = 34,
     VMI_VisualizeGroom = 35,
-    VMI_Max = 36,
+    VMI_LWCComplexity = 36,
+    VMI_Lit_Wireframe = 37,
+    VMI_VisualizeActorColoration = 38,
+    VMI_Max = 39,
     VMI_Unknown = 255,
 };
 
@@ -4669,7 +5173,8 @@ enum class EVirtualizationMode {
     Disabled = 0,
     PlayWhenSilent = 1,
     Restart = 2,
-    EVirtualizationMode_MAX = 3,
+    SeekRestart = 3,
+    EVirtualizationMode_MAX = 4,
 };
 
 enum EVisibilityAggressiveness {
@@ -4682,9 +5187,10 @@ enum EVisibilityAggressiveness {
 enum class EVisibilityBasedAnimTickOption {
     AlwaysTickPoseAndRefreshBones = 0,
     AlwaysTickPose = 1,
-    OnlyTickMontagesWhenNotRendered = 2,
-    OnlyTickPoseWhenRendered = 3,
-    EVisibilityBasedAnimTickOption_MAX = 4,
+    OnlyTickMontagesAndRefreshBonesWhenPlayingMontages = 2,
+    OnlyTickMontagesWhenNotRendered = 3,
+    OnlyTickPoseWhenRendered = 4,
+    EVisibilityBasedAnimTickOption_MAX = 5,
 };
 
 enum class EVoiceBlockReasons {
@@ -4769,6 +5275,12 @@ enum class EWorldPartitionCVarProjectDefaultOverride {
     EWorldPartitionCVarProjectDefaultOverride_MAX = 3,
 };
 
+enum class EWorldPartitionDataLayersLogicOperator {
+    Or = 0,
+    And = 1,
+    EWorldPartitionDataLayersLogicOperator_MAX = 2,
+};
+
 enum class EWorldPartitionRuntimeCellState {
     Unloaded = 0,
     Loaded = 1,
@@ -4795,7 +5307,8 @@ enum class EWorldPartitionStreamingPerformance {
     Good = 0,
     Slow = 1,
     Critical = 2,
-    EWorldPartitionStreamingPerformance_MAX = 3,
+    Immediate = 3,
+    EWorldPartitionStreamingPerformance_MAX = 4,
 };
 
 enum EWorldPositionIncludedOffsets {

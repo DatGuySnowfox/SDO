@@ -3,11 +3,11 @@
 
 class ABuildable_ModularMaster_C : public ABuildable_MASTER_C
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0430 (size: 0x8)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0440 (size: 0x8)
 
-    void GetSnappedObjects(TArray<class ABuildable_ModularMaster_C*>& OverlappingObjects);
+    void GetSnappedObjects(TArray<ABuildable_ModularMaster_C*>& OverlappingObjects);
     void RemoveModularBuilds();
     void ExecuteUbergraph_Buildable_ModularMaster(int32 EntryPoint);
-}; // Size: 0x438
+}; // Size: 0x448
 
 #endif

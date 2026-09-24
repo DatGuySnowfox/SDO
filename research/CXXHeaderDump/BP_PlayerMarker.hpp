@@ -3,14 +3,14 @@
 
 class ABP_PlayerMarker_C : public AActor
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0298 (size: 0x8)
-    class USceneComponent* DefaultSceneRoot;                                          // 0x02A0 (size: 0x8)
-    TArray<class UW_PlayerMarker_C*> Markers;                                         // 0x02A8 (size: 0x10)
-    FS_MarkerData Marker Data;                                                        // 0x02B8 (size: 0x70)
-    int32 Index;                                                                      // 0x0328 (size: 0x4)
-    class ABP_CompassMarker_C* CompassMarker;                                         // 0x0330 (size: 0x8)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02A8 (size: 0x8)
+    class USceneComponent* DefaultSceneRoot;                                          // 0x02B0 (size: 0x8)
+    FS_MarkerData Marker Data;                                                        // 0x02B8 (size: 0x68)
+    int32 Index;                                                                      // 0x0320 (size: 0x4)
+    class ABP_CompassMarker_C* CompassMarker;                                         // 0x0328 (size: 0x8)
+    class UW_PlayerMarker_C* Marker;                                                  // 0x0330 (size: 0x8)
 
-    void ComponentsToSave(TArray<class UActorComponent*>& Components);
+    void ComponentsToSave(TArray<UActorComponent*>& Components);
     void ActorPreLoad();
     void ActorPreSave();
     void ActorSaved();

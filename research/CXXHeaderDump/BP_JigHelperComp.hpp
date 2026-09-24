@@ -3,25 +3,25 @@
 
 class UBP_JigHelperComp_C : public UActorComponent
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x00A0 (size: 0x8)
-    TMap<class FGameplayTag, class FGuid> EquipmentUIDs;                              // 0x00A8 (size: 0x50)
-    FS_ServerEquippedItems ServerEquippedItems;                                       // 0x00F8 (size: 0x9D8)
-    TArray<FS_RepNonActorData> RepPrimitiveActorsData;                                // 0x0AD0 (size: 0x10)
-    TArray<FS_RepActorData> RepActorsData;                                            // 0x0AE0 (size: 0x10)
-    bool TraceToActors?;                                                              // 0x0AF0 (size: 0x1)
-    TMap<class FGameplayTag, class FS_EquipmentIDInfo> EquipmentIDSlotConfig;         // 0x0AF8 (size: 0x50)
-    TMap<class FGameplayTag, class ABP_CustomPrimitiveComp_C*> SpawnedCustomPrimitives; // 0x0B48 (size: 0x50)
-    FGameplayTag ActiveWeapon;                                                        // 0x0B98 (size: 0x8)
-    FBP_JigHelperComp_COnActiveWeaponSlotChanged OnActiveWeaponSlotChanged;           // 0x0BA0 (size: 0x10)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x00B8 (size: 0x8)
+    TMap<FGameplayTag, FGuid> EquipmentUIDs;                                          // 0x00C0 (size: 0x50)
+    FS_ServerEquippedItems ServerEquippedItems;                                       // 0x0110 (size: 0x9D8)
+    TArray<FS_RepNonActorData> RepPrimitiveActorsData;                                // 0x0AE8 (size: 0x10)
+    TArray<FS_RepActorData> RepActorsData;                                            // 0x0AF8 (size: 0x10)
+    bool TraceToActors?;                                                              // 0x0B08 (size: 0x1)
+    TMap<FGameplayTag, FS_EquipmentIDInfo> EquipmentIDSlotConfig;                     // 0x0B10 (size: 0x50)
+    TMap<FGameplayTag, ABP_CustomPrimitiveComp_C*> SpawnedCustomPrimitives;           // 0x0B60 (size: 0x50)
+    FGameplayTag ActiveWeapon;                                                        // 0x0BB0 (size: 0x8)
+    FBP_JigHelperComp_COnActiveWeaponSlotChanged OnActiveWeaponSlotChanged;           // 0x0BB8 (size: 0x10)
     void OnActiveWeaponSlotChanged(FGameplayTag Slot);
-    class AActor* PreviewChar;                                                        // 0x0BB0 (size: 0x8)
-    class AActor* CurrentTracActor;                                                   // 0x0BB8 (size: 0x8)
-    TMap<class FGameplayTag, class FText> CurrentInteractOptions;                     // 0x0BC0 (size: 0x50)
-    int32 CurrentInteractOptionIndex;                                                 // 0x0C10 (size: 0x4)
-    class AActor* InteractExecutedActor;                                              // 0x0C18 (size: 0x8)
-    FBP_JigHelperComp_COnPossessed OnPossessed;                                       // 0x0C20 (size: 0x10)
+    class AActor* PreviewChar;                                                        // 0x0BC8 (size: 0x8)
+    class AActor* CurrentTracActor;                                                   // 0x0BD0 (size: 0x8)
+    TMap<FGameplayTag, FText> CurrentInteractOptions;                                 // 0x0BD8 (size: 0x50)
+    int32 CurrentInteractOptionIndex;                                                 // 0x0C28 (size: 0x4)
+    class AActor* InteractExecutedActor;                                              // 0x0C30 (size: 0x8)
+    FBP_JigHelperComp_COnPossessed OnPossessed;                                       // 0x0C38 (size: 0x10)
     void OnPossessed(class AController* Controller);
-    FBP_JigHelperComp_COnEquipmentUpdated OnEquipmentUpdated;                         // 0x0C30 (size: 0x10)
+    FBP_JigHelperComp_COnEquipmentUpdated OnEquipmentUpdated;                         // 0x0C48 (size: 0x10)
     void OnEquipmentUpdated();
 
     void GetCurrentTracActor(class AActor*& Actor, bool& Valid);
@@ -34,11 +34,11 @@ class UBP_JigHelperComp_C : public UActorComponent
     void GetEquipmentUID(const FGameplayTag Slot, FGuid& Value);
     void UpdatePrevFromPrim();
     void ForceRepPrimitiveActorSpawns();
-    void GetTraceIgnore(TArray<class AActor*>& OutArr);
+    void GetTraceIgnore(TArray<AActor*>& OutArr);
     void OnLoadDataRequested();
-    void TryInteract(double TraceDistance);
+    void TryInteract();
     void GetActiveWeapon(class AActor*& Actor);
-    void GetAllEquippedActors(TArray<class AActor*>& OutArr);
+    void GetAllEquippedActors(TArray<AActor*>& OutArr);
     void TraceToWorld();
     void UpdateChamberUID(FGuid UID, bool& Result);
     FVector GetDropLocation();
@@ -72,6 +72,6 @@ class UBP_JigHelperComp_C : public UActorComponent
     void OnEquipmentUpdated__DelegateSignature();
     void OnPossessed__DelegateSignature(class AController* Controller);
     void OnActiveWeaponSlotChanged__DelegateSignature(FGameplayTag Slot);
-}; // Size: 0xC40
+}; // Size: 0xC58
 
 #endif

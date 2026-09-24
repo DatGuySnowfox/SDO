@@ -3,14 +3,14 @@
 
 struct FPerPlatformSettings
 {
-    TArray<class UPlatformSettings*> Settings;                                        // 0x0000 (size: 0x10)
+    TArray<UPlatformSettings*> Settings;                                              // 0x0000 (size: 0x10)
 
 }; // Size: 0x10
 
 struct FPlatformSettingsInstances
 {
     class UPlatformSettings* PlatformInstance;                                        // 0x0000 (size: 0x8)
-    TMap<class FName, class UPlatformSettings*> OtherPlatforms;                       // 0x0008 (size: 0x50)
+    TMap<FName, UPlatformSettings*> OtherPlatforms;                                   // 0x0008 (size: 0x50)
 
 }; // Size: 0x58
 
@@ -28,7 +28,7 @@ class UPlatformSettings : public UObject
 
 class UPlatformSettingsManager : public UObject
 {
-    TMap<class TSubclassOf<UPlatformSettings>, class FPlatformSettingsInstances> SettingsMap; // 0x0028 (size: 0x50)
+    TMap<TSubclassOf<class UPlatformSettings>, FPlatformSettingsInstances> SettingsMap; // 0x0028 (size: 0x50)
 
 }; // Size: 0x80
 

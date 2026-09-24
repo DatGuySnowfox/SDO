@@ -95,14 +95,14 @@ struct FRigVMBranchInfo
     FName Label;                                                                      // 0x0004 (size: 0x8)
     int32 InstructionIndex;                                                           // 0x000C (size: 0x4)
     int32 ArgumentIndex;                                                              // 0x0010 (size: 0x4)
-    uint16 FirstInstruction;                                                          // 0x0014 (size: 0x2)
-    uint16 LastInstruction;                                                           // 0x0016 (size: 0x2)
+    int32 FirstInstruction;                                                           // 0x0014 (size: 0x4)
+    int32 LastInstruction;                                                            // 0x0018 (size: 0x4)
 
-}; // Size: 0x18
+}; // Size: 0x1C
 
 struct FRigVMBreakpoint
 {
-}; // Size: 0x28
+}; // Size: 0x24
 
 struct FRigVMByteCode
 {
@@ -111,8 +111,9 @@ struct FRigVMByteCode
     TArray<FRigVMByteCodeEntry> Entries;                                              // 0x0018 (size: 0x10)
     TArray<FRigVMBranchInfo> BranchInfos;                                             // 0x0028 (size: 0x10)
     TArray<FRigVMPredicateBranch> PredicateBranches;                                  // 0x0038 (size: 0x10)
+    FTopLevelAssetPath PublicContextAssetPath;                                        // 0x0048 (size: 0x10)
 
-}; // Size: 0xA0
+}; // Size: 0xB0
 
 struct FRigVMByteCodeEntry
 {
@@ -138,15 +139,18 @@ struct FRigVMComparisonOp : public FRigVMBaseOp
 
 struct FRigVMCopyOp : public FRigVMBaseOp
 {
-}; // Size: 0x12
+}; // Size: 0x10
+
+struct FRigVMDebugDrawSettings
+{
+    TEnumAsByte<ESceneDepthPriorityGroup> DepthPriority;                              // 0x0000 (size: 0x1)
+    float Lifetime;                                                                   // 0x0004 (size: 0x4)
+
+}; // Size: 0x8
 
 struct FRigVMDebugInfo
 {
-}; // Size: 0xF8
-
-struct FRigVMDecorator : public FRigVMStruct
-{
-}; // Size: 0x18
+}; // Size: 0x140
 
 struct FRigVMDispatchFactory
 {
@@ -185,6 +189,10 @@ struct FRigVMDispatch_ArrayGetAtIndex : public FRigVMDispatch_ArrayBase
 }; // Size: 0x70
 
 struct FRigVMDispatch_ArrayGetNum : public FRigVMDispatch_ArrayBase
+{
+}; // Size: 0x70
+
+struct FRigVMDispatch_ArrayInit : public FRigVMDispatch_ArrayBaseMutable
 {
 }; // Size: 0x70
 
@@ -229,6 +237,18 @@ struct FRigVMDispatch_ArrayUnion : public FRigVMDispatch_ArrayAppend
 }; // Size: 0x70
 
 struct FRigVMDispatch_BreakStruct : public FRigVMDispatch_MakeStruct
+{
+}; // Size: 0x70
+
+struct FRigVMDispatch_CastEnumToInt : public FRigVMDispatchFactory
+{
+}; // Size: 0x70
+
+struct FRigVMDispatch_CastIntToEnum : public FRigVMDispatchFactory
+{
+}; // Size: 0x70
+
+struct FRigVMDispatch_CastObject : public FRigVMDispatchFactory
 {
 }; // Size: 0x70
 
@@ -282,6 +302,8 @@ struct FRigVMDrawInstruction
     FLinearColor Color;                                                               // 0x0020 (size: 0x10)
     float Thickness;                                                                  // 0x0030 (size: 0x4)
     FTransform Transform;                                                             // 0x0040 (size: 0x60)
+    TEnumAsByte<ESceneDepthPriorityGroup> DepthPriority;                              // 0x00A0 (size: 0x1)
+    float Lifetime;                                                                   // 0x00A4 (size: 0x4)
 
 }; // Size: 0xD0
 
@@ -289,21 +311,21 @@ struct FRigVMDrawInterface : public FRigVMDrawContainer
 {
 }; // Size: 0x18
 
-struct FRigVMExecuteContext
+struct FRigVMExecuteContext : public FRigVMExecutePin
 {
-}; // Size: 0xF0
+}; // Size: 0x110
 
 struct FRigVMExecuteOp : public FRigVMBaseOp
 {
 }; // Size: 0xA
 
+struct FRigVMExecutePin
+{
+}; // Size: 0x8
+
 struct FRigVMExtendedExecuteContext
 {
-    uint32 VMHash;                                                                    // 0x0008 (size: 0x4)
-    uint32 NumExecutions;                                                             // 0x0110 (size: 0x4)
-    class URigVM* DeferredVMToCopy;                                                   // 0x0170 (size: 0x8)
-
-}; // Size: 0x1B8
+}; // Size: 0x240
 
 struct FRigVMExternalVariable : public FRigVMExternalVariableDef
 {
@@ -324,27 +346,28 @@ struct FRigVMFourPointBezier
 
 struct FRigVMFunctionCompilationData
 {
-    FRigVMByteCode ByteCode;                                                          // 0x0000 (size: 0xA0)
-    TArray<FName> FunctionNames;                                                      // 0x00A0 (size: 0x10)
-    TArray<FRigVMFunctionCompilationPropertyDescription> WorkPropertyDescriptions;    // 0x00B0 (size: 0x10)
-    TArray<FRigVMFunctionCompilationPropertyPath> WorkPropertyPathDescriptions;       // 0x00C0 (size: 0x10)
-    TArray<FRigVMFunctionCompilationPropertyDescription> LiteralPropertyDescriptions; // 0x00D0 (size: 0x10)
-    TArray<FRigVMFunctionCompilationPropertyPath> LiteralPropertyPathDescriptions;    // 0x00E0 (size: 0x10)
-    TArray<FRigVMFunctionCompilationPropertyDescription> DebugPropertyDescriptions;   // 0x00F0 (size: 0x10)
-    TArray<FRigVMFunctionCompilationPropertyPath> DebugPropertyPathDescriptions;      // 0x0100 (size: 0x10)
-    TArray<FRigVMFunctionCompilationPropertyDescription> ExternalPropertyDescriptions; // 0x0110 (size: 0x10)
-    TArray<FRigVMFunctionCompilationPropertyPath> ExternalPropertyPathDescriptions;   // 0x0120 (size: 0x10)
-    TMap<int32, FName> ExternalRegisterIndexToVariable;                               // 0x0130 (size: 0x50)
-    TMap<class FString, class FRigVMOperand> Operands;                                // 0x0180 (size: 0x50)
-    uint32 Hash;                                                                      // 0x01D0 (size: 0x4)
+    FRigVMByteCode ByteCode;                                                          // 0x0000 (size: 0xB0)
+    TArray<FName> FunctionNames;                                                      // 0x00B0 (size: 0x10)
+    TArray<FRigVMFunctionCompilationPropertyDescription> WorkPropertyDescriptions;    // 0x00C0 (size: 0x10)
+    TArray<FRigVMFunctionCompilationPropertyPath> WorkPropertyPathDescriptions;       // 0x00D0 (size: 0x10)
+    TArray<FRigVMFunctionCompilationPropertyDescription> LiteralPropertyDescriptions; // 0x00E0 (size: 0x10)
+    TArray<FRigVMFunctionCompilationPropertyPath> LiteralPropertyPathDescriptions;    // 0x00F0 (size: 0x10)
+    TArray<FRigVMFunctionCompilationPropertyDescription> DebugPropertyDescriptions;   // 0x0100 (size: 0x10)
+    TArray<FRigVMFunctionCompilationPropertyPath> DebugPropertyPathDescriptions;      // 0x0110 (size: 0x10)
+    TArray<FRigVMFunctionCompilationPropertyDescription> ExternalPropertyDescriptions; // 0x0120 (size: 0x10)
+    TArray<FRigVMFunctionCompilationPropertyPath> ExternalPropertyPathDescriptions;   // 0x0130 (size: 0x10)
+    TMap<int32, FName> ExternalRegisterIndexToVariable;                               // 0x0140 (size: 0x50)
+    TMap<FString, FRigVMOperand> Operands;                                            // 0x0190 (size: 0x50)
+    uint32 Hash;                                                                      // 0x01E0 (size: 0x4)
+    bool bEncounteredSurpressedErrors;                                                // 0x01E4 (size: 0x1)
 
-}; // Size: 0x228
+}; // Size: 0x238
 
 struct FRigVMFunctionCompilationPropertyDescription
 {
     FName Name;                                                                       // 0x0000 (size: 0x8)
     FString CPPType;                                                                  // 0x0008 (size: 0x10)
-    TSoftObjectPtr<UObject> CPPTypeObject;                                            // 0x0018 (size: 0x28)
+    TSoftObjectPtr<class UObject> CPPTypeObject;                                      // 0x0018 (size: 0x28)
     FString DefaultValue;                                                             // 0x0040 (size: 0x10)
 
 }; // Size: 0x50
@@ -610,81 +633,95 @@ struct FRigVMFunction_ControlFlowBase : public FRigVMStruct
 
 struct FRigVMFunction_ControlFlowBranch : public FRigVMFunction_ControlFlowBase
 {
-    FRigVMExecuteContext ExecuteContext;                                              // 0x0010 (size: 0xF0)
-    bool Condition;                                                                   // 0x0100 (size: 0x1)
-    FRigVMExecuteContext TRUE;                                                        // 0x0110 (size: 0xF0)
-    FRigVMExecuteContext FALSE;                                                       // 0x0200 (size: 0xF0)
-    FRigVMExecuteContext Completed;                                                   // 0x02F0 (size: 0xF0)
-    FName BlockToRun;                                                                 // 0x03E0 (size: 0x8)
+    FRigVMExecuteContext ExecuteContext;                                              // 0x0010 (size: 0x110)
+    bool Condition;                                                                   // 0x0120 (size: 0x1)
+    FRigVMExecuteContext TRUE;                                                        // 0x0130 (size: 0x110)
+    FRigVMExecuteContext FALSE;                                                       // 0x0240 (size: 0x110)
+    FRigVMExecuteContext Completed;                                                   // 0x0350 (size: 0x110)
+    FName BlockToRun;                                                                 // 0x0460 (size: 0x8)
 
-}; // Size: 0x3F0
+}; // Size: 0x470
 
 struct FRigVMFunction_DebugArc : public FRigVMFunction_DebugBaseMutable
 {
-    FTransform Transform;                                                             // 0x0100 (size: 0x60)
-    FLinearColor Color;                                                               // 0x0160 (size: 0x10)
-    float Radius;                                                                     // 0x0170 (size: 0x4)
-    float MinimumDegrees;                                                             // 0x0174 (size: 0x4)
-    float MaximumDegrees;                                                             // 0x0178 (size: 0x4)
-    float Thickness;                                                                  // 0x017C (size: 0x4)
-    int32 Detail;                                                                     // 0x0180 (size: 0x4)
-    FName Space;                                                                      // 0x0184 (size: 0x8)
-    FTransform WorldOffset;                                                           // 0x0190 (size: 0x60)
-    bool bEnabled;                                                                    // 0x01F0 (size: 0x1)
+    FTransform Transform;                                                             // 0x0020 (size: 0x60)
+    FLinearColor Color;                                                               // 0x0080 (size: 0x10)
+    float Radius;                                                                     // 0x0090 (size: 0x4)
+    float MinimumDegrees;                                                             // 0x0094 (size: 0x4)
+    float MaximumDegrees;                                                             // 0x0098 (size: 0x4)
+    float Thickness;                                                                  // 0x009C (size: 0x4)
+    int32 Detail;                                                                     // 0x00A0 (size: 0x4)
+    FName Space;                                                                      // 0x00A4 (size: 0x8)
+    FTransform WorldOffset;                                                           // 0x00B0 (size: 0x60)
+    bool bEnabled;                                                                    // 0x0110 (size: 0x1)
 
-}; // Size: 0x200
+}; // Size: 0x120
 
 struct FRigVMFunction_DebugArcNoSpace : public FRigVMFunction_DebugBaseMutable
 {
-    FTransform Transform;                                                             // 0x0100 (size: 0x60)
-    FLinearColor Color;                                                               // 0x0160 (size: 0x10)
-    float Radius;                                                                     // 0x0170 (size: 0x4)
-    float MinimumDegrees;                                                             // 0x0174 (size: 0x4)
-    float MaximumDegrees;                                                             // 0x0178 (size: 0x4)
-    float Thickness;                                                                  // 0x017C (size: 0x4)
-    int32 Detail;                                                                     // 0x0180 (size: 0x4)
-    FTransform WorldOffset;                                                           // 0x0190 (size: 0x60)
-    bool bEnabled;                                                                    // 0x01F0 (size: 0x1)
+    FTransform Transform;                                                             // 0x0020 (size: 0x60)
+    FLinearColor Color;                                                               // 0x0080 (size: 0x10)
+    float Radius;                                                                     // 0x0090 (size: 0x4)
+    float MinimumDegrees;                                                             // 0x0094 (size: 0x4)
+    float MaximumDegrees;                                                             // 0x0098 (size: 0x4)
+    float Thickness;                                                                  // 0x009C (size: 0x4)
+    int32 Detail;                                                                     // 0x00A0 (size: 0x4)
+    FTransform WorldOffset;                                                           // 0x00B0 (size: 0x60)
+    bool bEnabled;                                                                    // 0x0110 (size: 0x1)
 
-}; // Size: 0x200
+}; // Size: 0x120
 
 struct FRigVMFunction_DebugBase : public FRigVMStruct
 {
-}; // Size: 0x8
+    FRigVMDebugDrawSettings DebugDrawSettings;                                        // 0x0008 (size: 0x8)
+
+}; // Size: 0x10
 
 struct FRigVMFunction_DebugBaseMutable : public FRigVMStructMutable
 {
-}; // Size: 0x100
+    FRigVMDebugDrawSettings DebugDrawSettings;                                        // 0x0010 (size: 0x8)
+
+}; // Size: 0x18
+
+struct FRigVMFunction_DebugBoxNoSpace : public FRigVMFunction_DebugBaseMutable
+{
+    FBox Box;                                                                         // 0x0018 (size: 0x38)
+    FLinearColor Color;                                                               // 0x0050 (size: 0x10)
+    float Thickness;                                                                  // 0x0060 (size: 0x4)
+    FTransform WorldOffset;                                                           // 0x0070 (size: 0x60)
+    bool bEnabled;                                                                    // 0x00D0 (size: 0x1)
+
+}; // Size: 0xE0
 
 struct FRigVMFunction_DebugLineNoSpace : public FRigVMFunction_DebugBaseMutable
 {
-    FVector A;                                                                        // 0x0100 (size: 0x18)
-    FVector B;                                                                        // 0x0118 (size: 0x18)
-    FLinearColor Color;                                                               // 0x0130 (size: 0x10)
-    float Thickness;                                                                  // 0x0140 (size: 0x4)
-    FTransform WorldOffset;                                                           // 0x0150 (size: 0x60)
-    bool bEnabled;                                                                    // 0x01B0 (size: 0x1)
+    FVector A;                                                                        // 0x0018 (size: 0x18)
+    FVector B;                                                                        // 0x0030 (size: 0x18)
+    FLinearColor Color;                                                               // 0x0048 (size: 0x10)
+    float Thickness;                                                                  // 0x0058 (size: 0x4)
+    FTransform WorldOffset;                                                           // 0x0060 (size: 0x60)
+    bool bEnabled;                                                                    // 0x00C0 (size: 0x1)
 
-}; // Size: 0x1C0
+}; // Size: 0xD0
 
 struct FRigVMFunction_DebugLineStripNoSpace : public FRigVMFunction_DebugBaseMutable
 {
-    TArray<FVector> Points;                                                           // 0x0100 (size: 0x10)
-    FLinearColor Color;                                                               // 0x0110 (size: 0x10)
-    float Thickness;                                                                  // 0x0120 (size: 0x4)
-    FTransform WorldOffset;                                                           // 0x0130 (size: 0x60)
-    bool bEnabled;                                                                    // 0x0190 (size: 0x1)
+    TArray<FVector> Points;                                                           // 0x0018 (size: 0x10)
+    FLinearColor Color;                                                               // 0x0028 (size: 0x10)
+    float Thickness;                                                                  // 0x0038 (size: 0x4)
+    FTransform WorldOffset;                                                           // 0x0040 (size: 0x60)
+    bool bEnabled;                                                                    // 0x00A0 (size: 0x1)
 
-}; // Size: 0x1A0
+}; // Size: 0xB0
 
 struct FRigVMFunction_DebugPoint : public FRigVMFunction_DebugBase
 {
-    FVector Vector;                                                                   // 0x0008 (size: 0x18)
-    ERigUnitDebugPointMode Mode;                                                      // 0x0020 (size: 0x1)
-    FLinearColor Color;                                                               // 0x0024 (size: 0x10)
-    float Scale;                                                                      // 0x0034 (size: 0x4)
-    float Thickness;                                                                  // 0x0038 (size: 0x4)
-    FName Space;                                                                      // 0x003C (size: 0x8)
+    FVector Vector;                                                                   // 0x0010 (size: 0x18)
+    ERigUnitDebugPointMode Mode;                                                      // 0x0028 (size: 0x1)
+    FLinearColor Color;                                                               // 0x002C (size: 0x10)
+    float Scale;                                                                      // 0x003C (size: 0x4)
+    float Thickness;                                                                  // 0x0040 (size: 0x4)
+    FName Space;                                                                      // 0x0044 (size: 0x8)
     FTransform WorldOffset;                                                           // 0x0050 (size: 0x60)
     bool bEnabled;                                                                    // 0x00B0 (size: 0x1)
 
@@ -692,52 +729,52 @@ struct FRigVMFunction_DebugPoint : public FRigVMFunction_DebugBase
 
 struct FRigVMFunction_DebugPointMutable : public FRigVMFunction_DebugBaseMutable
 {
-    FVector Vector;                                                                   // 0x0100 (size: 0x18)
-    ERigUnitDebugPointMode Mode;                                                      // 0x0118 (size: 0x1)
-    FLinearColor Color;                                                               // 0x011C (size: 0x10)
-    float Scale;                                                                      // 0x012C (size: 0x4)
-    float Thickness;                                                                  // 0x0130 (size: 0x4)
-    FName Space;                                                                      // 0x0134 (size: 0x8)
-    FTransform WorldOffset;                                                           // 0x0140 (size: 0x60)
-    bool bEnabled;                                                                    // 0x01A0 (size: 0x1)
+    FVector Vector;                                                                   // 0x0018 (size: 0x18)
+    ERigUnitDebugPointMode Mode;                                                      // 0x0030 (size: 0x1)
+    FLinearColor Color;                                                               // 0x0034 (size: 0x10)
+    float Scale;                                                                      // 0x0044 (size: 0x4)
+    float Thickness;                                                                  // 0x0048 (size: 0x4)
+    FName Space;                                                                      // 0x004C (size: 0x8)
+    FTransform WorldOffset;                                                           // 0x0060 (size: 0x60)
+    bool bEnabled;                                                                    // 0x00C0 (size: 0x1)
 
-}; // Size: 0x1B0
+}; // Size: 0xD0
 
 struct FRigVMFunction_DebugRectangle : public FRigVMFunction_DebugBaseMutable
 {
-    FTransform Transform;                                                             // 0x0100 (size: 0x60)
-    FLinearColor Color;                                                               // 0x0160 (size: 0x10)
-    float Scale;                                                                      // 0x0170 (size: 0x4)
-    float Thickness;                                                                  // 0x0174 (size: 0x4)
-    FName Space;                                                                      // 0x0178 (size: 0x8)
-    FTransform WorldOffset;                                                           // 0x0180 (size: 0x60)
-    bool bEnabled;                                                                    // 0x01E0 (size: 0x1)
+    FTransform Transform;                                                             // 0x0020 (size: 0x60)
+    FLinearColor Color;                                                               // 0x0080 (size: 0x10)
+    float Scale;                                                                      // 0x0090 (size: 0x4)
+    float Thickness;                                                                  // 0x0094 (size: 0x4)
+    FName Space;                                                                      // 0x0098 (size: 0x8)
+    FTransform WorldOffset;                                                           // 0x00A0 (size: 0x60)
+    bool bEnabled;                                                                    // 0x0100 (size: 0x1)
 
-}; // Size: 0x1F0
+}; // Size: 0x110
 
 struct FRigVMFunction_DebugRectangleNoSpace : public FRigVMFunction_DebugBaseMutable
 {
-    FTransform Transform;                                                             // 0x0100 (size: 0x60)
-    FLinearColor Color;                                                               // 0x0160 (size: 0x10)
-    float Scale;                                                                      // 0x0170 (size: 0x4)
-    float Thickness;                                                                  // 0x0174 (size: 0x4)
-    FTransform WorldOffset;                                                           // 0x0180 (size: 0x60)
-    bool bEnabled;                                                                    // 0x01E0 (size: 0x1)
+    FTransform Transform;                                                             // 0x0020 (size: 0x60)
+    FLinearColor Color;                                                               // 0x0080 (size: 0x10)
+    float Scale;                                                                      // 0x0090 (size: 0x4)
+    float Thickness;                                                                  // 0x0094 (size: 0x4)
+    FTransform WorldOffset;                                                           // 0x00A0 (size: 0x60)
+    bool bEnabled;                                                                    // 0x0100 (size: 0x1)
 
-}; // Size: 0x1F0
+}; // Size: 0x110
 
 struct FRigVMFunction_DebugTransformArrayMutableNoSpace : public FRigVMFunction_DebugBaseMutable
 {
-    TArray<FTransform> Transforms;                                                    // 0x0100 (size: 0x10)
-    TArray<int32> ParentIndices;                                                      // 0x0110 (size: 0x10)
-    ERigUnitDebugTransformMode Mode;                                                  // 0x0120 (size: 0x1)
-    FLinearColor Color;                                                               // 0x0124 (size: 0x10)
-    float Thickness;                                                                  // 0x0134 (size: 0x4)
-    float Scale;                                                                      // 0x0138 (size: 0x4)
-    FTransform WorldOffset;                                                           // 0x0140 (size: 0x60)
-    bool bEnabled;                                                                    // 0x01A0 (size: 0x1)
+    TArray<FTransform> Transforms;                                                    // 0x0018 (size: 0x10)
+    TArray<int32> ParentIndices;                                                      // 0x0028 (size: 0x10)
+    ERigUnitDebugTransformMode Mode;                                                  // 0x0038 (size: 0x1)
+    FLinearColor Color;                                                               // 0x003C (size: 0x10)
+    float Thickness;                                                                  // 0x004C (size: 0x4)
+    float Scale;                                                                      // 0x0050 (size: 0x4)
+    FTransform WorldOffset;                                                           // 0x0060 (size: 0x60)
+    bool bEnabled;                                                                    // 0x00C0 (size: 0x1)
 
-}; // Size: 0x1B0
+}; // Size: 0xD0
 
 struct FRigVMFunction_DebugTransformArrayMutable_WorkData
 {
@@ -747,15 +784,15 @@ struct FRigVMFunction_DebugTransformArrayMutable_WorkData
 
 struct FRigVMFunction_DebugTransformMutableNoSpace : public FRigVMFunction_DebugBaseMutable
 {
-    FTransform Transform;                                                             // 0x0100 (size: 0x60)
-    ERigUnitDebugTransformMode Mode;                                                  // 0x0160 (size: 0x1)
-    FLinearColor Color;                                                               // 0x0164 (size: 0x10)
-    float Thickness;                                                                  // 0x0174 (size: 0x4)
-    float Scale;                                                                      // 0x0178 (size: 0x4)
-    FTransform WorldOffset;                                                           // 0x0180 (size: 0x60)
-    bool bEnabled;                                                                    // 0x01E0 (size: 0x1)
+    FTransform Transform;                                                             // 0x0020 (size: 0x60)
+    ERigUnitDebugTransformMode Mode;                                                  // 0x0080 (size: 0x1)
+    FLinearColor Color;                                                               // 0x0084 (size: 0x10)
+    float Thickness;                                                                  // 0x0094 (size: 0x4)
+    float Scale;                                                                      // 0x0098 (size: 0x4)
+    FTransform WorldOffset;                                                           // 0x00A0 (size: 0x60)
+    bool bEnabled;                                                                    // 0x0100 (size: 0x1)
 
-}; // Size: 0x1F0
+}; // Size: 0x110
 
 struct FRigVMFunction_DeltaFromPreviousFloat : public FRigVMFunction_SimBase
 {
@@ -807,13 +844,13 @@ struct FRigVMFunction_EndsWith : public FRigVMFunction_NameBase
 
 struct FRigVMFunction_ForLoopCount : public FRigVMStructMutable
 {
-    FName BlockToRun;                                                                 // 0x0100 (size: 0x8)
-    int32 Count;                                                                      // 0x0108 (size: 0x4)
-    int32 Index;                                                                      // 0x010C (size: 0x4)
-    float Ratio;                                                                      // 0x0110 (size: 0x4)
-    FRigVMExecuteContext Completed;                                                   // 0x0120 (size: 0xF0)
+    FName BlockToRun;                                                                 // 0x0010 (size: 0x8)
+    int32 Count;                                                                      // 0x0018 (size: 0x4)
+    int32 Index;                                                                      // 0x001C (size: 0x4)
+    float Ratio;                                                                      // 0x0020 (size: 0x4)
+    FRigVMExecuteContext Completed;                                                   // 0x0030 (size: 0x110)
 
-}; // Size: 0x210
+}; // Size: 0x140
 
 struct FRigVMFunction_FramesToSeconds : public FRigVMFunction_AnimBase
 {
@@ -840,6 +877,12 @@ struct FRigVMFunction_GetWorldTime : public FRigVMFunction_AnimBase
     float OverallSeconds;                                                             // 0x0024 (size: 0x4)
 
 }; // Size: 0x28
+
+struct FRigVMFunction_IsHostBeingDebugged : public FRigVMStruct
+{
+    bool Result;                                                                      // 0x0008 (size: 0x1)
+
+}; // Size: 0x10
 
 struct FRigVMFunction_KalmanFloat : public FRigVMFunction_SimBase
 {
@@ -1000,6 +1043,100 @@ struct FRigVMFunction_MathBoolUnaryOp : public FRigVMFunction_MathBoolBase
 
 }; // Size: 0x10
 
+struct FRigVMFunction_MathBoxBase : public FRigVMFunction_MathBase
+{
+}; // Size: 0x8
+
+struct FRigVMFunction_MathBoxExpand : public FRigVMFunction_MathBoxBase
+{
+    FBox Box;                                                                         // 0x0008 (size: 0x38)
+    FVector Amount;                                                                   // 0x0040 (size: 0x18)
+    FBox Result;                                                                      // 0x0058 (size: 0x38)
+
+}; // Size: 0x90
+
+struct FRigVMFunction_MathBoxFromArray : public FRigVMFunction_MathBoxBase
+{
+    TArray<FVector> Array;                                                            // 0x0008 (size: 0x10)
+    FBox Box;                                                                         // 0x0018 (size: 0x38)
+    FVector Minimum;                                                                  // 0x0050 (size: 0x18)
+    FVector Maximum;                                                                  // 0x0068 (size: 0x18)
+    FVector Center;                                                                   // 0x0080 (size: 0x18)
+    FVector Size;                                                                     // 0x0098 (size: 0x18)
+
+}; // Size: 0xB0
+
+struct FRigVMFunction_MathBoxGetCenter : public FRigVMFunction_MathBoxBase
+{
+    FBox Box;                                                                         // 0x0008 (size: 0x38)
+    FVector Center;                                                                   // 0x0040 (size: 0x18)
+
+}; // Size: 0x58
+
+struct FRigVMFunction_MathBoxGetDistance : public FRigVMFunction_MathBoxBase
+{
+    FBox Box;                                                                         // 0x0008 (size: 0x38)
+    FVector Position;                                                                 // 0x0040 (size: 0x18)
+    bool Square;                                                                      // 0x0058 (size: 0x1)
+    bool Valid;                                                                       // 0x0059 (size: 0x1)
+    float Distance;                                                                   // 0x005C (size: 0x4)
+
+}; // Size: 0x60
+
+struct FRigVMFunction_MathBoxGetSize : public FRigVMFunction_MathBoxBase
+{
+    FBox Box;                                                                         // 0x0008 (size: 0x38)
+    FVector Size;                                                                     // 0x0040 (size: 0x18)
+    FVector Extent;                                                                   // 0x0058 (size: 0x18)
+
+}; // Size: 0x70
+
+struct FRigVMFunction_MathBoxGetVolume : public FRigVMFunction_MathBoxBase
+{
+    FBox Box;                                                                         // 0x0008 (size: 0x38)
+    float Volume;                                                                     // 0x0040 (size: 0x4)
+
+}; // Size: 0x48
+
+struct FRigVMFunction_MathBoxIsInside : public FRigVMFunction_MathBoxBase
+{
+    FBox Box;                                                                         // 0x0008 (size: 0x38)
+    FVector Position;                                                                 // 0x0040 (size: 0x18)
+    bool Result;                                                                      // 0x0058 (size: 0x1)
+
+}; // Size: 0x60
+
+struct FRigVMFunction_MathBoxIsValid : public FRigVMFunction_MathBoxBase
+{
+    FBox Box;                                                                         // 0x0008 (size: 0x38)
+    bool Valid;                                                                       // 0x0040 (size: 0x1)
+
+}; // Size: 0x48
+
+struct FRigVMFunction_MathBoxMoveTo : public FRigVMFunction_MathBoxBase
+{
+    FBox Box;                                                                         // 0x0008 (size: 0x38)
+    FVector Center;                                                                   // 0x0040 (size: 0x18)
+    FBox Result;                                                                      // 0x0058 (size: 0x38)
+
+}; // Size: 0x90
+
+struct FRigVMFunction_MathBoxShift : public FRigVMFunction_MathBoxBase
+{
+    FBox Box;                                                                         // 0x0008 (size: 0x38)
+    FVector Amount;                                                                   // 0x0040 (size: 0x18)
+    FBox Result;                                                                      // 0x0058 (size: 0x38)
+
+}; // Size: 0x90
+
+struct FRigVMFunction_MathBoxTransform : public FRigVMFunction_MathBoxBase
+{
+    FBox Box;                                                                         // 0x0008 (size: 0x38)
+    FTransform Transform;                                                             // 0x0040 (size: 0x60)
+    FBox Result;                                                                      // 0x00A0 (size: 0x38)
+
+}; // Size: 0xE0
+
 struct FRigVMFunction_MathColorAdd : public FRigVMFunction_MathColorBinaryAggregateOp
 {
 }; // Size: 0x38
@@ -1109,6 +1246,10 @@ struct FRigVMFunction_MathDoubleAtan : public FRigVMFunction_MathDoubleUnaryOp
 {
 }; // Size: 0x18
 
+struct FRigVMFunction_MathDoubleAtan2 : public FRigVMFunction_MathDoubleBinaryOp
+{
+}; // Size: 0x20
+
 struct FRigVMFunction_MathDoubleBase : public FRigVMFunction_MathBase
 {
 }; // Size: 0x8
@@ -1133,7 +1274,7 @@ struct FRigVMFunction_MathDoubleCeil : public FRigVMFunction_MathDoubleBase
 {
     double Value;                                                                     // 0x0008 (size: 0x8)
     double Result;                                                                    // 0x0010 (size: 0x8)
-    int32 Int;                                                                        // 0x0018 (size: 0x4)
+    int32 int;                                                                        // 0x0018 (size: 0x4)
 
 }; // Size: 0x20
 
@@ -1196,7 +1337,7 @@ struct FRigVMFunction_MathDoubleFloor : public FRigVMFunction_MathDoubleBase
 {
     double Value;                                                                     // 0x0008 (size: 0x8)
     double Result;                                                                    // 0x0010 (size: 0x8)
-    int32 Int;                                                                        // 0x0018 (size: 0x4)
+    int32 int;                                                                        // 0x0018 (size: 0x4)
 
 }; // Size: 0x20
 
@@ -1328,7 +1469,7 @@ struct FRigVMFunction_MathDoubleRound : public FRigVMFunction_MathDoubleBase
 {
     double Value;                                                                     // 0x0008 (size: 0x8)
     double Result;                                                                    // 0x0010 (size: 0x8)
-    int32 Int;                                                                        // 0x0018 (size: 0x4)
+    int32 int;                                                                        // 0x0018 (size: 0x4)
 
 }; // Size: 0x20
 
@@ -1350,6 +1491,13 @@ struct FRigVMFunction_MathDoubleSub : public FRigVMFunction_MathDoubleBinaryOp
 
 struct FRigVMFunction_MathDoubleTan : public FRigVMFunction_MathDoubleUnaryOp
 {
+}; // Size: 0x18
+
+struct FRigVMFunction_MathDoubleToFloat : public FRigVMFunction_MathDoubleBase
+{
+    double Value;                                                                     // 0x0008 (size: 0x8)
+    float Result;                                                                     // 0x0010 (size: 0x4)
+
 }; // Size: 0x18
 
 struct FRigVMFunction_MathDoubleToInt : public FRigVMFunction_MathDoubleBase
@@ -1400,6 +1548,10 @@ struct FRigVMFunction_MathFloatAtan : public FRigVMFunction_MathFloatUnaryOp
 {
 }; // Size: 0x10
 
+struct FRigVMFunction_MathFloatAtan2 : public FRigVMFunction_MathFloatBinaryOp
+{
+}; // Size: 0x18
+
 struct FRigVMFunction_MathFloatBase : public FRigVMFunction_MathBase
 {
 }; // Size: 0x8
@@ -1424,7 +1576,7 @@ struct FRigVMFunction_MathFloatCeil : public FRigVMFunction_MathFloatBase
 {
     float Value;                                                                      // 0x0008 (size: 0x4)
     float Result;                                                                     // 0x000C (size: 0x4)
-    int32 Int;                                                                        // 0x0010 (size: 0x4)
+    int32 int;                                                                        // 0x0010 (size: 0x4)
 
 }; // Size: 0x18
 
@@ -1487,7 +1639,7 @@ struct FRigVMFunction_MathFloatFloor : public FRigVMFunction_MathFloatBase
 {
     float Value;                                                                      // 0x0008 (size: 0x4)
     float Result;                                                                     // 0x000C (size: 0x4)
-    int32 Int;                                                                        // 0x0010 (size: 0x4)
+    int32 int;                                                                        // 0x0010 (size: 0x4)
 
 }; // Size: 0x18
 
@@ -1619,7 +1771,7 @@ struct FRigVMFunction_MathFloatRound : public FRigVMFunction_MathFloatBase
 {
     float Value;                                                                      // 0x0008 (size: 0x4)
     float Result;                                                                     // 0x000C (size: 0x4)
-    int32 Int;                                                                        // 0x0010 (size: 0x4)
+    int32 int;                                                                        // 0x0010 (size: 0x4)
 
 }; // Size: 0x18
 
@@ -1651,6 +1803,13 @@ struct FRigVMFunction_MathFloatSub : public FRigVMFunction_MathFloatBinaryOp
 struct FRigVMFunction_MathFloatTan : public FRigVMFunction_MathFloatUnaryOp
 {
 }; // Size: 0x10
+
+struct FRigVMFunction_MathFloatToDouble : public FRigVMFunction_MathFloatBase
+{
+    float Value;                                                                      // 0x0008 (size: 0x4)
+    double Result;                                                                    // 0x0010 (size: 0x8)
+
+}; // Size: 0x18
 
 struct FRigVMFunction_MathFloatToInt : public FRigVMFunction_MathFloatBase
 {
@@ -1933,7 +2092,7 @@ struct FRigVMFunction_MathMatrixUnaryOp : public FRigVMFunction_MathMatrixBase
 
 struct FRigVMFunction_MathMutableBase : public FRigVMStructMutable
 {
-}; // Size: 0x100
+}; // Size: 0x10
 
 struct FRigVMFunction_MathQuaternionBase : public FRigVMFunction_MathBase
 {
@@ -2148,6 +2307,15 @@ struct FRigVMFunction_MathQuaternionToRotator : public FRigVMFunction_MathQuater
 
 }; // Size: 0x50
 
+struct FRigVMFunction_MathQuaternionToVectors : public FRigVMFunction_MathQuaternionBase
+{
+    FQuat Value;                                                                      // 0x0010 (size: 0x20)
+    FVector Forward;                                                                  // 0x0030 (size: 0x18)
+    FVector Right;                                                                    // 0x0048 (size: 0x18)
+    FVector Up;                                                                       // 0x0060 (size: 0x18)
+
+}; // Size: 0x80
+
 struct FRigVMFunction_MathQuaternionUnaryOp : public FRigVMFunction_MathQuaternionBase
 {
     FQuat Value;                                                                      // 0x0010 (size: 0x20)
@@ -2171,48 +2339,48 @@ struct FRigVMFunction_MathRBFInterpolateQuatBase : public FRigVMFunction_MathRBF
     float SmoothingAngle;                                                             // 0x0034 (size: 0x4)
     bool bNormalizeOutput;                                                            // 0x0038 (size: 0x1)
     FVector TwistAxis;                                                                // 0x0040 (size: 0x18)
-    FRigVMFunction_MathRBFInterpolateQuatWorkData WorkData;                           // 0x0060 (size: 0x90)
+    FRigVMFunction_MathRBFInterpolateQuatWorkData WorkData;                           // 0x0060 (size: 0x80)
 
-}; // Size: 0xF0
+}; // Size: 0xE0
 
 struct FRigVMFunction_MathRBFInterpolateQuatColor : public FRigVMFunction_MathRBFInterpolateQuatBase
 {
-    TArray<FMathRBFInterpolateQuatColor_Target> Targets;                              // 0x00F0 (size: 0x10)
-    FLinearColor Output;                                                              // 0x0100 (size: 0x10)
+    TArray<FMathRBFInterpolateQuatColor_Target> Targets;                              // 0x00E0 (size: 0x10)
+    FLinearColor Output;                                                              // 0x00F0 (size: 0x10)
 
-}; // Size: 0x110
+}; // Size: 0x100
 
 struct FRigVMFunction_MathRBFInterpolateQuatFloat : public FRigVMFunction_MathRBFInterpolateQuatBase
 {
-    TArray<FMathRBFInterpolateQuatFloat_Target> Targets;                              // 0x00F0 (size: 0x10)
-    float Output;                                                                     // 0x0100 (size: 0x4)
+    TArray<FMathRBFInterpolateQuatFloat_Target> Targets;                              // 0x00E0 (size: 0x10)
+    float Output;                                                                     // 0x00F0 (size: 0x4)
 
-}; // Size: 0x110
+}; // Size: 0x100
 
 struct FRigVMFunction_MathRBFInterpolateQuatQuat : public FRigVMFunction_MathRBFInterpolateQuatBase
 {
-    TArray<FMathRBFInterpolateQuatQuat_Target> Targets;                               // 0x00F0 (size: 0x10)
-    FQuat Output;                                                                     // 0x0100 (size: 0x20)
+    TArray<FMathRBFInterpolateQuatQuat_Target> Targets;                               // 0x00E0 (size: 0x10)
+    FQuat Output;                                                                     // 0x00F0 (size: 0x20)
 
-}; // Size: 0x120
+}; // Size: 0x110
 
 struct FRigVMFunction_MathRBFInterpolateQuatVector : public FRigVMFunction_MathRBFInterpolateQuatBase
 {
-    TArray<FMathRBFInterpolateQuatVector_Target> Targets;                             // 0x00F0 (size: 0x10)
-    FVector Output;                                                                   // 0x0100 (size: 0x18)
+    TArray<FMathRBFInterpolateQuatVector_Target> Targets;                             // 0x00E0 (size: 0x10)
+    FVector Output;                                                                   // 0x00F0 (size: 0x18)
 
-}; // Size: 0x120
+}; // Size: 0x110
 
 struct FRigVMFunction_MathRBFInterpolateQuatWorkData
 {
-}; // Size: 0x90
+}; // Size: 0x80
 
 struct FRigVMFunction_MathRBFInterpolateQuatXform : public FRigVMFunction_MathRBFInterpolateQuatBase
 {
-    TArray<FMathRBFInterpolateQuatXform_Target> Targets;                              // 0x00F0 (size: 0x10)
-    FTransform Output;                                                                // 0x0100 (size: 0x60)
+    TArray<FMathRBFInterpolateQuatXform_Target> Targets;                              // 0x00E0 (size: 0x10)
+    FTransform Output;                                                                // 0x00F0 (size: 0x60)
 
-}; // Size: 0x160
+}; // Size: 0x150
 
 struct FRigVMFunction_MathRBFInterpolateVectorBase : public FRigVMFunction_MathRBFInterpolateBase
 {
@@ -2221,57 +2389,99 @@ struct FRigVMFunction_MathRBFInterpolateVectorBase : public FRigVMFunction_MathR
     ERBFKernelType SmoothingFunction;                                                 // 0x0021 (size: 0x1)
     float SmoothingRadius;                                                            // 0x0024 (size: 0x4)
     bool bNormalizeOutput;                                                            // 0x0028 (size: 0x1)
-    FRigVMFunction_MathRBFInterpolateVectorWorkData WorkData;                         // 0x0030 (size: 0x90)
+    FRigVMFunction_MathRBFInterpolateVectorWorkData WorkData;                         // 0x0030 (size: 0x80)
 
-}; // Size: 0xC0
+}; // Size: 0xB0
 
 struct FRigVMFunction_MathRBFInterpolateVectorColor : public FRigVMFunction_MathRBFInterpolateVectorBase
 {
-    TArray<FMathRBFInterpolateVectorColor_Target> Targets;                            // 0x00C0 (size: 0x10)
-    FLinearColor Output;                                                              // 0x00D0 (size: 0x10)
+    TArray<FMathRBFInterpolateVectorColor_Target> Targets;                            // 0x00B0 (size: 0x10)
+    FLinearColor Output;                                                              // 0x00C0 (size: 0x10)
 
-}; // Size: 0xE0
+}; // Size: 0xD0
 
 struct FRigVMFunction_MathRBFInterpolateVectorFloat : public FRigVMFunction_MathRBFInterpolateVectorBase
 {
-    TArray<FMathRBFInterpolateVectorFloat_Target> Targets;                            // 0x00C0 (size: 0x10)
-    float Output;                                                                     // 0x00D0 (size: 0x4)
+    TArray<FMathRBFInterpolateVectorFloat_Target> Targets;                            // 0x00B0 (size: 0x10)
+    float Output;                                                                     // 0x00C0 (size: 0x4)
 
-}; // Size: 0xE0
+}; // Size: 0xD0
 
 struct FRigVMFunction_MathRBFInterpolateVectorQuat : public FRigVMFunction_MathRBFInterpolateVectorBase
 {
-    TArray<FMathRBFInterpolateVectorQuat_Target> Targets;                             // 0x00C0 (size: 0x10)
-    FQuat Output;                                                                     // 0x00D0 (size: 0x20)
+    TArray<FMathRBFInterpolateVectorQuat_Target> Targets;                             // 0x00B0 (size: 0x10)
+    FQuat Output;                                                                     // 0x00C0 (size: 0x20)
 
-}; // Size: 0xF0
+}; // Size: 0xE0
 
 struct FRigVMFunction_MathRBFInterpolateVectorVector : public FRigVMFunction_MathRBFInterpolateVectorBase
 {
-    TArray<FMathRBFInterpolateVectorVector_Target> Targets;                           // 0x00C0 (size: 0x10)
-    FVector Output;                                                                   // 0x00D0 (size: 0x18)
+    TArray<FMathRBFInterpolateVectorVector_Target> Targets;                           // 0x00B0 (size: 0x10)
+    FVector Output;                                                                   // 0x00C0 (size: 0x18)
 
-}; // Size: 0xF0
+}; // Size: 0xE0
 
 struct FRigVMFunction_MathRBFInterpolateVectorWorkData
 {
-}; // Size: 0x90
+}; // Size: 0x80
 
 struct FRigVMFunction_MathRBFInterpolateVectorXform : public FRigVMFunction_MathRBFInterpolateVectorBase
 {
-    TArray<FMathRBFInterpolateVectorXform_Target> Targets;                            // 0x00C0 (size: 0x10)
-    FTransform Output;                                                                // 0x00D0 (size: 0x60)
+    TArray<FMathRBFInterpolateVectorXform_Target> Targets;                            // 0x00B0 (size: 0x10)
+    FTransform Output;                                                                // 0x00C0 (size: 0x60)
 
-}; // Size: 0x130
+}; // Size: 0x120
+
+struct FRigVMFunction_MathRayBase : public FRigVMFunction_MathBase
+{
+}; // Size: 0x8
+
+struct FRigVMFunction_MathRayGetAt : public FRigVMFunction_MathRayBase
+{
+    FRay Ray;                                                                         // 0x0008 (size: 0x30)
+    float Ratio;                                                                      // 0x0038 (size: 0x4)
+    FVector Result;                                                                   // 0x0040 (size: 0x18)
+
+}; // Size: 0x58
+
+struct FRigVMFunction_MathRayIntersectPlane : public FRigVMFunction_MathRayBase
+{
+    FRay Ray;                                                                         // 0x0008 (size: 0x30)
+    FVector PlanePoint;                                                               // 0x0038 (size: 0x18)
+    FVector PlaneNormal;                                                              // 0x0050 (size: 0x18)
+    FVector Result;                                                                   // 0x0068 (size: 0x18)
+    float Distance;                                                                   // 0x0080 (size: 0x4)
+    float Ratio;                                                                      // 0x0084 (size: 0x4)
+
+}; // Size: 0x88
+
+struct FRigVMFunction_MathRayIntersectRay : public FRigVMFunction_MathRayBase
+{
+    FRay A;                                                                           // 0x0008 (size: 0x30)
+    FRay B;                                                                           // 0x0038 (size: 0x30)
+    FVector Result;                                                                   // 0x0068 (size: 0x18)
+    float Distance;                                                                   // 0x0080 (size: 0x4)
+    float RatioA;                                                                     // 0x0084 (size: 0x4)
+    float RatioB;                                                                     // 0x0088 (size: 0x4)
+
+}; // Size: 0x90
+
+struct FRigVMFunction_MathRayTransform : public FRigVMFunction_MathRayBase
+{
+    FRay Ray;                                                                         // 0x0008 (size: 0x30)
+    FTransform Transform;                                                             // 0x0040 (size: 0x60)
+    FRay Result;                                                                      // 0x00A0 (size: 0x30)
+
+}; // Size: 0xD0
 
 struct FRigVMFunction_MathTransformAccumulateArray : public FRigVMFunction_MathTransformMutableBase
 {
-    TArray<FTransform> Transforms;                                                    // 0x0100 (size: 0x10)
-    ERigVMTransformSpace TargetSpace;                                                 // 0x0110 (size: 0x1)
-    FTransform Root;                                                                  // 0x0120 (size: 0x60)
-    TArray<int32> ParentIndices;                                                      // 0x0180 (size: 0x10)
+    TArray<FTransform> Transforms;                                                    // 0x0010 (size: 0x10)
+    ERigVMTransformSpace TargetSpace;                                                 // 0x0020 (size: 0x1)
+    FTransform Root;                                                                  // 0x0030 (size: 0x60)
+    TArray<int32> ParentIndices;                                                      // 0x0090 (size: 0x10)
 
-}; // Size: 0x190
+}; // Size: 0xA0
 
 struct FRigVMFunction_MathTransformArrayToSRT : public FRigVMFunction_MathTransformBase
 {
@@ -2396,7 +2606,7 @@ struct FRigVMFunction_MathTransformMul : public FRigVMFunction_MathTransformBina
 
 struct FRigVMFunction_MathTransformMutableBase : public FRigVMFunction_MathMutableBase
 {
-}; // Size: 0x100
+}; // Size: 0x10
 
 struct FRigVMFunction_MathTransformRotateVector : public FRigVMFunction_MathTransformBase
 {
@@ -2419,6 +2629,15 @@ struct FRigVMFunction_MathTransformToEulerTransform : public FRigVMFunction_Math
 {
     FTransform Value;                                                                 // 0x0010 (size: 0x60)
     FEulerTransform Result;                                                           // 0x0070 (size: 0x48)
+
+}; // Size: 0xC0
+
+struct FRigVMFunction_MathTransformToVectors : public FRigVMFunction_MathTransformBase
+{
+    FTransform Value;                                                                 // 0x0010 (size: 0x60)
+    FVector Forward;                                                                  // 0x0070 (size: 0x18)
+    FVector Right;                                                                    // 0x0088 (size: 0x18)
+    FVector Up;                                                                       // 0x00A0 (size: 0x18)
 
 }; // Size: 0xC0
 
@@ -2900,11 +3119,11 @@ struct FRigVMFunction_SecondsToFrames : public FRigVMFunction_AnimBase
 
 struct FRigVMFunction_Sequence : public FRigVMStruct
 {
-    FRigVMExecuteContext ExecuteContext;                                              // 0x0010 (size: 0xF0)
-    FRigVMExecuteContext A;                                                           // 0x0100 (size: 0xF0)
-    FRigVMExecuteContext B;                                                           // 0x01F0 (size: 0xF0)
+    FRigVMExecuteContext ExecuteContext;                                              // 0x0010 (size: 0x110)
+    FRigVMExecuteContext A;                                                           // 0x0120 (size: 0x110)
+    FRigVMExecuteContext B;                                                           // 0x0230 (size: 0x110)
 
-}; // Size: 0x2E0
+}; // Size: 0x340
 
 struct FRigVMFunction_SimBase : public FRigVMStruct
 {
@@ -2912,7 +3131,7 @@ struct FRigVMFunction_SimBase : public FRigVMStruct
 
 struct FRigVMFunction_SimBaseMutable : public FRigVMStructMutable
 {
-}; // Size: 0x100
+}; // Size: 0x10
 
 struct FRigVMFunction_StartsWith : public FRigVMFunction_NameBase
 {
@@ -3139,10 +3358,10 @@ struct FRigVMFunction_Timeline : public FRigVMFunction_SimBase
 
 struct FRigVMFunction_UserDefinedEvent : public FRigVMStruct
 {
-    FRigVMExecuteContext ExecuteContext;                                              // 0x0010 (size: 0xF0)
-    FName EventName;                                                                  // 0x0100 (size: 0x8)
+    FRigVMExecutePin ExecutePin;                                                      // 0x0008 (size: 0x8)
+    FName EventName;                                                                  // 0x0010 (size: 0x8)
 
-}; // Size: 0x110
+}; // Size: 0x18
 
 struct FRigVMFunction_VerletIntegrateVector : public FRigVMFunction_SimBase
 {
@@ -3199,70 +3418,182 @@ struct FRigVMFunction_VisualDebugTransformNoSpace : public FRigVMFunction_DebugB
 
 struct FRigVMFunction_VisualDebugVector : public FRigVMFunction_DebugBase
 {
-    FVector Value;                                                                    // 0x0008 (size: 0x18)
-    bool bEnabled;                                                                    // 0x0020 (size: 0x1)
-    ERigUnitVisualDebugPointMode Mode;                                                // 0x0021 (size: 0x1)
-    FLinearColor Color;                                                               // 0x0024 (size: 0x10)
-    float Thickness;                                                                  // 0x0034 (size: 0x4)
-    float Scale;                                                                      // 0x0038 (size: 0x4)
-    FName BoneSpace;                                                                  // 0x003C (size: 0x8)
+    FVector Value;                                                                    // 0x0010 (size: 0x18)
+    bool bEnabled;                                                                    // 0x0028 (size: 0x1)
+    ERigUnitVisualDebugPointMode Mode;                                                // 0x0029 (size: 0x1)
+    FLinearColor Color;                                                               // 0x002C (size: 0x10)
+    float Thickness;                                                                  // 0x003C (size: 0x4)
+    float Scale;                                                                      // 0x0040 (size: 0x4)
+    FName BoneSpace;                                                                  // 0x0044 (size: 0x8)
 
-}; // Size: 0x48
+}; // Size: 0x50
 
 struct FRigVMFunction_VisualDebugVectorNoSpace : public FRigVMFunction_DebugBase
 {
-    FVector Value;                                                                    // 0x0008 (size: 0x18)
-    bool bEnabled;                                                                    // 0x0020 (size: 0x1)
-    ERigUnitVisualDebugPointMode Mode;                                                // 0x0021 (size: 0x1)
-    FLinearColor Color;                                                               // 0x0024 (size: 0x10)
-    float Thickness;                                                                  // 0x0034 (size: 0x4)
-    float Scale;                                                                      // 0x0038 (size: 0x4)
+    FVector Value;                                                                    // 0x0010 (size: 0x18)
+    bool bEnabled;                                                                    // 0x0028 (size: 0x1)
+    ERigUnitVisualDebugPointMode Mode;                                                // 0x0029 (size: 0x1)
+    FLinearColor Color;                                                               // 0x002C (size: 0x10)
+    float Thickness;                                                                  // 0x003C (size: 0x4)
+    float Scale;                                                                      // 0x0040 (size: 0x4)
+
+}; // Size: 0x48
+
+struct FRigVMFunction_VisualLogArrow : public FRigVMFunction_VisualLogObject
+{
+    FVector SegmentStart;                                                             // 0x0040 (size: 0x18)
+    FVector SegmentEnd;                                                               // 0x0058 (size: 0x18)
+    float ArrowHeadSize;                                                              // 0x0070 (size: 0x4)
+
+}; // Size: 0x78
+
+struct FRigVMFunction_VisualLogBase : public FRigVMFunction_DebugBaseMutable
+{
+    FString Text;                                                                     // 0x0018 (size: 0x10)
+    FName Category;                                                                   // 0x0028 (size: 0x8)
+
+}; // Size: 0x30
+
+struct FRigVMFunction_VisualLogBox : public FRigVMFunction_VisualLogWireframeOptional
+{
+    FBox Box;                                                                         // 0x0048 (size: 0x38)
+
+}; // Size: 0x80
+
+struct FRigVMFunction_VisualLogCapsule : public FRigVMFunction_VisualLogWireframeOptional
+{
+    FVector base;                                                                     // 0x0048 (size: 0x18)
+    float HalfHeight;                                                                 // 0x0060 (size: 0x4)
+    float Radius;                                                                     // 0x0064 (size: 0x4)
+    FQuat Rotation;                                                                   // 0x0070 (size: 0x20)
+
+}; // Size: 0x90
+
+struct FRigVMFunction_VisualLogCircle : public FRigVMFunction_VisualLogWireframeOptional
+{
+    FVector Center;                                                                   // 0x0048 (size: 0x18)
+    FVector UpAxis;                                                                   // 0x0060 (size: 0x18)
+    float Radius;                                                                     // 0x0078 (size: 0x4)
+    float Thickness;                                                                  // 0x007C (size: 0x4)
+
+}; // Size: 0x80
+
+struct FRigVMFunction_VisualLogCone : public FRigVMFunction_VisualLogWireframeOptional
+{
+    FVector Origin;                                                                   // 0x0048 (size: 0x18)
+    FVector Direction;                                                                // 0x0060 (size: 0x18)
+    float Length;                                                                     // 0x0078 (size: 0x4)
+    float Angle;                                                                      // 0x007C (size: 0x4)
+
+}; // Size: 0x80
+
+struct FRigVMFunction_VisualLogCylinder : public FRigVMFunction_VisualLogWireframeOptional
+{
+    FVector Start;                                                                    // 0x0048 (size: 0x18)
+    FVector End;                                                                      // 0x0060 (size: 0x18)
+    float Radius;                                                                     // 0x0078 (size: 0x4)
+
+}; // Size: 0x80
+
+struct FRigVMFunction_VisualLogLocation : public FRigVMFunction_VisualLogObject
+{
+    FVector Location;                                                                 // 0x0040 (size: 0x18)
+    float Radius;                                                                     // 0x0058 (size: 0x4)
+
+}; // Size: 0x60
+
+struct FRigVMFunction_VisualLogObject : public FRigVMFunction_VisualLogBase
+{
+    FLinearColor ObjectColor;                                                         // 0x0030 (size: 0x10)
 
 }; // Size: 0x40
+
+struct FRigVMFunction_VisualLogOrientedBox : public FRigVMFunction_VisualLogWireframeOptional
+{
+    FBox Box;                                                                         // 0x0048 (size: 0x38)
+    FTransform Transform;                                                             // 0x0080 (size: 0x60)
+
+}; // Size: 0xE0
+
+struct FRigVMFunction_VisualLogSegment : public FRigVMFunction_VisualLogObject
+{
+    FVector SegmentStart;                                                             // 0x0040 (size: 0x18)
+    FVector SegmentEnd;                                                               // 0x0058 (size: 0x18)
+    float Thickness;                                                                  // 0x0070 (size: 0x4)
+
+}; // Size: 0x78
+
+struct FRigVMFunction_VisualLogSphere : public FRigVMFunction_VisualLogWireframeOptional
+{
+    FVector Center;                                                                   // 0x0048 (size: 0x18)
+    float Radius;                                                                     // 0x0060 (size: 0x4)
+
+}; // Size: 0x68
+
+struct FRigVMFunction_VisualLogText : public FRigVMFunction_VisualLogBase
+{
+}; // Size: 0x30
+
+struct FRigVMFunction_VisualLogWireframeOptional : public FRigVMFunction_VisualLogObject
+{
+    bool bWireframe;                                                                  // 0x0040 (size: 0x1)
+
+}; // Size: 0x48
 
 struct FRigVMGraphFunctionArgument
 {
     FName Name;                                                                       // 0x0000 (size: 0x8)
     FName DisplayName;                                                                // 0x0008 (size: 0x8)
     FName CPPType;                                                                    // 0x0010 (size: 0x8)
-    TSoftObjectPtr<UObject> CPPTypeObject;                                            // 0x0018 (size: 0x28)
+    TSoftObjectPtr<class UObject> CPPTypeObject;                                      // 0x0018 (size: 0x28)
     bool bIsArray;                                                                    // 0x0040 (size: 0x1)
     ERigVMPinDirection Direction;                                                     // 0x0041 (size: 0x1)
     FString DefaultValue;                                                             // 0x0048 (size: 0x10)
     bool bIsConst;                                                                    // 0x0058 (size: 0x1)
-    TMap<class FString, class FText> PathToTooltip;                                   // 0x0060 (size: 0x50)
+    TMap<FString, FText> PathToTooltip;                                               // 0x0060 (size: 0x50)
 
 }; // Size: 0xB0
 
 struct FRigVMGraphFunctionData
 {
-    FRigVMGraphFunctionHeader Header;                                                 // 0x0000 (size: 0x110)
-    FRigVMFunctionCompilationData CompilationData;                                    // 0x0110 (size: 0x228)
-    FString SerializedCollapsedNode;                                                  // 0x0338 (size: 0x10)
+    FRigVMGraphFunctionHeader Header;                                                 // 0x0000 (size: 0x1F8)
+    FRigVMFunctionCompilationData CompilationData;                                    // 0x01F8 (size: 0x238)
+    FString SerializedCollapsedNode;                                                  // 0x0430 (size: 0x10)
+    FRigVMObjectArchive CollapseNodeArchive;                                          // 0x0440 (size: 0x20)
 
-}; // Size: 0x348
+}; // Size: 0x460
 
 struct FRigVMGraphFunctionHeader
 {
-    FRigVMGraphFunctionIdentifier LibraryPointer;                                     // 0x0000 (size: 0x40)
-    FName Name;                                                                       // 0x0040 (size: 0x8)
-    FString NodeTitle;                                                                // 0x0048 (size: 0x10)
-    FLinearColor NodeColor;                                                           // 0x0058 (size: 0x10)
-    FText Tooltip;                                                                    // 0x0068 (size: 0x18)
-    FString Category;                                                                 // 0x0080 (size: 0x10)
-    FString Keywords;                                                                 // 0x0090 (size: 0x10)
-    TArray<FRigVMGraphFunctionArgument> Arguments;                                    // 0x00A0 (size: 0x10)
-    TMap<FRigVMGraphFunctionIdentifier, uint32> Dependencies;                         // 0x00B0 (size: 0x50)
-    TArray<FRigVMExternalVariable> ExternalVariables;                                 // 0x0100 (size: 0x10)
+    FRigVMGraphFunctionIdentifier LibraryPointer;                                     // 0x0000 (size: 0x50)
+    FRigVMVariant Variant;                                                            // 0x0050 (size: 0x20)
+    FName Name;                                                                       // 0x0070 (size: 0x8)
+    FString NodeTitle;                                                                // 0x0078 (size: 0x10)
+    FLinearColor NodeColor;                                                           // 0x0088 (size: 0x10)
+    FText Tooltip;                                                                    // 0x0098 (size: 0x10)
+    FString Description;                                                              // 0x00A8 (size: 0x10)
+    FString Category;                                                                 // 0x00B8 (size: 0x10)
+    FString Keywords;                                                                 // 0x00C8 (size: 0x10)
+    TArray<FRigVMGraphFunctionArgument> Arguments;                                    // 0x00D8 (size: 0x10)
+    TMap<FRigVMGraphFunctionIdentifier, uint32> Dependencies;                         // 0x00E8 (size: 0x50)
+    TArray<FRigVMExternalVariable> ExternalVariables;                                 // 0x0138 (size: 0x10)
+    FRigVMNodeLayout Layout;                                                          // 0x0148 (size: 0xB0)
 
-}; // Size: 0x110
+}; // Size: 0x1F8
+
+struct FRigVMGraphFunctionHeaderArray
+{
+    TArray<FRigVMGraphFunctionHeader> Headers;                                        // 0x0000 (size: 0x10)
+
+}; // Size: 0x10
 
 struct FRigVMGraphFunctionIdentifier
 {
     FSoftObjectPath LibraryNode;                                                      // 0x0000 (size: 0x20)
-    FSoftObjectPath HostObject;                                                       // 0x0020 (size: 0x20)
+    FString LibraryNodePath;                                                          // 0x0020 (size: 0x10)
+    FSoftObjectPath HostObject;                                                       // 0x0030 (size: 0x20)
 
-}; // Size: 0x40
+}; // Size: 0x50
 
 struct FRigVMGraphFunctionStore
 {
@@ -3273,17 +3604,27 @@ struct FRigVMGraphFunctionStore
 
 struct FRigVMInstruction
 {
-    uint64 ByteCodeIndex;                                                             // 0x0000 (size: 0x8)
-    ERigVMOpCode OpCode;                                                              // 0x0008 (size: 0x1)
-    uint8 OperandAlignment;                                                           // 0x0009 (size: 0x1)
+    int32 ByteCodeIndex;                                                              // 0x0000 (size: 0x4)
+    ERigVMOpCode OpCode;                                                              // 0x0004 (size: 0x1)
+    uint8 OperandAlignment;                                                           // 0x0005 (size: 0x1)
 
-}; // Size: 0x10
+}; // Size: 0x8
 
 struct FRigVMInstructionArray
 {
     TArray<FRigVMInstruction> Instructions;                                           // 0x0000 (size: 0x10)
 
 }; // Size: 0x10
+
+struct FRigVMInstructionSetExecuteState
+{
+    TMap<uint32, uint32> SliceHashToNumInstruction;                                   // 0x0000 (size: 0x50)
+
+}; // Size: 0x50
+
+struct FRigVMInstructionVisitInfo
+{
+}; // Size: 0x28
 
 struct FRigVMInvokeEntryOp : public FRigVMBaseOp
 {
@@ -3308,7 +3649,7 @@ struct FRigVMMemoryContainer
     TArray<FRigVMRegister> Registers;                                                 // 0x0008 (size: 0x10)
     TArray<FRigVMRegisterOffset> RegisterOffsets;                                     // 0x0018 (size: 0x10)
     TArray<uint8> Data;                                                               // 0x0028 (size: 0x10)
-    TArray<class UScriptStruct*> ScriptStructs;                                       // 0x0038 (size: 0x10)
+    TArray<UScriptStruct*> ScriptStructs;                                             // 0x0038 (size: 0x10)
     TMap<FName, int32> NameMap;                                                       // 0x0048 (size: 0x50)
     bool bEncounteredErrorDuringLoad;                                                 // 0x0098 (size: 0x1)
 
@@ -3322,6 +3663,10 @@ struct FRigVMMemoryStatistics
 
 }; // Size: 0xC
 
+struct FRigVMMemoryStorageStruct : public FInstancedPropertyBag
+{
+}; // Size: 0x50
+
 struct FRigVMMirrorSettings
 {
     TEnumAsByte<EAxis::Type> MirrorAxis;                                              // 0x0000 (size: 0x1)
@@ -3330,6 +3675,23 @@ struct FRigVMMirrorSettings
     FString ReplaceString;                                                            // 0x0018 (size: 0x10)
 
 }; // Size: 0x28
+
+struct FRigVMNodeLayout
+{
+    TArray<FRigVMPinCategory> Categories;                                             // 0x0000 (size: 0x10)
+    TMap<FString, int32> PinIndexInCategory;                                          // 0x0010 (size: 0x50)
+    TMap<FString, FString> DisplayNames;                                              // 0x0060 (size: 0x50)
+
+}; // Size: 0xB0
+
+struct FRigVMObjectArchive
+{
+    TArray<uint8> Buffer;                                                             // 0x0000 (size: 0x10)
+    int32 UncompressedSize;                                                           // 0x0010 (size: 0x4)
+    int32 CompressedSize;                                                             // 0x0014 (size: 0x4)
+    bool bIsCompressed;                                                               // 0x0018 (size: 0x1)
+
+}; // Size: 0x20
 
 struct FRigVMOperand
 {
@@ -3350,9 +3712,21 @@ struct FRigVMParameter
 
 }; // Size: 0x30
 
+struct FRigVMPinCategory
+{
+    FString Path;                                                                     // 0x0000 (size: 0x10)
+    TArray<FString> Elements;                                                         // 0x0010 (size: 0x10)
+    bool bExpandedByDefault;                                                          // 0x0020 (size: 0x1)
+
+}; // Size: 0x28
+
 struct FRigVMPredicateBranch
 {
-}; // Size: 0x30
+}; // Size: 0x38
+
+struct FRigVMProfilingInfo
+{
+}; // Size: 0x28
 
 struct FRigVMQuaternaryOp : public FRigVMBaseOp
 {
@@ -3391,6 +3765,10 @@ struct FRigVMRegisterOffset
 
 }; // Size: 0x48
 
+struct FRigVMRunInstructionsOp : public FRigVMUnaryOp
+{
+}; // Size: 0x10
+
 struct FRigVMRuntimeSettings
 {
     int32 MaximumArraySize;                                                           // 0x0000 (size: 0x4)
@@ -3400,6 +3778,10 @@ struct FRigVMRuntimeSettings
 struct FRigVMSenaryOp : public FRigVMBaseOp
 {
 }; // Size: 0x26
+
+struct FRigVMSetupTraitsOp : public FRigVMUnaryOp
+{
+}; // Size: 0x8
 
 struct FRigVMSimPoint
 {
@@ -3434,9 +3816,20 @@ struct FRigVMStruct
 
 struct FRigVMStructMutable : public FRigVMStruct
 {
-    FRigVMExecuteContext ExecuteContext;                                              // 0x0010 (size: 0xF0)
+    FRigVMExecutePin ExecutePin;                                                      // 0x0008 (size: 0x8)
 
-}; // Size: 0x100
+}; // Size: 0x10
+
+struct FRigVMTag
+{
+    FName Name;                                                                       // 0x0000 (size: 0x8)
+    FString Label;                                                                    // 0x0008 (size: 0x10)
+    FText Tooltip;                                                                    // 0x0018 (size: 0x10)
+    FLinearColor Color;                                                               // 0x0028 (size: 0x10)
+    bool bShowInUserInterface;                                                        // 0x0038 (size: 0x1)
+    bool bMarksSubjectAsInvalid;                                                      // 0x0039 (size: 0x1)
+
+}; // Size: 0x40
 
 struct FRigVMTemplateArgumentType
 {
@@ -3448,6 +3841,12 @@ struct FRigVMTemplateArgumentType
 struct FRigVMTernaryOp : public FRigVMBaseOp
 {
 }; // Size: 0x14
+
+struct FRigVMTrait : public FRigVMStruct
+{
+    FString Name;                                                                     // 0x0008 (size: 0x10)
+
+}; // Size: 0x18
 
 struct FRigVMUnaryOp : public FRigVMBaseOp
 {
@@ -3470,17 +3869,32 @@ struct FRigVMUserWorkflow
 
 }; // Size: 0x58
 
+struct FRigVMVariant
+{
+    FGuid Guid;                                                                       // 0x0000 (size: 0x10)
+    TArray<FRigVMTag> Tags;                                                           // 0x0010 (size: 0x10)
+
+}; // Size: 0x20
+
+struct FRigVMVariantRef
+{
+    FSoftObjectPath ObjectPath;                                                       // 0x0000 (size: 0x20)
+    FRigVMVariant Variant;                                                            // 0x0020 (size: 0x20)
+
+}; // Size: 0x40
+
 class IRigVMGraphFunctionHost : public IInterface
 {
 }; // Size: 0x28
 
 class UDataAssetLink : public UNameSpacedUserData
 {
-    class UDataAsset* DataAsset;                                                      // 0x0100 (size: 0x8)
+    TSoftObjectPtr<class UDataAsset> DataAsset;                                       // 0x0100 (size: 0x28)
+    class UDataAsset* DataAssetCached;                                                // 0x0128 (size: 0x8)
 
-    void SetDataAsset(class UDataAsset* InDataAsset);
-    class UDataAsset* GetDataAsset();
-}; // Size: 0x108
+    void SetDataAsset(TSoftObjectPtr<class UDataAsset> InDataAsset);
+    TSoftObjectPtr<class UDataAsset> GetDataAsset();
+}; // Size: 0x130
 
 class UDefault__RigVMBlueprintGeneratedClass
 {
@@ -3498,15 +3912,14 @@ class UNameSpacedUserData : public UAssetUserData
 
 class URigVM : public UObject
 {
-    class URigVMMemoryStorage* WorkMemoryStorageObject;                               // 0x0028 (size: 0x8)
-    class URigVMMemoryStorage* LiteralMemoryStorageObject;                            // 0x0030 (size: 0x8)
-    class URigVMMemoryStorage* DebugMemoryStorageObject;                              // 0x0038 (size: 0x8)
-    FRigVMByteCode ByteCodeStorage;                                                   // 0x0060 (size: 0xA0)
-    FRigVMInstructionArray Instructions;                                              // 0x0108 (size: 0x10)
-    TArray<FName> FunctionNamesStorage;                                               // 0x0120 (size: 0x10)
-    TArray<FRigVMParameter> Parameters;                                               // 0x0168 (size: 0x10)
-    TMap<FName, int32> ParametersNameMap;                                             // 0x0178 (size: 0x50)
-    class URigVM* DeferredVMToCopy;                                                   // 0x0260 (size: 0x8)
+    FRigVMMemoryStorageStruct LiteralMemoryStorage;                                   // 0x0028 (size: 0x50)
+    FRigVMMemoryStorageStruct DefaultWorkMemoryStorage;                               // 0x0078 (size: 0x50)
+    FRigVMMemoryStorageStruct DefaultDebugMemoryStorage;                              // 0x00C8 (size: 0x50)
+    FRigVMByteCode ByteCodeStorage;                                                   // 0x0138 (size: 0xB0)
+    FRigVMInstructionArray Instructions;                                              // 0x01F0 (size: 0x10)
+    TArray<FName> FunctionNamesStorage;                                               // 0x0200 (size: 0x10)
+    TArray<FRigVMParameter> Parameters;                                               // 0x0248 (size: 0x10)
+    uint32 CachedVMHash;                                                              // 0x0330 (size: 0x4)
 
     void SetParameterValueVector2D(const FName& InParameterName, const FVector2D& InValue, int32 InArrayIndex);
     void SetParameterValueVector(const FName& InParameterName, const FVector& InValue, int32 InArrayIndex);
@@ -3532,13 +3945,13 @@ class URigVM : public UObject
     bool GetParameterValueBool(const FName& InParameterName, int32 InArrayIndex);
     bool Execute(FRigVMExtendedExecuteContext& Context, const FName& InEntryName);
     int32 AddRigVMFunction(class UScriptStruct* InRigVMStruct, const FName& InMethodName);
-}; // Size: 0x2A8
+}; // Size: 0x388
 
 class URigVMBlueprintGeneratedClass : public UBlueprintGeneratedClass
 {
-    FRigVMGraphFunctionStore GraphFunctionStore;                                      // 0x0370 (size: 0x20)
+    FRigVMGraphFunctionStore GraphFunctionStore;                                      // 0x0368 (size: 0x20)
 
-}; // Size: 0x390
+}; // Size: 0x388
 
 class URigVMEditorSettings : public UDeveloperSettings
 {
@@ -3548,10 +3961,12 @@ class URigVMHost : public UObject
 {
     FRigVMRuntimeSettings VMRuntimeSettings;                                          // 0x0030 (size: 0x18)
     class URigVM* VM;                                                                 // 0x0058 (size: 0x8)
-    FRigVMExtendedExecuteContext ExtendedExecuteContext;                              // 0x0060 (size: 0x1B8)
-    FRigVMDrawContainer DrawContainer;                                                // 0x0218 (size: 0x18)
-    TArray<FName> EventQueue;                                                         // 0x0248 (size: 0x10)
-    TArray<class UAssetUserData*> AssetUserData;                                      // 0x02E8 (size: 0x10)
+    TMap<FString, FSoftObjectPath> UserDefinedStructGuidToPathName;                   // 0x0060 (size: 0x50)
+    TMap<FString, FSoftObjectPath> UserDefinedEnumToPathName;                         // 0x00B0 (size: 0x50)
+    TSet<UObject*> UserDefinedTypesInUse;                                             // 0x0100 (size: 0x50)
+    FRigVMDrawContainer DrawContainer;                                                // 0x0158 (size: 0x18)
+    TArray<FName> EventQueue;                                                         // 0x0188 (size: 0x10)
+    TArray<UAssetUserData*> AssetUserData;                                            // 0x0200 (size: 0x10)
 
     bool SupportsEvent(const FName& InEventName);
     bool SetVariableFromString(const FName& InVariableName, FString InValue);
@@ -3562,6 +3977,7 @@ class URigVMHost : public UObject
     void RequestRunOnceEvent(const FName& InEventName, int32 InEventIndex);
     void RequestInit();
     bool RemoveRunOnceEvent(const FName& InEventName);
+    bool IsInitRequired();
     class URigVM* GetVM();
     FName GetVariableType(const FName& InVariableName);
     FString GetVariableAsString(const FName& InVariableName);
@@ -3571,11 +3987,11 @@ class URigVMHost : public UObject
     float GetDeltaTime();
     float GetCurrentFramesPerSecond();
     float GetAbsoluteTime();
-    TArray<class URigVMHost*> FindRigVMHosts(class UObject* Outer, TSubclassOf<class URigVMHost> OptionalClass);
+    TArray<URigVMHost*> FindRigVMHosts(class UObject* Outer, TSubclassOf<class URigVMHost> OptionalClass);
     bool ExecuteEvent(const FName& InEventName);
     bool Execute(const FName& InEventName);
     bool CanExecute();
-}; // Size: 0x338
+}; // Size: 0x278
 
 class URigVMMemoryStorage : public UObject
 {
@@ -3587,7 +4003,14 @@ class URigVMMemoryStorageGeneratorClass : public UClass
 
 class URigVMNativized : public URigVM
 {
-}; // Size: 0x2D0
+}; // Size: 0x3B0
+
+class URigVMProjectSettings : public UDeveloperSettings
+{
+    TArray<FRigVMTag> VariantTags;                                                    // 0x0038 (size: 0x10)
+
+    FRigVMTag GetTag(FName InTagName);
+}; // Size: 0x48
 
 class URigVMUserWorkflowOptions : public UObject
 {

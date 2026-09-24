@@ -41,6 +41,13 @@ enum class EAnimFunctionCallSite {
     EAnimFunctionCallSite_MAX = 12,
 };
 
+enum class EBlendListChildUpdateMode {
+    Default = 0,
+    ResetChildOnActivate = 1,
+    AlwaysTickChildren = 2,
+    EBlendListChildUpdateMode_MAX = 3,
+};
+
 enum class EBlendListTransitionType {
     StandardBlend = 0,
     Inertialization = 1,

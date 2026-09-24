@@ -1,8 +1,6 @@
 #ifndef UE4SS_SDK_AssetTags_HPP
 #define UE4SS_SDK_AssetTags_HPP
 
-#include "AssetTags_enums.hpp"
-
 class UAssetTagsSubsystem : public UEngineSubsystem
 {
 

@@ -3,6 +3,6 @@
 
 class ABP_MasterPlayerController_C : public APlayerController
 {
-}; // Size: 0x858
+}; // Size: 0x738
 
 #endif

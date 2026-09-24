@@ -30,14 +30,14 @@ struct FMovieSceneGeometryCacheSectionTemplateParameters : public FMovieSceneGeo
 
 class UMovieSceneGeometryCacheSection : public UMovieSceneSection
 {
-    FMovieSceneGeometryCacheParams Params;                                            // 0x00F0 (size: 0x48)
+    FMovieSceneGeometryCacheParams Params;                                            // 0x0108 (size: 0x48)
 
-}; // Size: 0x138
+}; // Size: 0x150
 
 class UMovieSceneGeometryCacheTrack : public UMovieSceneNameableTrack
 {
-    TArray<class UMovieSceneSection*> AnimationSections;                              // 0x00A0 (size: 0x10)
+    TArray<UMovieSceneSection*> AnimationSections;                                    // 0x0118 (size: 0x10)
 
-}; // Size: 0xB0
+}; // Size: 0x128
 
 #endif

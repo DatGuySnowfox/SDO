@@ -3,6 +3,6 @@
 
 class ABP_MachetePickup_C : public ABP_MeleePickup_C
 {
-}; // Size: 0x328
+}; // Size: 0x340
 
 #endif

@@ -3,8 +3,8 @@
 
 class UBP_ItemSnapLoading_C : public UUserWidget
 {
-    class UCircularThrobber* CircularThrobber_41;                                     // 0x02C0 (size: 0x8)
+    class UCircularThrobber* CircularThrobber_41;                                     // 0x0340 (size: 0x8)
 
-}; // Size: 0x2C8
+}; // Size: 0x348
 
 #endif

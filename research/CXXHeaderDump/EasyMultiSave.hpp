@@ -3,6 +3,12 @@
 
 #include "EasyMultiSave_enums.hpp"
 
+struct FActorInitContext
+{
+    class AActor* Actor;                                                              // 0x0000 (size: 0x8)
+
+}; // Size: 0x10
+
 struct FActorSaveData
 {
 }; // Size: 0xB0
@@ -30,6 +36,12 @@ struct FLevelScriptSaveData
 struct FLevelStackArchive
 {
 }; // Size: 0x50
+
+struct FLoaderInitData
+{
+    TMap<FName, TWeakObjectPtr<class AActor>> InActorMap;                             // 0x0018 (size: 0x50)
+
+}; // Size: 0x68
 
 struct FMultiLevelStreamingData
 {
@@ -63,18 +75,15 @@ struct FSaveSlotInfo
     FString Name;                                                                     // 0x0000 (size: 0x10)
     FDateTime Timestamp;                                                              // 0x0010 (size: 0x8)
     FName Level;                                                                      // 0x0018 (size: 0x8)
-    TArray<FString> Players;                                                          // 0x0020 (size: 0x10)
+    TArray<FName> Levels;                                                             // 0x0020 (size: 0x10)
+    TArray<FString> Players;                                                          // 0x0030 (size: 0x10)
 
-}; // Size: 0x30
-
-struct FSaveVersionInfo
-{
-}; // Size: 0x20
+}; // Size: 0x40
 
 class IEMSActorSaveInterface : public IInterface
 {
 
-    void ComponentsToSave(TArray<class UActorComponent*>& Components);
+    void ComponentsToSave(TArray<UActorComponent*>& Components);
     void ActorSaved();
     void ActorPreSave();
     void ActorPreLoad();
@@ -84,7 +93,9 @@ class IEMSActorSaveInterface : public IInterface
 class IEMSCompSaveInterface : public IInterface
 {
 
+    void ComponentSaved();
     void ComponentPreSave();
+    void ComponentPreLoad();
     void ComponentLoaded();
 }; // Size: 0x28
 
@@ -94,10 +105,12 @@ class UEMSAsyncCheck : public UBlueprintAsyncActionBase
     void CheckCompletedPin();
     FEMSAsyncCheckOnFailed OnFailed;                                                  // 0x0040 (size: 0x10)
     void CheckFailedPin();
-    class UEMSObject* EMS;                                                            // 0x0050 (size: 0x8)
+    FEMSAsyncCheckOnVersionMismatch OnVersionMismatch;                                // 0x0050 (size: 0x10)
+    void CheckVersionMismatchPin();
+    class UEMSObject* EMS;                                                            // 0x0060 (size: 0x8)
 
-    class UEMSAsyncCheck* CheckSaveFiles(class UObject* WorldContextObject, ESaveFileCheckType CheckType, FString CustomSaveName, bool bCompareGameVersion);
-}; // Size: 0x78
+    class UEMSAsyncCheck* CheckSaveFiles(class UObject* WorldContextObject, ESaveFileCheckType CheckType, FString CustomSaveName, bool bComplexCheck);
+}; // Size: 0x88
 
 class UEMSAsyncLoadGame : public UBlueprintAsyncActionBase
 {
@@ -105,12 +118,11 @@ class UEMSAsyncLoadGame : public UBlueprintAsyncActionBase
     void AsyncLoadOutputPin();
     FEMSAsyncLoadGameOnFailed OnFailed;                                               // 0x0040 (size: 0x10)
     void AsyncLoadFailedPin();
-    class UEMSObject* EMS;                                                            // 0x0058 (size: 0x8)
+    class UEMSObject* EMS;                                                            // 0x0068 (size: 0x8)
 
-    void FinishTaskThreadSafe(const TWeakObjectPtr<class UEMSAsyncLoadGame> InTask);
     void AutoLoadLevelActors(class UEMSObject* EMSObject);
     class UEMSAsyncLoadGame* AsyncLoadActors(class UObject* WorldContextObject, int32 Data, bool bFullReload);
-}; // Size: 0x88
+}; // Size: 0x80
 
 class UEMSAsyncSaveGame : public UBlueprintAsyncActionBase
 {
@@ -122,18 +134,17 @@ class UEMSAsyncSaveGame : public UBlueprintAsyncActionBase
 
     void AutoSaveLevelActors(class UEMSObject* EMSObject);
     class UEMSAsyncSaveGame* AsyncSaveActors(class UObject* WorldContextObject, int32 Data);
-}; // Size: 0x68
+}; // Size: 0x70
 
 class UEMSAsyncStream : public UBlueprintAsyncActionBase
 {
     class ULevel* StreamingLevel;                                                     // 0x0030 (size: 0x8)
-    class UEMSObject* EMS;                                                            // 0x0040 (size: 0x8)
-    TArray<class AActor*> StreamActors;                                               // 0x0048 (size: 0x10)
-    TMap<class FName, class TWeakObjectPtr<AActor>> StreamActorsMap;                  // 0x0058 (size: 0x50)
+    class UEMSObject* EMS;                                                            // 0x0050 (size: 0x8)
+    TMap<FName, TWeakObjectPtr<class AActor>> StreamActorsMap;                        // 0x0058 (size: 0x50)
     FMultiLevelStreamingData PrunedData;                                              // 0x00A8 (size: 0x70)
 
     bool InitStreamingLoadTask(class UEMSObject* EMSObject, class ULevel* InLevel);
-}; // Size: 0x130
+}; // Size: 0x120
 
 class UEMSAsyncWait : public UBlueprintAsyncActionBase
 {
@@ -154,70 +165,86 @@ class UEMSCustomSaveGame : public USaveGame
 class UEMSFunctionLibrary : public UBlueprintFunctionLibrary
 {
 
-    void SetCurrentSaveUserName(class UObject* WorldContextObject, FString username);
+    void SetCurrentSaveUserName(class UObject* WorldContextObject, FString UserName);
     void SetCurrentSaveGameName(class UObject* WorldContextObject, FString SaveGameName);
     void SetActorSaveProperties(class UObject* WorldContextObject, bool bSkipSave, bool bPersistent, bool bSkipTransform, ELoadedStateMod LoadedState);
-    bool SaveRawObject(class AActor* WorldContextActor, FRawObjectSaveData Data);
+    bool SaveRawObject(class UObject* WorldContextObject, FRawObjectSaveData Data);
     bool SavePlayerActorsCustom(class AController* Controller, FString Filename);
     bool SaveCustom(class UObject* WorldContextObject, class UEMSCustomSaveGame* SaveGame);
-    class UObject* LoadRawObject(class AActor* WorldContextActor, FRawObjectSaveData Data);
+    void ResetCustomSave(class UObject* WorldContextObject, class UEMSCustomSaveGame* SaveGame, EResetCustomSaveType Type);
+    class UObject* LoadRawObject(class UObject* WorldContextObject, FRawObjectSaveData Data);
     bool LoadPlayerActorsCustom(class AController* Controller, FString Filename);
     bool IsWorldPartition(class UObject* WorldContextObject);
     bool IsSavingOrLoading(class UObject* WorldContextObject);
+    bool IsLoadedState(class AActor* Actor);
     bool IsLevelStreamingActive(class UObject* WorldContextObject);
     class UTexture2D* ImportSaveThumbnail(class UObject* WorldContextObject, FString SaveGameName);
     TArray<FString> GetSortedSaveSlots(class UObject* WorldContextObject);
     class UEMSInfoSaveGame* GetSlotInfoSaveGame(class UObject* WorldContextObject, FString& SaveGameName);
     class UEMSInfoSaveGame* GetNamedSlotInfo(class UObject* WorldContextObject, FString SaveGameName);
     class UEMSCustomSaveGame* GetCustomSave(class UObject* WorldContextObject, TSubclassOf<class UEMSCustomSaveGame> SaveGameClass, FString SaveSlot, FString Filename);
+    FString GetCurrentSaveUser(class UObject* WorldContextObject);
+    FString GetBackupName(class UObject* WorldContextObject, FString BaseName);
     TArray<FString> GetAllSaveUsers(class UObject* WorldContextObject);
     void ExportSaveThumbnail(class UObject* WorldContextObject, class UTextureRenderTarget2D* TextureRenderTarget, FString SaveGameName);
     bool DoesSaveSlotExist(class UObject* WorldContextObject, FString SaveGameName, bool bComplete);
-    void DeleteSaveUser(class UObject* WorldContextObject, FString username);
+    bool DoesCustomSaveFileExist(class UObject* WorldContextObject, FString SaveSlot, FString Filename);
+    void DeleteSaveUser(class UObject* WorldContextObject, FString UserName);
     void DeleteCustomSave(class UObject* WorldContextObject, class UEMSCustomSaveGame* SaveGame);
     bool DeleteCustomPlayerFile(class UObject* WorldContextObject, FString Filename);
-    void DeleteAllSaveDataForSlot(class UObject* WorldContextObject, FString SaveGameName);
+    void DeleteAllSaveDataForSlot(class UObject* WorldContextObject, FString SaveGameName, EDeleteSlotType Data);
     void ClearWorldPartition(class UObject* WorldContextObject);
     void ClearMultiLevelSave(class UObject* WorldContextObject);
 }; // Size: 0x28
 
 class UEMSInfoSaveGame : public USaveGame
 {
-    FSaveSlotInfo SlotInfo;                                                           // 0x0028 (size: 0x30)
+    FSaveSlotInfo SlotInfo;                                                           // 0x0028 (size: 0x40)
 
-}; // Size: 0x58
+}; // Size: 0x68
 
-class UEMSObject : public UGameInstanceSubsystem
+class UEMSObject : public UEMSObjectBase
 {
-    FString CurrentSaveGameName;                                                      // 0x0030 (size: 0x10)
-    FString CurrentSaveUserName;                                                      // 0x0040 (size: 0x10)
-    FEMSObjectOnPlayerLoaded OnPlayerLoaded;                                          // 0x0050 (size: 0x10)
+    FEMSObjectOnPlayerLoaded OnPlayerLoaded;                                          // 0x0148 (size: 0x10)
     void EmsLoadPlayerComplete(const class APlayerController* LoadedPlayer);
-    FEMSObjectOnLevelLoaded OnLevelLoaded;                                            // 0x0060 (size: 0x10)
-    void EmsLoadLevelComplete(const TArray<TSoftObjectPtr<AActor>>& LoadedActors);
-    FEMSObjectOnPartitionLoaded OnPartitionLoaded;                                    // 0x0070 (size: 0x10)
-    void EmsLoadPartitionComplete(const TArray<TSoftObjectPtr<AActor>>& LoadedActors);
-    TArray<TWeakObjectPtr<AActor>> ActorList;                                         // 0x0138 (size: 0x10)
-    TMap<class FName, class TWeakObjectPtr<AActor>> ActorMap;                         // 0x0148 (size: 0x50)
-    TArray<FLevelArchive> LevelArchiveList;                                           // 0x0198 (size: 0x10)
-    FMultiLevelStreamingData MultiLevelStreamData;                                    // 0x01A8 (size: 0x70)
-    FPlayerStackArchive PlayerStackData;                                              // 0x0218 (size: 0x100)
-    TArray<FActorSaveData> SavedActors;                                               // 0x0318 (size: 0x10)
-    TArray<FActorSaveData> SavedActorsPruned;                                         // 0x0328 (size: 0x10)
-    TArray<FLevelScriptSaveData> SavedScripts;                                        // 0x0338 (size: 0x10)
-    FGameObjectSaveData SavedGameMode;                                                // 0x0348 (size: 0x20)
-    FGameObjectSaveData SavedGameState;                                               // 0x0368 (size: 0x20)
-    FControllerSaveData SavedController;                                              // 0x0388 (size: 0x38)
-    FPawnSaveData SavedPawn;                                                          // 0x03C0 (size: 0x50)
-    FGameObjectSaveData SavedPlayerState;                                             // 0x0410 (size: 0x20)
-    TMap<class FString, class UEMSInfoSaveGame*> CachedSaveSlots;                     // 0x0430 (size: 0x50)
-    TMap<class FString, class UEMSCustomSaveGame*> CachedCustomSaves;                 // 0x0480 (size: 0x50)
-    TArray<FActorSaveData> WorldPartitionActors;                                      // 0x04D0 (size: 0x10)
-    TArray<FActorSaveData> DestroyedActors;                                           // 0x04E0 (size: 0x10)
-    TMap<class TWeakObjectPtr<AActor>, class FGameObjectSaveData> RawObjectData;      // 0x04F0 (size: 0x50)
-    TArray<TSoftObjectPtr<AActor>> RealLoadedActors;                                  // 0x0540 (size: 0x10)
+    FEMSObjectOnLevelLoaded OnLevelLoaded;                                            // 0x0158 (size: 0x10)
+    void EmsLoadLevelComplete(const TArray<TSoftObjectPtr<class AActor>>& LoadedActors);
+    FEMSObjectOnPartitionLoaded OnPartitionLoaded;                                    // 0x0168 (size: 0x10)
+    void EmsLoadLevelComplete(const TArray<TSoftObjectPtr<class AActor>>& LoadedActors);
+    TSet<TWeakObjectPtr<class AActor>> ActorList;                                     // 0x01E8 (size: 0x50)
+    TMap<FName, TWeakObjectPtr<class AActor>> ActorMap;                               // 0x0238 (size: 0x50)
+    TArray<FLevelArchive> LevelArchiveList;                                           // 0x0288 (size: 0x10)
+    FMultiLevelStreamingData MultiLevelStreamData;                                    // 0x0298 (size: 0x70)
+    TArray<FActorSaveData> SavedActors;                                               // 0x0308 (size: 0x10)
+    TArray<FActorSaveData> SavedActorsPruned;                                         // 0x0318 (size: 0x10)
+    TArray<FLevelScriptSaveData> SavedScripts;                                        // 0x0328 (size: 0x10)
+    FGameObjectSaveData SavedGameMode;                                                // 0x0338 (size: 0x20)
+    FGameObjectSaveData SavedGameState;                                               // 0x0358 (size: 0x20)
+    TSet<FActorSaveData> WorldPartitionActors;                                        // 0x0378 (size: 0x50)
+    TSet<FActorSaveData> DestroyedActors;                                             // 0x03C8 (size: 0x50)
+    TArray<TSoftObjectPtr<class AActor>> RealLoadedActors;                            // 0x0418 (size: 0x10)
+    FPlayerStackArchive PlayerStackData;                                              // 0x0478 (size: 0x100)
+    FPlayerArchive SavedPlayer;                                                       // 0x0578 (size: 0xB0)
 
-}; // Size: 0x550
+}; // Size: 0x628
+
+class UEMSObjectAdv : public UEMSObjectBase
+{
+
+    bool SaveObjectCollection(const TArray<FRawObjectSaveData>& Objects, bool bUseSlot, FString Filename);
+    bool LoadObjectCollection(const TArray<FRawObjectSaveData>& Objects, bool bUseSlot, FString Filename);
+}; // Size: 0x148
+
+class UEMSObjectBase : public UGameInstanceSubsystem
+{
+    FString CurrentSaveGameName;                                                      // 0x0070 (size: 0x10)
+    FString CurrentSaveUserName;                                                      // 0x0080 (size: 0x10)
+    double LastSlotSaveTime;                                                          // 0x0090 (size: 0x8)
+    TMap<FString, UEMSInfoSaveGame*> CachedSaveSlots;                                 // 0x0098 (size: 0x50)
+    TMap<FString, UEMSCustomSaveGame*> CachedCustomSaves;                             // 0x00E8 (size: 0x50)
+    TArray<FName> MultiSaveLevels;                                                    // 0x0138 (size: 0x10)
+
+}; // Size: 0x148
 
 class UEMSPluginSettings : public UObject
 {
@@ -242,12 +269,10 @@ class UEMSPluginSettings : public UObject
     EThumbnailImageFormat ThumbnailFormat;                                            // 0x0078 (size: 0x1)
     uint32 SaveGameVersion;                                                           // 0x007C (size: 0x4)
     EOldPackageEngine MigratedSaveEngineVersion;                                      // 0x0080 (size: 0x1)
-    bool bMigratedSaveActorVersionCheck;                                              // 0x0081 (size: 0x1)
-    TMap<class FString, class FSoftClassPath> RuntimeClasses;                         // 0x0088 (size: 0x50)
-    float WorldPartitionInitPollingRate;                                              // 0x00D8 (size: 0x4)
-    bool bPersistentPlayer;                                                           // 0x00DC (size: 0x1)
-    bool bPersistentGameMode;                                                         // 0x00DD (size: 0x1)
+    TMap<FString, FSoftClassPath> RuntimeClasses;                                     // 0x0088 (size: 0x50)
+    TMap<FString, FString> LevelRedirects;                                            // 0x00D8 (size: 0x50)
+    float WorldPartitionInitPollingRate;                                              // 0x0128 (size: 0x4)
 
-}; // Size: 0xE0
+}; // Size: 0x220
 
 #endif

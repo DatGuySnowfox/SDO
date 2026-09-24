@@ -21,7 +21,7 @@ struct FSessionServiceLogUnsubscribe
 
 struct FSessionServicePing
 {
-    FString username;                                                                 // 0x0000 (size: 0x10)
+    FString UserName;                                                                 // 0x0000 (size: 0x10)
 
 }; // Size: 0x10
 

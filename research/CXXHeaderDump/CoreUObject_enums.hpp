@@ -1,6 +1,9 @@
 enum Default__Enum {
 };
 
+enum Default__VerseEnum {
+};
+
 enum class EAppMsgCategory {
     Warning = 0,
     Error = 1,
@@ -68,7 +71,14 @@ namespace EAxisList {
         All = 15,
         ZRotation = 6,
         Rotate2D = 8,
-        EAxisList_MAX = 16,
+        Left = 16,
+        Up = 32,
+        Forward = 64,
+        LU = 48,
+        LF = 80,
+        UF = 96,
+        LeftUpForward = 112,
+        EAxisList_MAX = 113,
     };
 }
 
@@ -79,12 +89,42 @@ enum class EDataValidationResult {
     EDataValidationResult_MAX = 3,
 };
 
+enum class EDataValidationUsecase {
+    None = 0,
+    Manual = 1,
+    Commandlet = 2,
+    Save = 3,
+    PreSubmit = 4,
+    Script = 5,
+    EDataValidationUsecase_MAX = 6,
+};
+
+enum class EFallbackEnum {
+    EFallbackEnum_MAX = 1,
+};
+
+enum class EInputDeviceAnalogStickMask {
+    None = 0,
+    Left = 1,
+    Right = 2,
+    EInputDeviceAnalogStickMask_MAX = 3,
+};
+
 enum class EInputDeviceConnectionState {
     Invalid = 0,
     Unknown = 1,
     Disconnected = 2,
     Connected = 3,
     EInputDeviceConnectionState_MAX = 4,
+};
+
+enum class EInputDeviceMappingPolicy {
+    Invalid = -1,
+    UseManagedPlatformLogin = 0,
+    PrimaryUserSharesKeyboardAndFirstGamepad = 1,
+    CreateUniquePlatformUserForEachDevice = 2,
+    MapAllDevicesToPrimaryUser = 3,
+    EInputDeviceMappingPolicy_MAX = 4,
 };
 
 enum class EInputDeviceTriggerMask {
@@ -159,9 +199,29 @@ namespace EMouseCursor {
         GrabHandClosed = 11,
         SlashedCircle = 12,
         EyeDropper = 13,
-        EMouseCursor_MAX = 14,
+        Custom = 14,
+        EMouseCursor_MAX = 15,
     };
 }
+
+enum class EOverriddenPropertyOperation {
+    None = 0,
+    Modified = 1,
+    Replace = 2,
+    Add = 3,
+    Remove = 4,
+    SubObjectsShadowing = 5,
+    EOverriddenPropertyOperation_MAX = 6,
+};
+
+enum class EOverriddenState {
+    NoOverrides = 0,
+    HasOverrides = 1,
+    AllOverridden = 2,
+    SubObjectsHasOverrides = 3,
+    Added = 4,
+    EOverriddenState_MAX = 5,
+};
 
 enum EPixelFormat {
     PF_Unknown = 0,
@@ -256,7 +316,8 @@ enum EPixelFormat {
     PF_ASTC_8x8_NORM_RG = 89,
     PF_ASTC_10x10_NORM_RG = 90,
     PF_ASTC_12x12_NORM_RG = 91,
-    PF_MAX = 92,
+    PF_R16G16_SINT = 92,
+    PF_MAX = 94,
 };
 
 enum class EPropertyAccessChangeNotifyMode {
@@ -264,6 +325,63 @@ enum class EPropertyAccessChangeNotifyMode {
     Never = 1,
     Always = 2,
     EPropertyAccessChangeNotifyMode_MAX = 3,
+};
+
+enum class EPropertyBagAlterationResult {
+    Success = 0,
+    NoOperation = 0,
+    InternalError = 1,
+    PropertyNameEmpty = 2,
+    PropertyNameInvalidCharacters = 3,
+    SourcePropertyNotFound = 4,
+    TargetPropertyNotFound = 5,
+    TargetPropertyAlreadyExists = 6,
+    EPropertyBagAlterationResult_MAX = 7,
+};
+
+enum class EPropertyBagContainerType {
+    None = 0,
+    Array = 1,
+    Set = 2,
+    Count = 3,
+    EPropertyBagContainerType_MAX = 4,
+};
+
+enum class EPropertyBagMissingEnum {
+    Missing = 0,
+    EPropertyBagMissingEnum_MAX = 1,
+};
+
+enum class EPropertyBagPropertyType {
+    None = 0,
+    Bool = 1,
+    Byte = 2,
+    Int32 = 3,
+    Int64 = 4,
+    Float = 5,
+    Double = 6,
+    Name = 7,
+    String = 8,
+    Text = 9,
+    Enum = 10,
+    Struct = 11,
+    Object = 12,
+    SoftObject = 13,
+    Class = 14,
+    SoftClass = 15,
+    UInt32 = 16,
+    UInt64 = 17,
+    Count = 18,
+    EPropertyBagPropertyType_MAX = 19,
+};
+
+enum class EPropertyBagResult {
+    Success = 0,
+    TypeMismatch = 1,
+    OutOfBounds = 2,
+    PropertyNotFound = 3,
+    DuplicatedValue = 4,
+    EPropertyBagResult_MAX = 5,
 };
 
 namespace ERangeBoundTypes {
@@ -308,44 +426,125 @@ enum class EUnit {
     MetersPerSecond = 13,
     KilometersPerHour = 14,
     MilesPerHour = 15,
-    Celsius = 16,
-    Farenheit = 17,
-    Kelvin = 18,
-    Micrograms = 19,
-    Milligrams = 20,
-    Grams = 21,
-    Kilograms = 22,
-    MetricTons = 23,
-    Ounces = 24,
-    Pounds = 25,
-    Stones = 26,
-    Newtons = 27,
-    PoundsForce = 28,
-    KilogramsForce = 29,
-    KilogramCentimetersPerSecondSquared = 30,
-    NewtonMeters = 31,
-    KilogramCentimetersSquaredPerSecondSquared = 32,
-    Hertz = 33,
-    Kilohertz = 34,
-    Megahertz = 35,
-    Gigahertz = 36,
-    RevolutionsPerMinute = 37,
-    Bytes = 38,
-    Kilobytes = 39,
-    Megabytes = 40,
-    Gigabytes = 41,
-    Terabytes = 42,
-    Lumens = 43,
-    Milliseconds = 50,
-    Seconds = 51,
-    Minutes = 52,
-    Hours = 53,
-    Days = 54,
-    Months = 55,
-    Years = 56,
-    Multiplier = 59,
-    Percentage = 58,
-    Unspecified = 64,
-    EUnit_MAX = 65,
+    DegreesPerSecond = 16,
+    RadiansPerSecond = 17,
+    CentimetersPerSecondSquared = 18,
+    MetersPerSecondSquared = 19,
+    Celsius = 20,
+    Farenheit = 21,
+    Kelvin = 22,
+    Micrograms = 23,
+    Milligrams = 24,
+    Grams = 25,
+    Kilograms = 26,
+    MetricTons = 27,
+    Ounces = 28,
+    Pounds = 29,
+    Stones = 30,
+    GramsPerCubicCentimeter = 31,
+    GramsPerCubicMeter = 32,
+    KilogramsPerCubicCentimeter = 33,
+    KilogramsPerCubicMeter = 34,
+    Newtons = 35,
+    PoundsForce = 36,
+    KilogramsForce = 37,
+    KilogramCentimetersPerSecondSquared = 38,
+    NewtonMeters = 39,
+    KilogramCentimetersSquaredPerSecondSquared = 40,
+    NewtonSeconds = 41,
+    KilogramCentimeters = 42,
+    KilogramMeters = 43,
+    Hertz = 44,
+    Kilohertz = 45,
+    Megahertz = 46,
+    Gigahertz = 47,
+    RevolutionsPerMinute = 48,
+    Bytes = 49,
+    Kilobytes = 50,
+    Megabytes = 51,
+    Gigabytes = 52,
+    Terabytes = 53,
+    Lumens = 54,
+    Candela = 55,
+    Lux = 56,
+    CandelaPerMeter2 = 57,
+    ExposureValue = 59,
+    Nanoseconds = 60,
+    Microseconds = 61,
+    Milliseconds = 62,
+    Seconds = 63,
+    Minutes = 64,
+    Hours = 65,
+    Days = 66,
+    Months = 67,
+    Years = 68,
+    PixelsPerInch = 69,
+    Percentage = 70,
+    Multiplier = 71,
+    Pascals = 72,
+    KiloPascals = 73,
+    MegaPascals = 74,
+    GigaPascals = 75,
+    Unspecified = 76,
+    EUnit_MAX = 77,
+};
+
+enum EUserDefinedStructureStatus {
+    UDSS_UpToDate = 0,
+    UDSS_Dirty = 1,
+    UDSS_Error = 2,
+    UDSS_Duplicate = 3,
+    UDSS_MAX = 4,
+};
+
+enum class EVerseEffectSet {
+    None = 0,
+    Suspends = 1,
+    Decides = 2,
+    Diverges = 4,
+    Reads = 8,
+    Writes = 16,
+    Allocates = 32,
+    NoRollback = 64,
+    EVerseEffectSet_MAX = 128,
+};
+
+enum class EVerseEnumFlags {
+    None = 0,
+    NativeBound = 1,
+    UHTNative = 2,
+    EVerseEnumFlags_MAX = 4,
+};
+
+enum class EVerseFalse {
+    Value = 0,
+    EVerseFalse_MAX = 1,
+};
+
+enum class EVerseFunctionFlags {
+    None = 0,
+    UHTNative = 1,
+    EVerseFunctionFlags_MAX = 2,
+};
+
+enum class EVersePackageScope {
+    PublicAPI = 0,
+    InternalAPI = 1,
+    PublicUser = 2,
+    InternalUser = 3,
+    EVersePackageScope_MAX = 4,
+};
+
+enum class EVersePackageType {
+    VNI = 0,
+    Content = 1,
+    PublishedContent = 2,
+    Assets = 3,
+    EVersePackageType_MAX = 4,
+};
+
+enum class EVerseTrue {
+    Value = 0,
+    EVerseTrue_MAX = 1,
 };
 

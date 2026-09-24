@@ -3,6 +3,6 @@
 
 class ABP_Scavenger_Male_C : public ABP_MasterScavenger_C
 {
-}; // Size: 0x9B9
+}; // Size: 0x971
 
 #endif

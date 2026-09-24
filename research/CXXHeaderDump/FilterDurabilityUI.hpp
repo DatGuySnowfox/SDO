@@ -3,6 +3,6 @@
 
 class UFilterDurabilityUI_C : public UDurabilityUI_C
 {
-}; // Size: 0x2F0
+}; // Size: 0x370
 
 #endif

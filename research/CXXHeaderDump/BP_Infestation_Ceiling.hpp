@@ -3,6 +3,6 @@
 
 class ABP_Infestation_Ceiling_C : public ABP_Infestation_C
 {
-}; // Size: 0x448
+}; // Size: 0x450
 
 #endif

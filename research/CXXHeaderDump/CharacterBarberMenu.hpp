@@ -3,32 +3,32 @@
 
 class UCharacterBarberMenu_C : public UUserWidget
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02C0 (size: 0x8)
-    class UTextBlock* BackText;                                                       // 0x02C8 (size: 0x8)
-    class UComboBoxString* DropDownAccessory1;                                        // 0x02D0 (size: 0x8)
-    class UComboBoxString* DropDownAccessory2;                                        // 0x02D8 (size: 0x8)
-    class UComboBoxString* DropDownAccessory3;                                        // 0x02E0 (size: 0x8)
-    class UComboBoxString* DropDownBeard;                                             // 0x02E8 (size: 0x8)
-    class UComboBoxString* DropDownBeardColor;                                        // 0x02F0 (size: 0x8)
-    class UComboBoxString* DropDownEyebrows;                                          // 0x02F8 (size: 0x8)
-    class UComboBoxString* DropDownHairColor;                                         // 0x0300 (size: 0x8)
-    class UComboBoxString* DropDownHairType;                                          // 0x0308 (size: 0x8)
-    class UComboBoxString* DropDownMouth;                                             // 0x0310 (size: 0x8)
-    class UComboBoxString* DropDownOccupation;                                        // 0x0318 (size: 0x8)
-    class UComboBoxString* DropDownSex;                                               // 0x0320 (size: 0x8)
-    class UComboBoxString* DropDownSkinColor_2;                                       // 0x0328 (size: 0x8)
-    class UEditableTextBox* EditableTextBox_Age;                                      // 0x0330 (size: 0x8)
-    class UEditableTextBox* EditableTextBox_Forename;                                 // 0x0338 (size: 0x8)
-    class UEditableTextBox* EditableTextBox_Surname;                                  // 0x0340 (size: 0x8)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0340 (size: 0x8)
     class UButton* ExitButton;                                                        // 0x0348 (size: 0x8)
-    class ABP_PlayerCharacter_C* Chr;                                                 // 0x0350 (size: 0x8)
-    TArray<TEnumAsByte<Enum_Occupation::Type>> OccupationTypes;                       // 0x0358 (size: 0x10)
-    bool SkipAnim?;                                                                   // 0x0368 (size: 0x1)
-    bool IsMale?;                                                                     // 0x0369 (size: 0x1)
-    FCharacterBarberMenu_CExitMenu ExitMenu;                                          // 0x0370 (size: 0x10)
+    class UEditableTextBox* EditableTextBox_Surname;                                  // 0x0350 (size: 0x8)
+    class UEditableTextBox* EditableTextBox_Forename;                                 // 0x0358 (size: 0x8)
+    class UEditableTextBox* EditableTextBox_Age;                                      // 0x0360 (size: 0x8)
+    class UComboBoxString* DropDownSkinColor_2;                                       // 0x0368 (size: 0x8)
+    class UComboBoxString* DropDownSex;                                               // 0x0370 (size: 0x8)
+    class UComboBoxString* DropDownOccupation;                                        // 0x0378 (size: 0x8)
+    class UComboBoxString* DropDownMouth;                                             // 0x0380 (size: 0x8)
+    class UComboBoxString* DropDownHairType;                                          // 0x0388 (size: 0x8)
+    class UComboBoxString* DropDownHairColor;                                         // 0x0390 (size: 0x8)
+    class UComboBoxString* DropDownEyebrows;                                          // 0x0398 (size: 0x8)
+    class UComboBoxString* DropDownBeardColor;                                        // 0x03A0 (size: 0x8)
+    class UComboBoxString* DropDownBeard;                                             // 0x03A8 (size: 0x8)
+    class UComboBoxString* DropDownAccessory3;                                        // 0x03B0 (size: 0x8)
+    class UComboBoxString* DropDownAccessory2;                                        // 0x03B8 (size: 0x8)
+    class UComboBoxString* DropDownAccessory1;                                        // 0x03C0 (size: 0x8)
+    class UTextBlock* BackText;                                                       // 0x03C8 (size: 0x8)
+    class ABP_PlayerCharacter_C* Chr;                                                 // 0x03D0 (size: 0x8)
+    TArray<TEnumAsByte<Enum_Occupation::Type>> OccupationTypes;                       // 0x03D8 (size: 0x10)
+    bool SkipAnim?;                                                                   // 0x03E8 (size: 0x1)
+    bool IsMale?;                                                                     // 0x03E9 (size: 0x1)
+    FCharacterBarberMenu_CExitMenu ExitMenu;                                          // 0x03F0 (size: 0x10)
     void ExitMenu();
-    class ABP_Barber_C* Barber;                                                       // 0x0380 (size: 0x8)
-    class ABP_PlayerController_C* Controller;                                         // 0x0388 (size: 0x8)
+    class ABP_Barber_C* Barber;                                                       // 0x0400 (size: 0x8)
+    class ABP_PlayerController_C* Controller;                                         // 0x0408 (size: 0x8)
 
     void UpdateClothing(bool Male?);
     void Sex(FString String);
@@ -63,6 +63,6 @@ class UCharacterBarberMenu_C : public UUserWidget
     void BndEvt__CharacterCreatorMenu_DropDownOccupation_1_K2Node_ComponentBoundEvent_10_OnSelectionChangedEvent__DelegateSignature(FString SelectedItem, TEnumAsByte<ESelectInfo::Type> SelectionType);
     void ExecuteUbergraph_CharacterBarberMenu(int32 EntryPoint);
     void ExitMenu__DelegateSignature();
-}; // Size: 0x390
+}; // Size: 0x410
 
 #endif

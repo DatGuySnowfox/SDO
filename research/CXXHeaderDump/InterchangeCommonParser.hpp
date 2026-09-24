@@ -27,6 +27,6 @@ struct FInterchangeStepCurve
 {
     TArray<float> KeyTimes;                                                           // 0x0000 (size: 0x10)
 
-}; // Size: 0x70
+}; // Size: 0x60
 
 #endif

@@ -1,7 +1,8 @@
 enum class EDeadZoneType {
     Axial = 0,
     Radial = 1,
-    EDeadZoneType_MAX = 2,
+    UnscaledRadial = 2,
+    EDeadZoneType_MAX = 3,
 };
 
 enum class EFOVScalingType {
@@ -40,6 +41,19 @@ enum class EInputMappingRebuildType {
     EInputMappingRebuildType_MAX = 3,
 };
 
+enum class EMappingContextInputModeFilterOptions {
+    UseProjectDefaultQuery = 0,
+    UseCustomQuery = 1,
+    DoNotFilter = 2,
+    EMappingContextInputModeFilterOptions_MAX = 3,
+};
+
+enum class EMappingContextRegistrationTrackingMode {
+    Untracked = 0,
+    CountRegistrations = 1,
+    EMappingContextRegistrationTrackingMode_MAX = 2,
+};
+
 enum class EMappingQueryIssue {
     NoIssue = 0,
     ReservedByAction = 1,
@@ -58,6 +72,26 @@ enum class EMappingQueryResult {
     NotMappable = 3,
     MappingAvailable = 4,
     EMappingQueryResult_MAX = 5,
+};
+
+enum class ENormalizeInputSmoothingType {
+    None = 0,
+    Lerp = 1,
+    Interp_To = 2,
+    Interp_Constant_To = 3,
+    Interp_Circular_In = 4,
+    Interp_Circular_Out = 5,
+    Interp_Circular_In_Out = 6,
+    Interp_Ease_In = 7,
+    Interp_Ease_Out = 8,
+    Interp_Ease_In_Out = 9,
+    Interp_Expo_In = 10,
+    Interp_Expo_Out = 11,
+    Interp_Expo_In_Out = 12,
+    Interp_Sin_In = 13,
+    Interp_Sin_Out = 14,
+    Interp_Sin_In_Out = 15,
+    ENormalizeInputSmoothingType_MAX = 16,
 };
 
 enum class EPlayerMappableKeySettingBehaviors {

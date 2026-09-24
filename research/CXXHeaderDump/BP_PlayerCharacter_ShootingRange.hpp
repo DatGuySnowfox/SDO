@@ -5,6 +5,6 @@ class ABP_PlayerCharacter_ShootingRange_C : public ABP_PlayerCharacter_C
 {
 
     void UserConstructionScript();
-}; // Size: 0x1E08
+}; // Size: 0x1E40
 
 #endif

@@ -3,8 +3,8 @@
 
 class ABP_RadioTower_C : public ABP_MasterObject_C
 {
-    class UStaticMeshComponent* StaticMesh;                                           // 0x02A0 (size: 0x8)
+    class UStaticMeshComponent* StaticMesh;                                           // 0x02B0 (size: 0x8)
 
-}; // Size: 0x2A8
+}; // Size: 0x2B8
 
 #endif

@@ -5,7 +5,7 @@
 
 struct FBreakEventCallbackWrapper
 {
-}; // Size: 0x40
+}; // Size: 0x30
 
 struct FChaosDebugSubstepControl
 {
@@ -37,39 +37,112 @@ struct FChaosPhysicsCollisionInfo
 
 }; // Size: 0xC0
 
+struct FChaosVDChannelStateChangeCommandMessage
+{
+    FChaosVDDataChannelState NewState;                                                // 0x0000 (size: 0x18)
+
+}; // Size: 0x18
+
+struct FChaosVDChannelStateChangeResponseMessage
+{
+    FGuid InstanceId;                                                                 // 0x0000 (size: 0x10)
+    FChaosVDDataChannelState NewState;                                                // 0x0010 (size: 0x18)
+
+}; // Size: 0x28
+
+struct FChaosVDDataChannelState
+{
+    FString ChannelName;                                                              // 0x0000 (size: 0x10)
+    bool bIsEnabled;                                                                  // 0x0010 (size: 0x1)
+    bool bCanChangeChannelState;                                                      // 0x0011 (size: 0x1)
+
+}; // Size: 0x18
+
+struct FChaosVDFullSessionInfoRequestMessage
+{
+}; // Size: 0x1
+
+struct FChaosVDFullSessionInfoResponseMessage
+{
+    FGuid InstanceId;                                                                 // 0x0000 (size: 0x10)
+    TArray<FChaosVDDataChannelState> DataChannelsStates;                              // 0x0010 (size: 0x10)
+    bool bIsRecording;                                                                // 0x0020 (size: 0x1)
+
+}; // Size: 0x28
+
+struct FChaosVDRecordingStatusMessage
+{
+    FGuid InstanceId;                                                                 // 0x0000 (size: 0x10)
+    bool bIsRecording;                                                                // 0x0010 (size: 0x1)
+    float ElapsedTime;                                                                // 0x0014 (size: 0x4)
+    FChaosVDTraceDetails TraceDetails;                                                // 0x0018 (size: 0x38)
+
+}; // Size: 0x50
+
+struct FChaosVDSessionPing
+{
+    FGuid ControllerInstanceId;                                                       // 0x0000 (size: 0x10)
+
+}; // Size: 0x10
+
+struct FChaosVDSessionPong
+{
+    FGuid InstanceId;                                                                 // 0x0000 (size: 0x10)
+    FGuid SessionID;                                                                  // 0x0010 (size: 0x10)
+    FString SessionName;                                                              // 0x0020 (size: 0x10)
+    uint8 BuildTargetType;                                                            // 0x0030 (size: 0x1)
+
+}; // Size: 0x38
+
+struct FChaosVDStartRecordingCommandMessage
+{
+    EChaosVDRecordingMode RecordingMode;                                              // 0x0000 (size: 0x1)
+    FString Target;                                                                   // 0x0008 (size: 0x10)
+
+}; // Size: 0x18
+
+struct FChaosVDStopRecordingCommandMessage
+{
+}; // Size: 0x1
+
 struct FCrumblingEventCallbackWrapper
 {
-}; // Size: 0x40
+}; // Size: 0x30
+
+struct FDataflowRigidSolverProxy : public FDataflowPhysicsSolverProxy
+{
+}; // Size: 0x90
 
 struct FRemovalEventCallbackWrapper
 {
-}; // Size: 0x40
+}; // Size: 0x30
 
 class AChaosSolverActor : public AActor
 {
-    FChaosSolverConfiguration Properties;                                             // 0x0298 (size: 0x68)
-    float TimeStepMultiplier;                                                         // 0x0300 (size: 0x4)
-    int32 CollisionIterations;                                                        // 0x0304 (size: 0x4)
-    int32 PushOutIterations;                                                          // 0x0308 (size: 0x4)
-    int32 PushOutPairIterations;                                                      // 0x030C (size: 0x4)
-    float ClusterConnectionFactor;                                                    // 0x0310 (size: 0x4)
-    EClusterConnectionTypeEnum ClusterUnionConnectionType;                            // 0x0314 (size: 0x1)
-    bool DoGenerateCollisionData;                                                     // 0x0315 (size: 0x1)
-    FSolverCollisionFilterSettings CollisionFilterSettings;                           // 0x0318 (size: 0x10)
-    bool DoGenerateBreakingData;                                                      // 0x0328 (size: 0x1)
-    FSolverBreakingFilterSettings BreakingFilterSettings;                             // 0x032C (size: 0x10)
-    bool DoGenerateTrailingData;                                                      // 0x033C (size: 0x1)
-    FSolverTrailingFilterSettings TrailingFilterSettings;                             // 0x0340 (size: 0x10)
-    float MassScale;                                                                  // 0x0350 (size: 0x4)
-    bool bHasFloor;                                                                   // 0x0354 (size: 0x1)
-    float FloorHeight;                                                                // 0x0358 (size: 0x4)
-    FChaosDebugSubstepControl ChaosDebugSubstepControl;                               // 0x035C (size: 0x3)
-    class UBillboardComponent* SpriteComponent;                                       // 0x0360 (size: 0x8)
-    class UChaosGameplayEventDispatcher* GameplayEventDispatcherComponent;            // 0x0380 (size: 0x8)
+    FChaosSolverConfiguration Properties;                                             // 0x02B0 (size: 0x84)
+    float TimeStepMultiplier;                                                         // 0x0334 (size: 0x4)
+    int32 CollisionIterations;                                                        // 0x0338 (size: 0x4)
+    int32 PushOutIterations;                                                          // 0x033C (size: 0x4)
+    int32 PushOutPairIterations;                                                      // 0x0340 (size: 0x4)
+    float ClusterConnectionFactor;                                                    // 0x0344 (size: 0x4)
+    EClusterConnectionTypeEnum ClusterUnionConnectionType;                            // 0x0348 (size: 0x1)
+    bool DoGenerateCollisionData;                                                     // 0x0349 (size: 0x1)
+    FSolverCollisionFilterSettings CollisionFilterSettings;                           // 0x034C (size: 0x10)
+    bool DoGenerateBreakingData;                                                      // 0x035C (size: 0x1)
+    FSolverBreakingFilterSettings BreakingFilterSettings;                             // 0x0360 (size: 0x10)
+    bool DoGenerateTrailingData;                                                      // 0x0370 (size: 0x1)
+    FSolverTrailingFilterSettings TrailingFilterSettings;                             // 0x0374 (size: 0x10)
+    float MassScale;                                                                  // 0x0384 (size: 0x4)
+    bool bHasFloor;                                                                   // 0x0388 (size: 0x1)
+    float FloorHeight;                                                                // 0x038C (size: 0x4)
+    FChaosDebugSubstepControl ChaosDebugSubstepControl;                               // 0x0390 (size: 0x3)
+    class UBillboardComponent* SpriteComponent;                                       // 0x0398 (size: 0x8)
+    FDataflowSimulationAsset SimulationAsset;                                         // 0x03A0 (size: 0x58)
+    class UChaosGameplayEventDispatcher* GameplayEventDispatcherComponent;            // 0x0498 (size: 0x8)
 
     void SetSolverActive(bool bActive);
     void SetAsCurrentWorldSolver();
-}; // Size: 0x390
+}; // Size: 0x4A8
 
 class IChaosNotifyHandlerInterface : public IInterface
 {
@@ -77,20 +150,24 @@ class IChaosNotifyHandlerInterface : public IInterface
 
 class UChaosDebugDrawComponent : public UActorComponent
 {
-}; // Size: 0xA8
+}; // Size: 0xC0
+
+class UChaosDebugDrawSubsystem : public UWorldSubsystem
+{
+}; // Size: 0x30
 
 class UChaosEventListenerComponent : public UActorComponent
 {
-}; // Size: 0xA8
+}; // Size: 0xC0
 
 class UChaosGameplayEventDispatcher : public UChaosEventListenerComponent
 {
-    TMap<class UPrimitiveComponent*, class FChaosHandlerSet> CollisionEventRegistrations; // 0x0168 (size: 0x50)
-    TMap<class UPrimitiveComponent*, class FBreakEventCallbackWrapper> BreakEventRegistrations; // 0x01B8 (size: 0x50)
-    TMap<class UPrimitiveComponent*, class FRemovalEventCallbackWrapper> RemovalEventRegistrations; // 0x0208 (size: 0x50)
-    TMap<class UPrimitiveComponent*, class FCrumblingEventCallbackWrapper> CrumblingEventRegistrations; // 0x0258 (size: 0x50)
+    TMap<UPrimitiveComponent*, FChaosHandlerSet> CollisionEventRegistrations;         // 0x0180 (size: 0x50)
+    TMap<UPrimitiveComponent*, FBreakEventCallbackWrapper> BreakEventRegistrations;   // 0x01D0 (size: 0x50)
+    TMap<UPrimitiveComponent*, FRemovalEventCallbackWrapper> RemovalEventRegistrations; // 0x0220 (size: 0x50)
+    TMap<UPrimitiveComponent*, FCrumblingEventCallbackWrapper> CrumblingEventRegistrations; // 0x0270 (size: 0x50)
 
-}; // Size: 0x2B8
+}; // Size: 0x2D0
 
 class UChaosSolver : public UObject
 {

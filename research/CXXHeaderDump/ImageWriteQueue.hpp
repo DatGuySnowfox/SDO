@@ -12,7 +12,7 @@ struct FImageWriteOptions
     bool bOverwriteFile;                                                              // 0x0018 (size: 0x1)
     bool bAsync;                                                                      // 0x0019 (size: 0x1)
 
-}; // Size: 0x60
+}; // Size: 0x50
 
 class UImageWriteBlueprintLibrary : public UBlueprintFunctionLibrary
 {

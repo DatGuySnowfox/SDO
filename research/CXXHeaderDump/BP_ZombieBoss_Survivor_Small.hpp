@@ -5,6 +5,6 @@ class ABP_ZombieBoss_Survivor_Small_C : public ABP_ZombieBoss_C
 {
 
     void GetMarker(class UTexture2D*& Texture, FLinearColor& Color, double& MarkerOffset);
-}; // Size: 0x7B1
+}; // Size: 0x779
 
 #endif

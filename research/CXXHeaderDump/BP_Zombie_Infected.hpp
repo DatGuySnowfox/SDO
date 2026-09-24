@@ -3,11 +3,10 @@
 
 class ABP_Zombie_Infected_C : public ABP_MasterZombie_C
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x08B0 (size: 0x8)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x0848 (size: 0x8)
 
     void ReceiveBeginPlay();
-    void BndEvt__BP_Zombie_Master_AIOSubject_K2Node_ComponentBoundEvent_2_OnOptimizationUpdate__DelegateSignature(bool bIsBeyondLastLayer, int32 LayerIndex, bool bIsSeen);
     void ExecuteUbergraph_BP_Zombie_Infected(int32 EntryPoint);
-}; // Size: 0x8B8
+}; // Size: 0x850
 
 #endif

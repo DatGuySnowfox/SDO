@@ -5,6 +5,6 @@ class ABP_Bandit_Ranged_Boss_C : public ABP_MasterBandit_C
 {
 
     void AIHealthBarInfo(bool& Visible?, FString& Name, bool& Boss?);
-}; // Size: 0x9C9
+}; // Size: 0x981
 
 #endif

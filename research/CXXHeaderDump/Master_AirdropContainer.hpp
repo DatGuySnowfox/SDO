@@ -3,25 +3,25 @@
 
 class AMaster_AirdropContainer_C : public ABP_MasterObject_C
 {
-    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02A0 (size: 0x8)
-    class UWidgetComponent* magnifier;                                                // 0x02A8 (size: 0x8)
-    class UParticleSystemComponent* ParticleSystem;                                   // 0x02B0 (size: 0x8)
-    class UBP_JigMultiplayer_C* BP_JigMultiplayer;                                    // 0x02B8 (size: 0x8)
-    class UStaticMeshComponent* Parachute;                                            // 0x02C0 (size: 0x8)
-    class UStaticMeshComponent* StaticMesh;                                           // 0x02C8 (size: 0x8)
-    class AActor* CurrentActor;                                                       // 0x02D0 (size: 0x8)
-    FVector InteractingActorLoc;                                                      // 0x02D8 (size: 0x18)
-    bool IsHeld;                                                                      // 0x02F0 (size: 0x1)
-    TEnumAsByte<Enum_ContainerLootTables::Type> LootTable;                            // 0x02F1 (size: 0x1)
-    double DurationToHold;                                                            // 0x02F8 (size: 0x8)
-    bool PlayerClose?;                                                                // 0x0300 (size: 0x1)
-    bool Inspected;                                                                   // 0x0301 (size: 0x1)
-    FTimerHandle HoldToInteractTimer;                                                 // 0x0308 (size: 0x8)
-    FTimerHandle OutlineTimer;                                                        // 0x0310 (size: 0x8)
-    double ChanceToProduceNoise;                                                      // 0x0318 (size: 0x8)
-    FString Text;                                                                     // 0x0320 (size: 0x10)
-    FLinearColor Color;                                                               // 0x0330 (size: 0x10)
-    class ABP_Marker_C* Marker;                                                       // 0x0340 (size: 0x8)
+    FPointerToUberGraphFrame UberGraphFrame;                                          // 0x02B0 (size: 0x8)
+    class UWidgetComponent* magnifier;                                                // 0x02B8 (size: 0x8)
+    class UParticleSystemComponent* ParticleSystem;                                   // 0x02C0 (size: 0x8)
+    class UBP_JigComponent_C* BP_JigMultiplayer;                                      // 0x02C8 (size: 0x8)
+    class UStaticMeshComponent* Parachute;                                            // 0x02D0 (size: 0x8)
+    class UStaticMeshComponent* StaticMesh;                                           // 0x02D8 (size: 0x8)
+    class AActor* CurrentActor;                                                       // 0x02E0 (size: 0x8)
+    FVector InteractingActorLoc;                                                      // 0x02E8 (size: 0x18)
+    bool IsHeld;                                                                      // 0x0300 (size: 0x1)
+    TEnumAsByte<Enum_ContainerLootTables::Type> LootTable;                            // 0x0301 (size: 0x1)
+    double DurationToHold;                                                            // 0x0308 (size: 0x8)
+    bool PlayerClose?;                                                                // 0x0310 (size: 0x1)
+    bool Inspected;                                                                   // 0x0311 (size: 0x1)
+    FTimerHandle HoldToInteractTimer;                                                 // 0x0318 (size: 0x8)
+    FTimerHandle OutlineTimer;                                                        // 0x0320 (size: 0x8)
+    double ChanceToProduceNoise;                                                      // 0x0328 (size: 0x8)
+    FString Text;                                                                     // 0x0330 (size: 0x10)
+    FLinearColor Color;                                                               // 0x0340 (size: 0x10)
+    class ABP_Marker_C* Marker;                                                       // 0x0350 (size: 0x8)
 
     void GetSettings(double& ChanceToProduceNoise, double& Default_ChanceToProduceNoise, double& DurationToHold);
     void IsHeld?(bool& Held?);
@@ -40,13 +40,14 @@ class AMaster_AirdropContainer_C : public ABP_MasterObject_C
     void JigMP_OnUpdateChamberUID(FGuid NewUID, bool& Result);
     void JigMP_OnTwoContainersSwap(FName FromContainer, FName ToContainer, bool& Result);
     void GetMainSceneComp(class USceneComponent*& Comp);
-    void GetInteractOptions(TMap<class FGameplayTag, class FText>& Options);
+    void GetInteractOptions(TMap<FGameplayTag, FText>& Options);
     void OnRequestServerInteract(class AActor* Actor, FGameplayTag Option, FS_JigPayload Payload, bool& Result);
     void GetJigMultiplayerComponent(class UActorComponent*& JigComp);
-    void GetItemInfo(class UJigsawItem_DataAsset_C*& Info, int32& Count, FS_RandomStatsConfig& RandomStatsConfig, TMap<class FString, class FString>& CustomData);
+    void GetItemInfo(class UJigsawItem_DataAsset_C*& Info, int32& Count, FS_RandomStatsConfig& RandomStatsConfig, TMap<FString, FString>& CustomData);
     void JigCanInteract(bool& Result);
     void JigSetCanInteract(bool CanInteract, bool EnablePhysics, bool& Result);
     void SetPickupCount(int32 NewCount, bool& Result);
+    void SpawnEvent?();
     void NoiseEvent();
     void HoldToInteract();
     void DistanceOutline();
@@ -68,9 +69,9 @@ class AMaster_AirdropContainer_C : public ABP_MasterObject_C
     void Event_HoldToInteract();
     void OnExecuteInteractEnded();
     void OnExecuteInteract(class AActor* InteractingActor, FGameplayTag Option);
-    void OnBeginInteract(class AActor* InteractingActor, const TMap<class FGameplayTag, class FText> Options);
+    void OnBeginInteract(class AActor* InteractingActor, const TMap<FGameplayTag, FText> Options);
     void OnEndInteract();
     void ExecuteUbergraph_Master_AirdropContainer(int32 EntryPoint);
-}; // Size: 0x348
+}; // Size: 0x358
 
 #endif
