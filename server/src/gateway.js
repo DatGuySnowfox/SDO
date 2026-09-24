@@ -122,7 +122,15 @@ class Gateway {
     // random id once so restarts update the same directory entry instead of
     // creating a duplicate that lingers until its old TTL expires.
     _loadOrCreateServerId() {
-        const idPath = path.join(__dirname, '..', 'directory-server-id.txt');
+        // Deliberately stored beside the database rather than beside the source.
+        // In the Docker deployment only the directory holding players.db is a
+        // volume; everything else is image content and is replaced wholesale on
+        // every `docker compose up --build`. Keeping the id next to the source
+        // therefore produced a brand-new identity on each deploy, leaking a
+        // duplicate directory entry that lingered until its TTL expired — the
+        // exact outcome the comment above says this function exists to prevent.
+        const dbPath = process.env.SDO_DB_PATH || path.join(__dirname, '..', 'players.db');
+        const idPath = path.join(path.dirname(dbPath), 'directory-server-id.txt');
         try {
             const existing = fs.readFileSync(idPath, 'utf8').trim();
             if (existing) return existing;
