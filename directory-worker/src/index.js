@@ -1,20 +1,46 @@
 'use strict';
 
 // SDO server directory — a minimal, free-tier Cloudflare Worker replacement
-// for the old production system's server-directory service (see
-// research/old-sdo-v3/services-current/server-directory/). Deliberately much
+// for the old production system's server-directory service (that codebase is
+// not distributed with this repo). Deliberately much
 // smaller: no pre-registered server list, no Steam ownership/OpenID, no
 // trials, no mod registry, no icons — just "which home-hosted servers are
 // currently up and how do I reach one." Each server self-registers with a
-// heartbeat; KV's native per-key TTL handles expiry, so there's no separate
-// cleanup job (unlike the old file-backed home-heartbeats.js, which needed
-// its own freshness check on every read).
+// heartbeat.
 //
-// KV value + metadata are both set to the same JSON blob on write so GET
-// /v1/servers can read everything back from a single list() call (metadata
-// comes back with the key listing) instead of one get() per server.
+// Storage: a single SQLite-backed Durable Object, NOT Workers KV.
+//
+// 2026-09-24: this started on KV, using its native per-key TTL for expiry.
+// That does not survive contact with a heartbeat workload on the free plan —
+// KV's free tier allows 1,000 writes/DAY account-wide, and one server
+// heartbeating on the default 60s interval (server/src/config.js
+// directoryHeartbeatMs) is 1,440 writes/day on its own. A single server blew
+// the daily quota in ~17 hours; the reads were never the problem (100,000/day)
+// and neither was storage size — it is purely that "refresh a liveness
+// timestamp on a timer" is a write-shaped workload and KV prices writes like
+// a scarce resource. Raising the interval only buys headroom until the second
+// or third community-hosted server shows up, so the store was replaced rather
+// than retuned.
+//
+// A Durable Object has no equivalent per-day write cliff (it bills compute:
+// requests + duration, both of which a handful of servers heartbeating every
+// 60s barely register against), is available on the Workers Free plan when
+// SQLite-backed, and gives real queries instead of KV's list+metadata trick.
+// Expiry becomes an explicit freshness filter + opportunistic delete on read,
+// which is what the old file-backed home-heartbeats.js did too.
+//
+// One Durable Object instance holds the whole registry (idFromName REGISTRY_ID),
+// so every heartbeat and every read serialize through the same object. That is
+// the point — it is a single small shared list, not something to shard — and at
+// this scale (a handful of servers, a few requests a minute) the single-threaded
+// execution model is a feature, not a bottleneck.
+
+import { DurableObject } from 'cloudflare:workers';
 
 const HEARTBEAT_TTL_SECONDS = 90; // must stay above host-agent's send interval
+const HEARTBEAT_TTL_MS = HEARTBEAT_TTL_SECONDS * 1000;
+// Fixed name so every request reaches the same registry instance.
+const REGISTRY_ID = 'v1';
 const SERVER_ID_RE = /^[a-z0-9-]{6,64}$/;
 const HOST_RE = /^[a-zA-Z0-9.-]{1,253}$/;
 
@@ -35,6 +61,76 @@ function clampInt(value, min, max, fallback) {
     const n = Number.parseInt(value, 10);
     if (!Number.isFinite(n)) return fallback;
     return Math.min(max, Math.max(min, n));
+}
+
+// The registry itself. Methods are called as RPC from the Worker below via a
+// stub — no internal fetch()/URL routing, which is the older Durable Object
+// pattern and buys nothing here.
+export class ServerRegistry extends DurableObject {
+    constructor(ctx, env) {
+        super(ctx, env);
+        this.sql = ctx.storage.sql;
+        // Synchronous, so it is safe directly in the constructor (no
+        // blockConcurrencyWhile needed) and cheap enough to run per wake-up.
+        this.sql.exec(`
+            CREATE TABLE IF NOT EXISTS servers (
+                serverId    TEXT PRIMARY KEY,
+                name        TEXT    NOT NULL,
+                host        TEXT    NOT NULL,
+                port        INTEGER NOT NULL,
+                playerCount INTEGER NOT NULL,
+                maxPlayers  INTEGER NOT NULL,
+                lastSeenMs  INTEGER NOT NULL
+            )
+        `);
+    }
+
+    // Drops entries whose last heartbeat is older than the TTL. This replaces
+    // KV's per-key expirationTtl — there is no built-in row expiry, so the
+    // sweep happens on read instead of on a timer. No alarm: an alarm would
+    // keep waking the object up to delete rows nobody is currently asking
+    // about, which is the opposite of what we want on a free-tier budget.
+    _sweep(now) {
+        this.sql.exec('DELETE FROM servers WHERE lastSeenMs < ?', now - HEARTBEAT_TTL_MS);
+    }
+
+    heartbeat(record) {
+        this.sql.exec(
+            `INSERT INTO servers (serverId, name, host, port, playerCount, maxPlayers, lastSeenMs)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
+             ON CONFLICT(serverId) DO UPDATE SET
+                name        = excluded.name,
+                host        = excluded.host,
+                port        = excluded.port,
+                playerCount = excluded.playerCount,
+                maxPlayers  = excluded.maxPlayers,
+                lastSeenMs  = excluded.lastSeenMs`,
+            record.serverId, record.name, record.host, record.port,
+            record.playerCount, record.maxPlayers, record.lastSeenMs,
+        );
+        return record.lastSeenMs;
+    }
+
+    list() {
+        const now = Date.now();
+        this._sweep(now);
+        return this.sql
+            .exec('SELECT * FROM servers ORDER BY name')
+            .toArray();
+    }
+
+    get(serverId) {
+        const now = Date.now();
+        this._sweep(now);
+        const rows = this.sql
+            .exec('SELECT * FROM servers WHERE serverId = ?', serverId)
+            .toArray();
+        return rows[0] ?? null;
+    }
+}
+
+function registry(env) {
+    return env.REGISTRY.get(env.REGISTRY.idFromName(REGISTRY_ID));
 }
 
 async function handleHeartbeat(request, env) {
@@ -71,31 +167,15 @@ async function handleHeartbeat(request, env) {
     if (!Number.isInteger(port) || port < 1 || port > 65535) return json({ ok: false, error: 'port_invalid' }, 400);
 
     const record = { serverId, name, host, port, playerCount, maxPlayers, lastSeenMs: Date.now() };
-    await env.SERVERS.put(`server:${serverId}`, JSON.stringify(record), {
-        expirationTtl: HEARTBEAT_TTL_SECONDS,
-        metadata: record,
-    });
+    const acceptedAtMs = await registry(env).heartbeat(record);
 
-    return json({ ok: true, serverId, heartbeatAcceptedAtMs: record.lastSeenMs });
-}
-
-async function listServers(env) {
-    const servers = [];
-    let cursor;
-    do {
-        const page = await env.SERVERS.list({ prefix: 'server:', cursor });
-        for (const entry of page.keys) {
-            if (entry.metadata) servers.push(entry.metadata);
-        }
-        cursor = page.list_complete ? undefined : page.cursor;
-    } while (cursor);
-
-    servers.sort((a, b) => a.name.localeCompare(b.name));
-    return servers;
+    return json({ ok: true, serverId, heartbeatAcceptedAtMs: acceptedAtMs });
 }
 
 async function handleList(env) {
-    return json({ ok: true, servers: await listServers(env) });
+    // Ordering/freshness are both handled inside the Durable Object, so there
+    // is nothing to re-sort or re-filter out here.
+    return json({ ok: true, servers: await registry(env).list() });
 }
 
 // Proxies a ticket request to the chosen server's own HTTP API. Needed
@@ -121,9 +201,8 @@ async function handleJoin(request, env) {
     if (!SERVER_ID_RE.test(serverId)) return json({ ok: false, error: 'server_id_invalid' }, 400);
     if (!playerId) return json({ ok: false, error: 'player_id_required' }, 400);
 
-    const raw = await env.SERVERS.get(`server:${serverId}`);
-    if (!raw) return json({ ok: false, error: 'server_not_found' }, 404);
-    const server = JSON.parse(raw);
+    const server = await registry(env).get(serverId);
+    if (!server) return json({ ok: false, error: 'server_not_found' }, 404);
 
     let ticketRes;
     try {

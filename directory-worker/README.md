@@ -9,11 +9,11 @@ what's currently up. Replaces hardcoding a gateway IP in the launch scripts.
 cd directory-worker
 npm install
 npx wrangler login              # opens a browser, authorizes against your Cloudflare account
-npx wrangler kv namespace create SERVERS
 ```
 
-The last command prints an `id = "..."` — paste it into `wrangler.toml`'s
-`kv_namespaces` entry (replacing `REPLACE_WITH_KV_NAMESPACE_ID`).
+No storage provisioning step: the registry lives in a SQLite-backed Durable
+Object that `wrangler deploy` creates on first deploy from the
+`[exports.ServerRegistry]` block in `wrangler.toml`.
 
 Then set the shared secret hosts must present to heartbeat in (pick any
 random string — this is not a per-player secret, just a "don't let strangers
@@ -33,11 +33,35 @@ Prints the Worker's public URL (a `*.workers.dev` subdomain unless a custom doma
 configured in `wrangler.toml`, as below). That URL is `SDB_DIRECTORY_URL` for host-agent and for
 `scripts/join.ps1`.
 
-**Deployed 2026-08-21**: live at `https://directory.example.com` (custom domain, `example.com`'s zone is on
-the same Cloudflare account — added via the `routes` block in `wrangler.toml`, no separate DNS
-access needed beyond the existing `wrangler login` token's `workers_routes:write` scope). Adding a
-custom domain route disables the `workers.dev` URL by default unless `workers_dev = true` is also
-set.
+## Storage
+
+The server list is a single SQLite-backed Durable Object (`ServerRegistry`), reached by the fixed
+name `v1` so every request hits the same instance.
+
+It was originally Workers KV, which did not survive a heartbeat workload on the free plan: KV allows
+**1,000 writes/day account-wide**, and a single server heartbeating on the default 60s interval is
+1,440 writes/day by itself — the quota was exhausted in roughly 17 hours. Reads (100,000/day) and
+storage size were never close to their limits; the problem is specific to refreshing a liveness
+timestamp on a timer, which is write-shaped. Raising the heartbeat interval only defers the cliff
+until the second or third community-hosted server, so the store was swapped rather than retuned.
+
+Durable Objects bill compute (requests + duration) rather than per-write, and SQLite-backed ones are
+available on the Workers Free plan. KV's per-key `expirationTtl` had no direct equivalent, so expiry
+is now an explicit freshness filter plus an opportunistic delete of stale rows on each read.
+
+### Custom domain (optional)
+
+A bare `npm run deploy` publishes to your free `<name>.<subdomain>.workers.dev` URL, which is
+enough to run a directory. To serve it from your own domain instead, add a `routes` block with a
+`custom_domain = true` pattern for a zone on your own Cloudflare account; `wrangler deploy`
+provisions the DNS record itself via the Workers routes API, needing no DNS access beyond what
+`wrangler login` already grants. Note that adding a custom domain route disables the `workers.dev`
+URL unless you also set `workers_dev = true`.
+
+This repo intentionally ships **no** domain. The reference deployment keeps its route in an
+untracked `wrangler.prod.toml` (copy `wrangler.toml`, add the routes block) and deploys with
+`npm run deploy:prod`. Be aware that wrangler treats its config as the source of truth for routes,
+so deploying with a config that omits your custom domain can detach it.
 
 ## API
 

@@ -2,19 +2,33 @@ name = "sdo-directory"
 main = "src/index.js"
 compatibility_date = "2026-08-21"
 
-# Custom domain — requires directory.example.com's zone (example.com) to already be
-# active on this same Cloudflare account. `wrangler deploy` provisions the
-# DNS record itself via the Workers routes API (no separate DNS access
-# needed beyond the existing wrangler login token).
-routes = [
-  { pattern = "directory.example.com", custom_domain = true }
-]
+# No custom domain is configured in this repo — a bare `wrangler deploy`
+# publishes to your own free `<name>.<subdomain>.workers.dev` URL.
+#
+# To serve it from your own domain instead, either add a `routes` block here
+# (pattern = "directory.example.com", custom_domain = true) with a zone on
+# YOUR Cloudflare account, or keep it out of version control the way the
+# reference deployment does: copy this file to wrangler.prod.toml (gitignored),
+# add the routes block there, and deploy with `npm run deploy:prod`.
+#
+# Careful: wrangler treats its config as the source of truth for routes, so
+# deploying with a config that omits your custom domain can detach it.
 
-# Created via `npx wrangler kv namespace create SERVERS` — paste the id it
-# prints back here before the first deploy. See README.md in this folder.
-kv_namespaces = [
-  { binding = "SERVERS", id = "5930bb296a11483da1cb2ae9aa3b955c" }
-]
+# Server registry state. A single SQLite-backed Durable Object, not KV —
+# KV's free tier caps writes at 1,000/day account-wide and one server
+# heartbeating every 60s is 1,440/day on its own (see src/index.js's header
+# comment for the full reasoning). Durable Objects bill compute rather than
+# per-write, and SQLite-backed ones are available on the Workers Free plan.
+#
+# `exports` is the current declarative form; it replaced the legacy imperative
+# `migrations` array (the two are mutually exclusive — do not add both).
+[[durable_objects.bindings]]
+name = "REGISTRY"
+class_name = "ServerRegistry"
+
+[exports.ServerRegistry]
+type = "durable-object"
+storage = "sqlite"
 
 # Set the real value with `npx wrangler secret put DIRECTORY_KEY` — never
 # commit the actual key here. Host-agent's SDB_DIRECTORY_KEY must match it.
