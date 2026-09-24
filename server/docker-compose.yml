@@ -26,5 +26,30 @@ services:
     volumes:
       - sdo-data:/app/data
 
+    # node:22-slim ships neither curl nor wget, so the probe runs under node
+    # itself. It checks hostOnline as well as the status code on purpose: the
+    # host-agent connects to the gateway over a local socket, and if it drops
+    # the process keeps serving HTTP perfectly well while the world is no
+    # longer simulated. A status-code-only probe reports that as healthy.
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - |
+          require('http').get('http://127.0.0.1:31001/v1/health', r => {
+            let b = '';
+            r.on('data', c => b += c);
+            r.on('end', () => {
+              try {
+                process.exit(r.statusCode === 200 && JSON.parse(b).hostOnline ? 0 : 1);
+              } catch { process.exit(1); }
+            });
+          }).on('error', () => process.exit(1));
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
 volumes:
   sdo-data:
