@@ -1,0 +1,40 @@
+# Line endings.
+#
+# Development happens on Windows, where core.autocrlf=true rewrites LF to
+# CRLF on checkout. That is fine for files Windows consumes and actively
+# harmful for files Linux does:
+#
+#   - a shell script picks up a CR on its shebang line and fails to run at
+#     all, with "bad interpreter: /usr/bin/env bash^M"
+#   - a Dockerfile carries the CR into RUN commands
+#   - .env.example copied to a real .env puts a trailing CR inside every
+#     environment variable's value, which is invisible in most output and
+#     breaks secret comparison and host names
+#
+# So pin the ones that cross over to a Linux host, and pin the Windows-only
+# ones the other way rather than leaving them to the global setting.
+
+* text=auto
+
+# Runs on Linux — must stay LF.
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+.env.example    text eol=lf
+.dockerignore   text eol=lf
+
+# Windows-only.
+*.ps1           text eol=crlf
+*.bat           text eol=crlf
+*.cmd           text eol=crlf
+*.vcxproj       text eol=crlf
+*.csproj        text eol=crlf
+
+# Binary — never touch.
+*.usmap         binary
+*.pak           binary
+*.dll           binary
+*.exe           binary
+*.pdb           binary
+*.bin           binary
