@@ -2350,60 +2350,80 @@ void ProxyManager::sync_weapon_attachments(RemotePlayer& player)
             // sync_player_lights uses for the character-level flashlight.
             // +0x02E0 holds the "interesting" component on both toggleable
             // attachment classes decoded so far, but a different type each
-            // time — SpotLight (tactical light, SetIntensity(50000.0)) vs.
-            // a UTimelineComponent named NVGTL (NVG). NVGTL drives
+            // time — SpotLight (tactical light, SetIntensity(50000.0)/0.0)
+            // vs. a UTimelineComponent named NVGTL (NVG). NVGTL drives
             // NVGTL__UpdateFunc's Lerp(0,-60,alpha)->MakeRotator->
             // StaticMesh.K2_SetRelativeRotation — roll=0 is deployed/on,
             // roll=-60 is stowed/off (confirmed via a live A/B read against
             // the local player's own real attachment — opposite of what the
             // bytecode's naming alone suggested), so ReverseFromEnd()
-            // (-60->0) is the "turn on" call, not PlayFromStart() (0->-60).
-            // Both lookup and call are SEH-guarded: a garbage +0x02E0 read
-            // on a scope/mag's differently-shaped class is a real crash
-            // risk, and this whole burst previously raced a proxy's
-            // not-yet-constructed component state until the proxySpawnedAtUs
-            // grace period fix a few hundred lines below (do_proxy_per_
-            // player_tick's spawn_proxy() SEH-guard was the actual root
-            // cause of several earlier crashes chased here — see
-            // feedback_sdo_timelinecomponent_play_crash memory for the full
-            // history if this ever needs revisiting).
-            if (e->active) {
+            // (-60->0) is the "turn on" call, PlayFromStart() (0->-60) is
+            // "turn off". Both lookup and call are SEH-guarded: a garbage
+            // +0x02E0 read on a scope/mag's differently-shaped class is a
+            // real crash risk, and this whole burst previously raced a
+            // proxy's not-yet-constructed component state until the
+            // proxySpawnedAtUs grace period fix a few hundred lines below
+            // (do_proxy_per_player_tick's spawn_proxy() SEH-guard was the
+            // actual root cause of several earlier crashes chased here —
+            // see feedback_sdo_timelinecomponent_play_crash memory for the
+            // full history if this ever needs revisiting).
+            //
+            // 2026-08-26: the active=false direction (SetIntensity(0.0) /
+            // PlayFromStart()) was never added after that crash saga
+            // concluded with only the active=true path confirmed working —
+            // toggling a light or NVG off never reverted on a proxy at all.
+            // PlayFromStart() reaches this exact component through the same
+            // SEH-guarded, post-grace-period path ReverseFromEnd already
+            // uses successfully in production, so this isn't a blind repeat
+            // of the earlier crash — same already-proven-safe call site,
+            // just the other direction.
+            {
                 auto* comp = *reinterpret_cast<UObject**>(
                     reinterpret_cast<uintptr_t>(attachmentActor) + 0x02E0);
 
                 UFunction* setIntensityFn   = nullptr;
                 UFunction* reverseFromEndFn = nullptr;
+                UFunction* playFromStartFn  = nullptr;
                 if (comp) {
-                    struct LookupCtx { UObject* obj; UFunction* setIntensity; UFunction* reverseFromEnd; } lookupCtx{ comp, nullptr, nullptr };
+                    struct LookupCtx { UObject* obj; UFunction* setIntensity; UFunction* reverseFromEnd; UFunction* playFromStart; } lookupCtx{ comp, nullptr, nullptr, nullptr };
                     const bool lookupOk = seh_invoke([](void* raw) {
                         auto* c = static_cast<LookupCtx*>(raw);
                         c->setIntensity = c->obj->GetFunctionByNameInChain(L"SetIntensity");
                         c->reverseFromEnd = c->obj->GetFunctionByNameInChain(L"ReverseFromEnd");
+                        c->playFromStart = c->obj->GetFunctionByNameInChain(L"PlayFromStart");
                     }, &lookupCtx);
                     if (lookupOk) {
                         setIntensityFn   = lookupCtx.setIntensity;
                         reverseFromEndFn = lookupCtx.reverseFromEnd;
+                        playFromStartFn  = lookupCtx.playFromStart;
                     } else {
                         debug_log("sync_weapon_attachments: function lookup crashed, caught via SEH, itemId=" + e->itemId);
                     }
                 }
 
                 if (setIntensityFn) {
-                    struct CallCtx { UObject* obj; UFunction* fn; } callCtx{ comp, setIntensityFn };
+                    struct CallCtx { UObject* obj; UFunction* fn; float intensity; } callCtx{ comp, setIntensityFn, e->active ? 50000.0f : 0.0f };
                     const bool callOk = seh_invoke([](void* raw) {
                         auto* c = static_cast<CallCtx*>(raw);
                         struct Params { float NewIntensity = 0.0f; } params;
-                        params.NewIntensity = 50000.0f;
+                        params.NewIntensity = c->intensity;
                         c->obj->ProcessEvent(c->fn, &params);
                     }, &callCtx);
                     if (!callOk) debug_log("sync_weapon_attachments: SetIntensity call crashed, caught via SEH, itemId=" + e->itemId);
-                } else if (reverseFromEndFn) {
+                } else if (e->active && reverseFromEndFn) {
                     struct CallCtx { UObject* obj; UFunction* fn; } callCtx{ comp, reverseFromEndFn };
                     const bool callOk = seh_invoke([](void* raw) {
                         auto* c = static_cast<CallCtx*>(raw);
                         c->obj->ProcessEvent(c->fn, nullptr);
                     }, &callCtx);
                     if (!callOk) debug_log("sync_weapon_attachments: NVGTL.ReverseFromEnd call crashed, caught via SEH, itemId=" + e->itemId);
+                } else if (!e->active && playFromStartFn) {
+                    struct CallCtx { UObject* obj; UFunction* fn; } callCtx{ comp, playFromStartFn };
+                    const bool callOk = seh_invoke([](void* raw) {
+                        auto* c = static_cast<CallCtx*>(raw);
+                        c->obj->ProcessEvent(c->fn, nullptr);
+                    }, &callCtx);
+                    if (!callOk) debug_log("sync_weapon_attachments: NVGTL.PlayFromStart call crashed, caught via SEH, itemId=" + e->itemId);
                 }
             }
         }

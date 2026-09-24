@@ -45,7 +45,7 @@ using namespace RC::Unreal;
 
 // ── Config ────────────────────────────────────────────────────────────────
 
-static std::string cfg_gateway_host   = "gateway.example.com";
+static std::string cfg_gateway_host   = "127.0.0.1";
 static uint16_t    cfg_gateway_port   = 31000;
 static std::string cfg_join_ticket;
 static int64_t     cfg_move_interval_us = 50'000; // 50 ms
@@ -8089,30 +8089,105 @@ static void do_aim_write(void* ctxRaw)
     // ADS-while-melee isn't a real combination in this game). HeadQuat is
     // Conv_RotatorToQuaternion(HeadRotation) in the real function; computed
     // here via FRotator::Quaternion()'s standard formula (stable across UE
-    // versions) rather than calling the native function live. Sign
-    // (positive renderAimYaw, unlike Pitch/Yaw's negated write above) is
-    // NOT yet live-confirmed — NormalizedDeltaRotator is a plain rotation
-    // delta, not an authored blendspace sample, so it shouldn't carry this
-    // game's blendspace-specific inversion, but flip if a live test shows
-    // the head turning the wrong way.
+    // versions) rather than calling the native function live.
+    //
+    // 2026-08-26: first live test showed looking up turning the proxy's head
+    // right and down turning it left, no visible left/right response — tried
+    // negating Yaw (matching Pitch/Yaw's proven blendspace-inversion negation
+    // above), which produced a DIFFERENT wrong symptom (left/right now looked
+    // like up/down). Reverted the negation: check_head_rot_diagnostic's live
+    // capture confirmed the un-negated mapping is structurally correct
+    // (renderAimPitch mirrors the sender's raw control pitch exactly;
+    // renderAimYaw's aimYaw-renderYaw mirrors NormalizedDeltaRotator's
+    // controlYaw-actorYaw exactly) — that diagnostic also caught the real bug:
+    // Roll was hardcoded to 0 instead of tracking Pitch (see below), and since
+    // Roll multiplies into both Pitch and Yaw's terms in the quaternion
+    // formula, a missing Roll term is sufficient on its own to make a pure
+    // pitch input visually resemble a yaw rotation. Not yet live-confirmed —
+    // verify with another look-around test.
     struct FRotatorD { double Pitch, Yaw, Roll; };
     struct FQuatD    { double X, Y, Z, W; };
     if (auto* headRot = static_cast<FRotatorD*>(obj->GetValuePtrByPropertyNameInChain(L"HeadRotation"))) {
         FRotatorD r{ 0.0, 0.0, 0.0 };
         if (!isAds) {
-            r.Pitch = std::clamp(static_cast<double>(player.renderAimPitch), -60.0, 60.0);
-            r.Yaw   = std::clamp(static_cast<double>(player.renderAimYaw),   -40.0, 30.0);
+            // Clamp ranges (2026-08-26, corrected): the original bytecode read
+            // documented Pitch:[-60,60] / Yaw:[-40,30], but a live capture of
+            // the LOCAL player's real GetHeadRot() output across a whole test
+            // session directly contradicts both. Yaw hits a clean, repeated
+            // ±60.00 plateau (many identical samples pinned exactly there) —
+            // textbook clamp signature — so the real bound is [-60,60], not
+            // [-40,30]. Pitch shows the OPPOSITE signature: no repeated
+            // boundary at all, ranging asymmetrically from -78.35 to +29.92
+            // with every sample a different value — that's raw, unclamped
+            // camera pitch, not a hard-limited one. The two axes' real clamp
+            // bounds were very likely swapped in the original bytecode trace.
+            // Pitch gets a generous safety bound (standard UE camera pitch
+            // limit) rather than 0/none, so a corrupted upstream value can't
+            // feed a pathological angle into the quaternion math below.
+            r.Pitch = std::clamp(static_cast<double>(player.renderAimPitch), -89.9, 89.9);
+            r.Yaw   = std::clamp(static_cast<double>(player.renderAimYaw),   -60.0, 60.0);
+            // Roll: same live capture showed Roll isn't 0 — it tracks Pitch
+            // (equal whenever |Pitch|<=40, clamps at -40 beyond that), e.g.
+            // P=-37.02/R=-37.02, P=-38.20/R=-38.20, P=-40.96/R=-40.00. Since
+            // Roll multiplies together with Pitch/Yaw in the quaternion
+            // formula below, leaving it at 0 was a genuinely different
+            // rotation, not just a less-accurate one. Note: the same capture
+            // also showed Roll LAGS Pitch during fast movement (frozen at an
+            // old value while Pitch visibly changes, only converging once
+            // Pitch catches up) — consistent with Roll being its own
+            // RInterpTo-smoothed value in the real function rather than an
+            // instant copy. Not replicated here (unknown interp speed); this
+            // is an instantaneous copy, a known simplification.
+            r.Roll = std::clamp(r.Pitch, -40.0, 40.0);
         }
         *headRot = r;
         if (auto* headQuat = static_cast<FQuatD*>(obj->GetValuePtrByPropertyNameInChain(L"HeadQuat"))) {
+            // 2026-08-26: traced the actual GetHeadRot bytecode (not just the
+            // summary comment above) line by line — after computing
+            // HeadRotation, the real function Breaks it back apart, NEGATES
+            // the Roll component, and swaps Pitch/Yaw (BreakRotator's real
+            // output order is Roll/Pitch/Yaw, not the struct's Pitch/Yaw/Roll
+            // member order — the classic gotcha), THEN calls
+            // Conv_RotatorToQuaternion on that swapped/negated rotator, not
+            // on HeadRotation directly. Verified by hand-computing this exact
+            // transform against two independent real logged (HeadRotation,
+            // HeadQuat) pairs from check_head_rot_diagnostic — both matched
+            // the real HeadQuat to 3 decimal places. This is what the
+            // reported "diagonal"/cross-axis symptom was: HeadQuat (the
+            // dominant visual driver) was being built from Pitch/Yaw/Roll
+            // directly, never actually swapped/negated as the real function
+            // does.
+            const double quatPitch = r.Yaw;
+            const double quatYaw   = r.Pitch;
+            const double quatRoll  = -r.Roll;
             constexpr double kDegToRad = 3.14159265358979323846 / 180.0;
-            const double sp = std::sin(r.Pitch * kDegToRad * 0.5), cp = std::cos(r.Pitch * kDegToRad * 0.5);
-            const double sy = std::sin(r.Yaw   * kDegToRad * 0.5), cy = std::cos(r.Yaw   * kDegToRad * 0.5);
-            const double sr = std::sin(r.Roll  * kDegToRad * 0.5), cr = std::cos(r.Roll  * kDegToRad * 0.5);
+            const double sp = std::sin(quatPitch * kDegToRad * 0.5), cp = std::cos(quatPitch * kDegToRad * 0.5);
+            const double sy = std::sin(quatYaw   * kDegToRad * 0.5), cy = std::cos(quatYaw   * kDegToRad * 0.5);
+            const double sr = std::sin(quatRoll  * kDegToRad * 0.5), cr = std::cos(quatRoll  * kDegToRad * 0.5);
             headQuat->X =  cr*sp*sy - sr*cp*cy;
             headQuat->Y = -cr*sp*cy - sr*cp*sy;
             headQuat->Z =  cr*cp*sy - sr*sp*cy;
             headQuat->W =  cr*cp*cy + sr*sp*sy;
+
+            // TEMPORARY diagnostic (2026-08-26): three fixes in a row each
+            // produced a different-but-still-wrong symptom — stop reasoning
+            // from visual descriptions alone and log exactly what's actually
+            // being written to the proxy, not just the local ground truth
+            // check_head_rot_diagnostic already captures. Remove once the
+            // real mapping is confirmed.
+            static uint64_t s_lastLogUs = 0;
+            const uint64_t nowUs = sdb::now_micros();
+            if (nowUs - s_lastLogUs > 300'000ULL) {
+                s_lastLogUs = nowUs;
+                char buf[300];
+                snprintf(buf, sizeof(buf),
+                         "proxy_head_write: isAds=%d in(aimPitch=%.2f aimYaw=%.2f) "
+                         "out(P=%.2f Y=%.2f R=%.2f) quat(X=%.3f Y=%.3f Z=%.3f W=%.3f)",
+                         isAds ? 1 : 0, player.renderAimPitch, player.renderAimYaw,
+                         r.Pitch, r.Yaw, r.Roll,
+                         headQuat->X, headQuat->Y, headQuat->Z, headQuat->W);
+                debug_log(buf);
+            }
         }
     }
 }
@@ -8657,7 +8732,7 @@ public:
         merge_command_line_args(sc);
 
         cfg_gateway_host     = cfg_get(sc, "SDB_GATEWAY_HOST");
-        if (cfg_gateway_host.empty()) cfg_gateway_host = "gateway.example.com";
+        if (cfg_gateway_host.empty()) cfg_gateway_host = "127.0.0.1";
         cfg_gateway_port     = cfg_u16(sc, "SDB_GATEWAY_PORT", 31000);
         cfg_join_ticket      = cfg_get(sc, "SDB_JOIN_TICKET");
         cfg_move_interval_us = cfg_ms_to_us(sc, "SDB_MOVE_INTERVAL_MS", 50'000);
