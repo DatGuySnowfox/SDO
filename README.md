@@ -1,5 +1,16 @@
 # SurrounDead Bridge (SDO)
 
+> **Frozen branch — game version .7 / Unreal Engine 5.3.**
+>
+> This is the last state of the tree that targeted the pre-.8 build of SurrounDead. It is kept for
+> reference and receives no fixes. Everything in it — the hardcoded addresses, the struct offsets,
+> the `research/CXXHeaderDump/` headers, the `vendor/ue4ss-stub/` ABI mirror — describes UE 5.3 and
+> will not work against a current install.
+>
+> Active development is on `master`, ported to UE 5.6.1
+> (`++UE5+Release-5.6-CL-44394996`). If you are trying to run the mod, go there.
+
+
 Experimental multiplayer for [SurrounDead](https://store.steampowered.com/app/1645820/SurrounDead/),
 a single-player UE5 survival game. A [UE4SS](https://github.com/UE4SS-RE/RE-UE4SS) C++ mod hooks the
 game client and talks to a dedicated Node.js server, which owns world state and relays player state
