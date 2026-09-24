@@ -3725,8 +3725,13 @@ static void do_attach_health_scan(void* ctxRaw)
     if (ctx->itemHadMesh) {
         for (uintptr_t child : current) {
             UObject* childObj = reinterpret_cast<UObject*>(child);
-            void** meshSlot = static_cast<void**>(childObj->GetValuePtrByPropertyNameInChain(L"SkeletalMesh"));
-            if (!meshSlot) meshSlot = static_cast<void**>(childObj->GetValuePtrByPropertyNameInChain(L"SkeletalMeshAsset"));
+            // SkinnedAsset is the live property on UE5 — it is what
+            // SetSkinnedAssetAndUpdate writes. The legacy SkeletalMesh field
+            // still exists at 0x0578 but is not kept in sync, which is why the
+            // repair diagnostics reported meshBefore=0x0 meshAfter=0x0 for
+            // components that visibly had a mesh. Try the live one first.
+            void** meshSlot = static_cast<void**>(childObj->GetValuePtrByPropertyNameInChain(L"SkinnedAsset"));
+            if (!meshSlot) meshSlot = static_cast<void**>(childObj->GetValuePtrByPropertyNameInChain(L"SkeletalMesh"));
             if (!meshSlot) meshSlot = static_cast<void**>(childObj->GetValuePtrByPropertyNameInChain(L"StaticMesh"));
             if (!meshSlot) continue;
 
@@ -4419,8 +4424,8 @@ static void do_body_part_repair(void* ctxRaw)
         auto* clothingComp = *reinterpret_cast<UObject**>(
             reinterpret_cast<uintptr_t>(ctx->owner) + ctx->clothingCompOffset);
         if (clothingComp) {
-            void** clothMeshSlot = static_cast<void**>(clothingComp->GetValuePtrByPropertyNameInChain(L"SkeletalMesh"));
-            if (!clothMeshSlot) clothMeshSlot = static_cast<void**>(clothingComp->GetValuePtrByPropertyNameInChain(L"SkeletalMeshAsset"));
+            void** clothMeshSlot = static_cast<void**>(clothingComp->GetValuePtrByPropertyNameInChain(L"SkinnedAsset"));
+            if (!clothMeshSlot) clothMeshSlot = static_cast<void**>(clothingComp->GetValuePtrByPropertyNameInChain(L"SkeletalMesh"));
             if (clothMeshSlot && *clothMeshSlot) {
                 // 2026-08-15: mesh-presence alone isn't sufficient proof the
                 // clothing is actually showing — live-reported immediately
@@ -5122,7 +5127,7 @@ static void check_component_drift(const std::string& label, AActor* actor,
     // no AttachToName in the export at all — plain direct children, origin
     // check is correct for those.
     static const struct { const wchar_t* w; const char* n; int32_t ci; const wchar_t* clothingOnRep; const char* appearanceField; const wchar_t* socket; } kNames[] = {
-        { L"HairMesh", "HairMesh", 0, nullptr, "hair", L"head" }, { L"BeardMesh", "BeardMesh", 0, nullptr, "beard", L"head" }, { L"head", "head", 0, nullptr, nullptr, nullptr },
+        { L"HairMesh", "HairMesh", 0, nullptr, "hair", L"Head" }, { L"BeardMesh", "BeardMesh", 0, nullptr, "beard", L"Head" }, { L"Head", "Head", 0, nullptr, nullptr, nullptr },
         { L"Torso", "Torso", 1732710, L"OnRep_ClothingTorsoEquipped?", nullptr, nullptr },
         { L"Arms", "Arms", 0, nullptr, nullptr, nullptr }, { L"Hands", "Hands", 0, nullptr, "hands", nullptr },
         { L"Legs", "Legs", 1732718, L"OnRep_ClothingLegsEquipped?", nullptr, nullptr },
@@ -5133,7 +5138,7 @@ static void check_component_drift(const std::string& label, AActor* actor,
         // BP_PlayerCharacter.hpp @0x0790/@0x0740, both UStaticMeshComponent
         // (still USceneComponent-derived, same +0x128 RelativeLocation
         // offset applies).
-        { L"EyebrowsMesh", "EyebrowsMesh", 0, nullptr, "eyebrows", L"eyebrows" }, { L"Mouth", "Mouth", 0, nullptr, "mouth", L"head" },
+        { L"EyebrowsMesh", "EyebrowsMesh", 0, nullptr, "eyebrows", L"eyebrows" }, { L"Mouth", "Mouth", 0, nullptr, "mouth", L"Head" },
         // Added 2026-08-15 after a live report: PC2 spawned in with base
         // Torso/Legs/Feet all present (confirmed via the initial-post-join-
         // state logging — no base-mesh clear at all this occurrence) but
@@ -8524,7 +8529,22 @@ static void do_aim_write(void* ctxRaw)
             // limit) rather than 0/none, so a corrupted upstream value can't
             // feed a pathological angle into the quaternion math below.
             r.Pitch = std::clamp(static_cast<double>(player.renderAimPitch), -89.9, 89.9);
-            r.Yaw   = std::clamp(static_cast<double>(player.renderAimYaw),   -60.0, 60.0);
+            // Negated (2026-09-24), derived from a live capture rather than
+            // guessed at — the earlier negation attempt was reverted on the
+            // claim that renderAimYaw "mirrors controlYaw-actorYaw exactly".
+            // A capture from the running game says the opposite:
+            //
+            //   controlYaw = -130.92   actorYaw = -112.82
+            //   controlYaw - actorYaw = -18.10
+            //   the game's own HeadRotation.Yaw = +18.10
+            //
+            // So the AnimBP's convention is actorYaw - controlYaw, while
+            // renderAimYaw carries aimYaw - renderYaw (control - actor). Those
+            // are negatives of each other, which is exactly the reported
+            // symptom: head tracking works but looks the wrong way. Note the
+            // blendspace write above already negates renderAimYaw for the same
+            // reason.
+            r.Yaw   = std::clamp(-static_cast<double>(player.renderAimYaw),  -60.0, 60.0);
             // Roll: same live capture showed Roll isn't 0 — it tracks Pitch
             // (equal whenever |Pitch|<=40, clamps at -40 beyond that), e.g.
             // P=-37.02/R=-37.02, P=-38.20/R=-38.20, P=-40.96/R=-40.00. Since

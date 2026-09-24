@@ -3070,7 +3070,24 @@ void ProxyManager::sync_pawn_appearance(AActor* actor, RemotePlayer& player)
             // See refresh_leader_pose's own comment — every base body part
             // is a leader-pose follower of the character's own Mesh.
             auto** leaderMeshSlot = static_cast<UObject**>(actor->GetValuePtrByPropertyNameInChain(L"Mesh"));
-            refresh_leader_pose(comp, (leaderMeshSlot && *leaderMeshSlot) ? *leaderMeshSlot : nullptr);
+            UObject* leaderMesh = (leaderMeshSlot && *leaderMeshSlot) ? *leaderMeshSlot : nullptr;
+
+            // Body parts render detached when the follower's skeleton does not
+            // match the leader's, and SetLeaderPoseComponent reports nothing
+            // when that happens. The proxy is spawned from a fixed default
+            // class, so if it came up male while the appearance is female, the
+            // base Mesh still carries the male skeleton and every female part
+            // hung off it fails to bind. Log what the leader actually is so
+            // that is visible rather than inferred.
+            if (leaderMesh) {
+                UObject* leaderAsset = prop_obj(leaderMesh, STR("SkinnedAsset"));
+                debug_log("sync_pawn_appearance: leaderMesh asset=" +
+                          (leaderAsset ? narrow(leaderAsset->GetFullName()) : std::string("<none>")) +
+                          " follower=" + narrow(kBodyPartNames[i]));
+            } else {
+                debug_log("sync_pawn_appearance: leaderMesh is NULL — followers cannot bind");
+            }
+            refresh_leader_pose(comp, leaderMesh);
         }
 
         // Re-show in case a previous cycle hid this component (the source
