@@ -434,6 +434,33 @@ static UObject* obj_prop(UObject* owner, const wchar_t* name)
     return (slot && *slot) ? *slot : nullptr;
 }
 
+// USceneComponent::AttachChildren, resolved by name.
+//
+// This was read at a hardcoded 0x00C0 (data) / 0x00C8 (count). On UE 5.6
+// AttachChildren lives at 0x00E0 and 0x00C0 is PhysicsVolume, a
+// TWeakObjectPtr — so every attachment walk in this file was reading a weak
+// pointer as if it were a TArray. The resulting counts were garbage
+// (-1378242960, -1077692080 and friends appear throughout the live logs), and
+// because each call site defensively clamps an implausible count to zero, the
+// failure was completely silent: weapon-attachment sync, the attach-health
+// heartbeat and the component-drift scan all just quietly found nothing.
+//
+// TArray's own layout (pointer, then int32 count, then int32 capacity) is
+// stable across these versions; only where the property sits moved.
+struct AttachChildrenArray {
+    void*   data;
+    int32_t num;
+    int32_t capacity;
+};
+
+static int32_t attach_children_count(UObject* comp)
+{
+    if (!comp) return 0;
+    auto* arr = static_cast<AttachChildrenArray*>(
+        comp->GetValuePtrByPropertyNameInChain(STR("AttachChildren")));
+    return arr ? arr->num : 0;
+}
+
 // ── Vitals reader ─────────────────────────────────────────────────────────
 
 // Reads live game state from UE5 components by property name.
@@ -965,8 +992,14 @@ static void do_weapon_attach_scan(void* ctxRaw)
     const auto& itemIdToSlot = *ctx->itemIdToSlot;
     sdo::WeaponAttachments& out = *ctx->out;
 
-    const uintptr_t childrenData  = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(mesh) + 0x00C0);
-    int32_t         childrenCount = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(mesh) + 0x00C0 + 0x08);
+    // AttachChildren moved 0x0C0 -> 0x0E0 on UE 5.6; 0x0C0 is now PhysicsVolume,
+    // so this read a TWeakObjectPtr as a TArray and the count came back as
+    // garbage (logged as e.g. -1378242960), which the clamp below then treated
+    // as "nothing attached". Resolve by name instead.
+    auto* attachArr = static_cast<AttachChildrenArray*>(
+        mesh ? mesh->GetValuePtrByPropertyNameInChain(STR("AttachChildren")) : nullptr);
+    const uintptr_t childrenData  = attachArr ? reinterpret_cast<uintptr_t>(attachArr->data) : 0;
+    int32_t         childrenCount = attachArr ? attachArr->num : 0;
     debug_log("read_local_weapon_attachments: Mesh AttachChildren count=" + std::to_string(childrenCount));
     if (!childrenData || childrenCount <= 0) return;
     // Sanity cap: a genuine character never has more than a couple dozen
@@ -1060,8 +1093,10 @@ static void do_weapon_attach_scan(void* ctxRaw)
         // zero-ness.
         std::unordered_map<std::string, bool> nestedActiveByItemId;
         {
-            const uintptr_t nestedData  = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(childComp) + 0x00C0);
-            const int32_t   nestedCount = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(childComp) + 0x00C0 + 0x08);
+            auto* nestedArr = static_cast<AttachChildrenArray*>(
+                childComp ? childComp->GetValuePtrByPropertyNameInChain(STR("AttachChildren")) : nullptr);
+            const uintptr_t nestedData  = nestedArr ? reinterpret_cast<uintptr_t>(nestedArr->data) : 0;
+            const int32_t   nestedCount = nestedArr ? nestedArr->num : 0;
             if (nestedData && nestedCount > 0 && nestedCount <= 32) {
                 for (int32_t j = 0; j < nestedCount; ++j) {
                     UObject* nestedComp = *reinterpret_cast<UObject**>(nestedData + static_cast<size_t>(j) * 8);
@@ -3549,8 +3584,10 @@ static void do_attach_health_scan(void* ctxRaw)
     auto* ctx = static_cast<AttachHealthCtx*>(ctxRaw);
     const uintptr_t meshAddr = reinterpret_cast<uintptr_t>(ctx->mesh);
 
-    const uintptr_t childrenData  = *reinterpret_cast<uintptr_t*>(meshAddr + 0x00C0);
-    const int32_t   childrenCount = *reinterpret_cast<int32_t*>(meshAddr + 0x00C0 + 0x08);
+    auto* attachArr = static_cast<AttachChildrenArray*>(
+        reinterpret_cast<UObject*>(meshAddr)->GetValuePtrByPropertyNameInChain(STR("AttachChildren")));
+    const uintptr_t childrenData  = attachArr ? reinterpret_cast<uintptr_t>(attachArr->data) : 0;
+    const int32_t   childrenCount = attachArr ? attachArr->num : 0;
     // Same defensive clamp as read_local_weapon_attachments — a concurrent
     // native mutation of this TArray can transiently read as a huge garbage
     // count; skip this check entirely rather than iterate garbage.
@@ -3892,8 +3929,10 @@ static void do_current_actor_scan(void* rawCtx)
     if (!mesh) return;
 
     const uintptr_t meshAddr = reinterpret_cast<uintptr_t>(mesh);
-    const uintptr_t childrenData  = *reinterpret_cast<uintptr_t*>(meshAddr + 0x00C0);
-    const int32_t   childrenCount = *reinterpret_cast<int32_t*>(meshAddr + 0x00C0 + 0x08);
+    auto* attachArr = static_cast<AttachChildrenArray*>(
+        reinterpret_cast<UObject*>(meshAddr)->GetValuePtrByPropertyNameInChain(STR("AttachChildren")));
+    const uintptr_t childrenData  = attachArr ? reinterpret_cast<uintptr_t>(attachArr->data) : 0;
+    const int32_t   childrenCount = attachArr ? attachArr->num : 0;
     if (childrenCount < 0 || childrenCount > 64 || !childrenData) return;
 
     for (int32_t c = 0; c < childrenCount; ++c) {
@@ -4010,8 +4049,10 @@ static void do_freeze_check_scan(void* rawCtx)
     if (!mesh) return;
 
     const uintptr_t meshAddr = reinterpret_cast<uintptr_t>(mesh);
-    const uintptr_t childrenData  = *reinterpret_cast<uintptr_t*>(meshAddr + 0x00C0);
-    const int32_t   childrenCount = *reinterpret_cast<int32_t*>(meshAddr + 0x00C0 + 0x08);
+    auto* attachArr = static_cast<AttachChildrenArray*>(
+        reinterpret_cast<UObject*>(meshAddr)->GetValuePtrByPropertyNameInChain(STR("AttachChildren")));
+    const uintptr_t childrenData  = attachArr ? reinterpret_cast<uintptr_t>(attachArr->data) : 0;
+    const int32_t   childrenCount = attachArr ? attachArr->num : 0;
     if (childrenCount < 0 || childrenCount > 64 || !childrenData) return;
 
     for (int32_t c = 0; c < childrenCount; ++c) {
@@ -6717,7 +6758,7 @@ static void do_game_tick(bool cleanContext)
                 auto** preMeshSlot = static_cast<UObject**>(pawn->GetValuePtrByPropertyNameInChain(L"Mesh"));
                 UObject* preMesh = (preMeshSlot && *preMeshSlot) ? *preMeshSlot : nullptr;
                 int32_t preCount = -1;
-                if (preMesh) preCount = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(preMesh) + 0x00C0 + 0x08);
+                if (preMesh) preCount = attach_children_count(preMesh);
                 debug_log("join_teleport: about to call K2_SetActorLocation/Rotation, preChildrenCount=" + std::to_string(preCount));
 
                 struct SetLocParams { FVector NewLocation; bool bSweep; FHitResult SweepHitResult; bool bTeleport; bool ReturnValue; } locParams{};
@@ -6741,7 +6782,7 @@ static void do_game_tick(bool cleanContext)
                 pawn->ProcessEvent(setRotFn, &rotParams);
 
                 int32_t postCount = -1;
-                if (preMesh) postCount = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(preMesh) + 0x00C0 + 0x08);
+                if (preMesh) postCount = attach_children_count(preMesh);
                 debug_log("join_teleport: K2_SetActorLocation/Rotation done, postChildrenCount=" + std::to_string(postCount));
 
                 Output::send<LogLevel::Normal>(

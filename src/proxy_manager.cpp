@@ -34,6 +34,50 @@ struct NativeFTransform {
     double scaleX = 1.0, scaleY = 1.0, scaleZ = 1.0, scalePad = 0.0;
 };
 
+// ── Name-based property access ────────────────────────────────────────────
+//
+// Byte offsets do not survive an engine update; property names generally do.
+// The UE 5.6 update moved essentially every offset this file used to hardcode,
+// and none of it failed loudly:
+//
+//   AttachChildren   0x0C0 -> 0x0E0   (0x0C0 is now PhysicsVolume, so the
+//                                      TArray count read as garbage and every
+//                                      attachment scan silently did nothing)
+//   AttachParent     0x0B0 -> 0x0C8
+//   RelativeLocation 0x128 -> 0x140
+//   RelativeRotation 0x140 -> 0x158   (0x140 is now RelativeLocation, so
+//                                      rotations were written into position —
+//                                      this is the "component_drift ... DRIFTED"
+//                                      the logs were full of)
+//   Velocity         0x0B8 -> 0x0D0   (0x0B8/0x0C0 are now the UpdatedComponent
+//                                      and UpdatedPrimitive pointers, so proxy
+//                                      movement wrote doubles over two live
+//                                      engine component pointers every tick)
+//   IsPlayerMale?    0x15A0 -> 0x1540
+//   ItemDataAsset    0x0A8 -> 0x0C0
+//
+// Resolve by name instead. A miss returns nullptr, which callers must handle —
+// that is the loud failure the offsets never gave us.
+template <typename T>
+static T* prop_ptr(UObject* owner, const wchar_t* name)
+{
+    if (!owner) return nullptr;
+    return static_cast<T*>(owner->GetValuePtrByPropertyNameInChain(name));
+}
+
+template <typename T>
+static T* prop_ptr(uintptr_t owner, const wchar_t* name)
+{
+    return prop_ptr<T>(reinterpret_cast<UObject*>(owner), name);
+}
+
+// Object-valued property (a UObject* stored in the owner), dereferenced.
+static UObject* prop_obj(UObject* owner, const wchar_t* name)
+{
+    auto** slot = prop_ptr<UObject*>(owner, name);
+    return slot ? *slot : nullptr;
+}
+
 // UE4SS.dll's own UWorld::SpawnActor wrapper unconditionally returns nullptr
 // on this build — live IDA tracing (research/04_ida_investigation_log.md
 // Session 40) followed its real call chain (UWorld::SpawnActor ->
@@ -49,15 +93,82 @@ struct NativeFTransform {
 // UEngine::GetWorldFromContextObject, then calls the real, stock
 // UWorld::SpawnActor (confirmed 100% vanilla UE5 with no SurrounDead-specific
 // gate) with bDeferConstruction=true.
+// Both spawn calls used to be raw RVAs into the game executable
+// (0x2E80E80 and 0x2AAAB90). Those were captured against UE 5.3. The 5.6
+// update grew the executable from 122 MB to 165 MB, so both addresses now
+// land on unrelated code — and because the call site passes five or six
+// arguments to whatever happens to be there, the callee writes a different
+// stack frame than the caller expects. That corrupts the /GS stack cookie,
+// and Windows kills the process with __fastfail(FAST_FAIL_STACK_COOKIE_-
+// CHECK_FAILURE) rather than an access violation, which is why the crash
+// dump pointed at `int 29h` inside the game exe with no useful stack.
+//
+// This is what killed both clients within seconds of the second player
+// joining: the proxy spawn path is the first thing that runs when a remote
+// player appears, and it had never been exercised since the port.
+//
+// Both are UFunctions on UGameplayStatics, so call them through
+// ProcessEvent by name instead — names survive an engine bump, addresses do
+// not. Parameter blocks mirror the 5.6 signatures exactly:
+//
+//   AActor* BeginDeferredActorSpawnFromClass(const UObject* WorldContextObject,
+//       TSubclassOf<AActor> ActorClass, const FTransform& SpawnTransform,
+//       ESpawnActorCollisionHandlingMethod CollisionHandlingOverride,
+//       AActor* Owner, ESpawnActorScaleMethod TransformScaleMethod)
+//   AActor* FinishSpawningActor(AActor* Actor, const FTransform& SpawnTransform,
+//       ESpawnActorScaleMethod TransformScaleMethod)
+//
+// FTransform is 0x60 and 16-byte aligned, which NativeFTransform already
+// mirrors (Rotation 0x00, Translation 0x20, Scale3D 0x40).
+static UObject* gameplay_statics()
+{
+    static UObject* s_gs   = nullptr;
+    static bool     s_tried = false;
+    if (!s_tried) {
+        s_tried = true;
+        s_gs = UObjectGlobals::FindObject(nullptr, reinterpret_cast<UObject*>(-1),
+                                          STR("Default__GameplayStatics"));
+        debug_log(std::string("gameplay_statics: Default__GameplayStatics ") +
+                  (s_gs ? "resolved" : "NOT FOUND"));
+    }
+    return s_gs;
+}
+
 static void* call_begin_deferred_spawn(void* world_context, void* actor_class,
                                         const NativeFTransform* xform)
 {
-    // (WorldContextObject, ActorClass, SpawnTransform, CollisionHandlingOverride,
-    //  Owner, <unidentified trailing byte, always 0 for our use>)
-    using Fn = void*(__fastcall*)(void*, void*, const NativeFTransform*, char, void*, char);
-    static Fn fn = reinterpret_cast<Fn>(
-        reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr)) + 0x2E80E80);
-    return fn(world_context, actor_class, xform, 0, nullptr, 0);
+    UObject* gs = gameplay_statics();
+    if (!gs) return nullptr;
+    static UFunction* fn = gs->GetFunctionByNameInChain(STR("BeginDeferredActorSpawnFromClass"));
+    if (!fn) {
+        debug_log("call_begin_deferred_spawn: BeginDeferredActorSpawnFromClass NOT FOUND");
+        return nullptr;
+    }
+
+    struct alignas(16) Params {
+        const void*      WorldContextObject;          // 0x00
+        void*            ActorClass;                  // 0x08
+        NativeFTransform SpawnTransform;              // 0x10 (0x60)
+        uint8_t          CollisionHandlingOverride;   // 0x70
+        uint8_t          _pad0[7];
+        void*            Owner;                       // 0x78
+        uint8_t          TransformScaleMethod;        // 0x80
+        uint8_t          _pad1[7];
+        void*            ReturnValue;                 // 0x88
+    } params{};
+    static_assert(offsetof(Params, SpawnTransform)  == 0x10, "FTransform must be 16-aligned at 0x10");
+    static_assert(offsetof(Params, Owner)           == 0x78, "Owner offset");
+    static_assert(offsetof(Params, ReturnValue)     == 0x88, "ReturnValue offset");
+
+    params.WorldContextObject       = world_context;
+    params.ActorClass               = actor_class;
+    params.SpawnTransform           = *xform;
+    params.CollisionHandlingOverride = 0;   // Undefined — same as before
+    params.Owner                    = nullptr;
+    params.TransformScaleMethod     = 0;    // OverrideRootScale
+
+    gs->ProcessEvent(fn, &params);
+    return params.ReturnValue;
 }
 
 // AActor::FinishSpawning()'s real native implementation — identified via its
@@ -69,11 +180,30 @@ static void* call_begin_deferred_spawn(void* world_context, void* actor_class,
 // itself is void in UE5 source, so its return value here is not used.
 static void call_finish_spawning(void* actor, const NativeFTransform* xform)
 {
-    // (this=Actor, SpawnTransform, bIsDefaultTransform, InstanceDataCache, TransformScaleMethod)
-    using Fn = void*(__fastcall*)(void*, const NativeFTransform*, char, void*, char);
-    static Fn fn = reinterpret_cast<Fn>(
-        reinterpret_cast<uintptr_t>(GetModuleHandleW(nullptr)) + 0x2AAAB90);
-    fn(actor, xform, 0, nullptr, 0);
+    UObject* gs = gameplay_statics();
+    if (!gs) return;
+    static UFunction* fn = gs->GetFunctionByNameInChain(STR("FinishSpawningActor"));
+    if (!fn) {
+        debug_log("call_finish_spawning: FinishSpawningActor NOT FOUND");
+        return;
+    }
+
+    struct alignas(16) Params {
+        void*            Actor;                 // 0x00
+        uint8_t          _pad0[8];
+        NativeFTransform SpawnTransform;        // 0x10 (0x60)
+        uint8_t          TransformScaleMethod;  // 0x70
+        uint8_t          _pad1[7];
+        void*            ReturnValue;           // 0x78
+    } params{};
+    static_assert(offsetof(Params, SpawnTransform) == 0x10, "FTransform must be 16-aligned at 0x10");
+    static_assert(offsetof(Params, ReturnValue)    == 0x78, "ReturnValue offset");
+
+    params.Actor                = actor;
+    params.SpawnTransform       = *xform;
+    params.TransformScaleMethod = 0;   // OverrideRootScale
+
+    gs->ProcessEvent(fn, &params);
 }
 
 // UObject::GetClassPrivate() in the vendored UE4SS stub header is declared
@@ -898,7 +1028,14 @@ static bool call_on_rep_active_weapon(AActor* actor)
 static bool set_primary_weapon_equipped(AActor* actor, bool value)
 {
     if (!actor) return false;
-    *reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(actor) + 0x1DC0) = value;
+    // Was actor+0x1DC0; the property is "PrimaryWeaponEquipped?" (trailing
+    // question mark is part of the Blueprint name) at 0x1DE0 on UE 5.6.
+    bool* slot = prop_ptr<bool>(reinterpret_cast<UObject*>(actor), STR("PrimaryWeaponEquipped?"));
+    if (!slot) {
+        debug_log("set_primary_weapon_equipped: PrimaryWeaponEquipped? not found");
+        return false;
+    }
+    *slot = value;
     return true;
 }
 
@@ -1009,7 +1146,9 @@ static bool set_pickup_item_data(AActor* pickupActor, void* itemAsset)
         return false;
     }
 
-    *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(pickupComp) + 0x0A8) = itemAsset;
+    // Was pickupComp+0x0A8; ItemDataAsset is at 0x00C0 on UE 5.6.
+    if (auto** slot = prop_ptr<void*>(reinterpret_cast<UObject*>(pickupComp), STR("ItemDataAsset")))
+        *slot = itemAsset;
 
     UFunction* setCountFn = pickupComp->GetFunctionByNameInChain(L"SetCount");
     if (setCountFn) {
@@ -1052,7 +1191,10 @@ static void apply_item_equipped_transform(UObject* itemRoot, void* itemAsset)
     const auto* eq = reinterpret_cast<const NativeFTransform*>(
         reinterpret_cast<uintptr_t>(itemAsset) + 0x220);
 
-    auto* relLoc = reinterpret_cast<double*>(reinterpret_cast<uintptr_t>(itemRoot) + 0x0128);
+    // Was itemRoot+0x0128. RelativeLocation sits at 0x0140 on UE 5.6, so this
+    // wrote the equip offset into whatever preceded it.
+    auto* relLoc = prop_ptr<double>(itemRoot, STR("RelativeLocation"));
+    if (!relLoc) { debug_log("apply_equipped_transform: RelativeLocation not found"); return; }
     relLoc[0] = eq->locX;
     relLoc[1] = eq->locY;
     relLoc[2] = eq->locZ;
@@ -1080,7 +1222,11 @@ static void apply_item_equipped_transform(UObject* itemRoot, void* itemAsset)
         yaw = std::atan2(yawY, yawX) * kRad2Deg;
         roll = std::atan2(-2.0 * (qw * qx + qy * qz), 1.0 - 2.0 * (qx * qx + qy * qy)) * kRad2Deg;
     }
-    auto* relRot = reinterpret_cast<double*>(reinterpret_cast<uintptr_t>(itemRoot) + 0x0140);
+    // Was itemRoot+0x0140 — which on UE 5.6 *is* RelativeLocation, so every
+    // rotation was being written straight into the component's position. That
+    // is the source of the "component_drift ... DRIFTED" entries.
+    auto* relRot = prop_ptr<double>(itemRoot, STR("RelativeRotation"));
+    if (!relRot) { debug_log("apply_equipped_transform: RelativeRotation not found"); return; }
     relRot[0] = pitch;
     relRot[1] = yaw;
     relRot[2] = roll;
@@ -1311,7 +1457,8 @@ static AActor* spawn_and_equip_item_visual(AActor* actor, void* itemAsset, bool 
     reassert_no_interact(itemActor);
 
     if (itemRoot) {
-        const void* attachParent = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(itemRoot) + 0xB0);
+        // Was itemRoot+0xB0; AttachParent is at 0x00C8 on UE 5.6.
+    const void* attachParent = prop_obj(reinterpret_cast<UObject*>(itemRoot), STR("AttachParent"));
         char buf[128];
         snprintf(buf, sizeof(buf), "spawn_and_equip_item_visual: spawned=0x%llx equip_actor_to_socket=%d AttachParent=0x%llx",
                  reinterpret_cast<unsigned long long>(itemActor), equipped,
@@ -1499,7 +1646,9 @@ static bool equip_clothing_to_mesh(AActor* actor, void* itemAsset, uintptr_t clo
         return false;
     }
 
-    const bool isMale = *reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(actor) + 0x15A0);
+    // Was actor+0x15A0; IsPlayerMale? is at 0x1540 on UE 5.6.
+    const bool* isMalePtr = prop_ptr<bool>(reinterpret_cast<UObject*>(actor), STR("IsPlayerMale?"));
+    const bool isMale = isMalePtr && *isMalePtr;
     UObject* mesh = *reinterpret_cast<UObject**>(
         reinterpret_cast<uintptr_t>(itemAsset) + 0x430 + (isMale ? 0x00 : 0x08));
     if (!mesh) {
@@ -2499,7 +2648,8 @@ void ProxyManager::sync_player_lights(AActor* actor, RemotePlayer& player)
         // the wire from the sender's own live reading rather than guessed —
         // see RemotePlayer::flashlightIntensity / mod.cpp's
         // read_local_player_lights.
-        auto* lightSlot = *reinterpret_cast<UObject**>(reinterpret_cast<uintptr_t>(actor) + 0x0738);
+        // Was actor+0x0738; Flashlight is at 0x0710 on UE 5.6.
+        auto* lightSlot = prop_obj(reinterpret_cast<UObject*>(actor), STR("Flashlight"));
         UFunction* setIntensityFn = lightSlot ? lightSlot->GetFunctionByNameInChain(L"SetIntensity") : nullptr;
         UFunction* setRadiusFn    = lightSlot ? lightSlot->GetFunctionByNameInChain(L"SetAttenuationRadius") : nullptr;
         debug_log("sync_player_lights: Flashlight component=" + std::to_string(lightSlot != nullptr) +
@@ -2664,7 +2814,9 @@ void ProxyManager::sync_pawn_appearance(AActor* actor, RemotePlayer& player)
         return;
     }
 
-    *reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(actor) + 0x15A0) = a.isMale;
+    // Was actor+0x15A0; IsPlayerMale? is at 0x1540 on UE 5.6.
+    if (bool* isMaleSlot = prop_ptr<bool>(reinterpret_cast<UObject*>(actor), STR("IsPlayerMale?")))
+        *isMaleSlot = a.isMale;
 
     // Naked-body SkeletalMeshComponents (BP_PlayerCharacter.hpp) — order
     // matches sdo::PawnAppearance::bodyPartMeshNames / mod.cpp's own copy of
@@ -3235,12 +3387,20 @@ struct ProxyVelocityCtx { AActor* actor; double vx, vy, vz; };
 static void do_apply_proxy_velocity(void* ctxRaw)
 {
     auto* ctx = static_cast<ProxyVelocityCtx*>(ctxRaw);
-    const auto moveComp = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(ctx->actor) + 0x328);
+
+    // Was actor+0x328 for the movement component and moveComp+0xB8..0xC8 for
+    // Velocity. On UE 5.6 actor+0x328 is Mesh (CharacterMovement moved to
+    // 0x330), and 0x0B8/0x0C0 on the resulting component are the
+    // UpdatedComponent and UpdatedPrimitive pointers — so this wrote three
+    // doubles over live engine pointers inside the skeletal mesh component on
+    // every movement tick.
+    UObject* moveComp = prop_obj(reinterpret_cast<UObject*>(ctx->actor), STR("CharacterMovement"));
     if (!moveComp) return;
-    *reinterpret_cast<double*>(moveComp + 0xB8) = ctx->vx;
-    *reinterpret_cast<double*>(moveComp + 0xC0) = ctx->vy;
-    *reinterpret_cast<double*>(moveComp + 0xC8) = ctx->vz;
+    auto* vel = prop_ptr<double>(moveComp, STR("Velocity"));   // FVector: 3 doubles
+    if (!vel) return;
+    vel[0] = ctx->vx;
+    vel[1] = ctx->vy;
+    vel[2] = ctx->vz;
 }
 
 static void apply_proxy_velocity_safe(AActor* actor, float vx, float vy, float vz)

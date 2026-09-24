@@ -275,10 +275,18 @@ static AActor* find_and_claim_native_pickup(UClass* pickupClass, const WorldEnti
         // codebase, e.g. mod.cpp's equip_restore_retry mismatch check); an
         // equipped one never does. Cheap, read-only, no behavior change for
         // the real-drop case this function exists for.
-        const uintptr_t rootComp = *reinterpret_cast<const uintptr_t*>(
-            reinterpret_cast<uintptr_t>(actor) + 0x1A0);
-        const uintptr_t attachParent = rootComp
-            ? *reinterpret_cast<const uintptr_t*>(rootComp + 0xB0) : 0;
+        // Was actor+0x1A0 for RootComponent and rootComp+0xB0 for AttachParent.
+        // On UE 5.6 AttachParent is at 0x00C8, so this read an unrelated field
+        // and the "is it attached to something" test was meaningless.
+        auto** rootSlot = static_cast<UObject**>(
+            actor->GetValuePtrByPropertyNameInChain(L"RootComponent"));
+        UObject* rootComp = (rootSlot && *rootSlot) ? *rootSlot : nullptr;
+        UObject* attachParent = nullptr;
+        if (rootComp) {
+            auto** apSlot = static_cast<UObject**>(
+                rootComp->GetValuePtrByPropertyNameInChain(L"AttachParent"));
+            attachParent = (apSlot && *apSlot) ? *apSlot : nullptr;
+        }
         if (attachParent) continue;
 
         const FVector loc = actor->K2_GetActorLocation();
@@ -617,7 +625,10 @@ AActor* EntityManager::spawn_entity_actor(UWorld* world, const WorldEntity& enti
             actor->GetValuePtrByPropertyNameInChain(L"BP_JigPickupComponent"));
         UObject* pickupComp = (pickupCompSlot && *pickupCompSlot) ? *pickupCompSlot : nullptr;
         if (pickupComp) {
-            *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(pickupComp) + 0x0A8) = itemAsset;
+            // Was pickupComp+0x0A8; ItemDataAsset is at 0x00C0 on UE 5.6.
+            if (auto** assetSlot = static_cast<void**>(
+                    pickupComp->GetValuePtrByPropertyNameInChain(L"ItemDataAsset")))
+                *assetSlot = itemAsset;
 
             UFunction* setCountFn = pickupComp->GetFunctionByNameInChain(L"SetCount");
             if (setCountFn) {
