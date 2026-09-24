@@ -8528,7 +8528,18 @@ static void do_aim_write(void* ctxRaw)
             // Pitch gets a generous safety bound (standard UE camera pitch
             // limit) rather than 0/none, so a corrupted upstream value can't
             // feed a pathological angle into the quaternion math below.
-            r.Pitch = std::clamp(static_cast<double>(player.renderAimPitch), -89.9, 89.9);
+            // Negated 2026-09-24, together with Yaw below. Unlike Yaw this one
+            // could NOT be derived from a capture: the local player's own
+            // HeadRotation.Pitch reads 0.00 in every sample ever logged, so
+            // there is no ground-truth value to compare a computed one
+            // against. The inference is that the AnimBP takes head rotation in
+            // the opposite sense on both axes — which the Yaw capture proved
+            // for Yaw, and which matches the reported symptom that up/down
+            // stayed inverted after Yaw alone was corrected.
+            //
+            // r.Roll derives from r.Pitch below, so it follows automatically
+            // and the documented "Roll tracks Pitch" relationship is kept.
+            r.Pitch = std::clamp(-static_cast<double>(player.renderAimPitch), -89.9, 89.9);
             // Negated (2026-09-24), derived from a live capture rather than
             // guessed at — the earlier negation attempt was reverted on the
             // claim that renderAimYaw "mirrors controlYaw-actorYaw exactly".
