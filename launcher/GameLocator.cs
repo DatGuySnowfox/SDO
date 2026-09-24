@@ -2,7 +2,7 @@ using System.IO;
 using System.Text.RegularExpressions;
 using Microsoft.Win32;
 
-namespace SDB;
+namespace SDO;
 
 public enum ModStatus
 {
@@ -31,7 +31,7 @@ public static class GameLocator
     {
         var candidates = new List<string>();
 
-        var env = Environment.GetEnvironmentVariable("SDB_GAME_WIN64");
+        var env = Environment.GetEnvironmentVariable("SDO_GAME_WIN64");
         if (!string.IsNullOrEmpty(env)) candidates.Add(env);
 
         try
@@ -60,7 +60,7 @@ public static class GameLocator
     {
         var ue4ssPresent = File.Exists(Path.Combine(win64, "UE4SS.dll"))
                          && File.Exists(Path.Combine(win64, "dwmapi.dll"));
-        var modDllPresent = File.Exists(Path.Combine(win64, "Mods", "SurrounDeadBridge", "dlls", "main.dll"));
+        var modDllPresent = File.Exists(Path.Combine(win64, "Mods", "SDO", "dlls", "main.dll"));
         return ue4ssPresent && modDllPresent ? ModStatus.Installed : ModStatus.NotInstalled;
     }
 }

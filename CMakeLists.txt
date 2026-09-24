@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(SurrounDeadBridge VERSION 1.0.0 LANGUAGES CXX)
+project(SDO VERSION 1.0.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -10,7 +10,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(UE4SS_STUB "${CMAKE_SOURCE_DIR}/vendor/ue4ss-stub")
 
 # ── Target ───────────────────────────────────────────────────────────────────
-add_library(SurrounDeadBridge SHARED
+add_library(SDO SHARED
     src/protocol.cpp
     src/tcp_client.cpp
     src/entity_manager.cpp
@@ -18,7 +18,7 @@ add_library(SurrounDeadBridge SHARED
     src/mod.cpp
 )
 
-target_include_directories(SurrounDeadBridge PRIVATE
+target_include_directories(SDO PRIVATE
     src/
     "${UE4SS_STUB}/include"
 )
@@ -29,14 +29,14 @@ find_library(UE4SS_LIB
     REQUIRED
 )
 
-target_link_libraries(SurrounDeadBridge PRIVATE
+target_link_libraries(SDO PRIVATE
     ${UE4SS_LIB}
     Ws2_32
     User32
     Shell32
 )
 
-target_compile_definitions(SurrounDeadBridge PRIVATE
+target_compile_definitions(SDO PRIVATE
     UNICODE
     _UNICODE
     WIN32_LEAN_AND_MEAN
@@ -44,24 +44,24 @@ target_compile_definitions(SurrounDeadBridge PRIVATE
 )
 
 if(MSVC)
-    target_compile_options(SurrounDeadBridge PRIVATE /W4 /permissive-)
-    set_property(TARGET SurrounDeadBridge PROPERTY
+    target_compile_options(SDO PRIVATE /W4 /permissive-)
+    set_property(TARGET SDO PROPERTY
         MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 endif()
 
 # Output as main.dll (UE4SS C++ mod convention)
-set_target_properties(SurrounDeadBridge PROPERTIES
+set_target_properties(SDO PROPERTIES
     OUTPUT_NAME "main"
     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/out"
 )
 
 # Copy UE4SS.dll next to main.dll so Windows finds it at runtime.
 # Adjust the source path to point to the UE4SS.dll from SD-Online.
-if(DEFINED SDB_UE4SS_DLL)
-    add_custom_command(TARGET SurrounDeadBridge POST_BUILD
+if(DEFINED SDO_UE4SS_DLL)
+    add_custom_command(TARGET SDO POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            "${SDB_UE4SS_DLL}"
-            "$<TARGET_FILE_DIR:SurrounDeadBridge>/UE4SS.dll"
+            "${SDO_UE4SS_DLL}"
+            "$<TARGET_FILE_DIR:SDO>/UE4SS.dll"
         COMMENT "Copying UE4SS.dll alongside main.dll"
     )
 endif()

@@ -249,14 +249,14 @@ const STATUS_PAGE_TEMPLATE = `<!doctype html>
 
 <script>
 // Persisted per-browser identity, same role as the PowerShell scripts'
-// %APPDATA%\SurrounDeadBridge\player.id file — generated once, reused on
+// %APPDATA%\SDO\player.id file — generated once, reused on
 // every future visit so a returning tester keeps the same in-game identity/
 // progress instead of getting a fresh one every join.
 function getPlayerId() {
-    let id = localStorage.getItem('sdbPlayerId');
+    let id = localStorage.getItem('sdoPlayerId');
     if (!id) {
         id = crypto.randomUUID().replace(/-/g, '');
-        localStorage.setItem('sdbPlayerId', id);
+        localStorage.setItem('sdoPlayerId', id);
     }
     return id;
 }
@@ -290,7 +290,7 @@ async function refresh() {
 // needed because this page is HTTPS and a home-hosted gateway's ticket API
 // is plain HTTP, which browsers block outright as mixed content if called
 // directly), then hands off to Steam with the ticket as a launch argument —
-// steam://run/<appid>//-sdb_host=... -sdb_port=... -sdb_ticket=... — which
+// steam://run/<appid>//-sdo_host=... -sdo_port=... -sdo_ticket=... — which
 // the mod reads via its own command line on startup. No local script, no
 // download, no OS security prompt: just this one click.
 async function joinServer(index, button) {
@@ -305,7 +305,7 @@ async function joinServer(index, button) {
         });
         const data = await res.json();
         if (!data.ok) throw new Error(data.error || 'join failed');
-        const args = '-sdb_host=' + data.host + ' -sdb_port=' + data.port + ' -sdb_ticket=' + data.ticket;
+        const args = '-sdo_host=' + data.host + ' -sdo_port=' + data.port + ' -sdo_ticket=' + data.ticket;
         window.location.href = 'steam://run/1645820//' + encodeURIComponent(args);
         button.textContent = 'Launching…';
     } catch (e) {

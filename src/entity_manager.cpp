@@ -16,7 +16,7 @@
 using namespace RC;
 using namespace RC::Unreal;
 
-namespace sdb {
+namespace sdo {
 
 // Local copy of mod.cpp's seh_invoke — small and self-contained enough to
 // duplicate per-file rather than restructure headers to share, matching
@@ -78,7 +78,7 @@ void EntityManager::on_entity_descriptor(const EntityDescriptorData& desc)
     }
 
     Output::send<LogLevel::Normal>(
-        STR("SDB: entity desc  eid={:d}  kind={:d}  qty={:d}\n"),
+        STR("SDO: entity desc  eid={:d}  kind={:d}  qty={:d}\n"),
         desc.entityId,
         static_cast<int>(desc.kind),
         desc.quantity);
@@ -163,7 +163,7 @@ void EntityManager::on_entity_despawn(uint64_t entityId)
     g_state().entities.erase(it);
 
     Output::send<LogLevel::Normal>(
-        STR("SDB: entity despawn  eid={:d}\n"), entityId);
+        STR("SDO: entity despawn  eid={:d}\n"), entityId);
 }
 
 void EntityManager::tick(UWorld* world, AActor* /*local_pawn*/)
@@ -655,4 +655,4 @@ void EntityManager::destroy_entity_actor(WorldEntity& entity)
     entity.actor = nullptr;
 }
 
-} // namespace sdb
+} // namespace sdo

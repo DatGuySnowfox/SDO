@@ -14,17 +14,17 @@
 #  endif
 #  include <winsock2.h>
 #  include <ws2tcpip.h>
-using sdb_socket_t = SOCKET;
-static constexpr sdb_socket_t SDB_INVALID_SOCKET = INVALID_SOCKET;
+using sdo_socket_t = SOCKET;
+static constexpr sdo_socket_t SDO_INVALID_SOCKET = INVALID_SOCKET;
 #else
 #  include <netdb.h>
 #  include <sys/socket.h>
 #  include <sys/select.h>
-using sdb_socket_t = int;
-static constexpr sdb_socket_t SDB_INVALID_SOCKET = -1;
+using sdo_socket_t = int;
+static constexpr sdo_socket_t SDO_INVALID_SOCKET = -1;
 #endif
 
-namespace sdb {
+namespace sdo {
 
 // TCP client that connects directly to the gateway server.
 //
@@ -93,7 +93,7 @@ private:
     // never during normal operation — so there's no concurrent-mutation
     // window while the TCP thread is actively using sock_ for anything
     // other than the same select()/recv() call this is meant to interrupt.
-    sdb_socket_t         sock_         = SDB_INVALID_SOCKET;
+    sdo_socket_t         sock_         = SDO_INVALID_SOCKET;
     std::vector<uint8_t> recvBuf_;
     uint64_t             lastHbUs_     = 0;
     uint32_t             seqCounter_   = 0;
@@ -122,4 +122,4 @@ private:
     void reset_state();
 };
 
-} // namespace sdb
+} // namespace sdo

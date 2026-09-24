@@ -4,17 +4,17 @@
 # doesn't know any host's address ahead of time.
 #
 # Usage:
-#   .\scripts\join.ps1                                  # uses $env:SDB_DIRECTORY_URL
+#   .\scripts\join.ps1                                  # uses $env:SDO_DIRECTORY_URL
 #   .\scripts\join.ps1 -DirectoryUrl "https://sdo-directory.<you>.workers.dev"
 
 param(
-    [string]$DirectoryUrl = $env:SDB_DIRECTORY_URL
+    [string]$DirectoryUrl = $env:SDO_DIRECTORY_URL
 )
 
 $ErrorActionPreference = "Stop"
 
 if (-not $DirectoryUrl) {
-    Write-Error "No directory URL. Pass -DirectoryUrl or set `$env:SDB_DIRECTORY_URL."
+    Write-Error "No directory URL. Pass -DirectoryUrl or set `$env:SDO_DIRECTORY_URL."
     exit 1
 }
 
@@ -45,9 +45,9 @@ if ($servers.Count -eq 1) {
 
 $GatewayHost = $chosen.host
 $GatewayPort = $chosen.port
-$HttpPort    = $GatewayPort + 1   # SDB_HTTP_PORT is conventionally gatewayPort+1 (42200/42201 default)
+$HttpPort    = $GatewayPort + 1   # SDO_HTTP_PORT is conventionally gatewayPort+1 (42200/42201 default)
 
-$idFile = "$env:APPDATA\SurrounDeadBridge\player.id"
+$idFile = "$env:APPDATA\SDO\player.id"
 if (Test-Path $idFile) {
     $playerId = (Get-Content $idFile -Raw).Trim()
 } else {
@@ -59,10 +59,10 @@ if (Test-Path $idFile) {
 $body = "{`"playerId`":`"$playerId`",`"displayName`":`"Player`"}"
 $resp = Invoke-RestMethod -Method Post -Uri "http://${GatewayHost}:${HttpPort}/v1/tickets" -ContentType "application/json" -Body $body
 
-$cfgDir  = "$env:APPDATA\SurrounDeadBridge"
+$cfgDir  = "$env:APPDATA\SDO"
 $cfgFile = "$cfgDir\session.cfg"
 New-Item -ItemType Directory -Force -Path $cfgDir | Out-Null
-$cfgLines = "SDB_GATEWAY_HOST=$GatewayHost`r`nSDB_GATEWAY_PORT=$GatewayPort`r`nSDB_JOIN_TICKET=$($resp.ticket)`r`nSDB_MOVE_INTERVAL_MS=50"
+$cfgLines = "SDO_GATEWAY_HOST=$GatewayHost`r`nSDO_GATEWAY_PORT=$GatewayPort`r`nSDO_JOIN_TICKET=$($resp.ticket)`r`nSDO_MOVE_INTERVAL_MS=50"
 [System.IO.File]::WriteAllText($cfgFile, $cfgLines, [System.Text.Encoding]::ASCII)
 
 Write-Host "Ticket fetched, session.cfg written. Launching..."

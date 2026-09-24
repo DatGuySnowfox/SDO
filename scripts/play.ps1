@@ -13,7 +13,7 @@ $ErrorActionPreference = "Stop"
 
 # Stable per-machine player ID
 if (-not $PlayerId) {
-    $idFile = "$env:APPDATA\SurrounDeadBridge\player.id"
+    $idFile = "$env:APPDATA\SDO\player.id"
     if (Test-Path $idFile) {
         $PlayerId = (Get-Content $idFile -Raw).Trim()
     } else {
@@ -45,13 +45,13 @@ $ticket = $resp.ticket
 Write-Host "Ticket : $($ticket.Substring(0, 20))...  (valid 2 min)"
 
 # Write session config so the mod can read it regardless of Steam restart state
-$cfgDir  = "$env:APPDATA\SurrounDeadBridge"
+$cfgDir  = "$env:APPDATA\SDO"
 $cfgFile = "$cfgDir\session.cfg"
 New-Item -ItemType Directory -Force -Path $cfgDir | Out-Null
-$cfgLines = "SDB_GATEWAY_HOST=$Server`r`nSDB_GATEWAY_PORT=$GwPort`r`nSDB_JOIN_TICKET=$ticket`r`nSDB_MOVE_INTERVAL_MS=50"
+$cfgLines = "SDO_GATEWAY_HOST=$Server`r`nSDO_GATEWAY_PORT=$GwPort`r`nSDO_JOIN_TICKET=$ticket`r`nSDO_MOVE_INTERVAL_MS=50"
 [System.IO.File]::WriteAllText($cfgFile, $cfgLines, [System.Text.Encoding]::ASCII)
 Write-Host "Config : $cfgFile"
 
 Write-Host "Launching via Steam..."
 Start-Process "steam://run/1645820//"
-Write-Host "Done. Watch UE4SS console for: SDB: session latched"
+Write-Host "Done. Watch UE4SS console for: SDO: session latched"

@@ -9,7 +9,7 @@ namespace RC::Unreal {
     class UObject;
 }
 
-namespace sdb {
+namespace sdo {
 
 // Looks up a live UJigsawItem_DataAsset_C* by its itemId (FName string),
 // shared between equipment sync and world-entity spawning. Returns nullptr
@@ -175,4 +175,4 @@ inline ProxyManager& g_proxy_manager() {
     return pm;
 }
 
-} // namespace sdb
+} // namespace sdo

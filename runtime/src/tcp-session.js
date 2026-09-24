@@ -121,7 +121,7 @@ class TcpSession {
 
         const ticket = cfg.joinTicket;
         if (!ticket) {
-            console.error('[tcp] SDB_JOIN_TICKET is not set – cannot authenticate');
+            console.error('[tcp] SDO_JOIN_TICKET is not set – cannot authenticate');
             this._socket.destroy();
             return;
         }

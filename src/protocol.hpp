@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-namespace sdb {
+namespace sdo {
 
 static constexpr uint32_t FRAME_MAGIC       = 0x53444F33u; // "SDO3"
 static constexpr uint16_t FRAME_VERSION     = 3;
@@ -390,4 +390,4 @@ std::optional<PlayerLights>       decode_player_lights(const uint8_t* p, size_t 
 
 uint64_t now_micros();
 
-} // namespace sdb
+} // namespace sdo

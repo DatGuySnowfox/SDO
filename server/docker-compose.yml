@@ -7,21 +7,21 @@ services:
       - "31000:31000"   # game gateway (the mod's default port)
       - "31001:31001"   # HTTP: tickets, health, and directory-worker's /v1/join proxy
     environment:
-      SDB_GATEWAY_PORT: "31000"
-      SDB_HTTP_PORT: "31001"
+      SDO_GATEWAY_PORT: "31000"
+      SDO_HTTP_PORT: "31001"
       # Real values live only in this host's untracked .env (see
       # .env.example) — never commit actual secrets here.
-      SDB_HOST_SECRET: "${SDB_HOST_SECRET}"
-      SDB_TICKET_SECRET: "${SDB_TICKET_SECRET}"
-      SDB_WORLD_ID: "${SDB_WORLD_ID}"
-      SDB_MAX_PLAYERS: "32"
-      SDB_TICKET_REPLAY_PROTECTION: "false"
+      SDO_HOST_SECRET: "${SDO_HOST_SECRET}"
+      SDO_TICKET_SECRET: "${SDO_TICKET_SECRET}"
+      SDO_WORLD_ID: "${SDO_WORLD_ID}"
+      SDO_MAX_PLAYERS: "32"
+      SDO_TICKET_REPLAY_PROTECTION: "false"
 
-      SDB_DIRECTORY_URL: "${SDB_DIRECTORY_URL}"
-      SDB_DIRECTORY_KEY: "${SDB_DIRECTORY_KEY}"
-      SDB_SERVER_NAME: "${SDB_SERVER_NAME:-SurrounDead Server}"
-      SDB_PUBLIC_HOST: "${SDB_PUBLIC_HOST}"
-      SDB_DB_PATH: "/app/data/players.db"
+      SDO_DIRECTORY_URL: "${SDO_DIRECTORY_URL}"
+      SDO_DIRECTORY_KEY: "${SDO_DIRECTORY_KEY}"
+      SDO_SERVER_NAME: "${SDO_SERVER_NAME:-SurrounDead Server}"
+      SDO_PUBLIC_HOST: "${SDO_PUBLIC_HOST}"
+      SDO_DB_PATH: "/app/data/players.db"
 
     volumes:
       - sdo-data:/app/data

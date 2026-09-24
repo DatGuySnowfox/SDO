@@ -1,7 +1,7 @@
 {
-  "name": "sdb-server",
+  "name": "sdo-server",
   "version": "1.0.0",
-  "description": "SurrounDead Bridge \u2013 dedicated server (gateway + host-agent)",
+  "description": "SurrounDead Online \u2013 dedicated server (gateway + host-agent)",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js"

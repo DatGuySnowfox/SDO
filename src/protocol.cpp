@@ -10,7 +10,7 @@
 #  include <time.h>
 #endif
 
-namespace sdb {
+namespace sdo {
 
 // ---------------------------------------------------------------------------
 // Byte-order helpers (big-endian, no UB)
@@ -795,4 +795,4 @@ uint64_t now_micros()
 #endif
 }
 
-} // namespace sdb
+} // namespace sdo

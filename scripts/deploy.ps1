@@ -5,10 +5,10 @@
 #
 # The DLL connects directly to the gateway server via TCP.
 # Set these env vars before launching the game (or add them to UE4SS-settings.ini):
-#   SDB_GATEWAY_HOST   gateway hostname or IP  (default: 127.0.0.1)
-#   SDB_GATEWAY_PORT   gateway TCP port        (default: 42200)
-#   SDB_JOIN_TICKET    HMAC-signed join ticket (required; obtain from server admin)
-#   SDB_MOVE_INTERVAL_MS  movement send interval in ms (default: 50)
+#   SDO_GATEWAY_HOST   gateway hostname or IP  (default: 127.0.0.1)
+#   SDO_GATEWAY_PORT   gateway TCP port        (default: 42200)
+#   SDO_JOIN_TICKET    HMAC-signed join ticket (required; obtain from server admin)
+#   SDO_MOVE_INTERVAL_MS  movement send interval in ms (default: 50)
 #
 # Usage:
 #   .\scripts\deploy.ps1
@@ -30,7 +30,7 @@ function Find-Win64 {
     $candidates = @()
 
     # 1. Env var shortcut
-    if ($env:SDB_GAME_WIN64) { $candidates += $env:SDB_GAME_WIN64 }
+    if ($env:SDO_GAME_WIN64) { $candidates += $env:SDO_GAME_WIN64 }
 
     # 2. SDO launcher settings (if SDO is installed)
     $launcherSettings = Join-Path $env:LOCALAPPDATA 'SurrounDeadOnline\launcher-settings.json'
@@ -68,7 +68,7 @@ if (-not $Win64) { $Win64 = Find-Win64 }
 if (-not $Win64) {
     Write-Error (
         "Could not find SurrounDead Win64 directory.`n" +
-        "Set the SDB_GAME_WIN64 environment variable or pass -Win64 <path>."
+        "Set the SDO_GAME_WIN64 environment variable or pass -Win64 <path>."
     )
     exit 1
 }
@@ -150,7 +150,7 @@ Write-Host ("UE4SS layout: {0} ({1})" -f $(if ($IsModernLayout) { 'modern' } els
 # ── Create mod directory structure ────────────────────────────────────────────
 
 $modsRoot  = Join-Path $ue4ssRoot 'Mods'
-$modRoot   = Join-Path $modsRoot 'SurrounDeadBridge'
+$modRoot   = Join-Path $modsRoot 'SDO'
 $dllsDir   = Join-Path $modRoot 'dlls'
 $enabledTxt= Join-Path $modRoot 'enabled.txt'
 $modsTxt   = Join-Path $modsRoot 'mods.txt'
@@ -189,7 +189,7 @@ $lines = @($lines | ForEach-Object {
 # in mods.txt as `: 1` *and* giving it an enabled.txt means it can be started
 # twice, which is not something a C++ mod's global state survives. Force the
 # mods.txt entry to 0 so exactly one mechanism is live.
-$ourMod = 'SurrounDeadBridge'
+$ourMod = 'SDO'
 $lines = @($lines | ForEach-Object {
     if ($_ -match "^\s*$([regex]::Escape($ourMod))\s*:") { "$ourMod : 0" } else { $_ }
 })

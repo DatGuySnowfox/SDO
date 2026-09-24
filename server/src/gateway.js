@@ -113,7 +113,7 @@ class Gateway {
             const body = await res.json();
             this._publicHost = body.ip;
         } catch (e) {
-            console.warn('SDO: could not auto-detect public IP, set SDB_PUBLIC_HOST manually:', e.message);
+            console.warn('SDO: could not auto-detect public IP, set SDO_PUBLIC_HOST manually:', e.message);
         }
     }
 

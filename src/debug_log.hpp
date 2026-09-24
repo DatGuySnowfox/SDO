@@ -4,14 +4,14 @@
 // actually run" when Output::send's own destination is in question — not a
 // replacement for normal logging.
 //
-// Location (2026-09-24): defaults to %APPDATA%\SurrounDeadBridge, but
-// SDB_LOG_DIR overrides it, so a dev checkout can collect logs next to the
+// Location (2026-09-24): defaults to %APPDATA%\SDO, but
+// SDO_LOG_DIR overrides it, so a dev checkout can collect logs next to the
 // source instead of three directories away. Read straight from the
 // environment rather than session.cfg: debug_log() runs before any config
 // parsing and must not depend on init order.
 //
 // Note the other two logs are UE4SS-owned and land in ITS root directory
-// (Binaries/Win64/ue4ss as of the post-3.0.1 layout): SDB.log for
+// (Binaries/Win64/ue4ss as of the post-3.0.1 layout): SDO.log for
 // Output::send output, UE4SS.log for UE4SS core. Only this file is ours.
 #include <cstdio>
 #include <string>
@@ -24,12 +24,12 @@ inline constexpr long long kDebugLogMaxBytes = 64LL * 1024 * 1024;
 inline std::wstring debug_log_dir()
 {
     wchar_t buf[MAX_PATH];
-    DWORD n = GetEnvironmentVariableW(L"SDB_LOG_DIR", buf, MAX_PATH);
+    DWORD n = GetEnvironmentVariableW(L"SDO_LOG_DIR", buf, MAX_PATH);
     if (n > 0 && n < MAX_PATH) return std::wstring(buf, n);
 
     n = GetEnvironmentVariableW(L"APPDATA", buf, MAX_PATH);
     std::wstring dir = (n > 0 && n < MAX_PATH) ? std::wstring(buf, n) : L"C:\\Temp";
-    return dir + L"\\SurrounDeadBridge";
+    return dir + L"\\SDO";
 }
 
 // Renames an oversized log to .prev (replacing any existing .prev) so a
@@ -61,7 +61,7 @@ inline void debug_log(const std::string& line)
     debug_log_rotate_if_needed(s_file, false);
 
     // Local HH:MM:SS.mmm on every line — added 2026-08-13. Without this,
-    // correlating an event here against SDB.log or the server's own log
+    // correlating an event here against SDO.log or the server's own log
     // (also now timestamped, see index.js) meant matching by line-number
     // proximity and guessing, across three separate files with no shared
     // clock reference at all.

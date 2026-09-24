@@ -1,6 +1,6 @@
 #pragma once
 // Minimal RC::Unreal types derived from UE4SS.dll export table.
-// Only contains what sd-online-bridge actually uses.
+// Only contains what SDO actually uses.
 
 #include <cstdint>
 #include <cstring>

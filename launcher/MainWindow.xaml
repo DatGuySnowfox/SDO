@@ -1,7 +1,7 @@
-<Window x:Class="SDB.MainWindow"
+<Window x:Class="SDO.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="SurrounDead Bridge" Height="560" Width="640"
+        Title="SurrounDead Online" Height="560" Width="640"
         MinHeight="460" MinWidth="560"
         WindowStartupLocation="CenterScreen"
         Background="#181818" Foreground="#E0E0E0"
@@ -80,7 +80,7 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <StackPanel>
-                    <TextBlock Text="SurrounDead Bridge" FontSize="18" FontWeight="Bold"/>
+                    <TextBlock Text="SurrounDead Online" FontSize="18" FontWeight="Bold"/>
                     <TextBlock x:Name="TxtModStatus" Margin="0,4,0,0" FontSize="12"/>
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">

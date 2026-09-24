@@ -16,7 +16,7 @@
 
 using namespace RC;
 
-namespace sdb {
+namespace sdo {
 
 static constexpr uint64_t HB_INTERVAL_US  = 1'000'000ULL;   // 1 s
 static constexpr uint64_t SELECT_TIMEOUT_US = 10'000ULL;    // 10 ms
@@ -173,8 +173,8 @@ bool TcpClient::try_connect()
     struct addrinfo* res = nullptr;
     if (getaddrinfo(host_.c_str(), portStr, &hints, &res) != 0) return false;
 
-    sdb_socket_t s = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-    if (s == SDB_INVALID_SOCKET) { freeaddrinfo(res); return false; }
+    sdo_socket_t s = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+    if (s == SDO_INVALID_SOCKET) { freeaddrinfo(res); return false; }
 
     if (connect(s, res->ai_addr, static_cast<int>(res->ai_addrlen)) != 0) {
         freeaddrinfo(res);
@@ -225,7 +225,7 @@ void TcpClient::reset_state()
 void TcpClient::run_connected()
 {
     while (!stopped_.load(std::memory_order_relaxed) && !killConn_) {
-        if (sock_ == SDB_INVALID_SOCKET) break;
+        if (sock_ == SDO_INVALID_SOCKET) break;
 
         fd_set rfds, wfds;
         FD_ZERO(&rfds);
@@ -449,7 +449,7 @@ int TcpClient::write_all(const uint8_t* data, int len)
 {
     int sent = 0;
     while (sent < len && !stopped_.load(std::memory_order_relaxed)) {
-        if (sock_ == SDB_INVALID_SOCKET) break;
+        if (sock_ == SDO_INVALID_SOCKET) break;
         fd_set wfds;
         FD_ZERO(&wfds);
         FD_SET(sock_, &wfds);
@@ -484,14 +484,14 @@ void TcpClient::drain_outbound()
 
 void TcpClient::close_socket()
 {
-    if (sock_ != SDB_INVALID_SOCKET) {
+    if (sock_ != SDO_INVALID_SOCKET) {
 #ifdef _WIN32
         closesocket(sock_);
 #else
         close(sock_);
 #endif
-        sock_ = SDB_INVALID_SOCKET;
+        sock_ = SDO_INVALID_SOCKET;
     }
 }
 
-} // namespace sdb
+} // namespace sdo

@@ -60,9 +60,9 @@ async function main() {
     const { ticket, gatewayHost, gatewayPort } = res.body;
     console.log(`Got ticket (host=${gatewayHost}:${gatewayPort})`);
 
-    setEnv('SDB_JOIN_TICKET',  ticket);
-    setEnv('SDB_GATEWAY_HOST', gatewayHost);
-    setEnv('SDB_GATEWAY_PORT', String(gatewayPort));
+    setEnv('SDO_JOIN_TICKET',  ticket);
+    setEnv('SDO_GATEWAY_HOST', gatewayHost);
+    setEnv('SDO_GATEWAY_PORT', String(gatewayPort));
     console.log('Environment variables set.');
 
     console.log('Launching SurrounDead...');

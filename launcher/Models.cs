@@ -2,7 +2,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 
-namespace SDB;
+namespace SDO;
 
 // Matches directory-worker's GET /v1/servers response shape exactly
 // (directory-worker/src/index.js: listServers()). Implements

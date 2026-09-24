@@ -1,7 +1,7 @@
 {
-  "name": "sdb-bridge-runtime",
+  "name": "sdo-runtime",
   "version": "1.0.0",
-  "description": "SurrounDead Bridge \u2013 client-side UDP\u2194TCP relay",
+  "description": "SurrounDead Online \u2013 client-side UDP\u2194TCP relay",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js"

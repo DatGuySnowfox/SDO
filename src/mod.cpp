@@ -1,10 +1,10 @@
-// SurrounDead Bridge – open-source UE4SS C++ mod
+// SurrounDead Online – open-source UE4SS C++ mod
 //
-// Environment variables (all SDB_* – no name conflict with other mods):
-//   SDB_GATEWAY_HOST     gateway hostname or IP  (default 127.0.0.1)
-//   SDB_GATEWAY_PORT     gateway TCP port        (default 42200)
-//   SDB_JOIN_TICKET      HMAC-signed join ticket (required)
-//   SDB_MOVE_INTERVAL_MS Movement send interval in ms (default 50)
+// Environment variables (all SDO_* – no name conflict with other mods):
+//   SDO_GATEWAY_HOST     gateway hostname or IP  (default 127.0.0.1)
+//   SDO_GATEWAY_PORT     gateway TCP port        (default 42200)
+//   SDO_JOIN_TICKET      HMAC-signed join ticket (required)
+//   SDO_MOVE_INTERVAL_MS Movement send interval in ms (default 50)
 
 #include "protocol.hpp"
 #include "tcp_client.hpp"
@@ -50,7 +50,7 @@ static uint16_t    cfg_gateway_port   = 31000;
 static std::string cfg_join_ticket;
 static int64_t     cfg_move_interval_us = 50'000; // 50 ms
 
-// Read %APPDATA%\SurrounDeadBridge\session.cfg (KEY=VALUE per line).
+// Read %APPDATA%\SDO\session.cfg (KEY=VALUE per line).
 // Falls back to environment variables with the same key names.
 static std::unordered_map<std::string,std::string> load_session_config()
 {
@@ -58,7 +58,7 @@ static std::unordered_map<std::string,std::string> load_session_config()
 
     wchar_t appdata[MAX_PATH];
     if (GetEnvironmentVariableW(L"APPDATA", appdata, MAX_PATH)) {
-        std::wstring path = std::wstring(appdata) + L"\\SurrounDeadBridge\\session.cfg";
+        std::wstring path = std::wstring(appdata) + L"\\SDO\\session.cfg";
         HANDLE h = CreateFileW(path.c_str(), GENERIC_READ, FILE_SHARE_READ,
                                nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
         if (h != INVALID_HANDLE_VALUE) {
@@ -85,8 +85,8 @@ static std::unordered_map<std::string,std::string> load_session_config()
     return m;
 }
 
-// Steam launch-option support (2026-08-26): steam://run/<appid>//-sdb_host=
-// ... -sdb_port=... -sdb_ticket=... lets a browser-based "Join" button
+// Steam launch-option support (2026-08-26): steam://run/<appid>//-sdo_host=
+// ... -sdo_port=... -sdo_ticket=... lets a browser-based "Join" button
 // (directory-worker's status page) launch straight into a server with zero
 // local script/download — Steam appends everything after the trailing //
 // as literal argv tokens on the launched process. Overwrites (not merged
@@ -96,7 +96,7 @@ static std::unordered_map<std::string,std::string> load_session_config()
 // base64url (server/src/lib/ticket.js: "<base64url>.<base64url>") —
 // deliberately URL- and command-line-safe characters only
 // ([A-Za-z0-9_.-]), so no quoting/escaping is needed on either the URI or
-// argv side. Only recognizes our own sdb_* switches — never touches
+// argv side. Only recognizes our own sdo_* switches — never touches
 // anything else on the command line (UE's own engine switches etc.).
 static void merge_command_line_args(std::unordered_map<std::string,std::string>& m)
 {
@@ -105,9 +105,9 @@ static void merge_command_line_args(std::unordered_map<std::string,std::string>&
     if (!argv) return;
 
     static const std::unordered_map<std::wstring, const char*> kKeyMap = {
-        { L"sdb_host",   "SDB_GATEWAY_HOST" },
-        { L"sdb_port",   "SDB_GATEWAY_PORT" },
-        { L"sdb_ticket", "SDB_JOIN_TICKET" },
+        { L"sdo_host",   "SDO_GATEWAY_HOST" },
+        { L"sdo_port",   "SDO_GATEWAY_PORT" },
+        { L"sdo_ticket", "SDO_JOIN_TICKET" },
     };
 
     for (int i = 1; i < argc; ++i) {
@@ -159,8 +159,8 @@ static int64_t cfg_ms_to_us(const std::unordered_map<std::string,std::string>& m
 
 // ── Globals ───────────────────────────────────────────────────────────────
 
-static sdb::TcpClient g_tcp;
-static uint8_t        g_enc_buf[sdb::FRAME_HEADER_SIZE + sdb::FRAME_MAX_PAYLOAD];
+static sdo::TcpClient g_tcp;
+static uint8_t        g_enc_buf[sdo::FRAME_HEADER_SIZE + sdo::FRAME_MAX_PAYLOAD];
 
 // ── UE4SS helpers ─────────────────────────────────────────────────────────
 
@@ -197,10 +197,10 @@ static AActor* find_local_pawn()
     if (candidates.empty()) return nullptr;
     if (candidates.size() == 1) return static_cast<AActor*>(candidates[0]);
 
-    std::lock_guard<std::mutex> lk(sdb::g_state().playersMtx);
+    std::lock_guard<std::mutex> lk(sdo::g_state().playersMtx);
     for (UObject* obj : candidates) {
         bool isKnownProxy = false;
-        for (auto& [id, player] : sdb::g_state().players) {
+        for (auto& [id, player] : sdo::g_state().players) {
             if (player.proxyActor == obj) { isKnownProxy = true; break; }
         }
         if (!isKnownProxy) return static_cast<AActor*>(obj);
@@ -212,20 +212,20 @@ static AActor* find_local_pawn()
 
 // ── Frame send helpers ────────────────────────────────────────────────────
 
-static void send_frame(const sdb::Frame& f)
+static void send_frame(const sdo::Frame& f)
 {
-    auto& s = sdb::g_state();
+    auto& s = sdo::g_state();
     uint32_t seq  = s.seq.load(std::memory_order_relaxed);
     uint32_t tick = s.tick.load(std::memory_order_relaxed);
-    const int n = sdb::encode_frame(g_enc_buf, sizeof(g_enc_buf), f, seq, tick);
+    const int n = sdo::encode_frame(g_enc_buf, sizeof(g_enc_buf), f, seq, tick);
     s.seq.store(seq,  std::memory_order_relaxed);
     s.tick.store(tick, std::memory_order_relaxed);
     if (n > 0) g_tcp.send_bytes(g_enc_buf, n);
 }
 
-static void build_session_frame(sdb::Frame& f)
+static void build_session_frame(sdo::Frame& f)
 {
-    auto& st = sdb::g_state();
+    auto& st = sdo::g_state();
     std::lock_guard<std::mutex> lk(st.sessionMtx);
     f.sessionId    = st.session.sessionId;
     f.worldId      = st.session.worldId;
@@ -234,9 +234,9 @@ static void build_session_frame(sdb::Frame& f)
     f.entityId     = st.session.entityId;
 }
 
-static void send_header_only(sdb::MsgType type)
+static void send_header_only(sdo::MsgType type)
 {
-    sdb::Frame f;
+    sdo::Frame f;
     f.type = type;
     build_session_frame(f);
     send_frame(f);
@@ -254,7 +254,7 @@ static void send_movement(AActor* pawn)
     const FVector  loc = pawn->K2_GetActorLocation();
     const FRotator rot = pawn->K2_GetActorRotation();
 
-    sdb::Movement mv{};
+    sdo::Movement mv{};
     mv.x      = static_cast<float>(loc.X);
     mv.y      = static_cast<float>(loc.Y);
     mv.z      = static_cast<float>(loc.Z);
@@ -294,11 +294,11 @@ static void send_movement(AActor* pawn)
         mv.velocityZ = static_cast<float>(vz);
     }
 
-    uint8_t payload[sdb::MOVEMENT_PAYLOAD_SIZE];
-    sdb::encode_movement(mv, payload);
+    uint8_t payload[sdo::MOVEMENT_PAYLOAD_SIZE];
+    sdo::encode_movement(mv, payload);
 
-    sdb::Frame f;
-    f.type = sdb::MsgType::Movement;
+    sdo::Frame f;
+    f.type = sdo::MsgType::Movement;
     build_session_frame(f);
     f.payload.assign(payload, payload + sizeof(payload));
     send_frame(f);
@@ -444,9 +444,9 @@ static UObject* obj_prop(UObject* owner, const wchar_t* name)
 // profile tick after a save load. Reflection costs a name lookup per read and
 // survives engine bumps, which is the trade this path wants: it runs once per
 // 30s, not per frame.
-static sdb::LocalVitals read_local_progress(AActor* pawn)
+static sdo::LocalVitals read_local_progress(AActor* pawn)
 {
-    sdb::LocalVitals v{};
+    sdo::LocalVitals v{};
 
     // Vitals components, resolved by property NAME (2026-09-24).
     //
@@ -581,9 +581,9 @@ static std::string short_object_name(UObject* obj)
 // separate naked-body SkeletalMeshComponents (Arms/Torso/Legs/Feet/Hands/
 // head/Biceps/LowerThighs/LowerLegs) — see proxy_manager.cpp's
 // sync_pawn_appearance for the apply side.
-static sdb::PawnAppearance read_local_pawn_appearance(AActor* pawn)
+static sdo::PawnAppearance read_local_pawn_appearance(AActor* pawn)
 {
-    sdb::PawnAppearance out;
+    sdo::PawnAppearance out;
     if (!pawn) return out;
 
     // Name-resolved (2026-09-24). Every offset here was captured against
@@ -618,13 +618,13 @@ static sdb::PawnAppearance read_local_pawn_appearance(AActor* pawn)
     out.beardColorName = short_object_name(obj_prop(pawn, STR("Beard Color")));
     out.skinColorName  = short_object_name(obj_prop(pawn, STR("SkinColor")));
 
-    // Order must match sdb::PawnAppearance::bodyPartMeshNames and
+    // Order must match sdo::PawnAppearance::bodyPartMeshNames and
     // proxy_manager.cpp's own copy of this table exactly.
-    static const wchar_t* const kBodyPartNames[sdb::BODY_PART_COUNT] = {
+    static const wchar_t* const kBodyPartNames[sdo::BODY_PART_COUNT] = {
         STR("Torso"), STR("Biceps"), STR("LowerThighs"), STR("Head"), STR("Arms"),
         STR("Feet"),  STR("LowerLegs"), STR("Legs"),     STR("Hands"),
     };
-    for (int i = 0; i < sdb::BODY_PART_COUNT; ++i)
+    for (int i = 0; i < sdo::BODY_PART_COUNT; ++i)
         out.bodyPartMeshNames[i] = comp_mesh_name(kBodyPartNames[i]);
 
     out.mouthMeshName      = comp_mesh_name(STR("Mouth"));
@@ -767,7 +767,7 @@ static uint8_t read_local_aim_pitch(AActor* pawn, float& outAbsoluteYaw)
     // seeing a live, varying camera pitch/yaw before trusting the receive side.
     // Throttled to ~1/sec so it doesn't flood debug.log at movement-tick rate.
     static uint64_t s_lastLogUs = 0;
-    const uint64_t nowUs = sdb::now_micros();
+    const uint64_t nowUs = sdo::now_micros();
     if (nowUs - s_lastLogUs > 1'000'000ULL) {
         s_lastLogUs = nowUs;
         char buf[160];
@@ -794,7 +794,7 @@ static void check_head_rot_diagnostic(AActor* pawn)
 {
     if (!pawn) return;
     static uint64_t s_lastUs = 0;
-    const uint64_t nowUs = sdb::now_micros();
+    const uint64_t nowUs = sdo::now_micros();
     if (nowUs - s_lastUs < 100'000ULL) return;
     s_lastUs = nowUs;
 
@@ -867,14 +867,14 @@ static uint8_t read_local_movement_flags(AActor* pawn)
     return flags;
 }
 
-static sdb::Equipment read_local_equipment(AActor* pawn)
+static sdo::Equipment read_local_equipment(AActor* pawn)
 {
-    static constexpr uintptr_t kSlotOffsets[sdb::EQUIPMENT_SLOT_COUNT] = {
+    static constexpr uintptr_t kSlotOffsets[sdo::EQUIPMENT_SLOT_COUNT] = {
         0x000, 0x078, 0x0F0, 0x168, 0x1E0, 0x258, 0x2D0, 0x348, 0x3C0, 0x438,
         0x4B0, 0x528, 0x5A0, 0x618, 0x690, 0x708, 0x780, 0x7F8, 0x870, 0x8E8, 0x960,
     };
 
-    sdb::Equipment eq;
+    sdo::Equipment eq;
 
     // BP_PlayerCharacter_C.BP_JigHelperComp is a named property at pawn+0x700
     // (research/CXXHeaderDump/BP_PlayerCharacter.hpp) — read it directly
@@ -891,7 +891,7 @@ static sdb::Equipment read_local_equipment(AActor* pawn)
     if (!equippedPtr) return eq;
     const auto equipped = reinterpret_cast<uintptr_t>(equippedPtr);
 
-    for (uint8_t i = 0; i < sdb::EQUIPMENT_SLOT_COUNT; ++i) {
+    for (uint8_t i = 0; i < sdo::EQUIPMENT_SLOT_COUNT; ++i) {
         const uintptr_t slot   = equipped + kSlotOffsets[i];
         const uintptr_t itemDA = *reinterpret_cast<uintptr_t*>(slot + 0x00);
         if (!itemDA) continue; // empty slot
@@ -899,7 +899,7 @@ static sdb::Equipment read_local_equipment(AActor* pawn)
         std::string itemId = native::fname_to_string(itemDA + 0x30);
         if (itemId.empty()) continue;
 
-        sdb::EquipmentSlot es;
+        sdo::EquipmentSlot es;
         es.slotIndex = i;
         es.itemId    = std::move(itemId);
         eq.slots.push_back(std::move(es));
@@ -944,7 +944,7 @@ static bool seh_invoke(void (*fn)(void*), void* ctx);
 struct WeaponAttachScanCtx {
     UObject* mesh;
     const std::unordered_map<std::string, uint8_t>* itemIdToSlot;
-    sdb::WeaponAttachments* out;
+    sdo::WeaponAttachments* out;
 };
 
 // The actual AttachChildren walk, split out from read_local_weapon_attachments
@@ -963,7 +963,7 @@ static void do_weapon_attach_scan(void* ctxRaw)
     auto* ctx = static_cast<WeaponAttachScanCtx*>(ctxRaw);
     UObject* mesh = ctx->mesh;
     const auto& itemIdToSlot = *ctx->itemIdToSlot;
-    sdb::WeaponAttachments& out = *ctx->out;
+    sdo::WeaponAttachments& out = *ctx->out;
 
     const uintptr_t childrenData  = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(mesh) + 0x00C0);
     int32_t         childrenCount = *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(mesh) + 0x00C0 + 0x08);
@@ -1104,7 +1104,7 @@ static void do_weapon_attach_scan(void* ctxRaw)
             std::string attItemId = native::fname_to_string(attachmentDA + 0x30);
             if (attItemId.empty()) continue;
 
-            sdb::WeaponAttachmentEntry wae;
+            sdo::WeaponAttachmentEntry wae;
             wae.weaponSlotIndex = slotIndex;
             wae.containerIndex  = static_cast<uint8_t>(*reinterpret_cast<int32_t*>(entry + 0x18));
             auto activeIt = nestedActiveByItemId.find(attItemId);
@@ -1115,13 +1115,13 @@ static void do_weapon_attach_scan(void* ctxRaw)
     }
 }
 
-static sdb::WeaponAttachments read_local_weapon_attachments(AActor* pawn)
+static sdo::WeaponAttachments read_local_weapon_attachments(AActor* pawn)
 {
-    sdb::WeaponAttachments out;
+    sdo::WeaponAttachments out;
     if (!pawn) return out;
 
     static constexpr uint8_t kAttachableSlots[] = {0, 1, 2, 10, 11, 12, 13, 14};
-    const sdb::Equipment eq = read_local_equipment(pawn);
+    const sdo::Equipment eq = read_local_equipment(pawn);
     std::unordered_map<std::string, uint8_t> itemIdToSlot;
     for (const auto& slot : eq.slots) {
         for (uint8_t s : kAttachableSlots) {
@@ -1165,9 +1165,9 @@ static sdb::WeaponAttachments read_local_weapon_attachments(AActor* pawn)
 // Live-confirmed Session 35 (as the earlier flat-list v1): correctly resolved
 // a real, varied inventory (ammo, meds, currency, keycards, etc.) across
 // multiple real containers with no crash.
-static std::vector<sdb::InventoryContainer> read_local_inventory(AActor* pawn)
+static std::vector<sdo::InventoryContainer> read_local_inventory(AActor* pawn)
 {
-    std::vector<sdb::InventoryContainer> out;
+    std::vector<sdo::InventoryContainer> out;
 
     const auto jigMp = reinterpret_cast<uintptr_t>(obj_prop(pawn, STR("BP_JigMultiplayer")));
     if (!jigMp) return out;
@@ -1207,7 +1207,7 @@ static std::vector<sdb::InventoryContainer> read_local_inventory(AActor* pawn)
         const int32_t   itemCount = *reinterpret_cast<int32_t*>(container + kContainerItemsOffset + 0x08);
         if (!itemsData || itemCount <= 0) continue;
 
-        sdb::InventoryContainer bucket;
+        sdo::InventoryContainer bucket;
         bucket.columns = static_cast<uint16_t>(std::clamp(columns, 0, 65535));
         bucket.rows    = static_cast<uint16_t>(std::clamp(rows, 0, 65535));
 
@@ -1222,7 +1222,7 @@ static std::vector<sdb::InventoryContainer> read_local_inventory(AActor* pawn)
             std::string itemId = native::fname_to_string(itemDA + 0x30);
             if (itemId.empty()) continue;
 
-            sdb::InventorySlot slot;
+            sdo::InventorySlot slot;
             slot.slotIndex = static_cast<uint8_t>(std::clamp<int32_t>(i, 0, 255));
             slot.itemId    = std::move(itemId);
             slot.quantity  = static_cast<uint16_t>(std::clamp(count, 0, 65535));
@@ -1246,8 +1246,8 @@ static std::vector<sdb::InventoryContainer> read_local_inventory(AActor* pawn)
 // had.)
 static void send_item_pickup_request(uint64_t entityId)
 {
-    sdb::Frame f;
-    f.type = sdb::MsgType::ItemPickupRequest;
+    sdo::Frame f;
+    f.type = sdo::MsgType::ItemPickupRequest;
     build_session_frame(f);
     f.entityId = entityId;
     const uint8_t payload[2] = { 1, 0xFF };
@@ -1258,25 +1258,25 @@ static void send_item_pickup_request(uint64_t entityId)
 static void send_item_drop_request(const std::string& itemId, uint16_t quantity,
                                     float x, float y, float z)
 {
-    sdb::Frame f;
-    f.type = sdb::MsgType::ItemDropRequest;
+    sdo::Frame f;
+    f.type = sdo::MsgType::ItemDropRequest;
     build_session_frame(f);
-    f.payload = sdb::encode_item_drop_request(itemId, quantity, x, y, z);
+    f.payload = sdo::encode_item_drop_request(itemId, quantity, x, y, z);
     send_frame(f);
 }
 
 static void send_build_request(const std::string& itemId, float x, float y, float z, float yaw)
 {
-    sdb::Frame f;
-    f.type = sdb::MsgType::InteractionRequest;
+    sdo::Frame f;
+    f.type = sdo::MsgType::InteractionRequest;
     build_session_frame(f);
-    f.payload = sdb::encode_interaction_request_build(itemId, x, y, z, yaw);
+    f.payload = sdo::encode_interaction_request_build(itemId, x, y, z, yaw);
     send_frame(f);
 }
 
 static void send_character_create()
 {
-    auto& st = sdb::g_state();
+    auto& st = sdo::g_state();
     std::string forename, surname, sex, age;
     int occupation;
     {
@@ -1305,25 +1305,25 @@ static void send_character_create()
         ",\"age\":\""      + esc(age)      + "\""
         ",\"occupation\":" + std::to_string(occupation) + "}";
 
-    sdb::Frame f;
-    f.type    = sdb::MsgType::CharacterCreate;
-    f.payload = sdb::encode_world_action(json);
+    sdo::Frame f;
+    f.type    = sdo::MsgType::CharacterCreate;
+    f.payload = sdo::encode_world_action(json);
     build_session_frame(f);
     send_frame(f);
 
-    Output::send<LogLevel::Normal>(STR("SDB: CharacterCreate sent\n"));
+    Output::send<LogLevel::Normal>(STR("SDO: CharacterCreate sent\n"));
 }
 
 static void send_profile_revision(AActor* pawn)
 {
-    auto& st = sdb::g_state();
+    auto& st = sdo::g_state();
 
-    const sdb::LocalVitals v = read_local_progress(pawn);
+    const sdo::LocalVitals v = read_local_progress(pawn);
 
     const FVector  loc = pawn->K2_GetActorLocation();
     const FRotator rot = pawn->K2_GetActorRotation();
 
-    sdb::PlayerProgress prog;
+    sdo::PlayerProgress prog;
     prog.containers = read_local_inventory(pawn);
 
     {
@@ -1374,11 +1374,11 @@ static void send_profile_revision(AActor* pawn)
     prog.distanceTravelled     = v.distanceTravelled;
     prog.infestationsDestroyed = v.infestationsDestroyed;
 
-    auto buf = sdb::encode_player_progress(prog);
+    auto buf = sdo::encode_player_progress(prog);
     if (buf.empty()) return;
 
-    sdb::Frame f;
-    f.type    = sdb::MsgType::ProfileRevision;
+    sdo::Frame f;
+    f.type    = sdo::MsgType::ProfileRevision;
     f.payload = std::move(buf);
     build_session_frame(f);
     send_frame(f);
@@ -1389,18 +1389,18 @@ static void send_profile_revision(AActor* pawn)
 
 static void send_equipment(AActor* pawn)
 {
-    const sdb::Equipment eq = read_local_equipment(pawn);
+    const sdo::Equipment eq = read_local_equipment(pawn);
 
-    sdb::Frame f;
-    f.type    = sdb::MsgType::Equipment;
-    f.payload = sdb::encode_equipment(eq);
+    sdo::Frame f;
+    f.type    = sdo::MsgType::Equipment;
+    f.payload = sdo::encode_equipment(eq);
     build_session_frame(f);
     send_frame(f);
 }
 
 static void send_weapon_attachments(AActor* pawn)
 {
-    const sdb::WeaponAttachments wa = read_local_weapon_attachments(pawn);
+    const sdo::WeaponAttachments wa = read_local_weapon_attachments(pawn);
 
     {
         std::string line = "send_weapon_attachments: entries=" + std::to_string(wa.entries.size());
@@ -1412,9 +1412,9 @@ static void send_weapon_attachments(AActor* pawn)
         debug_log(line);
     }
 
-    sdb::Frame f;
-    f.type    = sdb::MsgType::WeaponAttachments;
-    f.payload = sdb::encode_weapon_attachments(wa);
+    sdo::Frame f;
+    f.type    = sdo::MsgType::WeaponAttachments;
+    f.payload = sdo::encode_weapon_attachments(wa);
     build_session_frame(f);
     send_frame(f);
 }
@@ -1424,9 +1424,9 @@ static void send_weapon_attachments(AActor* pawn)
 // at all). BP_PlayerCharacter.hpp: FlashlightOn? is a plain bool @0x13E5,
 // PlayerUsingNightVision? @0x1401 — both read directly, no ProcessEvent
 // needed, same convention as isMale@0x15A0 in read_local_pawn_appearance.
-static sdb::PlayerLights read_local_player_lights(AActor* pawn)
+static sdo::PlayerLights read_local_player_lights(AActor* pawn)
 {
-    sdb::PlayerLights out;
+    sdo::PlayerLights out;
     if (!pawn) return out;
     out.flashlightOn  = *reinterpret_cast<const bool*>(reinterpret_cast<uintptr_t>(pawn) + 0x13E5);
     out.nightVisionOn = *reinterpret_cast<const bool*>(reinterpret_cast<uintptr_t>(pawn) + 0x1401);
@@ -1449,7 +1449,7 @@ static sdb::PlayerLights read_local_player_lights(AActor* pawn)
 
 static void send_player_lights(AActor* pawn)
 {
-    const sdb::PlayerLights pl = read_local_player_lights(pawn);
+    const sdo::PlayerLights pl = read_local_player_lights(pawn);
 
     static bool  s_lastFlashlight  = false;
     static bool  s_lastNightVision = false;
@@ -1466,9 +1466,9 @@ static void send_player_lights(AActor* pawn)
               " nightVisionOn=" + std::to_string(pl.nightVisionOn) +
               " flashlightIntensity=" + std::to_string(pl.flashlightIntensity));
 
-    sdb::Frame f;
-    f.type    = sdb::MsgType::PlayerLights;
-    f.payload = sdb::encode_player_lights(pl);
+    sdo::Frame f;
+    f.type    = sdo::MsgType::PlayerLights;
+    f.payload = sdo::encode_player_lights(pl);
     build_session_frame(f);
     send_frame(f);
 }
@@ -1505,19 +1505,19 @@ static void check_weapon_fire_edge(AActor* pawn)
     if (!edge) return;
 
     debug_log("check_weapon_fire_edge: CurrentFiringWeapon null->non-null, sent WeaponFired");
-    send_header_only(sdb::MsgType::WeaponFired);
+    send_header_only(sdo::MsgType::WeaponFired);
 }
 
 static void send_pawn_appearance(AActor* pawn)
 {
-    const sdb::PawnAppearance pa = read_local_pawn_appearance(pawn);
+    const sdo::PawnAppearance pa = read_local_pawn_appearance(pawn);
 
     // 2026-08-15: merge non-empty fields into the "last good" cache (see
     // state.hpp's lastGoodLocalAppearance comment) — field-by-field so a
     // partial clear (e.g. hair already gone but everything else fine)
     // doesn't blank out still-good cached fields for the others.
     {
-        auto& good = sdb::g_state().lastGoodLocalAppearance;
+        auto& good = sdo::g_state().lastGoodLocalAppearance;
         good.isMale = pa.isMale;
         if (!pa.hairMeshName.empty())     good.hairMeshName = pa.hairMeshName;
         if (!pa.hairColorName.empty())    good.hairColorName = pa.hairColorName;
@@ -1539,18 +1539,18 @@ static void send_pawn_appearance(AActor* pawn)
         debug_log(line);
     }
 
-    sdb::Frame f;
-    f.type    = sdb::MsgType::PawnAppearance;
-    f.payload = sdb::encode_pawn_appearance(pa);
+    sdo::Frame f;
+    f.type    = sdo::MsgType::PawnAppearance;
+    f.payload = sdo::encode_pawn_appearance(pa);
     build_session_frame(f);
     send_frame(f);
 }
 
 // ── Incoming frame dispatcher ─────────────────────────────────────────────
 
-static void dispatch_frame(const sdb::Frame& f)
+static void dispatch_frame(const sdo::Frame& f)
 {
-    auto& st = sdb::g_state();
+    auto& st = sdo::g_state();
 
     // Latch session context from the first inbound frame.
     {
@@ -1562,92 +1562,92 @@ static void dispatch_frame(const sdb::Frame& f)
             st.session.playerId     = f.playerId;
             st.session.entityId     = f.entityId;
             st.session.ready        = true;
-            st.sessionLatchUs.store(sdb::now_micros(), std::memory_order_relaxed);
+            st.sessionLatchUs.store(sdo::now_micros(), std::memory_order_relaxed);
             Output::send<LogLevel::Normal>(
-                STR("SDB: session latched, playerId={:d}\n"), f.playerId);
+                STR("SDO: session latched, playerId={:d}\n"), f.playerId);
         }
     }
 
     switch (f.type) {
 
-    case sdb::MsgType::PlayerConnected:
+    case sdo::MsgType::PlayerConnected:
         if (f.entityId) {
             std::lock_guard<std::mutex> lk(st.sessionMtx);
             st.session.entityId = f.entityId;
         }
         if (f.playerId && f.playerId != st.session.playerId)
-            sdb::g_proxy_manager().on_player_connected(f.playerId);
+            sdo::g_proxy_manager().on_player_connected(f.playerId);
         break;
 
-    case sdb::MsgType::PlayerDisconnected:
-        sdb::g_proxy_manager().on_player_disconnected(f.playerId);
+    case sdo::MsgType::PlayerDisconnected:
+        sdo::g_proxy_manager().on_player_disconnected(f.playerId);
         break;
 
-    case sdb::MsgType::Movement:
+    case sdo::MsgType::Movement:
         if (f.playerId && f.playerId != st.session.playerId
                        && !f.payload.empty()) {
-            if (auto mv = sdb::decode_movement(f.payload.data(),
+            if (auto mv = sdo::decode_movement(f.payload.data(),
                                                static_cast<int>(f.payload.size())))
-                sdb::g_proxy_manager().on_movement(f.playerId, *mv);
+                sdo::g_proxy_manager().on_movement(f.playerId, *mv);
         }
         break;
 
-    case sdb::MsgType::Equipment:
+    case sdo::MsgType::Equipment:
         if (f.playerId && f.playerId != st.session.playerId
                        && !f.payload.empty()) {
-            if (auto eq = sdb::decode_equipment(f.payload.data(), f.payload.size()))
-                sdb::g_proxy_manager().on_equipment(f.playerId, *eq);
+            if (auto eq = sdo::decode_equipment(f.payload.data(), f.payload.size()))
+                sdo::g_proxy_manager().on_equipment(f.playerId, *eq);
         }
         break;
 
-    case sdb::MsgType::WeaponAttachments:
+    case sdo::MsgType::WeaponAttachments:
         if (f.playerId && f.playerId != st.session.playerId
                        && !f.payload.empty()) {
-            if (auto wa = sdb::decode_weapon_attachments(f.payload.data(), f.payload.size()))
-                sdb::g_proxy_manager().on_weapon_attachments(f.playerId, *wa);
+            if (auto wa = sdo::decode_weapon_attachments(f.payload.data(), f.payload.size()))
+                sdo::g_proxy_manager().on_weapon_attachments(f.playerId, *wa);
         }
         break;
 
-    case sdb::MsgType::PawnAppearance:
+    case sdo::MsgType::PawnAppearance:
         if (f.playerId && f.playerId != st.session.playerId
                        && !f.payload.empty()) {
-            if (auto pa = sdb::decode_pawn_appearance(f.payload.data(), f.payload.size()))
-                sdb::g_proxy_manager().on_pawn_appearance(f.playerId, *pa);
+            if (auto pa = sdo::decode_pawn_appearance(f.payload.data(), f.payload.size()))
+                sdo::g_proxy_manager().on_pawn_appearance(f.playerId, *pa);
         }
         break;
 
-    case sdb::MsgType::PlayMontage:
+    case sdo::MsgType::PlayMontage:
         if (f.playerId && f.playerId != st.session.playerId
                        && !f.payload.empty()) {
-            if (auto m = sdb::decode_play_montage(f.payload.data(), f.payload.size()))
-                sdb::g_proxy_manager().on_play_montage(f.playerId, m->montageName, m->playRate);
+            if (auto m = sdo::decode_play_montage(f.payload.data(), f.payload.size()))
+                sdo::g_proxy_manager().on_play_montage(f.playerId, m->montageName, m->playRate);
         }
         break;
 
-    case sdb::MsgType::PlayerLights:
+    case sdo::MsgType::PlayerLights:
         debug_log("dispatch_frame: PlayerLights received playerId=" + std::to_string(f.playerId) +
                   " ownId=" + std::to_string(st.session.playerId) +
                   " payloadSize=" + std::to_string(f.payload.size()));
         if (f.playerId && f.playerId != st.session.playerId
                        && !f.payload.empty()) {
-            if (auto pl = sdb::decode_player_lights(f.payload.data(), f.payload.size()))
-                sdb::g_proxy_manager().on_player_lights(f.playerId, *pl);
+            if (auto pl = sdo::decode_player_lights(f.payload.data(), f.payload.size()))
+                sdo::g_proxy_manager().on_player_lights(f.playerId, *pl);
             else
                 debug_log("dispatch_frame: PlayerLights decode_player_lights FAILED");
         }
         break;
 
-    case sdb::MsgType::WeaponFired:
+    case sdo::MsgType::WeaponFired:
         // Header-only (no payload) — the receiving player and slot are
         // enough info; replay just needs to touch whichever weapon actor is
         // currently tracked as that player's active/in-hand weapon. See
         // on_process_event_pre's own comment for the full sender-side story.
         if (f.playerId && f.playerId != st.session.playerId) {
-            sdb::g_proxy_manager().on_weapon_fired(f.playerId);
+            sdo::g_proxy_manager().on_weapon_fired(f.playerId);
         }
         break;
 
-    case sdb::MsgType::FirstJoin:
+    case sdo::MsgType::FirstJoin:
         // Authoritative "this playerId has never saved before" from the
         // server (gateway.js sends this instead of PlayerProgressRestore
         // when db.getProgress() is empty) — replaces the old 6s-timeout
@@ -1655,10 +1655,10 @@ static void dispatch_frame(const sdb::Frame& f)
         // deferred to do_game_tick since a pawn may not exist yet at the
         // moment this arrives.
         st.pendingFirstJoin.store(true, std::memory_order_release);
-        Output::send<LogLevel::Normal>(STR("SDB: FirstJoin received — new player\n"));
+        Output::send<LogLevel::Normal>(STR("SDO: FirstJoin received — new player\n"));
         break;
 
-    case sdb::MsgType::Death:
+    case sdo::MsgType::Death:
         // This is a per-connection confirmation (gateway.js routes MsgType::Death
         // only back to the connection that sent DeathRequest — see that file's
         // "Sent to a specific client" comment), so a player's own death arrives
@@ -1703,15 +1703,15 @@ static void dispatch_frame(const sdb::Frame& f)
         }
         break;
 
-    case sdb::MsgType::Respawn: {
+    case sdo::MsgType::Respawn: {
         std::lock_guard<std::mutex> lk(st.playersMtx);
         auto it = st.players.find(f.playerId);
         if (it != st.players.end()) it->second.dead = false;
         break;
     }
 
-    case sdb::MsgType::WorldState:
-        if (auto ws = sdb::decode_world_state(f.payload.data(),
+    case sdo::MsgType::WorldState:
+        if (auto ws = sdo::decode_world_state(f.payload.data(),
                                               static_cast<int>(f.payload.size()))) {
             std::lock_guard<std::mutex> lk(st.worldMtx);
             st.worldState      = *ws;
@@ -1719,8 +1719,8 @@ static void dispatch_frame(const sdb::Frame& f)
         }
         break;
 
-    case sdb::MsgType::PlayerDamage: {
-        auto dmg = sdb::decode_player_damage(f.payload.data(),
+    case sdo::MsgType::PlayerDamage: {
+        auto dmg = sdo::decode_player_damage(f.payload.data(),
                                              static_cast<int>(f.payload.size()));
         if (!dmg) break;
         // Write straight into MedicalComponent.Health — this frame carries the
@@ -1734,44 +1734,44 @@ static void dispatch_frame(const sdb::Frame& f)
             }
         }
         Output::send<LogLevel::Normal>(
-            STR("SDB: player damage applied  health={:.1f}/{:.1f}\n"),
+            STR("SDO: player damage applied  health={:.1f}/{:.1f}\n"),
             dmg->current, dmg->maximum);
         break;
     }
 
     // ── Entity lifecycle ──────────────────────────────────────────────────────
 
-    case sdb::MsgType::EntitySpawn: {
+    case sdo::MsgType::EntitySpawn: {
         // JS sends encodeWorldEntityDescriptor (variable length, no position).
-        auto desc = sdb::decode_entity_descriptor(f.payload.data(), f.payload.size());
+        auto desc = sdo::decode_entity_descriptor(f.payload.data(), f.payload.size());
         if (!desc) break;
         desc->entityId = f.entityId;
-        sdb::g_entity_manager().on_entity_descriptor(*desc);
+        sdo::g_entity_manager().on_entity_descriptor(*desc);
         break;
     }
 
-    case sdb::MsgType::EntityState: {
+    case sdo::MsgType::EntityState: {
         // JS sends encodeWorldEntityState (27 bytes, position + health).
-        auto st_data = sdb::decode_entity_state(f.payload.data(), f.payload.size());
+        auto st_data = sdo::decode_entity_state(f.payload.data(), f.payload.size());
         if (!st_data) break;
         st_data->entityId = f.entityId;
-        sdb::g_entity_manager().on_entity_state(f.entityId, *st_data);
+        sdo::g_entity_manager().on_entity_state(f.entityId, *st_data);
         break;
     }
 
-    case sdb::MsgType::EntityDespawn:
-        sdb::g_entity_manager().on_entity_despawn(f.entityId);
+    case sdo::MsgType::EntityDespawn:
+        sdo::g_entity_manager().on_entity_despawn(f.entityId);
         break;
 
     // ── Player progress restore ───────────────────────────────────────────────
 
-    case sdb::MsgType::PlayerProgressRestore: {
+    case sdo::MsgType::PlayerProgressRestore: {
         // Gateway replays the last-saved ProfileRevision payload verbatim, so
         // this must use decode_player_progress, not decode_movement — the
         // payload is the full PlayerProgress format (health/vitals/inventory
         // included), not the bare 39-byte Movement format.
         st.receivedProgressRestore.store(true, std::memory_order_relaxed);
-        auto prog = sdb::decode_player_progress(f.payload.data(), f.payload.size());
+        auto prog = sdo::decode_player_progress(f.payload.data(), f.payload.size());
         if (!prog) break;
         st.teleportX   = prog->posX;
         st.teleportY   = prog->posY;
@@ -1788,11 +1788,11 @@ static void dispatch_frame(const sdb::Frame& f)
         st.vitalsThirst    = prog->thirst;
         st.vitalsStamina   = prog->stamina;
         st.vitalsRadiation = prog->radiation;
-        st.vitalsRestoreReadyAtUs = sdb::now_micros() + 2'000'000ULL;
+        st.vitalsRestoreReadyAtUs = sdo::now_micros() + 2'000'000ULL;
         st.pendingVitalsRestore.store(true, std::memory_order_release);
 
         Output::send<LogLevel::Normal>(
-            STR("SDB: progress restored  x={:.1f} y={:.1f} z={:.1f}  health={:.2f} level={:d}  "
+            STR("SDO: progress restored  x={:.1f} y={:.1f} z={:.1f}  health={:.2f} level={:d}  "
                 "hunger={:.1f} thirst={:.1f} stamina={:.1f} radiation={:.1f}\n"),
             prog->posX, prog->posY, prog->posZ, prog->health, prog->level,
             prog->hunger, prog->thirst, prog->stamina, prog->radiation);
@@ -1801,42 +1801,42 @@ static void dispatch_frame(const sdb::Frame& f)
 
     // ── Item pickup result (JSON via encodeWorldAction) ───────────────────────
 
-    case sdb::MsgType::ItemPickupResult: {
-        auto json = sdb::decode_world_action(f.payload.data(), f.payload.size());
+    case sdo::MsgType::ItemPickupResult: {
+        auto json = sdo::decode_world_action(f.payload.data(), f.payload.size());
         if (!json) break;
-        const bool ok = sdb::json_bool(*json, "success");
+        const bool ok = sdo::json_bool(*json, "success");
         if (ok) {
-            Output::send<LogLevel::Normal>(STR("SDB: item pickup confirmed\n"));
+            Output::send<LogLevel::Normal>(STR("SDO: item pickup confirmed\n"));
         } else {
-            Output::send<LogLevel::Warning>(STR("SDB: item pickup rejected\n"));
+            Output::send<LogLevel::Warning>(STR("SDO: item pickup rejected\n"));
         }
         break;
     }
 
     // ── Item drop result (JSON via encodeWorldAction) ─────────────────────────
 
-    case sdb::MsgType::ItemDropResult: {
-        auto json = sdb::decode_world_action(f.payload.data(), f.payload.size());
+    case sdo::MsgType::ItemDropResult: {
+        auto json = sdo::decode_world_action(f.payload.data(), f.payload.size());
         if (!json) break;
-        const bool ok = sdb::json_bool(*json, "success");
+        const bool ok = sdo::json_bool(*json, "success");
         if (ok) {
-            Output::send<LogLevel::Normal>(STR("SDB: item drop confirmed\n"));
+            Output::send<LogLevel::Normal>(STR("SDO: item drop confirmed\n"));
         } else {
-            Output::send<LogLevel::Warning>(STR("SDB: item drop rejected\n"));
+            Output::send<LogLevel::Warning>(STR("SDO: item drop rejected\n"));
         }
         break;
     }
 
     // ── Interaction result (JSON via encodeWorldAction) ───────────────────────
 
-    case sdb::MsgType::InteractionResult: {
-        auto json = sdb::decode_world_action(f.payload.data(), f.payload.size());
+    case sdo::MsgType::InteractionResult: {
+        auto json = sdo::decode_world_action(f.payload.data(), f.payload.size());
         if (!json) break;
-        const bool ok = sdb::json_bool(*json, "success");
+        const bool ok = sdo::json_bool(*json, "success");
         if (ok) {
-            Output::send<LogLevel::Normal>(STR("SDB: interaction confirmed\n"));
+            Output::send<LogLevel::Normal>(STR("SDO: interaction confirmed\n"));
         } else {
-            Output::send<LogLevel::Warning>(STR("SDB: interaction rejected\n"));
+            Output::send<LogLevel::Warning>(STR("SDO: interaction rejected\n"));
         }
         break;
     }
@@ -1926,11 +1926,11 @@ static void check_trace_trigger()
     wchar_t path[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return;
-    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\trace_trigger.flag";
+    std::wstring flag = std::wstring(path, n) + L"\\SDO\\trace_trigger.flag";
     if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
 
     DeleteFileW(flag.c_str());
-    g_trace_until_us.store(sdb::now_micros() + 20'000'000ULL, std::memory_order_relaxed);
+    g_trace_until_us.store(sdo::now_micros() + 20'000'000ULL, std::memory_order_relaxed);
     debug_log("check_trace_trigger: full trace window opened for 5s");
 }
 
@@ -2040,7 +2040,7 @@ static void check_barber_widget_removed_poller()
 {
     if (!s_lastForcedBarberWidget) return;
     static uint64_t s_lastPollUs = 0;
-    const uint64_t now = sdb::now_micros();
+    const uint64_t now = sdo::now_micros();
     if (now - s_lastPollUs < 200'000ULL) return;
     s_lastPollUs = now;
 
@@ -2069,7 +2069,7 @@ static void check_barber_widget_removed_poller()
     // should never randomly relocate the player, so this only fires when
     // do_open_barber_menu() was itself kicked off by the server's
     // FirstJoin signal (see do_game_tick's first-join handling).
-    auto& st = sdb::g_state();
+    auto& st = sdo::g_state();
     if (st.inFirstJoinFlow) {
         st.inFirstJoinFlow = false;
         if (AActor* pawn = find_local_pawn()) {
@@ -2377,7 +2377,7 @@ static void check_open_barber_menu_trigger()
     wchar_t path[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return;
-    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\open_barber_menu.flag";
+    std::wstring flag = std::wstring(path, n) + L"\\SDO\\open_barber_menu.flag";
     if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
     DeleteFileW(flag.c_str());
     do_open_barber_menu();
@@ -2488,7 +2488,7 @@ static void check_reset_player_stats_trigger()
     wchar_t path[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return;
-    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\reset_player_stats.flag";
+    std::wstring flag = std::wstring(path, n) + L"\\SDO\\reset_player_stats.flag";
     if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
     DeleteFileW(flag.c_str());
 
@@ -2529,7 +2529,7 @@ static void check_max_vitals_trigger()
     wchar_t path[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return;
-    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\max_vitals.flag";
+    std::wstring flag = std::wstring(path, n) + L"\\SDO\\max_vitals.flag";
     if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
     DeleteFileW(flag.c_str());
 
@@ -2588,7 +2588,7 @@ static void check_load_game_from_slot_trigger()
     wchar_t path[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return;
-    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\load_game_from_slot.flag";
+    std::wstring flag = std::wstring(path, n) + L"\\SDO\\load_game_from_slot.flag";
     if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
     DeleteFileW(flag.c_str());
 
@@ -2637,7 +2637,7 @@ static void check_set_current_save_slot_trigger()
     wchar_t path[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return;
-    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\set_current_save_slot.flag";
+    std::wstring flag = std::wstring(path, n) + L"\\SDO\\set_current_save_slot.flag";
     if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
     DeleteFileW(flag.c_str());
 
@@ -2683,7 +2683,7 @@ static void check_read_current_save_slot_trigger()
     wchar_t path[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return;
-    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\read_current_save_slot.flag";
+    std::wstring flag = std::wstring(path, n) + L"\\SDO\\read_current_save_slot.flag";
     if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
     DeleteFileW(flag.c_str());
 
@@ -2725,7 +2725,7 @@ static void check_set_save_name_direct_trigger()
     wchar_t path[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return;
-    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\set_save_name_direct.flag";
+    std::wstring flag = std::wstring(path, n) + L"\\SDO\\set_save_name_direct.flag";
     if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
 
     // Flag file's single line is the target slot name — defaults to the
@@ -2785,7 +2785,7 @@ static void check_restore_camera_trigger()
     wchar_t path[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return;
-    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\restore_camera.flag";
+    std::wstring flag = std::wstring(path, n) + L"\\SDO\\restore_camera.flag";
     if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
     DeleteFileW(flag.c_str());
     do_restore_camera_and_input();
@@ -2803,7 +2803,7 @@ static void check_dump_playerstarts_trigger()
     wchar_t path[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return;
-    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\dump_playerstarts.flag";
+    std::wstring flag = std::wstring(path, n) + L"\\SDO\\dump_playerstarts.flag";
     if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
 
     // Flag file's single line is the target class name — defaults to
@@ -2908,7 +2908,7 @@ static void check_teleport_random_spawn_trigger()
     wchar_t path[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return;
-    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\teleport_random_spawn.flag";
+    std::wstring flag = std::wstring(path, n) + L"\\SDO\\teleport_random_spawn.flag";
     if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
     DeleteFileW(flag.c_str());
 
@@ -2922,7 +2922,7 @@ static void check_bytecode_dump_trigger()
     wchar_t path[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return;
-    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\bytecode_dump.flag";
+    std::wstring flag = std::wstring(path, n) + L"\\SDO\\bytecode_dump.flag";
     if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
 
     std::ifstream in(flag, std::ios::binary);
@@ -3015,7 +3015,7 @@ static void check_bytecode_dump_trigger()
                 }
                 return s;
             };
-            std::wstring outPath = std::wstring(outDir, dn) + L"\\SurrounDeadBridge\\" +
+            std::wstring outPath = std::wstring(outDir, dn) + L"\\SDO\\" +
                 sanitize(className) + L"_" + sanitize(funcName) + L".bin";
             std::ofstream out(outPath, std::ios::binary | std::ios::trunc);
             const bool opened = out.is_open();
@@ -3042,7 +3042,7 @@ static void check_resolve_fname_trigger()
     wchar_t path[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return;
-    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\resolve_fname.flag";
+    std::wstring flag = std::wstring(path, n) + L"\\SDO\\resolve_fname.flag";
     if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
 
     std::ifstream in(flag, std::ios::binary);
@@ -3069,13 +3069,13 @@ static void check_resolve_fname_trigger()
 }
 
 // Flag file's single line is the target UDataTable's own object name, e.g.
-// "DT_Clothing" — see sdb::dump_clothing_table in proxy_manager.cpp.
+// "DT_Clothing" — see sdo::dump_clothing_table in proxy_manager.cpp.
 static void check_dump_clothing_table_trigger()
 {
     wchar_t path[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return;
-    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\dump_clothing_table.flag";
+    std::wstring flag = std::wstring(path, n) + L"\\SDO\\dump_clothing_table.flag";
     if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
 
     std::ifstream in(flag, std::ios::binary);
@@ -3095,7 +3095,7 @@ static void check_dump_clothing_table_trigger()
                                   tableName.data(), (int)tableName.size());
     tableName.resize(wn);
 
-    sdb::dump_clothing_table(tableName.c_str());
+    sdo::dump_clothing_table(tableName.c_str());
 }
 
 // One-off diagnostic: flag file content is a class name (e.g.
@@ -3111,7 +3111,7 @@ static void check_scan_pickup_class_trigger()
     wchar_t path[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return;
-    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\scan_pickup_class.flag";
+    std::wstring flag = std::wstring(path, n) + L"\\SDO\\scan_pickup_class.flag";
     if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
 
     std::ifstream in(flag, std::ios::binary);
@@ -3205,7 +3205,7 @@ static void check_resolve_ptr_trigger()
     wchar_t path[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return;
-    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\resolve_ptr.flag";
+    std::wstring flag = std::wstring(path, n) + L"\\SDO\\resolve_ptr.flag";
     if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
 
     std::ifstream in(flag, std::ios::binary);
@@ -3262,7 +3262,7 @@ static void check_resolve_fprop_trigger()
     wchar_t path[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return;
-    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\resolve_fprop.flag";
+    std::wstring flag = std::wstring(path, n) + L"\\SDO\\resolve_fprop.flag";
     if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
 
     std::ifstream in(flag, std::ios::binary);
@@ -3334,11 +3334,11 @@ static void check_watch_aimoffset_trigger()
     wchar_t path[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return;
-    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\watch_aimoffset.flag";
+    std::wstring flag = std::wstring(path, n) + L"\\SDO\\watch_aimoffset.flag";
     if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
 
     static uint64_t s_lastLogUs = 0;
-    const uint64_t now = sdb::now_micros();
+    const uint64_t now = sdo::now_micros();
     if (now - s_lastLogUs < 1'000'000ULL) return;
     s_lastLogUs = now;
 
@@ -3350,8 +3350,8 @@ static void check_watch_aimoffset_trigger()
     // non-locally-controlled proxy, before deciding whether giving it a
     // Controller would even change anything.
     {
-        std::lock_guard<std::mutex> lk(sdb::g_state().playersMtx);
-        for (auto& [id, player] : sdb::g_state().players) {
+        std::lock_guard<std::mutex> lk(sdo::g_state().playersMtx);
+        for (auto& [id, player] : sdo::g_state().players) {
             // The 2s post-spawn grace period used elsewhere for proxy writes
             // (on_process_event_post's own comment) was tested disabled here
             // starting 2026-08-13, since this is a read-only diagnostic, not
@@ -3415,22 +3415,22 @@ static void check_watch_lefthand_trigger()
     wchar_t path[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return;
-    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\watch_lefthand.flag";
+    std::wstring flag = std::wstring(path, n) + L"\\SDO\\watch_lefthand.flag";
     if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
 
     static uint64_t s_lastLogUs = 0;
-    const uint64_t now = sdb::now_micros();
+    const uint64_t now = sdo::now_micros();
     if (now - s_lastLogUs < 1'000'000ULL) return;
     s_lastLogUs = now;
 
     log_lefthand_values("local", find_local_pawn());
 
-    std::lock_guard<std::mutex> lk(sdb::g_state().playersMtx);
-    for (auto& [id, player] : sdb::g_state().players) {
+    std::lock_guard<std::mutex> lk(sdo::g_state().playersMtx);
+    for (auto& [id, player] : sdo::g_state().players) {
         // Same 2s post-spawn grace period used everywhere else a proxy's
         // components get touched — see on_process_event_post's own comment
         // for why (live-tested crash without it).
-        if (player.proxyActor /* && sdb::now_micros() - player.proxySpawnedAtUs >= 2'000'000ULL */) {
+        if (player.proxyActor /* && sdo::now_micros() - player.proxySpawnedAtUs >= 2'000'000ULL */) {
             log_lefthand_values("proxy", static_cast<AActor*>(player.proxyActor));
             break;
         }
@@ -3487,19 +3487,19 @@ static void check_watch_activeslot_trigger()
     wchar_t path[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return;
-    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\watch_activeslot.flag";
+    std::wstring flag = std::wstring(path, n) + L"\\SDO\\watch_activeslot.flag";
     if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
 
     static uint64_t s_lastLogUs = 0;
-    const uint64_t now = sdb::now_micros();
+    const uint64_t now = sdo::now_micros();
     if (now - s_lastLogUs < 1'000'000ULL) return;
     s_lastLogUs = now;
 
     log_activeslot_values("local", find_local_pawn());
 
-    std::lock_guard<std::mutex> lk(sdb::g_state().playersMtx);
-    for (auto& [id, player] : sdb::g_state().players) {
-        if (player.proxyActor /* && sdb::now_micros() - player.proxySpawnedAtUs >= 2'000'000ULL */) {
+    std::lock_guard<std::mutex> lk(sdo::g_state().playersMtx);
+    for (auto& [id, player] : sdo::g_state().players) {
+        if (player.proxyActor /* && sdo::now_micros() - player.proxySpawnedAtUs >= 2'000'000ULL */) {
             log_activeslot_values("proxy", static_cast<AActor*>(player.proxyActor));
             break;
         }
@@ -3655,7 +3655,7 @@ static void do_attach_health_scan(void* ctxRaw)
         // see the comment further down for why this exists alongside the
         // delta check below.
         static std::unordered_map<std::string, uint64_t> s_lastAbsoluteCheckUs;
-        const uint64_t nowUs = sdb::now_micros();
+        const uint64_t nowUs = sdo::now_micros();
         uint64_t& lastAbsUs = s_lastAbsoluteCheckUs[ctx->label];
         // 2026-08-16: widened 1s -> 20s, and the re-snap below made
         // unconditional (not just on detected offset) in the same change —
@@ -3772,10 +3772,10 @@ static void do_attach_health_scan(void* ctxRaw)
             // Logged unconditionally (not just on threshold-exceeded) so
             // this theory is directly checkable against the next live
             // report instead of guessed at.
-            char sdbuf[160];
-            snprintf(sdbuf, sizeof(sdbuf), "attach_health: %s child ptr=0x%llx socket-dist=%.1f offSocket=%d",
+            char sdouf[160];
+            snprintf(sdouf, sizeof(sdouf), "attach_health: %s child ptr=0x%llx socket-dist=%.1f offSocket=%d",
                       ctx->label.c_str(), static_cast<unsigned long long>(child), sDist, offSocket ? 1 : 0);
-            debug_log(sdbuf);
+            debug_log(sdouf);
             // 2026-08-16: tried re-snapping UNCONDITIONALLY on this throttled
             // pass (not just when offSocket) to test the render-thread-
             // notification-gap theory above — the very next live test
@@ -3914,7 +3914,7 @@ static void do_current_actor_scan(void* rawCtx)
 static void check_current_actor_diagnostic()
 {
     static uint64_t s_lastCheckUs = 0;
-    const uint64_t now = sdb::now_micros();
+    const uint64_t now = sdo::now_micros();
     if (now - s_lastCheckUs < 1'000'000ULL) return;
     s_lastCheckUs = now;
 
@@ -3953,9 +3953,9 @@ static void check_current_actor_diagnostic()
 
     scanOne("local", cached_find_local_pawn());
 
-    std::lock_guard<std::mutex> lk(sdb::g_state().playersMtx);
+    std::lock_guard<std::mutex> lk(sdo::g_state().playersMtx);
     int i = 0;
-    for (auto& [id, player] : sdb::g_state().players) {
+    for (auto& [id, player] : sdo::g_state().players) {
         if (!player.proxyActor) continue;
         std::string label = "proxy" + std::to_string(i++);
         scanOne(label.c_str(), static_cast<AActor*>(player.proxyActor));
@@ -4037,7 +4037,7 @@ static void do_freeze_check_scan(void* rawCtx)
 static void check_item_freeze_diagnostic()
 {
     static uint64_t s_lastCheckUs = 0;
-    const uint64_t now = sdb::now_micros();
+    const uint64_t now = sdo::now_micros();
     if (now - s_lastCheckUs < 2'000'000ULL) return;
     s_lastCheckUs = now;
 
@@ -4099,9 +4099,9 @@ static void check_item_freeze_diagnostic()
 
     scanOne("local", cached_find_local_pawn());
 
-    std::lock_guard<std::mutex> lk(sdb::g_state().playersMtx);
+    std::lock_guard<std::mutex> lk(sdo::g_state().playersMtx);
     int i = 0;
-    for (auto& [id, player] : sdb::g_state().players) {
+    for (auto& [id, player] : sdo::g_state().players) {
         if (!player.proxyActor) continue;
         std::string label = "proxy" + std::to_string(i++);
         scanOne(label.c_str(), static_cast<AActor*>(player.proxyActor));
@@ -4345,7 +4345,7 @@ static void do_body_part_repair(void* ctxRaw)
                     // idempotent if the link is already fine; see
                     // refresh_leader_pose's own comment (proxy_manager.cpp).
                     auto** leaderMeshSlot2 = static_cast<UObject**>(ctx->owner->GetValuePtrByPropertyNameInChain(L"Mesh"));
-                    sdb::refresh_leader_pose(clothingComp, (leaderMeshSlot2 && *leaderMeshSlot2) ? *leaderMeshSlot2 : nullptr);
+                    sdo::refresh_leader_pose(clothingComp, (leaderMeshSlot2 && *leaderMeshSlot2) ? *leaderMeshSlot2 : nullptr);
                     debug_log("component_drift: " + *ctx->key + " skipped mesh-repair (Clothing_X equipped+visible) but refreshed leader-pose link");
                 }
                 return;
@@ -4419,7 +4419,7 @@ static void do_body_part_repair(void* ctxRaw)
         // (proxy_manager.cpp) for the full rationale. Harmless no-op if
         // UpdateBodyParts already handled it correctly.
         auto** leaderMeshSlot = static_cast<UObject**>(ctx->owner->GetValuePtrByPropertyNameInChain(L"Mesh"));
-        sdb::refresh_leader_pose(ctx->comp, (leaderMeshSlot && *leaderMeshSlot) ? *leaderMeshSlot : nullptr);
+        sdo::refresh_leader_pose(ctx->comp, (leaderMeshSlot && *leaderMeshSlot) ? *leaderMeshSlot : nullptr);
     }
 
     const void* immediatelyAfter = meshSlot ? *meshSlot : nullptr;
@@ -4529,7 +4529,7 @@ static void do_component_drift_scan(void* ctxRaw)
                 const double sdz = clParams.ReturnValue.Z - slParams.ReturnValue.Z;
                 constexpr double kSocketDistSq = 50.0 * 50.0;
                 if (sdx * sdx + sdy * sdy + sdz * sdz > kSocketDistSq) {
-                    const uint64_t nowUs = sdb::now_micros();
+                    const uint64_t nowUs = sdo::now_micros();
                     if (ctx->firstSeenUs == 0) ctx->firstSeenUs = nowUs;
                     if (nowUs - ctx->firstSeenUs >= 2'000'000ULL &&
                         nowUs - ctx->lastRepairAttemptUs >= 1'000'000ULL) {
@@ -4554,7 +4554,7 @@ static void do_component_drift_scan(void* ctxRaw)
             }
         }
     } else if (x * x + y * y + z * z > 50.0 * 50.0) {
-        const uint64_t nowUs = sdb::now_micros();
+        const uint64_t nowUs = sdo::now_micros();
         if (ctx->firstSeenUs == 0) ctx->firstSeenUs = nowUs;
         if (nowUs - ctx->firstSeenUs >= 2'000'000ULL &&
             nowUs - ctx->lastRepairAttemptUs >= 1'000'000ULL) {
@@ -4599,7 +4599,7 @@ static void do_component_drift_scan(void* ctxRaw)
         // refresh_leader_pose's own comment (proxy_manager.cpp).
         if (isSkeletalComp && hasMeshNow) {
             auto** leaderMeshSlotRoutine = static_cast<UObject**>(ctx->owner->GetValuePtrByPropertyNameInChain(L"Mesh"));
-            sdb::refresh_leader_pose(ctx->comp, (leaderMeshSlotRoutine && *leaderMeshSlotRoutine) ? *leaderMeshSlotRoutine : nullptr);
+            sdo::refresh_leader_pose(ctx->comp, (leaderMeshSlotRoutine && *leaderMeshSlotRoutine) ? *leaderMeshSlotRoutine : nullptr);
         }
         // 2026-08-15: transition-only detection ("was set, now null") has a
         // real blind spot — live-reported same day: a part missing on the
@@ -4719,7 +4719,7 @@ static void do_component_drift_scan(void* ctxRaw)
         // 2026-08-15: isolation test, paired with kEnableItemDriftCheck
         // above — same reasoning, same "flip back once answered" note.
         static constexpr bool kEnableAppearanceRepair = true;
-        const uint64_t nowUs = sdb::now_micros();
+        const uint64_t nowUs = sdo::now_micros();
         // 2026-08-16: firstSeenUs was being stamped unconditionally on this
         // ctx's very first scan ever (component healthy or not), not on
         // first-seen-BROKEN as the comment above claims and as the 5-minute
@@ -4788,11 +4788,11 @@ static void do_component_drift_scan(void* ctxRaw)
             if (ctx->appearanceField) {
                 const bool isProxy = ctx->key.rfind("proxy", 0) == 0;
                 if (isProxy) {
-                    const bool matched = sdb::g_proxy_manager().force_resync_appearance(ctx->owner);
+                    const bool matched = sdo::g_proxy_manager().force_resync_appearance(ctx->owner);
                     debug_log("component_drift: " + ctx->key + " forced proxy appearance resync, matched=" +
                               std::to_string(matched));
                 } else {
-                    const auto& good = sdb::g_state().lastGoodLocalAppearance;
+                    const auto& good = sdo::g_state().lastGoodLocalAppearance;
                     const std::string* name = nullptr;
                     bool isSkeletal = false;
                     const std::string f = ctx->appearanceField;
@@ -4805,7 +4805,7 @@ static void do_component_drift_scan(void* ctxRaw)
                     // reapply_named_mesh/refresh_leader_pose's own comments.
                     auto** leaderMeshSlot = isSkeletal ? static_cast<UObject**>(ctx->owner->GetValuePtrByPropertyNameInChain(L"Mesh")) : nullptr;
                     UObject* leaderMesh = (leaderMeshSlot && *leaderMeshSlot) ? *leaderMeshSlot : nullptr;
-                    const bool applied = name && sdb::reapply_named_mesh(ctx->comp, *name, isSkeletal, leaderMesh);
+                    const bool applied = name && sdo::reapply_named_mesh(ctx->comp, *name, isSkeletal, leaderMesh);
                     debug_log("component_drift: " + ctx->key + " local appearance repair field=" + f +
                               " cachedName=" + (name ? *name : "<none>") + " applied=" + std::to_string(applied));
                 }
@@ -4864,7 +4864,7 @@ static void check_component_drift(const std::string& label, AActor* actor,
     // showing (live-reported 2026-08-14: skin visible through pants gaps
     // after a repair with only UpdateBodyParts called).
     // 2026-08-15: added `appearanceField` — identifies which
-    // sdb::PawnAppearance field this component corresponds to, for the new
+    // sdo::PawnAppearance field this component corresponds to, for the new
     // appearance-repair path (HairMesh/BeardMesh/EyebrowsMesh/Mouth/Hands,
     // none of which UpdateBodyParts covers by name). nullptr = not
     // appearance-repairable (unchanged behavior for those entries).
@@ -5008,10 +5008,10 @@ static void check_component_drift(const std::string& label, AActor* actor,
         // item 6 for the full reasoning either way.
         static constexpr bool kEnableProactiveLeaderPoseRefresh = true;
         if (kEnableProactiveLeaderPoseRefresh) {
-            const uint64_t nowUsRefresh = sdb::now_micros();
+            const uint64_t nowUsRefresh = sdo::now_micros();
             if (nowUsRefresh - ctx.lastLeaderPoseRefreshUs >= 20'000'000ULL) {
                 ctx.lastLeaderPoseRefreshUs = nowUsRefresh;
-                sdb::refresh_leader_pose(comp, leaderMesh);
+                sdo::refresh_leader_pose(comp, leaderMesh);
             }
         }
     }
@@ -5081,7 +5081,7 @@ static void check_attach_health_trigger(bool cleanContext)
     static std::unordered_map<uintptr_t, std::array<double, 3>> s_itemLastPos;
     static std::unordered_map<std::string, AActor*> s_lastActorForLabel;
     static size_t s_rotateIndex = 0;
-    const uint64_t now = sdb::now_micros();
+    const uint64_t now = sdo::now_micros();
     // 2026-08-16: this throttle used to gate the WHOLE function, including
     // reset-detection/target-building that must run regardless of
     // cleanContext. That created a real starvation bug once the scan itself
@@ -5166,9 +5166,9 @@ static void check_attach_health_trigger(bool cleanContext)
     // heavier load than a single proxy visual.
     constexpr uint64_t kLocalPawnRepairGraceUs = 3'000'000ULL;
     const bool localPawnPastGrace =
-        (now - sdb::g_state().pawnValidSinceUs.load(std::memory_order_relaxed)) >= kLocalPawnRepairGraceUs;
+        (now - sdo::g_state().pawnValidSinceUs.load(std::memory_order_relaxed)) >= kLocalPawnRepairGraceUs;
     const bool localEligible = localPawn && localPawnPastGrace &&
-                                sdb::g_state().equipDataReady.load(std::memory_order_acquire);
+                                sdo::g_state().equipDataReady.load(std::memory_order_acquire);
 
     // 2026-08-16: this used to run check_attach_health + check_component_drift
     // for "local" AND every connected proxy, all in one do_game_tick()
@@ -5194,9 +5194,9 @@ static void check_attach_health_trigger(bool cleanContext)
 
     int proxyCount = 0;
     {
-        std::lock_guard<std::mutex> lk(sdb::g_state().playersMtx);
+        std::lock_guard<std::mutex> lk(sdo::g_state().playersMtx);
         int i = 0;
-        for (auto& [id, player] : sdb::g_state().players) {
+        for (auto& [id, player] : sdo::g_state().players) {
             if (!player.proxyActor) continue;
             std::string label = "proxy" + std::to_string(i++);
             AActor* proxyActor = static_cast<AActor*>(player.proxyActor);
@@ -5271,16 +5271,16 @@ static void check_watch_rotation_trigger()
     wchar_t path[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return;
-    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\watch_rotation.flag";
+    std::wstring flag = std::wstring(path, n) + L"\\SDO\\watch_rotation.flag";
     if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
 
     static uint64_t s_lastLogUs = 0;
-    const uint64_t now = sdb::now_micros();
+    const uint64_t now = sdo::now_micros();
     if (now - s_lastLogUs < 1'000'000ULL) return;
     s_lastLogUs = now;
 
-    std::lock_guard<std::mutex> lk(sdb::g_state().playersMtx);
-    for (auto& [id, player] : sdb::g_state().players) {
+    std::lock_guard<std::mutex> lk(sdo::g_state().playersMtx);
+    for (auto& [id, player] : sdo::g_state().players) {
         if (!player.proxyActor) continue;
         // The 2s post-spawn grace period used elsewhere for proxy writes was
         // tested disabled here starting 2026-08-13 (read-only diagnostic, not
@@ -5314,7 +5314,7 @@ static void check_active_weapon_trigger()
     wchar_t path[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return;
-    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\active_weapon.flag";
+    std::wstring flag = std::wstring(path, n) + L"\\SDO\\active_weapon.flag";
     if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
     DeleteFileW(flag.c_str());
 
@@ -5349,8 +5349,8 @@ static void check_active_weapon_trigger()
 
     logOne("local", find_local_pawn());
 
-    std::lock_guard<std::mutex> lk(sdb::g_state().playersMtx);
-    for (auto& [id, player] : sdb::g_state().players) {
+    std::lock_guard<std::mutex> lk(sdo::g_state().playersMtx);
+    for (auto& [id, player] : sdo::g_state().players) {
         if (!player.proxyActor) continue;
         // The 2s post-spawn grace period used elsewhere for proxy writes was
         // tested disabled here starting 2026-08-13 (read-only diagnostic, not
@@ -5385,7 +5385,7 @@ static void check_fabrik_dump_trigger()
     wchar_t path[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return;
-    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\fabrik_dump.flag";
+    std::wstring flag = std::wstring(path, n) + L"\\SDO\\fabrik_dump.flag";
     if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
     DeleteFileW(flag.c_str());
 
@@ -5415,7 +5415,7 @@ static void check_fabrik_dump_trigger()
                 debug_log(std::string("fabrik_dump: ") + label + " node not found");
                 continue;
             }
-            std::wstring outPath = std::wstring(ctx->outDir, ctx->dn) + L"\\SurrounDeadBridge\\fabrik_" +
+            std::wstring outPath = std::wstring(ctx->outDir, ctx->dn) + L"\\SDO\\fabrik_" +
                 ctx->wlabel + L"_" + nodeName + L".bin";
             std::ofstream out(outPath, std::ios::binary | std::ios::trunc);
             if (out.is_open()) out.write(reinterpret_cast<const char*>(structPtr), 864);
@@ -5434,8 +5434,8 @@ static void check_fabrik_dump_trigger()
     if (!seh_invoke(dumpOneRaw, &localCtx))
         debug_log("fabrik_dump: local crashed, caught via SEH");
 
-    std::lock_guard<std::mutex> lk(sdb::g_state().playersMtx);
-    for (auto& [id, player] : sdb::g_state().players) {
+    std::lock_guard<std::mutex> lk(sdo::g_state().playersMtx);
+    for (auto& [id, player] : sdo::g_state().players) {
         if (!player.proxyActor) continue;
         // The 2s post-spawn grace period used elsewhere for proxy writes was
         // tested disabled here starting 2026-08-13 (read-only diagnostic, not
@@ -5461,7 +5461,7 @@ static void check_widget_scan_trigger()
     wchar_t path[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return;
-    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\widget_scan.flag";
+    std::wstring flag = std::wstring(path, n) + L"\\SDO\\widget_scan.flag";
     if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
 
     std::ifstream in(flag, std::ios::binary);
@@ -5495,7 +5495,7 @@ static void check_mem_dump_trigger()
     wchar_t path[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return;
-    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\mem_dump.flag";
+    std::wstring flag = std::wstring(path, n) + L"\\SDO\\mem_dump.flag";
     if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
 
     std::ifstream in(flag, std::ios::binary);
@@ -5638,7 +5638,7 @@ static void check_dump_delegate_trigger()
     wchar_t path[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return;
-    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\dump_delegate.flag";
+    std::wstring flag = std::wstring(path, n) + L"\\SDO\\dump_delegate.flag";
     if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
 
     std::ifstream in(flag, std::ios::binary);
@@ -5705,7 +5705,7 @@ static void check_call_trigger()
     wchar_t path[MAX_PATH];
     DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
     if (n == 0 || n >= MAX_PATH) return;
-    std::wstring flag = std::wstring(path, n) + L"\\SurrounDeadBridge\\call.flag";
+    std::wstring flag = std::wstring(path, n) + L"\\SDO\\call.flag";
     if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
 
     std::ifstream in(flag, std::ios::binary);
@@ -5747,7 +5747,7 @@ static bool try_open_world()
     if (find_local_pawn()) return true; // already in-world
 
     // Testing escape hatch (2026-08-17) — drop a `disable_auto_continue.flag`
-    // file in %APPDATA%\SurrounDeadBridge\ to skip the auto-click below
+    // file in %APPDATA%\SDO\ to skip the auto-click below
     // entirely and leave the menu alone, e.g. for testing menu-level
     // ProcessEvent calls (SaveMenu_C::LoadGameFromSlot etc.) that need to
     // observe/interact with the actual interactive main menu rather than
@@ -5758,13 +5758,13 @@ static bool try_open_world()
         wchar_t path[MAX_PATH];
         DWORD n = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
         if (n != 0 && n < MAX_PATH) {
-            std::wstring disableFlag = std::wstring(path, n) + L"\\SurrounDeadBridge\\disable_auto_continue.flag";
+            std::wstring disableFlag = std::wstring(path, n) + L"\\SDO\\disable_auto_continue.flag";
             if (GetFileAttributesW(disableFlag.c_str()) != INVALID_FILE_ATTRIBUTES) return false;
         }
     }
 
     // Only auto-click through the menu when this launch is actually
-    // configured to join the bridge (a real ticket in session.cfg) — a
+    // configured to join the server (a real ticket in session.cfg) — a
     // plain solo/offline launch (no session.cfg, or an empty ticket) should
     // leave the menu alone for the player to navigate normally instead of
     // getting yanked into a game they didn't ask to join through us.
@@ -5775,17 +5775,17 @@ static bool try_open_world()
 
     static bool s_logged = false;
     if (!s_logged) { s_logged = true;
-        Output::send<LogLevel::Normal>(STR("SDB: MenuWidget found, clicking ContinueGame\n")); }
+        Output::send<LogLevel::Normal>(STR("SDO: MenuWidget found, clicking ContinueGame\n")); }
 
     UFunction* fn = menu->GetFunctionByNameInChain(
         L"BndEvt__MenuWidget_ContinueGame_K2Node_ComponentBoundEvent_25_OnButtonClickedEvent__DelegateSignature");
     if (fn) {
         menu->ProcessEvent(fn, nullptr);
-        Output::send<LogLevel::Normal>(STR("SDB: ContinueGame clicked\n"));
+        Output::send<LogLevel::Normal>(STR("SDO: ContinueGame clicked\n"));
         return true;
     }
 
-    Output::send<LogLevel::Error>(STR("SDB: ContinueGame fn not found on MenuWidget\n"));
+    Output::send<LogLevel::Error>(STR("SDO: ContinueGame fn not found on MenuWidget\n"));
     return false;
 }
 
@@ -5821,7 +5821,7 @@ static AActor* cached_find_local_pawn()
 {
     static std::atomic<uint64_t> s_last_try_us{0};
     static AActor* s_cached = nullptr;
-    const uint64_t now = sdb::now_micros();
+    const uint64_t now = sdo::now_micros();
     const uint64_t last = s_last_try_us.load(std::memory_order_relaxed);
     if (last == 0 || now - last >= 100'000ULL) {
         s_last_try_us.store(now, std::memory_order_relaxed);
@@ -5837,7 +5837,7 @@ static AActor* cached_find_sky_actor()
 {
     static std::atomic<uint64_t> s_last_try_us{0};
     static AActor* s_cached = nullptr;
-    const uint64_t now = sdb::now_micros();
+    const uint64_t now = sdo::now_micros();
     const uint64_t last = s_last_try_us.load(std::memory_order_relaxed);
     if (last == 0 || now - last >= 2'000'000ULL) {
         s_last_try_us.store(now, std::memory_order_relaxed);
@@ -5850,7 +5850,7 @@ static AActor* cached_find_weather_actor()
 {
     static std::atomic<uint64_t> s_last_try_us{0};
     static AActor* s_cached = nullptr;
-    const uint64_t now = sdb::now_micros();
+    const uint64_t now = sdo::now_micros();
     const uint64_t last = s_last_try_us.load(std::memory_order_relaxed);
     if (last == 0 || now - last >= 2'000'000ULL) {
         s_last_try_us.store(now, std::memory_order_relaxed);
@@ -5878,12 +5878,12 @@ static uint32_t s_lastAppliedWorldRevision = 0;
 
 static void apply_world_state()
 {
-    sdb::WorldState ws;
+    sdo::WorldState ws;
     bool valid = false;
     {
-        std::lock_guard<std::mutex> lk(sdb::g_state().worldMtx);
-        valid = sdb::g_state().worldStateValid;
-        if (valid) ws = sdb::g_state().worldState;
+        std::lock_guard<std::mutex> lk(sdo::g_state().worldMtx);
+        valid = sdo::g_state().worldStateValid;
+        if (valid) ws = sdo::g_state().worldState;
     }
     if (!valid || ws.revision == s_lastAppliedWorldRevision) return;
     s_lastAppliedWorldRevision = ws.revision;
@@ -6182,7 +6182,7 @@ static void do_equip_restore_retry(void* ctxRaw)
     // check_attach_health_trigger), and equipDataReady only ever gates the
     // "local" scan, so only set it when this call IS the local one.
     if (ctx->label == "local")
-        sdb::g_state().equipDataReady.store(true, std::memory_order_release);
+        sdo::g_state().equipDataReady.store(true, std::memory_order_release);
 
     // 2026-08-15: covers "AttachParent is null" (the original failure shape)
     // but NOT the distinct case live-reported same session: a helmet still
@@ -6306,7 +6306,7 @@ static void do_equip_restore_retry(void* ctxRaw)
         }
         if (mismatches == 0) {
             static uint64_t s_lastCleanLogUs = 0;
-            const uint64_t nowUs = sdb::now_micros();
+            const uint64_t nowUs = sdo::now_micros();
             if (nowUs - s_lastCleanLogUs >= 30'000'000ULL) { // heartbeat every 30s so we know it's still running
                 s_lastCleanLogUs = nowUs;
                 debug_log("equip_restore_retry: " + ctx->label + " RepPrimitiveActorsData checked, count=" +
@@ -6344,7 +6344,7 @@ static void reset_stale_actors_on_world_change(UWorld* world)
     g_last_world = world;
     if (firstWorld) return; // nothing to reset on the very first tick
 
-    auto& st = sdb::g_state();
+    auto& st = sdo::g_state();
     size_t playerCount = 0, entityCount = 0;
     {
         std::lock_guard<std::mutex> lk(st.playersMtx);
@@ -6411,7 +6411,7 @@ static void do_game_tick(bool cleanContext)
         ~ReentryGuard() { flag = false; }
     } reentry_guard(s_in_game_tick);
 
-    const uint64_t now = sdb::now_micros();
+    const uint64_t now = sdo::now_micros();
     if (now - g_last_tick_us.load(std::memory_order_relaxed) < 5'000ULL) return;
     g_last_tick_us.store(now, std::memory_order_relaxed);
 
@@ -6547,8 +6547,8 @@ static void do_game_tick(bool cleanContext)
     // the client outright. Wrapping per-frame (not the whole loop) so one
     // bad frame doesn't stop the rest of the batch from being processed.
     for (const auto& f : g_tcp.recv_all()) {
-        const sdb::Frame* fptr = &f;
-        if (!seh_invoke([](void* raw) { dispatch_frame(*static_cast<const sdb::Frame*>(raw)); }, const_cast<sdb::Frame*>(fptr)))
+        const sdo::Frame* fptr = &f;
+        if (!seh_invoke([](void* raw) { dispatch_frame(*static_cast<const sdo::Frame*>(raw)); }, const_cast<sdo::Frame*>(fptr)))
             debug_log("do_game_tick: dispatch_frame crashed on an inbound frame, caught via SEH");
     }
 
@@ -6560,19 +6560,19 @@ static void do_game_tick(bool cleanContext)
     // timeout heuristic + SDOnline Lua script hand-off this replaced
     // (2026-08-17) — see pendingFirstJoin's own comment in state.hpp.
     {
-        auto& st2 = sdb::g_state();
+        auto& st2 = sdo::g_state();
         if (st2.pendingFirstJoin.load(std::memory_order_acquire) && cached_find_local_pawn()) {
             st2.pendingFirstJoin.store(false, std::memory_order_release);
             st2.inFirstJoinFlow = true;
             Output::send<LogLevel::Normal>(
-                STR("SDB: first join — opening barber menu for character customization\n"));
+                STR("SDO: first join — opening barber menu for character customization\n"));
             if (!seh_invoke([](void*) { do_open_barber_menu(); }, nullptr))
                 debug_log("do_game_tick: do_open_barber_menu (first-join) crashed, caught via SEH");
         }
     }
 
     // 2. Find local pawn.
-    auto& st    = sdb::g_state();
+    auto& st    = sdo::g_state();
     AActor* pawn = cached_find_local_pawn();
 
     if (pawn) {
@@ -6608,10 +6608,10 @@ static void do_game_tick(bool cleanContext)
         const bool healthDead = localHealth <= 0.0;
         const bool wasHealthDead = st.sentDeathByHealth.exchange(healthDead, std::memory_order_relaxed);
         if (healthDead && !wasHealthDead) {
-            send_header_only(sdb::MsgType::DeathRequest);
+            send_header_only(sdo::MsgType::DeathRequest);
             debug_log("do_game_tick: health<=0 (" + std::to_string(localHealth) + ") detected, sent DeathRequest");
         } else if (!healthDead && wasHealthDead) {
-            send_header_only(sdb::MsgType::RespawnRequest);
+            send_header_only(sdo::MsgType::RespawnRequest);
             debug_log("do_game_tick: health recovered (" + std::to_string(localHealth) + "), sent RespawnRequest");
         }
     }
@@ -6623,12 +6623,12 @@ static void do_game_tick(bool cleanContext)
         const uint64_t since = st.noPlayerSinceUs.load();
         if (since && !st.sentDeath.load()) {
             if (now - since > 1'000'000ULL) {
-                send_header_only(sdb::MsgType::DeathRequest);
+                send_header_only(sdo::MsgType::DeathRequest);
                 st.sentDeath.store(true);
             }
         }
 
-        sdb::g_proxy_manager().tick(nullptr, nullptr, cleanContext);
+        sdo::g_proxy_manager().tick(nullptr, nullptr, cleanContext);
         return;
     }
 
@@ -6636,7 +6636,7 @@ static void do_game_tick(bool cleanContext)
     if (!st.hasPawn.exchange(true) || was_dead) {
         st.noPlayerSinceUs.store(0);
         st.pawnValidSinceUs.store(now, std::memory_order_relaxed);
-        if (was_dead) send_header_only(sdb::MsgType::RespawnRequest);
+        if (was_dead) send_header_only(sdo::MsgType::RespawnRequest);
         // New/respawned pawn — RepActorsData hasn't necessarily replicated
         // back in yet. See state.hpp's equipDataReady comment.
         st.equipDataReady.store(false, std::memory_order_release);
@@ -6745,7 +6745,7 @@ static void do_game_tick(bool cleanContext)
                 debug_log("join_teleport: K2_SetActorLocation/Rotation done, postChildrenCount=" + std::to_string(postCount));
 
                 Output::send<LogLevel::Normal>(
-                    STR("SDB: teleported (split call)  x={:.1f} y={:.1f} z={:.1f}\n"),
+                    STR("SDO: teleported (split call)  x={:.1f} y={:.1f} z={:.1f}\n"),
                     st.teleportX, st.teleportY, st.teleportZ);
             } else {
                 // Fallback to the old combined call rather than silently not
@@ -6753,12 +6753,12 @@ static void do_game_tick(bool cleanContext)
                 FHitResult hit{};
                 pawn->K2_SetActorLocationAndRotation(newLoc, newRot, false, hit, true);
                 Output::send<LogLevel::Normal>(
-                    STR("SDB: teleported (fallback combined call, K2_SetActorLocation/Rotation not found)  x={:.1f} y={:.1f} z={:.1f}\n"),
+                    STR("SDO: teleported (fallback combined call, K2_SetActorLocation/Rotation not found)  x={:.1f} y={:.1f} z={:.1f}\n"),
                     st.teleportX, st.teleportY, st.teleportZ);
             }
         } else {
             Output::send<LogLevel::Normal>(
-                STR("SDB: skipped teleport, already close to saved position\n"));
+                STR("SDO: skipped teleport, already close to saved position\n"));
         }
     }
 
@@ -6803,9 +6803,9 @@ static void do_game_tick(bool cleanContext)
         if (!seh_invoke(do_equip_restore_retry, &ctx))
             debug_log("equip_restore_retry: local crashed, caught via SEH");
 
-        std::lock_guard<std::mutex> lk(sdb::g_state().playersMtx);
+        std::lock_guard<std::mutex> lk(sdo::g_state().playersMtx);
         int proxyIdx = 0;
-        for (auto& [id, player] : sdb::g_state().players) {
+        for (auto& [id, player] : sdo::g_state().players) {
             if (!player.proxyActor) continue;
             std::string label = "proxy" + std::to_string(proxyIdx++);
             EquipRestoreRetryCtx proxyCtx{ static_cast<AActor*>(player.proxyActor), label };
@@ -6824,10 +6824,10 @@ static void do_game_tick(bool cleanContext)
     // 5. Drive proxy actors.
     UWorld* world = pawn->GetWorld();
     reset_stale_actors_on_world_change(world);
-    sdb::g_proxy_manager().tick(world, pawn, cleanContext);
+    sdo::g_proxy_manager().tick(world, pawn, cleanContext);
 
     // 6. Drive world entities.
-    sdb::g_entity_manager().tick(world, pawn);
+    sdo::g_entity_manager().tick(world, pawn);
 
     // 6a. One-time: suppress local zombie spawning so this client relies on
     // server-simulated Zombie entities instead (see suppress_zombie_spawners's
@@ -6845,14 +6845,14 @@ static void do_game_tick(bool cleanContext)
                 // actors in one burst, and on UE 5.6 the first crash after a
                 // save load left no mod frames on the stack -- consistent
                 // with the game touching something we freed on a later frame.
-                // Set SDB_NO_SPAWNER_SUPPRESS=1 to skip it and see whether
+                // Set SDO_NO_SPAWNER_SUPPRESS=1 to skip it and see whether
                 // the crash follows.
                 static const bool s_skipSuppress = [] {
                     wchar_t buf[8];
-                    return GetEnvironmentVariableW(L"SDB_NO_SPAWNER_SUPPRESS", buf, 8) > 0 && buf[0] == L'1';
+                    return GetEnvironmentVariableW(L"SDO_NO_SPAWNER_SUPPRESS", buf, 8) > 0 && buf[0] == L'1';
                 }();
                 if (s_skipSuppress) {
-                    debug_log("suppress_zombie_spawners: SKIPPED (SDB_NO_SPAWNER_SUPPRESS=1)");
+                    debug_log("suppress_zombie_spawners: SKIPPED (SDO_NO_SPAWNER_SUPPRESS=1)");
                     s_spawnersSuppressed.store(true, std::memory_order_relaxed);
                 } else if (suppress_zombie_spawners()) {
                     s_spawnersSuppressed.store(true, std::memory_order_relaxed);
@@ -7112,13 +7112,13 @@ static void check_local_montage_change(AActor* pawn)
     g_last_local_montage = ctx.montage;
     if (!ctx.montage || ctx.name.empty()) return;
 
-    sdb::PlayMontageData m;
+    sdo::PlayMontageData m;
     m.montageName = ctx.name;
     m.playRate    = 1.0f;
 
-    sdb::Frame f;
-    f.type    = sdb::MsgType::PlayMontage;
-    f.payload = sdb::encode_play_montage(m);
+    sdo::Frame f;
+    f.type    = sdo::MsgType::PlayMontage;
+    f.payload = sdo::encode_play_montage(m);
     build_session_frame(f);
     send_frame(f);
 
@@ -7141,7 +7141,7 @@ static void handle_drop_hook(void* params)
     // ProcessEvent call per real drop.
     static void*   s_last_item_ref = nullptr;
     static uint64_t s_last_drop_us = 0;
-    const uint64_t nowUs = sdb::now_micros();
+    const uint64_t nowUs = sdo::now_micros();
     if (itemRef == s_last_item_ref && nowUs - s_last_drop_us < 500'000ULL) {
         debug_log("handle_drop_hook: debounced duplicate call for same ItemRef");
         return;
@@ -7195,7 +7195,7 @@ static void handle_build_hook(void* params)
     // (position, time) the same way handle_drop_hook debounces by ItemRef.
     static double   s_last_x = 0, s_last_y = 0, s_last_z = 0;
     static uint64_t s_last_build_us = 0;
-    const uint64_t nowUs = sdb::now_micros();
+    const uint64_t nowUs = sdo::now_micros();
     if (xf->locX == s_last_x && xf->locY == s_last_y && xf->locZ == s_last_z &&
         nowUs - s_last_build_us < 500'000ULL) {
         debug_log("handle_build_hook: debounced duplicate call for same position");
@@ -7274,7 +7274,7 @@ static void handle_pickup_hook(AActor* pawn, void* params)
     if (!pickupRef) return;
 
     s_pending_pickup_ref = pickupRef;
-    s_pending_pickup_us  = sdb::now_micros();
+    s_pending_pickup_us  = sdo::now_micros();
     s_pending_pickup_snapshot.clear();
     for (const auto& container : read_local_inventory(pawn))
         for (const auto& slot : container.items)
@@ -7287,7 +7287,7 @@ static void handle_pickup_hook(AActor* pawn, void* params)
 static void check_pending_pickup(AActor* pawn)
 {
     if (!s_pending_pickup_ref || !pawn) return;
-    if (sdb::now_micros() - s_pending_pickup_us < 100'000ULL) return;
+    if (sdo::now_micros() - s_pending_pickup_us < 100'000ULL) return;
 
     AActor* pickupRef = s_pending_pickup_ref;
     s_pending_pickup_ref = nullptr;
@@ -7308,8 +7308,8 @@ static void check_pending_pickup(AActor* pawn)
         return;
     }
 
-    std::lock_guard<std::mutex> lk(sdb::g_state().entityMtx);
-    for (const auto& [id, entity] : sdb::g_state().entities) {
+    std::lock_guard<std::mutex> lk(sdo::g_state().entityMtx);
+    for (const auto& [id, entity] : sdo::g_state().entities) {
         if (entity.actor != pickupRef) continue;
         send_item_pickup_request(id);
         debug_log("check_pending_pickup: sent ItemPickupRequest eid=" + std::to_string(id) +
@@ -7334,7 +7334,7 @@ static void check_inventory_pickup(AActor* pawn)
     static std::unordered_map<std::string, int32_t> s_lastCounts;
     static uint64_t s_lastCheckUs = 0;
 
-    const uint64_t now = sdb::now_micros();
+    const uint64_t now = sdo::now_micros();
     if (s_lastCheckUs != 0 && now - s_lastCheckUs < 1'500'000ULL) return;
     s_lastCheckUs = now;
 
@@ -7350,8 +7350,8 @@ static void check_inventory_pickup(AActor* pawn)
             const int32_t prevQty = (it != s_lastCounts.end()) ? it->second : 0;
             if (curQty <= prevQty) continue; // not an increase — nothing picked up
 
-            std::lock_guard<std::mutex> lk(sdb::g_state().entityMtx);
-            for (const auto& [id, entity] : sdb::g_state().entities) {
+            std::lock_guard<std::mutex> lk(sdo::g_state().entityMtx);
+            for (const auto& [id, entity] : sdo::g_state().entities) {
                 if (entity.itemId != itemId || !entity.hasPosition) continue;
                 const double dx = entity.x - loc.X, dy = entity.y - loc.Y, dz = entity.z - loc.Z;
                 if (dx*dx + dy*dy + dz*dz > 300.0*300.0) continue;
@@ -7444,7 +7444,7 @@ static void record_recent_call(UObject* obj, UFunction* func)
         if (w == obj) { watched = true; break; }
     }
     if (!watched) return;
-    s_recentCalls[s_recentCallsIdx] = { func, obj, sdb::now_micros() };
+    s_recentCalls[s_recentCallsIdx] = { func, obj, sdo::now_micros() };
     s_recentCallsIdx = (s_recentCallsIdx + 1) % 65536;
 }
 
@@ -7507,7 +7507,7 @@ static void do_dump_recent_calls(void* ctxRaw)
 static void dump_recent_calls()
 {
     static std::atomic<uint64_t> s_lastDumpUs{0};
-    const uint64_t now = sdb::now_micros();
+    const uint64_t now = sdo::now_micros();
     const uint64_t last = s_lastDumpUs.load(std::memory_order_relaxed);
     if (last != 0 && now - last < 500'000ULL) return; // de-dup: Torso/Legs/Feet often clear in the same tick
     s_lastDumpUs.store(now, std::memory_order_relaxed);
@@ -7535,7 +7535,7 @@ static void check_load_data_requested_hook(UObject* obj, UFunction* func)
 {
     if (!s_loadDataRequestedFn) {
         static std::atomic<uint64_t> s_lastTryUs{0};
-        const uint64_t now = sdb::now_micros();
+        const uint64_t now = sdo::now_micros();
         const uint64_t last = s_lastTryUs.load(std::memory_order_relaxed);
         if (last == 0 || now - last >= 1'000'000ULL) {
             s_lastTryUs.store(now, std::memory_order_relaxed);
@@ -7574,7 +7574,7 @@ static void check_set_sex_mesh_hook(UObject* obj, UFunction* func)
 {
     if (!s_setSexMeshFn) {
         static std::atomic<uint64_t> s_lastTryUs{0};
-        const uint64_t now = sdb::now_micros();
+        const uint64_t now = sdo::now_micros();
         const uint64_t last = s_lastTryUs.load(std::memory_order_relaxed);
         if (last == 0 || now - last >= 1'000'000ULL) {
             s_lastTryUs.store(now, std::memory_order_relaxed);
@@ -7633,7 +7633,7 @@ static void check_barber_interact_diagnostic(UObject* obj, UFunction* func, void
     for (auto* p : s_barberCandidateFnPtrs) if (!p) { anyUnresolved = true; break; }
     if (anyUnresolved) {
         static std::atomic<uint64_t> s_lastTryUs{0};
-        const uint64_t now = sdb::now_micros();
+        const uint64_t now = sdo::now_micros();
         const uint64_t last = s_lastTryUs.load(std::memory_order_relaxed);
         if (last == 0 || now - last >= 1'000'000ULL) {
             s_lastTryUs.store(now, std::memory_order_relaxed);
@@ -7705,7 +7705,7 @@ static void check_barber_exit_hook(UObject* obj, UFunction* func)
 {
     if (!s_barberEventExitFn) {
         static std::atomic<uint64_t> s_lastTryUs{0};
-        const uint64_t now = sdb::now_micros();
+        const uint64_t now = sdo::now_micros();
         const uint64_t last = s_lastTryUs.load(std::memory_order_relaxed);
         if (last == 0 || now - last >= 1'000'000ULL) {
             s_lastTryUs.store(now, std::memory_order_relaxed);
@@ -7727,7 +7727,7 @@ static void check_attach_clothing_hooks(UObject* obj, UFunction* func)
 {
     if (!s_svrAttachClothingFn || !s_mcAttachClothingFn || !s_equipClothingToMeshFn) {
         static std::atomic<uint64_t> s_lastTryUs{0};
-        const uint64_t now = sdb::now_micros();
+        const uint64_t now = sdo::now_micros();
         const uint64_t last = s_lastTryUs.load(std::memory_order_relaxed);
         if (last == 0 || now - last >= 1'000'000ULL) {
             s_lastTryUs.store(now, std::memory_order_relaxed);
@@ -7780,7 +7780,7 @@ static void on_process_event_pre(UObject* obj, UFunction* func, void* params)
     // yet => the lookup kept retrying on literally every ProcessEvent call).
     static std::atomic<uint64_t> s_last_drop_fn_try_us{0};
     if (func && !s_drop_fn) {
-        const uint64_t now = sdb::now_micros();
+        const uint64_t now = sdo::now_micros();
         const uint64_t last = s_last_drop_fn_try_us.load(std::memory_order_relaxed);
         if (last == 0 || now - last >= 1'000'000ULL) {
             s_last_drop_fn_try_us.store(now, std::memory_order_relaxed);
@@ -7824,7 +7824,7 @@ static void on_process_event_pre(UObject* obj, UFunction* func, void* params)
     // proxy's.
     static std::atomic<uint64_t> s_last_fire_bullet_fn_try_us{0};
     if (func && !s_fireBullet_fn) {
-        const uint64_t now = sdb::now_micros();
+        const uint64_t now = sdo::now_micros();
         const uint64_t last = s_last_fire_bullet_fn_try_us.load(std::memory_order_relaxed);
         if (last == 0 || now - last >= 1'000'000ULL) {
             s_last_fire_bullet_fn_try_us.store(now, std::memory_order_relaxed);
@@ -7854,7 +7854,7 @@ static void on_process_event_pre(UObject* obj, UFunction* func, void* params)
                   " localPawn=0x" + std::to_string(reinterpret_cast<uintptr_t>(localPawn)) +
                   " isLocal=" + std::to_string(owner && localPawn && owner == localPawn));
         if (owner && localPawn && owner == localPawn) {
-            send_header_only(sdb::MsgType::WeaponFired);
+            send_header_only(sdo::MsgType::WeaponFired);
             debug_log("on_process_event_pre: local FireBullet detected, sent WeaponFired");
         }
     }
@@ -7881,7 +7881,7 @@ static void on_process_event_pre(UObject* obj, UFunction* func, void* params)
     static UFunction* s_eventSaveFn = nullptr;
     static std::atomic<uint64_t> s_last_gamemode_fn_try_us{0};
     if (func && (!s_autoSaveGameFn || !s_eventAutoSaveFn || !s_eventSaveFn)) {
-        const uint64_t now = sdb::now_micros();
+        const uint64_t now = sdo::now_micros();
         const uint64_t last = s_last_gamemode_fn_try_us.load(std::memory_order_relaxed);
         if (last == 0 || now - last >= 1'000'000ULL) {
             s_last_gamemode_fn_try_us.store(now, std::memory_order_relaxed);
@@ -7907,7 +7907,7 @@ static void on_process_event_pre(UObject* obj, UFunction* func, void* params)
     // declaration comment for why (not yet confirmed live which one fires).
     static std::atomic<uint64_t> s_last_build_fn_try_us{0};
     if (func && (!s_buildFn || !s_svrBuildFn)) {
-        const uint64_t now = sdb::now_micros();
+        const uint64_t now = sdo::now_micros();
         const uint64_t last = s_last_build_fn_try_us.load(std::memory_order_relaxed);
         if (last == 0 || now - last >= 1'000'000ULL) {
             s_last_build_fn_try_us.store(now, std::memory_order_relaxed);
@@ -7938,7 +7938,7 @@ static void on_process_event_pre(UObject* obj, UFunction* func, void* params)
     // straight off the pawn itself.
     static std::atomic<uint64_t> s_last_pickup_fn_try_us{0};
     if (func && !s_pickup_fn) {
-        const uint64_t now = sdb::now_micros();
+        const uint64_t now = sdo::now_micros();
         const uint64_t last = s_last_pickup_fn_try_us.load(std::memory_order_relaxed);
         if (last == 0 || now - last >= 1'000'000ULL) {
             s_last_pickup_fn_try_us.store(now, std::memory_order_relaxed);
@@ -7964,7 +7964,7 @@ static void on_process_event_pre(UObject* obj, UFunction* func, void* params)
     // declaration comment above. Same throttled-retry shape.
     static std::atomic<uint64_t> s_last_mcsvr_fn_try_us{0};
     if (func && (!s_mcMontage_fn || !s_svrMontage_fn)) {
-        const uint64_t now = sdb::now_micros();
+        const uint64_t now = sdo::now_micros();
         const uint64_t last = s_last_mcsvr_fn_try_us.load(std::memory_order_relaxed);
         if (last == 0 || now - last >= 1'000'000ULL) {
             s_last_mcsvr_fn_try_us.store(now, std::memory_order_relaxed);
@@ -7990,9 +7990,9 @@ static void on_process_event_pre(UObject* obj, UFunction* func, void* params)
     // all. Broadened to log EVERY ProcessEvent call from ANY object, but only
     // during a short externally-triggered window (check_trace_trigger) so
     // this doesn't run continuously and flood the log the way an unthrottled
-    // full trace would (research/04_ida_investigation_log.md: SDB.log hit
+    // full trace would (research/04_ida_investigation_log.md: SDO.log hit
     // 106MB from an unrelated tight retry loop earlier this session).
-    if (func && sdb::now_micros() < g_trace_until_us.load(std::memory_order_relaxed)) {
+    if (func && sdo::now_micros() < g_trace_until_us.load(std::memory_order_relaxed)) {
         std::wstring wname = reinterpret_cast<UObject*>(func)->GetFullName();
         const int needed = WideCharToMultiByte(CP_UTF8, 0, wname.c_str(), -1, nullptr, 0, nullptr, nullptr);
         std::string name(needed > 0 ? static_cast<size_t>(needed - 1) : 0, '\0');
@@ -8007,7 +8007,7 @@ static void on_process_event_pre(UObject* obj, UFunction* func, void* params)
 
     const uint64_t init_t = g_init_time_us.load(std::memory_order_relaxed);
     if (init_t == 0) return;
-    const uint64_t now = sdb::now_micros();
+    const uint64_t now = sdo::now_micros();
 
     // Auto-open the world (click ContinueGame if still needed).
     if (!g_auto_open_fired.load(std::memory_order_relaxed)) {
@@ -8105,13 +8105,13 @@ static UFunction* s_lastUpdateFn = nullptr;
 // that function's own comment on why) — __try/__except can't share a stack
 // frame with C++ objects needing unwinding (MSVC C2712), hence the
 // trampoline split, same pattern as this file's other seh_invoke uses.
-struct AimWriteCtx { UObject* obj; sdb::RemotePlayer* player; };
+struct AimWriteCtx { UObject* obj; sdo::RemotePlayer* player; };
 
 static void do_aim_write(void* ctxRaw)
 {
     auto* ctx = static_cast<AimWriteCtx*>(ctxRaw);
     UObject* obj = ctx->obj;
-    sdb::RemotePlayer& player = *ctx->player;
+    sdo::RemotePlayer& player = *ctx->player;
 
     // Smoothed values (ProxyManager::update_proxy_render_smoothing, run
     // from the game tick), not the raw packet-driven aimPitchByte/aimYaw
@@ -8136,7 +8136,7 @@ static void do_aim_write(void* ctxRaw)
     // collapsing or renderYaw chasing it down (turn-in-place working
     // exactly as designed, just faster/more aggressively than expected).
     static uint64_t s_lastAimDiagUs = 0;
-    const uint64_t nowDiagUs = sdb::now_micros();
+    const uint64_t nowDiagUs = sdo::now_micros();
     if (nowDiagUs - s_lastAimDiagUs > 50'000ULL) {
         s_lastAimDiagUs = nowDiagUs;
         char buf[256];
@@ -8270,7 +8270,7 @@ static void do_aim_write(void* ctxRaw)
             // check_head_rot_diagnostic already captures. Remove once the
             // real mapping is confirmed.
             static uint64_t s_lastLogUs = 0;
-            const uint64_t nowUs = sdb::now_micros();
+            const uint64_t nowUs = sdo::now_micros();
             if (nowUs - s_lastLogUs > 300'000ULL) {
                 s_lastLogUs = nowUs;
                 char buf[300];
@@ -8311,7 +8311,7 @@ static void on_process_event_post(UObject* obj, UFunction* func, void* /*params*
     // fires on every ProcessEvent call otherwise.
     if (!s_lastUpdateFn) {
         static std::atomic<uint64_t> s_lastTryUs{0};
-        const uint64_t now = sdb::now_micros();
+        const uint64_t now = sdo::now_micros();
         const uint64_t last = s_lastTryUs.load(std::memory_order_relaxed);
         if (last == 0 || now - last >= 1'000'000ULL) {
             s_lastTryUs.store(now, std::memory_order_relaxed);
@@ -8361,10 +8361,10 @@ static void on_process_event_post(UObject* obj, UFunction* func, void* /*params*
     // immediately available, just skip this one frame's override — the
     // same override gets reattempted on the very next per-frame call,
     // completely harmless to skip once.
-    std::unique_lock<std::mutex> lk(sdb::g_state().playersMtx, std::try_to_lock);
+    std::unique_lock<std::mutex> lk(sdo::g_state().playersMtx, std::try_to_lock);
     if (!lk.owns_lock()) return;
 
-    for (auto& [id, player] : sdb::g_state().players) {
+    for (auto& [id, player] : sdo::g_state().players) {
         if (static_cast<AActor*>(player.proxyActor) != owner) continue;
 
         // ProxyManager::tick()'s own 2s post-spawn grace period
@@ -8412,7 +8412,7 @@ static void on_process_event_post(UObject* obj, UFunction* func, void* /*params*
 // Fires per actor per frame; drives do_game_tick when on_actor_tick is available.
 static void on_actor_tick(AActor* /*actor*/, float /*delta*/)
 {
-    const uint64_t now = sdb::now_micros();
+    const uint64_t now = sdo::now_micros();
     g_last_actor_tick_us.store(now, std::memory_order_relaxed);
     g_actor_tick_ever_fired.store(true, std::memory_order_relaxed);
     do_game_tick(true); // never reached from inside a ProcessEvent dispatch — genuinely clean, see do_game_tick's own comment
@@ -8562,7 +8562,7 @@ static void fixup_and_register_actor_tick_hook(AActor* pawn)
         debug_log("fixup_and_register_actor_tick_hook: vtable fixup did not find a corrected address — registering with UE4SS's original address");
 
     if (!register_actor_tick_hook())
-        Output::send<LogLevel::Error>(STR("SDB: RegisterAActorTickPreCallback not found\n"));
+        Output::send<LogLevel::Error>(STR("SDO: RegisterAActorTickPreCallback not found\n"));
 }
 
 // ── Reliable clean-context tick trigger ("Reliable GameThread Trigger via
@@ -8616,11 +8616,11 @@ static WNDPROC           g_originalWndProc = nullptr;
 // of whether this specific wrap would have caught that exact crash.
 static void do_game_tick_clean_ctx(void*) { do_game_tick(true); }
 
-static LRESULT CALLBACK sdb_wnd_proc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
+static LRESULT CALLBACK sdo_wnd_proc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
     if (msg == kCleanTickMessage) {
         if (!seh_invoke(do_game_tick_clean_ctx, nullptr))
-            debug_log("sdb_wnd_proc: do_game_tick(true) crashed, caught via SEH");
+            debug_log("sdo_wnd_proc: do_game_tick(true) crashed, caught via SEH");
     }
     // Always call through — must never disrupt normal input/resize/close
     // handling. CallWindowProc (not calling g_originalWndProc directly) is
@@ -8665,7 +8665,7 @@ static void ensure_hwnd_ticker_started()
     g_gameHwnd = ctx.result;
 
     g_originalWndProc = reinterpret_cast<WNDPROC>(
-        SetWindowLongPtrW(g_gameHwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(sdb_wnd_proc)));
+        SetWindowLongPtrW(g_gameHwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(sdo_wnd_proc)));
     if (!g_originalWndProc) {
         debug_log("hwnd_ticker: SetWindowLongPtrW failed, GetLastError=" + std::to_string(GetLastError()) +
                    " — risky tick work stays on the existing nested fallback");
@@ -8735,7 +8735,7 @@ static void ensure_parallel_anim_eval_disabled(AActor* worldContextActor)
     // success shape as s_last_drop_fn_try_us elsewhere in this file, not a
     // tight per-tick loop.
     static uint64_t s_lastTryUs = 0;
-    const uint64_t nowUs = sdb::now_micros();
+    const uint64_t nowUs = sdo::now_micros();
     if (nowUs - s_lastTryUs < 2'000'000ULL) return;
     s_lastTryUs = nowUs;
 
@@ -8792,15 +8792,15 @@ static void ensure_parallel_anim_eval_disabled(AActor* worldContextActor)
 
 // ── UE4SS 3.x mod class ───────────────────────────────────────────────────
 
-class SDBMod : public RC::CppUserModBase {
+class SDOMod : public RC::CppUserModBase {
 
 public:
-    SDBMod() { ModName = STR("SurrounDeadBridge"); }
+    SDOMod() { ModName = STR("SDO"); }
 
     void on_unreal_init() override
     {
         // Diagnostic (2026-08-16): debug_log's own file (%APPDATA%\
-        // SurrounDeadBridge\debug.log) stopped receiving any writes at all
+        // SDO\debug.log) stopped receiving any writes at all
         // partway through tonight — no new lines across the last several
         // launches, including ones that clearly reached real gameplay per a
         // live screenshot. Windows Defender's Controlled Folder Access was
@@ -8816,7 +8816,7 @@ public:
         // handling; if THIS line is also missing, on_unreal_init itself
         // isn't being reached at all, which would be a much bigger problem
         // than a broken log file.
-        Output::send<LogLevel::Normal>(STR("SDB: on_unreal_init ENTRY (Output::send diagnostic)\n"));
+        Output::send<LogLevel::Normal>(STR("SDO: on_unreal_init ENTRY (Output::send diagnostic)\n"));
         debug_log("on_unreal_init: entered");
         // See g_game_thread_id's own comment — captured here since UE4SS
         // only ever calls on_unreal_init from GameThread.
@@ -8825,17 +8825,17 @@ public:
         auto sc = load_session_config();
         merge_command_line_args(sc);
 
-        cfg_gateway_host     = cfg_get(sc, "SDB_GATEWAY_HOST");
+        cfg_gateway_host     = cfg_get(sc, "SDO_GATEWAY_HOST");
         if (cfg_gateway_host.empty()) cfg_gateway_host = "127.0.0.1";
-        cfg_gateway_port     = cfg_u16(sc, "SDB_GATEWAY_PORT", 31000);
-        cfg_join_ticket      = cfg_get(sc, "SDB_JOIN_TICKET");
-        cfg_move_interval_us = cfg_ms_to_us(sc, "SDB_MOVE_INTERVAL_MS", 50'000);
+        cfg_gateway_port     = cfg_u16(sc, "SDO_GATEWAY_PORT", 31000);
+        cfg_join_ticket      = cfg_get(sc, "SDO_JOIN_TICKET");
+        cfg_move_interval_us = cfg_ms_to_us(sc, "SDO_MOVE_INTERVAL_MS", 50'000);
 
         debug_log("on_unreal_init: config loaded, gateway=" + cfg_gateway_host + ":" +
                    std::to_string(cfg_gateway_port) + " ticket_len=" + std::to_string(cfg_join_ticket.size()));
 
         Output::send<LogLevel::Normal>(
-            STR("SDB: starting  gateway port={:d}  interval={:d}ms\n"),
+            STR("SDO: starting  gateway port={:d}  interval={:d}ms\n"),
             cfg_gateway_port,
             static_cast<int>(cfg_move_interval_us / 1000));
 
@@ -8843,10 +8843,10 @@ public:
 
         if (cfg_join_ticket.empty())
             Output::send<LogLevel::Warning>(
-                STR("SDB: no join ticket — will not connect (run play.ps1 first)\n"));
+                STR("SDO: no join ticket — will not connect (run play.ps1 first)\n"));
 
-        sdb::g_proxy_manager().init();
-        sdb::g_entity_manager().init();
+        sdo::g_proxy_manager().init();
+        sdo::g_entity_manager().init();
 
         auto* ue4ss = GetModuleHandleW(L"UE4SS.dll");
 
@@ -8861,7 +8861,7 @@ public:
             "?RegisterProcessEventPreCallback@Hook@Unreal@RC@@YAXV?$function"
             "@$$A6AXPEAVUObject@Unreal@RC@@PEAVUFunction@23@PEAX@Z@std@@@Z")) : nullptr;
         if (fn_pe) fn_pe(on_process_event_pre);
-        else Output::send<LogLevel::Error>(STR("SDB: RegisterProcessEventPreCallback not found\n"));
+        else Output::send<LogLevel::Error>(STR("SDO: RegisterProcessEventPreCallback not found\n"));
 
         // Verified live via GetProcAddress against the actual on-disk
         // UE4SS.dll (2026-08-13) — exists in this build despite an earlier,
@@ -8872,22 +8872,22 @@ public:
             "?RegisterProcessEventPostCallback@Hook@Unreal@RC@@YAXV?$function"
             "@$$A6AXPEAVUObject@Unreal@RC@@PEAVUFunction@23@PEAX@Z@std@@@Z")) : nullptr;
         if (fn_pe_post) fn_pe_post(on_process_event_post);
-        else Output::send<LogLevel::Error>(STR("SDB: RegisterProcessEventPostCallback not found\n"));
+        else Output::send<LogLevel::Error>(STR("SDO: RegisterProcessEventPostCallback not found\n"));
 
-        Output::send<LogLevel::Normal>(STR("SDB: ready\n"));
-        g_init_time_us.store(sdb::now_micros());
+        Output::send<LogLevel::Normal>(STR("SDO: ready\n"));
+        g_init_time_us.store(sdo::now_micros());
         debug_log("on_unreal_init: complete, hooks registered");
     }
 
     // Was on_uninstall(), which current UE4SS no longer declares. Teardown
     // moves to the destructor, which UE4SS still calls through the imported
     // virtual destructor when unloading the mod.
-    ~SDBMod() override
+    ~SDOMod() override
     {
         g_tcp.shutdown();
         g_tcp_started.store(false, std::memory_order_relaxed);
         g_auto_open_fired.store(false, std::memory_order_relaxed);
-        auto& st = sdb::g_state();
+        auto& st = sdo::g_state();
         st.sessionLatchUs.store(0, std::memory_order_relaxed);
         st.receivedProgressRestore.store(false, std::memory_order_relaxed);
         st.ccRequestWritten.store(false, std::memory_order_relaxed);
@@ -8898,7 +8898,7 @@ public:
             st.ccSex.clear();      st.ccAge.clear();
             st.ccOccupation = 0;
         }
-        Output::send<LogLevel::Normal>(STR("SDB: unloaded\n"));
+        Output::send<LogLevel::Normal>(STR("SDO: unloaded\n"));
     }
 };
 
@@ -8906,7 +8906,7 @@ public:
 
 extern "C" __declspec(dllexport) RC::CppUserModBase* start_mod()
 {
-    return new SDBMod();
+    return new SDOMod();
 }
 
 extern "C" __declspec(dllexport) void uninstall_mod(RC::CppUserModBase* mod)

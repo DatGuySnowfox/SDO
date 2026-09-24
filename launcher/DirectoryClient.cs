@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Net.Http;
 using System.Net.Http.Json;
 
-namespace SDB;
+namespace SDO;
 
 // Talks to directory-worker (the free Cloudflare Worker) for the live
 // server list, and to each individual server's own gateway for ping/ticket.

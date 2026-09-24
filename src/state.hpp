@@ -7,7 +7,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace sdb {
+namespace sdo {
 
 // Per-remote-player state.
 struct RemotePlayer {
@@ -18,7 +18,7 @@ struct RemotePlayer {
     // Smoothed position/yaw actually applied to the proxy each tick,
     // separate from the raw x/y/z/yaw above (which jump directly to whatever
     // the last-received network packet said, every ~50ms per
-    // SDB_MOVE_INTERVAL_MS). teleport_proxy calling K2_SetActorLocationAnd-
+    // SDO_MOVE_INTERVAL_MS). teleport_proxy calling K2_SetActorLocationAnd-
     // Rotation with bTeleport=true every do_game_tick (~5ms) against the raw
     // fields just re-snaps to an unchanged value between packets, then jumps
     // instantly on the next one — visually "teleporty" (live-tested
@@ -232,7 +232,7 @@ struct RemotePlayer {
     bool  appliedNightVisionOn = false;
 };
 
-// Bridge session context.
+// SDO session context.
 struct Session {
     bool     ready       = false;
     Uuid16   sessionId   {};
@@ -265,7 +265,7 @@ struct WorldEntity {
     uint64_t    lastActorAttemptUs = 0;
 };
 
-struct BridgeState {
+struct SDOState {
     // Frame counters – incremented atomically by senders.
     std::atomic<uint32_t> seq  {0};
     std::atomic<uint32_t> tick {0};
@@ -423,9 +423,9 @@ struct BridgeState {
     bool inFirstJoinFlow = false;
 };
 
-inline BridgeState& g_state() {
-    static BridgeState s;
+inline SDOState& g_state() {
+    static SDOState s;
     return s;
 }
 
-} // namespace sdb
+} // namespace sdo

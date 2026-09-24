@@ -1,4 +1,4 @@
-; SurrounDead Bridge launcher installer.
+; SurrounDead Online launcher installer.
 ; Built with Inno Setup (https://jrsoftware.org/isinfo.php).
 ;
 ; Publish the self-contained build first:
@@ -7,9 +7,9 @@
 ; then compile this script:
 ;   "%LocalAppData%\Programs\Inno Setup 6\ISCC.exe" installer\setup.iss
 
-#define MyAppName "SurrounDead Bridge"
+#define MyAppName "SurrounDead Online"
 #define MyAppVersion "1.0.0"
-#define MyAppExeName "SDBLauncher.exe"
+#define MyAppExeName "SDOLauncher.exe"
 
 [Setup]
 AppId={{B6C3B6C0-6B0E-4E7A-9C7C-6C8B7E9A9E7C}
@@ -23,7 +23,7 @@ DefaultDirName={autopf}\{#MyAppName}
 PrivilegesRequired=lowest
 DisableProgramGroupPage=yes
 OutputDir=Output
-OutputBaseFilename=SDBLauncher-Setup
+OutputBaseFilename=SDOLauncher-Setup
 Compression=lzma2/max
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible

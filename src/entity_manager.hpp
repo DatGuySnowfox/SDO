@@ -8,7 +8,7 @@ namespace RC::Unreal {
     class UWorld;
 }
 
-namespace sdb {
+namespace sdo {
 
 // EntityManager spawns and tracks world entities (ground items, zombies, vehicles, …)
 // in the UE5 world.  It mirrors the server's authoritative entity list.
@@ -52,4 +52,4 @@ inline EntityManager& g_entity_manager() {
     return em;
 }
 
-} // namespace sdb
+} // namespace sdo

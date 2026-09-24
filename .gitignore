@@ -94,5 +94,5 @@ server/settings.json*.bak
 # Deployment config containing a real custom domain (see wrangler.toml)
 directory-worker/wrangler.prod.toml
 
-# Mod logs when SDB_LOG_DIR points into the checkout
+# Mod logs when SDO_LOG_DIR points into the checkout
 logs/

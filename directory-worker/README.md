@@ -30,7 +30,7 @@ npm run deploy
 ```
 
 Prints the Worker's public URL (a `*.workers.dev` subdomain unless a custom domain route is
-configured in `wrangler.toml`, as below). That URL is `SDB_DIRECTORY_URL` for host-agent and for
+configured in `wrangler.toml`, as below). That URL is `SDO_DIRECTORY_URL` for host-agent and for
 `scripts/join.ps1`.
 
 ## Storage

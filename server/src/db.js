@@ -2,9 +2,9 @@
 const Database = require('better-sqlite3');
 const path     = require('node:path');
 
-// SDB_DB_PATH lets tests/integration.js (and any future isolated run) point
+// SDO_DB_PATH lets tests/integration.js (and any future isolated run) point
 // this at a throwaway file instead of the real players.db.
-const db = new Database(process.env.SDB_DB_PATH || path.join(__dirname, '..', 'players.db'));
+const db = new Database(process.env.SDO_DB_PATH || path.join(__dirname, '..', 'players.db'));
 
 db.exec(`
     CREATE TABLE IF NOT EXISTS players (

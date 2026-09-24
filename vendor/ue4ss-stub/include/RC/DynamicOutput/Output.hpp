@@ -1,6 +1,6 @@
 #pragma once
 // Minimal Output shim.
-// Writes to a dedicated SDB.log file so messages are visible regardless of
+// Writes to a dedicated SDO.log file so messages are visible regardless of
 // whether a debug console or UE4SS output device is registered.
 
 #include <string>
@@ -16,13 +16,13 @@ inline FILE* log_file()
 {
     static FILE* f = nullptr;
     if (!f) {
-        // Try next to the game exe first, fall back to C:\temp\SDB.log.
+        // Try next to the game exe first, fall back to C:\temp\SDO.log.
         wchar_t path[MAX_PATH];
         GetModuleFileNameW(nullptr, path, MAX_PATH);
         wchar_t* last_sep = wcsrchr(path, L'\\');
-        if (last_sep) wcscpy_s(last_sep + 1, MAX_PATH - (last_sep - path + 1), L"SDB.log");
+        if (last_sep) wcscpy_s(last_sep + 1, MAX_PATH - (last_sep - path + 1), L"SDO.log");
         f = _wfopen(path, L"a");
-        if (!f) f = _wfopen(L"C:\\temp\\SDB.log", L"a");
+        if (!f) f = _wfopen(L"C:\\temp\\SDO.log", L"a");
     }
     return f;
 }

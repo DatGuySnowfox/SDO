@@ -3,7 +3,7 @@ using System.Diagnostics;
 using System.Windows;
 using System.Windows.Media;
 
-namespace SDB;
+namespace SDO;
 
 public partial class MainWindow : Window
 {
@@ -11,7 +11,7 @@ public partial class MainWindow : Window
 
     readonly Settings _settings = SettingsStore.Load();
     // No server address ships with this repo — configure one via
-    // SDB_DIRECTORY_URL or HKCU\Software\SDB\DirectoryUrl.
+    // SDO_DIRECTORY_URL or HKCU\Software\SDO\DirectoryUrl.
     // See SettingsStore.DirectoryUrl().
     readonly string          _directoryUrl = SettingsStore.DirectoryUrl();
     readonly DirectoryClient _directory    = new(SettingsStore.DirectoryUrl());
@@ -50,7 +50,7 @@ public partial class MainWindow : Window
         if (string.IsNullOrWhiteSpace(_directoryUrl))
         {
             _servers.Clear();
-            SetStatus("No directory configured — set SDB_DIRECTORY_URL (or HKCU\\Software\\SDB\\DirectoryUrl).",
+            SetStatus("No directory configured — set SDO_DIRECTORY_URL (or HKCU\\Software\\SDO\\DirectoryUrl).",
                       (Brush)FindResource("Bad"));
             return;
         }
@@ -125,7 +125,7 @@ public partial class MainWindow : Window
             // convention as directory-worker's served join.ps1 used before
             // this launcher replaced it. No local file write, no env var,
             // just launch args straight to the process.
-            var args = $"-sdb_host={gwHost} -sdb_port={gwPort} -sdb_ticket={ticket}";
+            var args = $"-sdo_host={gwHost} -sdo_port={gwPort} -sdo_ticket={ticket}";
             Process.Start(new ProcessStartInfo(_game.GameExePath, args) { UseShellExecute = true });
             SetStatus("Launching…", (Brush)FindResource("Good"));
         }

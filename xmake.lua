@@ -1,8 +1,8 @@
--- SurrounDeadBridge – xmake build (alternative to CMake)
+-- SDO – xmake build (alternative to CMake)
 -- Usage: xmake build
 -- Requires UE4SS_SDK env var or set ue4ss_sdk below.
 
-set_project("SurrounDeadBridge")
+set_project("SDO")
 set_version("1.0.0")
 set_xmakever("2.8.5")
 
@@ -11,7 +11,7 @@ set_defaultmode("release")
 
 local ue4ss_sdk = path.join(os.scriptdir(), "vendor/ue4ss-stub")
 
-target("SurrounDeadBridge")
+target("SDO")
     set_kind("shared")
     set_languages("cxx20")
     set_arch("x64")

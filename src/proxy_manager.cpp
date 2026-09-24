@@ -19,7 +19,7 @@
 using namespace RC;
 using namespace RC::Unreal;
 
-namespace sdb {
+namespace sdo {
 
 // UE5 LWC FTransform's real memory layout: three SIMD-aligned 32-byte blocks
 // (Rotation quat XYZW, Translation XYZ+pad, Scale3D XYZ+pad), each stored as
@@ -1725,7 +1725,7 @@ void ProxyManager::sync_equipment(AActor* actor, RemotePlayer& player)
         bool equipped = false;
         const bool ok = get_equipped_info_by_slot(actor, slot.slotIndex, info, equipped);
         Output::send<LogLevel::Normal>(
-            STR("SDB: equip-getter slot={:d} itemId={} ok={:d} equipped={:d}\n"),
+            STR("SDO: equip-getter slot={:d} itemId={} ok={:d} equipped={:d}\n"),
             slot.slotIndex, widen(slot.itemId), ok, equipped);
 
         // Skip the write-side pipeline entirely when this slot's itemId
@@ -1758,7 +1758,7 @@ void ProxyManager::sync_equipment(AActor* actor, RemotePlayer& player)
             player.appliedEquipItemId[slot.slotIndex] = slot.itemId;
             const bool wrote = set_equipped_info_by_slot(actor, slot.slotIndex, slot.itemId);
             Output::send<LogLevel::Normal>(
-                STR("SDB: equip-setter slot={:d} itemId={} ok={:d}\n"),
+                STR("SDO: equip-setter slot={:d} itemId={} ok={:d}\n"),
                 slot.slotIndex, widen(slot.itemId), wrote);
 
             // SetEquippedInfoBySlot alone doesn't visually draw the weapon —
@@ -1769,13 +1769,13 @@ void ProxyManager::sync_equipment(AActor* actor, RemotePlayer& player)
             if (wrote && slot.slotIndex >= 11 && slot.slotIndex <= 14) {
                 const bool activated = set_active_weapon_slot(actor, slot.slotIndex);
                 Output::send<LogLevel::Normal>(
-                    STR("SDB: equip-activate slot={:d} itemId={} ok={:d}\n"),
+                    STR("SDO: equip-activate slot={:d} itemId={} ok={:d}\n"),
                     slot.slotIndex, widen(slot.itemId), activated);
 
                 if (activated) {
                     const bool repped = call_on_rep_active_weapon(actor);
                     Output::send<LogLevel::Normal>(
-                        STR("SDB: equip-onrep slot={:d} itemId={} ok={:d}\n"),
+                        STR("SDO: equip-onrep slot={:d} itemId={} ok={:d}\n"),
                         slot.slotIndex, widen(slot.itemId), repped);
 
                     // Session 50: tried skipping this call entirely (it runs
@@ -1787,7 +1787,7 @@ void ProxyManager::sync_equipment(AActor* actor, RemotePlayer& player)
                     // NULL, ruling this out too. Restored.
                     const bool notified = call_on_active_weapon_slot_changed(actor, slot.slotIndex);
                     Output::send<LogLevel::Normal>(
-                        STR("SDB: equip-notify slot={:d} itemId={} ok={:d}\n"),
+                        STR("SDO: equip-notify slot={:d} itemId={} ok={:d}\n"),
                         slot.slotIndex, widen(slot.itemId), notified);
 
                     // PrimaryWeaponEquipped? is specifically the Primary slot
@@ -1799,14 +1799,14 @@ void ProxyManager::sync_equipment(AActor* actor, RemotePlayer& player)
                         const bool setEquipped = set_primary_weapon_equipped(actor, !slot.itemId.empty());
                         const bool reppedPwe = setEquipped && call_on_rep_primary_weapon_equipped(actor);
                         Output::send<LogLevel::Normal>(
-                            STR("SDB: equip-pwe slot={:d} itemId={} set={:d} rep={:d}\n"),
+                            STR("SDO: equip-pwe slot={:d} itemId={} set={:d} rep={:d}\n"),
                             slot.slotIndex, widen(slot.itemId), setEquipped, reppedPwe);
 
                         AActor* activeWeapon = get_current_active_weapon(actor);
                         AActor* helperActiveWeapon = get_helper_active_weapon(actor);
                         AActor* equippedActorBySlot = get_helper_equipped_actor_by_slot(actor, slot.slotIndex);
                         Output::send<LogLevel::Normal>(
-                            STR("SDB: equip-diag slot={:d} itemId={} activeWeaponPtr=0x{:x} helperActiveWeaponPtr=0x{:x} equippedActorBySlotPtr=0x{:x}\n"),
+                            STR("SDO: equip-diag slot={:d} itemId={} activeWeaponPtr=0x{:x} helperActiveWeaponPtr=0x{:x} equippedActorBySlotPtr=0x{:x}\n"),
                             slot.slotIndex, widen(slot.itemId),
                             reinterpret_cast<uintptr_t>(activeWeapon),
                             reinterpret_cast<uintptr_t>(helperActiveWeapon),
@@ -1838,7 +1838,7 @@ void ProxyManager::sync_equipment(AActor* actor, RemotePlayer& player)
                             player.primaryWeaponVisualActor = visual;
                             player.primaryWeaponVisualItemId = slot.itemId;
                             Output::send<LogLevel::Normal>(
-                                STR("SDB: equip-visual slot={:d} itemId={} spawnedPtr=0x{:x}\n"),
+                                STR("SDO: equip-visual slot={:d} itemId={} spawnedPtr=0x{:x}\n"),
                                 slot.slotIndex, widen(slot.itemId),
                                 reinterpret_cast<uintptr_t>(visual));
                         }
@@ -1871,7 +1871,7 @@ void ProxyManager::sync_equipment(AActor* actor, RemotePlayer& player)
                         *slotVisualActor = visual;
                         *slotVisualItemId = slot.itemId;
                         Output::send<LogLevel::Normal>(
-                            STR("SDB: equip-visual slot={:d} itemId={} spawnedPtr=0x{:x}\n"),
+                            STR("SDO: equip-visual slot={:d} itemId={} spawnedPtr=0x{:x}\n"),
                             slot.slotIndex, widen(slot.itemId),
                             reinterpret_cast<uintptr_t>(visual));
                     }
@@ -1902,7 +1902,7 @@ void ProxyManager::sync_equipment(AActor* actor, RemotePlayer& player)
                         *slotVisualActor = visual;
                         *slotVisualItemId = slot.itemId;
                         Output::send<LogLevel::Normal>(
-                            STR("SDB: equip-visual slot={:d} itemId={} spawnedPtr=0x{:x}\n"),
+                            STR("SDO: equip-visual slot={:d} itemId={} spawnedPtr=0x{:x}\n"),
                             slot.slotIndex, widen(slot.itemId),
                             reinterpret_cast<uintptr_t>(visual));
                     }
@@ -1928,7 +1928,7 @@ void ProxyManager::sync_equipment(AActor* actor, RemotePlayer& player)
                     void* itemAsset = resolve_item_asset(slot.itemId);
                     const bool called = itemAsset && equip_clothing_to_mesh(actor, itemAsset, clothingOffset);
                     Output::send<LogLevel::Normal>(
-                        STR("SDB: equip-clothing slot={:d} itemId={} ok={:d}\n"),
+                        STR("SDO: equip-clothing slot={:d} itemId={} ok={:d}\n"),
                         slot.slotIndex, widen(slot.itemId), called);
 
                     // Gloves-vs-bare-hands z-fight (live-tested 2026-08-13:
@@ -2004,7 +2004,7 @@ void ProxyManager::sync_equipment(AActor* actor, RemotePlayer& player)
                 player.missingSlotStreak.erase(i);
                 const bool cleared = set_equipped_info_by_slot(actor, i, "");
                 Output::send<LogLevel::Normal>(
-                    STR("SDB: equip-clear slot={:d} ok={:d}\n"), i, cleared);
+                    STR("SDO: equip-clear slot={:d} ok={:d}\n"), i, cleared);
                 player.appliedEquipItemId.erase(i);
 
                 // Primary's spawned weapon-visual actor doesn't tear itself
@@ -2221,7 +2221,7 @@ void ProxyManager::sync_active_weapon_hand(AActor* actor, RemotePlayer& player)
     const bool attached = reattach_weapon_visual_to_socket(actor, newActor, equipSocket);
     if (attached) apply_item_equipped_transform(findItemRoot(newActor), itemAsset);
     Output::send<LogLevel::Normal>(
-        STR("SDB: hand-attach slot={:d} itemId={} socket_ci={:d} ok={:d}\n"),
+        STR("SDO: hand-attach slot={:d} itemId={} socket_ci={:d} ok={:d}\n"),
         newActive, widen(itemId), equipSocket.ComparisonIndex, attached);
 }
 
@@ -2667,10 +2667,10 @@ void ProxyManager::sync_pawn_appearance(AActor* actor, RemotePlayer& player)
     *reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(actor) + 0x15A0) = a.isMale;
 
     // Naked-body SkeletalMeshComponents (BP_PlayerCharacter.hpp) — order
-    // matches sdb::PawnAppearance::bodyPartMeshNames / mod.cpp's own copy of
+    // matches sdo::PawnAppearance::bodyPartMeshNames / mod.cpp's own copy of
     // this table exactly. Hoisted above the stage dispatch since both the
     // per-body-part stages and the final skin-color stage need it.
-    static constexpr uintptr_t kBodyPartOffsets[sdb::BODY_PART_COUNT] = {
+    static constexpr uintptr_t kBodyPartOffsets[sdo::BODY_PART_COUNT] = {
         0x06B8, // Torso
         0x0710, // Biceps
         0x0718, // LowerThighs
@@ -2819,7 +2819,7 @@ void ProxyManager::sync_pawn_appearance(AActor* actor, RemotePlayer& player)
 
     // Stages 2..(1+BODY_PART_COUNT): ONE naked-body SkeletalMeshComponent
     // per stage (BP_PlayerCharacter.hpp), order matching
-    // sdb::PawnAppearance::bodyPartMeshNames / mod.cpp's own copy of this
+    // sdo::PawnAppearance::bodyPartMeshNames / mod.cpp's own copy of this
     // table exactly. This is the historically-confirmed danger zone — a
     // prior live freeze was traced to exactly this SetSkinnedAssetAndUpdate
     // call site (bodyPart[0]=Torso, see below), the whole reason this
@@ -2835,7 +2835,7 @@ void ProxyManager::sync_pawn_appearance(AActor* actor, RemotePlayer& player)
     // equip_clothing_to_mesh already uses successfully for Clothing_*
     // components — *before* applying SkinColor in the final stage, so the
     // material override isn't reset by a subsequent mesh change.
-    if (stage >= 2 && stage <= 1 + sdb::BODY_PART_COUNT) {
+    if (stage >= 2 && stage <= 1 + sdo::BODY_PART_COUNT) {
         const int i = stage - 2;
         const auto& meshName = a.bodyPartMeshNames[i];
         auto* comp = *reinterpret_cast<UObject**>(reinterpret_cast<uintptr_t>(actor) + kBodyPartOffsets[i]);
@@ -2951,7 +2951,7 @@ void ProxyManager::on_player_connected(uint64_t playerId)
     std::lock_guard<std::mutex> lock(g_state().playersMtx);
     auto& p   = g_state().players[playerId];
     p.playerId = playerId;
-    Output::send<LogLevel::Normal>(STR("SDB: remote player connected {:d}\n"), playerId);
+    Output::send<LogLevel::Normal>(STR("SDO: remote player connected {:d}\n"), playerId);
 }
 
 void ProxyManager::on_player_disconnected(uint64_t playerId)
@@ -2984,7 +2984,7 @@ void ProxyManager::on_player_disconnected(uint64_t playerId)
         destroy_proxy(static_cast<AActor*>(p.proxyActor));
 
     g_state().players.erase(it);
-    Output::send<LogLevel::Normal>(STR("SDB: remote player disconnected {:d}\n"), playerId);
+    Output::send<LogLevel::Normal>(STR("SDO: remote player disconnected {:d}\n"), playerId);
 }
 
 void ProxyManager::on_movement(uint64_t playerId, const Movement& m)
@@ -3202,7 +3202,7 @@ void ProxyManager::on_weapon_fired(uint64_t playerId)
 }
 
 // Session 51 first tried writing ACharacter::CharacterMovement's Velocity
-// (+0x328/+0xB8-C8) directly — crashed the mod once (SDB.log: "ready" then
+// (+0x328/+0xB8-C8) directly — crashed the mod once (SDO.log: "ready" then
 // immediately "unloaded"), then crashed the real game process outright on a
 // retry even with an SEH guard around the write (the fault was downstream,
 // in a later engine tick reacting to the change, not synchronous in the
@@ -3826,7 +3826,7 @@ AActor* ProxyManager::spawn_proxy(UWorld* world, float x, float y, float z, floa
     // trivially returns `this` — confirmed live during the same trace.
     void* pending = call_begin_deferred_spawn(world, s_proxy_class, &xform);
     if (!pending) {
-        Output::send<LogLevel::Warning>(STR("SDB: proxy spawn failed\n"));
+        Output::send<LogLevel::Warning>(STR("SDO: proxy spawn failed\n"));
         return nullptr;
     }
 
@@ -3845,7 +3845,7 @@ AActor* ProxyManager::spawn_proxy(UWorld* world, float x, float y, float z, floa
     // rather than trying to patch the Blueprint's death logic itself.
     static_cast<AActor*>(pending)->SetActorEnableCollision(false);
 
-    Output::send<LogLevel::Normal>(STR("SDB: proxy spawned\n"));
+    Output::send<LogLevel::Normal>(STR("SDO: proxy spawned\n"));
     return static_cast<AActor*>(pending);
 }
 
@@ -3860,4 +3860,4 @@ void ProxyManager::destroy_proxy(AActor* actor)
         debug_log("ProxyManager::destroy_proxy: K2_DestroyActor crashed on a stale pointer, caught via SEH");
 }
 
-} // namespace sdb
+} // namespace sdo

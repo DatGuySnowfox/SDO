@@ -1,23 +1,23 @@
 using Microsoft.Win32;
 
-namespace SDB;
+namespace SDO;
 
 // Registry-backed settings — no file on disk, same approach as the previous
 // WinForms launcher this was rebuilt from.
 public static class SettingsStore
 {
-    const string RegPath = @"Software\SDB";
+    const string RegPath = @"Software\SDO";
 
     // No directory is baked in: this repo does not ship anyone's server
     // address. Point the launcher at one of
-    //   • SDB_DIRECTORY_URL in the environment (wins; easiest per-launch), or
-    //   • HKCU\Software\SDB\DirectoryUrl (persistent; what an installer or a
+    //   • SDO_DIRECTORY_URL in the environment (wins; easiest per-launch), or
+    //   • HKCU\Software\SDO\DirectoryUrl (persistent; what an installer or a
     //     one-line `reg add` would set for testers).
     // Returns empty when unconfigured, which the UI surfaces rather than
     // silently failing against a hardcoded host.
     public static string DirectoryUrl()
     {
-        var env = Environment.GetEnvironmentVariable("SDB_DIRECTORY_URL");
+        var env = Environment.GetEnvironmentVariable("SDO_DIRECTORY_URL");
         if (!string.IsNullOrWhiteSpace(env)) return env.Trim();
         try
         {

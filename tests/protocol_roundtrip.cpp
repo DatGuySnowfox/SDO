@@ -45,7 +45,7 @@
 #include <string>
 #include <vector>
 
-using namespace sdb;
+using namespace sdo;
 
 // ---------------------------------------------------------------------------
 // Tiny assertion engine (mirrors tests/integration.js's ok() style)
@@ -976,7 +976,7 @@ static void test_world_action_json() {
 // ---------------------------------------------------------------------------
 
 int main() {
-    std::printf("SurrounDeadBridge protocol round-trip test\n");
+    std::printf("SDO protocol round-trip test\n");
     std::printf("(standalone — no UE4SS/UE5 dependency, see src/protocol.cpp)\n");
 
     test_frame_envelope_all_header_only_types();

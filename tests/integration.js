@@ -22,20 +22,20 @@ const http   = require('node:http');
 const crypto = require('node:crypto');
 
 // ── Test ports (choose high numbers to avoid conflicts) ───────────────────────
-process.env.SDB_HOST_SECRET          = 'test-host-secret-abc123';
-process.env.SDB_TICKET_SECRET        = 'test-ticket-secret-xyz987';
-process.env.SDB_GATEWAY_PORT         = '43700';
-process.env.SDB_HTTP_PORT            = '43701';
-process.env.SDB_WORLD_ID             = 'deadbeef-cafe-4000-8000-123456789abc';
-process.env.SDB_WORLD_STATE_INTERVAL_MS = '1000'; // faster for tests
-process.env.SDB_HEARTBEAT_MS         = '200';
+process.env.SDO_HOST_SECRET          = 'test-host-secret-abc123';
+process.env.SDO_TICKET_SECRET        = 'test-ticket-secret-xyz987';
+process.env.SDO_GATEWAY_PORT         = '43700';
+process.env.SDO_HTTP_PORT            = '43701';
+process.env.SDO_WORLD_ID             = 'deadbeef-cafe-4000-8000-123456789abc';
+process.env.SDO_WORLD_STATE_INTERVAL_MS = '1000'; // faster for tests
+process.env.SDO_HEARTBEAT_MS         = '200';
 // Isolated throwaway DB — must not touch the real server/players.db.
-process.env.SDB_DB_PATH = require('node:path').join(
+process.env.SDO_DB_PATH = require('node:path').join(
     require('node:os').tmpdir(), `sdo_integration_test_${Date.now()}.db`);
 // Small synthetic world (one zone at the origin) instead of the real
 // 913-zone extracted data — keeps the zombie-spawn test deterministic and
 // independent of whether server/scripts/extract-zombie-data.js has been run.
-process.env.SDB_ZOMBIE_TICK_INTERVAL_MS = '300';
+process.env.SDO_ZOMBIE_TICK_INTERVAL_MS = '300';
 {
     const fs = require('node:fs');
     const wdPath = require('node:path').join(
@@ -49,7 +49,7 @@ process.env.SDB_ZOMBIE_TICK_INTERVAL_MS = '300';
         zombieStats: { BP_Zombie_Roamer: { health: { maxHealth: 100 }, roamingSpeed: 100 } },
         difficulty: { Standard: { ZombieHealthMultiplier: 1, ZombieSpeedMultiplier: 1, ZombieSpawnAmountMultiplier: 1 } },
     }));
-    process.env.SDB_WORLD_DATA_PATH = wdPath;
+    process.env.SDO_WORLD_DATA_PATH = wdPath;
 }
 
 const { Gateway }      = require('../server/src/gateway');
@@ -213,7 +213,7 @@ const issueTicket = (playerId, displayName) =>
 
 async function runTests() {
     console.log('╔══════════════════════════════════════╗');
-    console.log('║   SDB Integration Test Suite         ║');
+    console.log('║   SDO Integration Test Suite         ║');
     console.log('╚══════════════════════════════════════╝\n');
 
     // ── Start server ──────────────────────────────────────────────────────────
@@ -242,7 +242,7 @@ async function runTests() {
     ok(aliceTR.gatewayPort === cfg.gatewayPort, 'ticket gatewayPort correct');
 
     // Verify ticket HMAC round-trip
-    const aliceBody = verifyTicket(aliceTR.ticket, process.env.SDB_TICKET_SECRET, cfg.worldIdStr);
+    const aliceBody = verifyTicket(aliceTR.ticket, process.env.SDO_TICKET_SECRET, cfg.worldIdStr);
     ok(aliceBody.playerId     === 'alice', 'ticket playerId preserved');
     ok(aliceBody.displayName  === 'Alice', 'ticket displayName preserved');
     ok(aliceBody.expiresAtMs  >  Date.now(), 'ticket not already expired');
@@ -337,7 +337,7 @@ async function runTests() {
 
     // ── 9. WorldState broadcast ───────────────────────────────────────────────
     console.log('\n── 9. WorldState broadcast ──────────────');
-    // Host sends WorldState every SDB_WORLD_STATE_INTERVAL_MS (1000 ms for tests).
+    // Host sends WorldState every SDO_WORLD_STATE_INTERVAL_MS (1000 ms for tests).
     const aliceWS = await alice.waitFor(MsgType.WorldState, 3000);
     ok(aliceWS !== null,                  'alice received WorldState');
     ok(aliceWS.payload.length === 41,     'WorldState payload is 41 bytes');

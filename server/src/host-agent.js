@@ -47,7 +47,7 @@ const path = require('node:path');
 // gracefully: zombie simulation is simply disabled (no spawns/ticks) rather
 // than crashing the whole host-agent if this hasn't been generated yet.
 function loadWorldData() {
-    const p = process.env.SDB_WORLD_DATA_PATH || path.join(__dirname, 'data', 'world-data.json');
+    const p = process.env.SDO_WORLD_DATA_PATH || path.join(__dirname, 'data', 'world-data.json');
     if (!fs.existsSync(p)) {
         console.warn('[host] server/src/data/world-data.json not found — run ' +
             'server/scripts/extract-zombie-data.js. Zombie simulation disabled.');

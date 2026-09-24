@@ -31,4 +31,4 @@ type = "durable-object"
 storage = "sqlite"
 
 # Set the real value with `npx wrangler secret put DIRECTORY_KEY` — never
-# commit the actual key here. Host-agent's SDB_DIRECTORY_KEY must match it.
+# commit the actual key here. Host-agent's SDO_DIRECTORY_KEY must match it.

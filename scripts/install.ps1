@@ -1,6 +1,6 @@
-# install.ps1 – End-user installer for SurrounDead Bridge
+# install.ps1 – End-user installer for SurrounDead Online
 #
-# Installs the UE4SS mod loader and the SurrounDead Bridge client into the game.
+# Installs the UE4SS mod loader and the SurrounDead Online client into the game.
 # Run this once; then launch SurrounDead normally through Steam.
 #
 # The simplest usage – extract the release zip and run:
@@ -13,7 +13,7 @@
 #   -Win64          Override auto-detected game Binaries\Win64 path
 #   -BundleDir      Folder containing UE4SS files + main.dll
 #                   (default: same folder as this script)
-#   -Uninstall      Remove all SDB files and saved settings
+#   -Uninstall      Remove all SDO files and saved settings
 
 param(
     [string]$Ticket      = '',
@@ -49,7 +49,7 @@ if (-not (Test-Bundle $BundleDir)) {
 function Find-Win64 {
     $candidates = @()
 
-    if ($env:SDB_GAME_WIN64) { $candidates += $env:SDB_GAME_WIN64 }
+    if ($env:SDO_GAME_WIN64) { $candidates += $env:SDO_GAME_WIN64 }
 
     $launcherSettings = Join-Path $env:LOCALAPPDATA 'SurrounDeadOnline\launcher-settings.json'
     if (Test-Path -LiteralPath $launcherSettings) {
@@ -85,7 +85,7 @@ if (-not $Win64) { $Win64 = Find-Win64 }
 if (-not $Win64) {
     Write-Error (
         "Could not find the SurrounDead Win64 directory.`n" +
-        "Set the SDB_GAME_WIN64 environment variable or pass -Win64 <path>."
+        "Set the SDO_GAME_WIN64 environment variable or pass -Win64 <path>."
     )
     exit 1
 }
@@ -93,10 +93,10 @@ if (-not $Win64) {
 # ── Uninstall path ────────────────────────────────────────────────────────────
 
 if ($Uninstall) {
-    Write-Host "`nUninstalling SurrounDead Bridge …"
+    Write-Host "`nUninstalling SurrounDead Online …"
 
     # Remove mod folder
-    $modRoot = Join-Path $Win64 'Mods\SurrounDeadBridge'
+    $modRoot = Join-Path $Win64 'Mods\SDO'
     if (Test-Path -LiteralPath $modRoot) {
         Remove-Item -LiteralPath $modRoot -Recurse -Force
         Write-Host "  Removed: $modRoot"
@@ -107,18 +107,18 @@ if ($Uninstall) {
     if (Test-Path -LiteralPath $modsTxt) {
         $lines = @(Get-Content -LiteralPath $modsTxt)
         $lines = @($lines | ForEach-Object {
-            if ($_ -match '^\s*SurrounDeadBridge\s*:') { 'SurrounDeadBridge : 0' }
+            if ($_ -match '^\s*SDO\s*:') { 'SDO : 0' }
             else { $_ }
         })
         $lines | Set-Content -LiteralPath $modsTxt -Encoding ASCII
-        Write-Host "  Disabled SurrounDeadBridge in mods.txt"
+        Write-Host "  Disabled SDO in mods.txt"
     }
 
     # Remove UE4SS files only if no other mods remain enabled
     $otherModsEnabled = $false
     if (Test-Path -LiteralPath $modsTxt) {
         $otherModsEnabled = (Get-Content -LiteralPath $modsTxt) |
-            Where-Object { $_ -match ':\s*1' -and $_ -notmatch 'SurrounDeadBridge' } |
+            Where-Object { $_ -match ':\s*1' -and $_ -notmatch 'SDO' } |
             Select-Object -First 1
     }
     if (-not $otherModsEnabled) {
@@ -131,10 +131,10 @@ if ($Uninstall) {
     }
 
     # Clear saved env vars
-    foreach ($v in 'SDB_JOIN_TICKET', 'SDB_GATEWAY_HOST', 'SDB_GATEWAY_PORT') {
+    foreach ($v in 'SDO_JOIN_TICKET', 'SDO_GATEWAY_HOST', 'SDO_GATEWAY_PORT') {
         [System.Environment]::SetEnvironmentVariable($v, $null, 'User')
     }
-    Write-Host "  Cleared SDB_* user environment variables"
+    Write-Host "  Cleared SDO_* user environment variables"
 
     Write-Host "`nUninstall complete."
     exit 0
@@ -166,7 +166,7 @@ foreach ($name in 'dwmapi.dll', 'UE4SS.dll', 'UE4SS-settings.ini') {
 # ── Create mod directory structure ────────────────────────────────────────────
 
 $modsRoot   = Join-Path $Win64 'Mods'
-$modRoot    = Join-Path $modsRoot 'SurrounDeadBridge'
+$modRoot    = Join-Path $modsRoot 'SDO'
 $dllsDir    = Join-Path $modRoot 'dlls'
 $enabledTxt = Join-Path $modRoot 'enabled.txt'
 $modsTxt    = Join-Path $modsRoot 'mods.txt'
@@ -178,7 +178,7 @@ if (-not (Test-Path -LiteralPath $enabledTxt)) {
 
 # ── Install main.dll ──────────────────────────────────────────────────────────
 
-Write-Host "`nInstalling SurrounDead Bridge mod …"
+Write-Host "`nInstalling SurrounDead Online mod …"
 $srcDll  = Join-Path $BundleDir 'main.dll'
 $destDll = Join-Path $dllsDir 'main.dll'
 Copy-Item -LiteralPath $srcDll -Destination $destDll -Force
@@ -201,7 +201,7 @@ $lines = @($lines | ForEach-Object {
 })
 
 # Enable ours.
-$ourMod  = 'SurrounDeadBridge'
+$ourMod  = 'SDO'
 $matched = $false
 $lines   = @($lines | ForEach-Object {
     if ($_ -match "^\s*$([regex]::Escape($ourMod))\s*:") { $matched = $true; "$ourMod : 1" }
@@ -218,22 +218,22 @@ $lines | Set-Content -LiteralPath $modsTxt -Encoding ASCII
 
 Write-Host "`nSaving connection settings …"
 
-[System.Environment]::SetEnvironmentVariable('SDB_JOIN_TICKET', $Ticket, 'User')
-Write-Host "  SDB_JOIN_TICKET = (set)"
+[System.Environment]::SetEnvironmentVariable('SDO_JOIN_TICKET', $Ticket, 'User')
+Write-Host "  SDO_JOIN_TICKET = (set)"
 
 if ($GatewayHost) {
-    [System.Environment]::SetEnvironmentVariable('SDB_GATEWAY_HOST', $GatewayHost, 'User')
-    Write-Host "  SDB_GATEWAY_HOST = $GatewayHost"
+    [System.Environment]::SetEnvironmentVariable('SDO_GATEWAY_HOST', $GatewayHost, 'User')
+    Write-Host "  SDO_GATEWAY_HOST = $GatewayHost"
 } else {
     # Remove any stale override so the DLL uses its built-in default (127.0.0.1).
-    [System.Environment]::SetEnvironmentVariable('SDB_GATEWAY_HOST', $null, 'User')
+    [System.Environment]::SetEnvironmentVariable('SDO_GATEWAY_HOST', $null, 'User')
 }
 
 if ($GatewayPort) {
-    [System.Environment]::SetEnvironmentVariable('SDB_GATEWAY_PORT', $GatewayPort, 'User')
-    Write-Host "  SDB_GATEWAY_PORT = $GatewayPort"
+    [System.Environment]::SetEnvironmentVariable('SDO_GATEWAY_PORT', $GatewayPort, 'User')
+    Write-Host "  SDO_GATEWAY_PORT = $GatewayPort"
 } else {
-    [System.Environment]::SetEnvironmentVariable('SDB_GATEWAY_PORT', $null, 'User')
+    [System.Environment]::SetEnvironmentVariable('SDO_GATEWAY_PORT', $null, 'User')
 }
 
 # ── Done ──────────────────────────────────────────────────────────────────────

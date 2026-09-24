@@ -1,4 +1,4 @@
-# SurrounDead Bridge (SDO)
+# SurrounDead Online (SDO)
 
 Experimental multiplayer for [SurrounDead](https://store.steampowered.com/app/1645820/SurrounDead/),
 a single-player UE5 survival game. A [UE4SS](https://github.com/UE4SS-RE/RE-UE4SS) C++ mod hooks the
@@ -121,7 +121,7 @@ Win64/
    ├─ UE4SS.dll
    ├─ UE4SS-settings.ini
    └─ Mods/
-      └─ SurrounDeadBridge/
+      └─ SDO/
          ├─ enabled.txt       # empty file; its presence is what enables the mod
          └─ dlls/main.dll     # the build output
 ```
@@ -156,7 +156,7 @@ Generate the secrets it asks for:
 
 ```sh
 node -e "console.log(require('crypto').randomBytes(24).toString('base64url'))"   # each secret
-node -e "console.log(require('crypto').randomUUID())"                            # SDB_WORLD_ID
+node -e "console.log(require('crypto').randomUUID())"                            # SDO_WORLD_ID
 ```
 
 Listens on `31000` (game TCP) and `31001` (HTTP: tickets, health). Both need forwarding to host for
@@ -168,9 +168,9 @@ players outside your network.
 
 The mod reads its target, in ascending order of precedence:
 
-1. `%APPDATA%\SurrounDeadBridge\session.cfg`
+1. `%APPDATA%\SDO\session.cfg`
 2. Environment variables
-3. Command-line arguments — `-sdb_host=`, `-sdb_port=`, `-sdb_ticket=`
+3. Command-line arguments — `-sdo_host=`, `-sdo_port=`, `-sdo_ticket=`
 
 Joining needs a ticket from the server's HTTP API:
 
@@ -180,7 +180,7 @@ curl -X POST http://<host>:31001/v1/tickets \
   -d '{"playerId":"<any stable id>","displayName":"Name"}'
 ```
 
-Then launch with `-sdb_host=<host> -sdb_port=31000 -sdb_ticket=<ticket>`. Tickets are short-lived and
+Then launch with `-sdo_host=<host> -sdo_port=31000 -sdo_ticket=<ticket>`. Tickets are short-lived and
 single-use by default, so **a fresh one is needed for every launch** — including reconnects. This is
 the single most common cause of a join mysteriously failing.
 
@@ -188,7 +188,7 @@ the single most common cause of a join mysteriously failing.
 
 A Cloudflare Worker letting servers advertise themselves and clients discover them. Free tier is
 sufficient. See [`directory-worker/README.md`](directory-worker/README.md). Skip it entirely for a
-LAN or a single known host — set `SDB_DIRECTORY_URL` empty and it stays out of the way.
+LAN or a single known host — set `SDO_DIRECTORY_URL` empty and it stays out of the way.
 
 ### 6. Launcher (optional)
 
@@ -200,10 +200,10 @@ dotnet build -c Release
 Point it at a directory before it is useful:
 
 ```
-setx SDB_DIRECTORY_URL https://your-directory.example.com
+setx SDO_DIRECTORY_URL https://your-directory.example.com
 ```
 
-(or `HKCU\Software\SDB\DirectoryUrl`). No directory address ships in this repo.
+(or `HKCU\Software\SDO\DirectoryUrl`). No directory address ships in this repo.
 
 ---
 
@@ -256,8 +256,8 @@ then fell over in minutes once someone logged the actual values. Two were only s
 proxy against the local player's own correct data, and the 5.6 port only converged once the header
 dump was regenerated instead of reasoned about.
 
-The mod's own log is `debug.log`, in `%APPDATA%\SurrounDeadBridge` by default or wherever
-`SDB_LOG_DIR` points. UE4SS owns the other two (`SDB.log`, `UE4SS.log`) and puts them in its own
+The mod's own log is `debug.log`, in `%APPDATA%\SDO` by default or wherever
+`SDO_LOG_DIR` points. UE4SS owns the other two (`SDO.log`, `UE4SS.log`) and puts them in its own
 directory — since v3.0.1 that is `Binaries/Win64/ue4ss/`. Checking the wrong one of the three is a
 recurring trap.
 
