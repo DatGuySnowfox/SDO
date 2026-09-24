@@ -10263,3 +10263,146 @@ throttle). The transform-snap unconditional variant was never part of this decis
 comparable "here's the new protection" argument was made for it tonight. **First thing next session: check
 `debug.log` for a hang signature or an SEH-caught-exception line before assuming this went fine** — the log
 is the actual verdict, this write-up is just the reasoning that led here.
+
+---
+
+## Session 60 (2026-09-24) — UE 5.6 port: two clients connect and see each other
+
+The game shipped `.8` on UE 5.6.1 (`++UE5+Release-5.6-CL-44394996`), exe 122 MB to 165 MB, pak
+rebuilt to 1.58 GB. This session got from "the mod loads" to "two clients spawn and see each
+other". Almost all of it was one failure mode wearing different masks: addresses and offsets
+captured against 5.3.
+
+### The spawn crash — both clients dying seconds apart
+
+Both clients died within ~5s of the second player joining, `ECONNRESET` on the server. The dump
+faulted on `int 29h` with `rcx=2` on the GameThread — `__fastfail(FAST_FAIL_STACK_COOKIE_CHECK_FAILURE)`,
+a **stack buffer overrun**, not an access violation. That is why the stack looked like nonsense:
+`!analyze` pointed into the game exe with no mod frames.
+
+Resolving the one `main.dll` return address on the corrupted frame against the PDB gave
+`sdo::call_finish_spawning+0x4b`, the instruction after a call through a raw function pointer.
+Both spawn helpers held hardcoded RVAs into the executable:
+
+    call_begin_deferred_spawn   0x2E80E80
+    call_finish_spawning        0x2AAAB90
+
+5.3 addresses. On the 165 MB exe they land on unrelated code, and calling them with five or six
+arguments corrupts the caller frame. Both are `UGameplayStatics` UFunctions, so they now go
+through `ProcessEvent` by name, with parameter blocks mirroring the 5.6 signatures and
+`static_assert`s on the offsets that matter (`FTransform` is `0x60`, 16-byte aligned; getting that
+wrong reproduces the same crash). No hardcoded executable address remains anywhere in `src/`.
+
+### Then the local player froze, and the hotbar never populated
+
+Four wrong hypotheses before the right one, all from reading diagnostics too eagerly:
+
+1. **`t_processEventDepth=51`** looked like proof the tick trigger was dirty. Switched the trigger
+   from `AActor::Tick` to `RegisterEngineTickPreCallback` — which the code had ruled out with a
+   comment saying UE4SS "exports no EngineTick/AsyncTask-equivalent hook (checked directly against
+   UE4SS.dll's PE export table)". True of the pinned v3.0.1, false of current builds; the export is
+   there. The hook registered, depth dropped to 1-25, and **nothing was fixed** — engine tick also
+   fires inside ProcessEvent chains. Kept anyway as the better trigger.
+2. **The vitals write-back**, deferred exactly 2s (`vitalsRestoreReadyAtUs = now + 2'000'000`),
+   matched the "works for 2 seconds" symptom perfectly. It *was* badly broken — chasing
+   `MedicalComponent` at `pawn+0x7D0` (`0x07A8` on 5.6), and even the field offsets were wrong:
+   `UMedicalComponent_C` keeps `Health` at `0x00E0`, while the code wrote `0x00D0`, the
+   `UberGraphFrame` pointer. Fixed, and still frozen.
+3. **`component_drift` repair** — ruled out by switch, still frozen.
+4. **`apply_world_state`** — the code carrying a standing "suspected in the save-corruption
+   incident, unverified in isolation" warning. Ruled out by switch, still frozen.
+
+What actually found it was **elimination, not hypothesis**. Disabling the mod entirely proved
+movement and the hotbar were fine without it. Then `no_tick_work.flag` (all local per-tick steps
+off) worked. Then the two equipment steps. Then step 8 alone.
+
+The log named the cause outright once we were looking in the right place:
+
+    read_local_weapon_attachments: SEH caught a crash mid-scan
+      (stale pointer, likely a concurrent native equip/unequip change)
+    send_weapon_attachments: entries=0
+
+`pickupComp + 0x00A8` for `ItemDataAsset`, which is `0x00C0` on 5.6 — an unrelated field read as a
+pointer, then dereferenced. Faulting every cycle on the GameThread, producing nothing.
+
+**It only started faulting because an earlier fix worked.** `AttachChildren` had been read at
+`0x00C0` (`PhysicsVolume` on 5.6), so the walk bailed on a garbage count — `-1378242960` and
+friends litter the older logs — and never reached the bad line. Fixing one offset exposed the next
+two behind it.
+
+### The equip-restore loop
+
+A separate discovery from the same logs:
+
+    1859  equip_restore_retry: local re-attached orphaned slot
+     169  equip_restore_retry: local checked=11 fixed=11
+
+`checked=11 fixed=11`, every pass. The orphan test read `AttachParent` at `root+0xB0` (`0x00C8` on
+5.6), concluded all 11 equipment slots were detached, and fired `EquipActorToSocket` on every one
+every 3 seconds. After the fix: `fixed=1`.
+
+This also **falsifies a long-standing note in the codebase and the README** — that
+`EquipActorToSocket`'s display-name lookup never resolves and the call "has never executed". It
+resolves and it fires, thousands of times. The standing caution about enabling it was reasoning
+about a call that was already running.
+
+### Offsets corrected this session
+
+All read from `research/CXXHeaderDump/`, regenerated from the running 5.6 build:
+
+    BP_JigHelperComp        pawn+0x700   -> 0x06D8   (15 sites)
+    BuildingComponent       pawn+0x7E0   -> 0x07B8
+    MedicalComponent        pawn+0x7D0   -> 0x07A8
+    Flashlight              pawn+0x738   -> 0x0710
+    FlashlightOn?           pawn+0x13E5  -> 0x138D
+    PlayerUsingNightVision? pawn+0x1401  -> 0x13A9
+    Hands                   actor+0x7B0  -> 0x0788   (0x7B0 is VehicleDrivingComponent)
+    CharacterMovement       actor+0x328  -> 0x0330   (0x328 is Mesh)
+    Velocity                move+0xB8    -> 0x00D0   (0xB8/0xC0 are UpdatedComponent/Primitive)
+    AttachChildren          comp+0x0C0   -> 0x00E0   (7 sites)
+    AttachParent            comp+0x0B0   -> 0x00C8
+    RelativeLocation        comp+0x128   -> 0x0140
+    RelativeRotation        comp+0x140   -> 0x0158   (0x140 IS RelativeLocation)
+    ItemDataAsset           pickup+0xA8  -> 0x00C0
+    RepAttachments          pickup+0x110 -> 0x0128
+    RepPrimitiveActorsData  helper+0xAD0 -> 0x0AE8
+    EquippedTransform       asset+0x220  -> 0x0280
+    PickupClass             asset+0x128  -> 0x0190
+    BuildActorClass         asset+0x4E8  -> 0x0548
+    IsPlayerMale?           actor+0x15A0 -> 0x1540
+    PrimaryWeaponEquipped?  actor+0x1DC0 -> 0x1DE0
+
+Two were particularly instructive. `RelativeRotation` at `0x140` *is* `RelativeLocation` on 5.6, so
+every rotation was being written into position — the source of the `component_drift ... DRIFTED`
+spam. And proxy velocity wrote three doubles over the `UpdatedComponent`/`UpdatedPrimitive`
+pointers inside a live skeletal mesh component, every tick.
+
+Live offset count went 119/45/4 to 39/11/0. What remains cannot be name-resolved: `TArray` counts
+at `+0x08`, ProcessEvent parameter blocks, `FName ItemId` at `+0x30`, plain-struct fields.
+
+### Deliberately not fixed
+
+Guessing at offsets is what produced the incidents this session cleaned up, so these stay broken
+and documented rather than plausibly patched:
+
+- `JigsawItem_DataAsset +0x448`, read as a male/female torso mesh pair. `0x448` is `MaxWeight` on
+  5.6 and no field in the dump matches the shape the code wants.
+- `JigsawItem_DataAsset +0x280`, read as an `FGameplayTag` equip socket. `0x0280` is
+  `EquippedTransform`; `EquipSocket` is an `FName` at `0x02E0`. Offset *and* type look wrong.
+
+### Method notes worth keeping
+
+- **Bisect beats hypothesis.** Four reasoned guesses cost a session; four elimination steps found
+  it. The switches built for that (`safe_mode.flag`, `no_tick_work.flag`, and five per-step flags)
+  are documented in the README and are worth reaching for first next time.
+- **Env vars do not reach the game.** Windows applies a User-scope variable only to processes
+  started afterwards, and the game inherits Steam's environment from whenever Steam launched.
+  Setting `SDO_SAFE_MODE=1` and relaunching silently tested the old value and invalidated a whole
+  round. All switches now also read a flag file from `%APPDATA%\SDO\`. Always confirm the switch
+  logged its line before trusting a result.
+- **Defensive guards hide the bugs they catch.** The SEH handler around the attachment scan
+  asserted a cause ("concurrent native equip/unequip change") it had never established, and made a
+  hard repeatable offset bug read as a benign race.
+- **Silent no-ops are worse than crashes.** Every bug here failed quietly: garbage counts clamped
+  to zero, wrong pointers written through, orphan tests always true. A name lookup that returns
+  null at least says so.

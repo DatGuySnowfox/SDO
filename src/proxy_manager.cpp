@@ -695,8 +695,14 @@ void dump_clothing_table(const wchar_t* tableName)
         std::string itemId = equip_native::fname_to_string(addr + 0x30);
         if (itemId.empty()) continue;
 
-        void* maleTorso   = *reinterpret_cast<void**>(addr + 0x448);
-        void* femaleTorso = *reinterpret_cast<void**>(addr + 0x448 + 0x40);
+        // Was addr+0x448 (ClothingSettings 0x430 + BodyPartSettings 0x18).
+        // ClothingSettings is at 0x0490 on UE 5.6, so BodyPartSettings is at
+        // 0x04A8; the +0x00/+0x40 within it are unchanged.
+        auto* cs = obj ? obj->GetValuePtrByPropertyNameInChain(STR("ClothingSettings")) : nullptr;
+        if (!cs) continue;
+        const uintptr_t bodyParts = reinterpret_cast<uintptr_t>(cs) + 0x18;
+        void* maleTorso   = *reinterpret_cast<void**>(bodyParts + 0x00);
+        void* femaleTorso = *reinterpret_cast<void**>(bodyParts + 0x40);
         if (!maleTorso && !femaleTorso) continue;
 
         const bool matches = rowNames.count(itemId) != 0;
@@ -1624,7 +1630,7 @@ static AActor* spawn_and_attach_weapon_attachment(AActor* weaponActor, void* att
 // Clothing_* component via SetSkinnedAssetAndUpdate instead, sidestepping
 // the incomplete table entirely. IsPlayerMale? is BP_PlayerCharacter_C's own
 // field (research/CXXHeaderDump/BP_PlayerCharacter.hpp @0x15A0).
-static bool equip_clothing_to_mesh(AActor* actor, void* itemAsset, uintptr_t clothingCompOffset)
+static bool equip_clothing_to_mesh(AActor* actor, void* itemAsset, const wchar_t* clothingCompName)
 {
     if (!actor || !itemAsset) return false;
 
@@ -1637,14 +1643,10 @@ static bool equip_clothing_to_mesh(AActor* actor, void* itemAsset, uintptr_t clo
     // where exactly inside it things stopped. Bracket every step so the next
     // live repro pinpoints the exact call.
     {
-        char buf[64];
-        snprintf(buf, sizeof(buf), "equip_clothing_to_mesh: enter offset=0x%llx",
-                 static_cast<unsigned long long>(clothingCompOffset));
-        debug_log(buf);
+        debug_log(std::string("equip_clothing_to_mesh: enter comp=") + narrow(clothingCompName));
     }
 
-    auto* clothingComp = *reinterpret_cast<UObject**>(
-        reinterpret_cast<uintptr_t>(actor) + clothingCompOffset);
+    auto* clothingComp = prop_obj(reinterpret_cast<UObject*>(actor), clothingCompName);
     if (!clothingComp) {
         debug_log("equip_clothing_to_mesh: target Clothing_* component is null");
         return false;
@@ -1653,8 +1655,19 @@ static bool equip_clothing_to_mesh(AActor* actor, void* itemAsset, uintptr_t clo
     // Was actor+0x15A0; IsPlayerMale? is at 0x1540 on UE 5.6.
     const bool* isMalePtr = prop_ptr<bool>(reinterpret_cast<UObject*>(actor), STR("IsPlayerMale?"));
     const bool isMale = isMalePtr && *isMalePtr;
+    // Was itemAsset+0x430. ClothingSettings is at 0x0490 on UE 5.6; the
+    // +0x00/+0x08 for MaleMesh/FemaleMesh *within* FClothingSettings is still
+    // right (research/CXXHeaderDump/ClothingSettings.hpp), so only the base
+    // moved. Struct members are not reflected, so the base is resolved by name
+    // and the two field offsets stay literal.
+    auto* clothingSettings = reinterpret_cast<UObject*>(itemAsset)
+                                 ->GetValuePtrByPropertyNameInChain(STR("ClothingSettings"));
+    if (!clothingSettings) {
+        debug_log("equip_clothing_to_mesh: ClothingSettings not found on item asset");
+        return false;
+    }
     UObject* mesh = *reinterpret_cast<UObject**>(
-        reinterpret_cast<uintptr_t>(itemAsset) + 0x430 + (isMale ? 0x00 : 0x08));
+        reinterpret_cast<uintptr_t>(clothingSettings) + (isMale ? 0x00 : 0x08));
     if (!mesh) {
         debug_log("equip_clothing_to_mesh: itemId=\"" +
             equip_native::fname_to_string(reinterpret_cast<uintptr_t>(itemAsset) + 0x30) +
@@ -2068,13 +2081,19 @@ void ProxyManager::sync_equipment(AActor* actor, RemotePlayer& player)
                 // slots with a confirmed matching component are wired up;
                 // Headwear/Accessory/Backpack still need the same treatment
                 // as Facewear/Eyewear above.
-                uintptr_t clothingOffset = 0;
+                // Was a table of UE 5.3 offsets, every one of which now points at
+                // a different component: 0x0770 is Feet, 0x0780 is Legs, and
+                // 0x07B8 is BuildingComponent. So clothing meshes were being
+                // pushed onto body parts and onto the building component, and
+                // the actual Clothing_* components were never touched — a proxy
+                // rendered with its body and weapons but no clothes.
+                const wchar_t* clothingOffset = nullptr;
                 switch (slot.slotIndex) {
-                    case 4:  clothingOffset = 0x0770; break; // Torso
-                    case 5:  clothingOffset = 0x0780; break; // Gloves
-                    case 6:  clothingOffset = 0x0768; break; // Legs
-                    case 7:  clothingOffset = 0x0760; break; // Feet
-                    case 9:  clothingOffset = 0x07B8; break; // BodyArmor
+                    case 4:  clothingOffset = STR("Clothing_Torso");  break;
+                    case 5:  clothingOffset = STR("Clothing_Gloves"); break;
+                    case 6:  clothingOffset = STR("Clothing_Legs");   break;
+                    case 7:  clothingOffset = STR("Clothing_Feet");   break;
+                    case 9:  clothingOffset = STR("Clothing_Armor");  break;
                     default: break;
                 }
                 if (clothingOffset) {
@@ -2830,16 +2849,26 @@ void ProxyManager::sync_pawn_appearance(AActor* actor, RemotePlayer& player)
     // matches sdo::PawnAppearance::bodyPartMeshNames / mod.cpp's own copy of
     // this table exactly. Hoisted above the stage dispatch since both the
     // per-body-part stages and the final skin-color stage need it.
-    static constexpr uintptr_t kBodyPartOffsets[sdo::BODY_PART_COUNT] = {
-        0x06B8, // Torso
-        0x0710, // Biceps
-        0x0718, // LowerThighs
-        0x0778, // head
-        0x0788, // Arms
-        0x0798, // Feet
-        0x07A0, // LowerLegs
-        0x07A8, // Legs
-        0x07B0, // Hands
+    // Was a table of UE 5.3 byte offsets. Every one moved on 5.6, and not by a
+    // uniform amount, so each body part was being written to some *other*
+    // component: the old "Arms" offset 0x0788 is Hands on 5.6, the old
+    // "Hands" 0x07B0 is VehicleDrivingComponent. A proxy therefore rendered
+    // with its body-part meshes scattered across the wrong slots — which
+    // looks like clothing simply not syncing.
+    //
+    // Names, in the order sdo::PawnAppearance::bodyPartMeshNames uses. Note
+    // "head" became "Head" on 5.6; a lookup that silently returns null is the
+    // symptom of getting that wrong.
+    static constexpr const wchar_t* kBodyPartNames[sdo::BODY_PART_COUNT] = {
+        STR("Torso"),
+        STR("Biceps"),
+        STR("LowerThighs"),
+        STR("Head"),
+        STR("Arms"),
+        STR("Feet"),
+        STR("LowerLegs"),
+        STR("Legs"),
+        STR("Hands"),
     };
 
     const int stage = player.appearanceSyncStage;
@@ -2998,7 +3027,7 @@ void ProxyManager::sync_pawn_appearance(AActor* actor, RemotePlayer& player)
     if (stage >= 2 && stage <= 1 + sdo::BODY_PART_COUNT) {
         const int i = stage - 2;
         const auto& meshName = a.bodyPartMeshNames[i];
-        auto* comp = *reinterpret_cast<UObject**>(reinterpret_cast<uintptr_t>(actor) + kBodyPartOffsets[i]);
+        auto* comp = prop_obj(reinterpret_cast<UObject*>(actor), kBodyPartNames[i]);
         if (!comp) { player.appearanceSyncStage = stage + 1; return; }
 
         // Live-tested 2026-08-13: the real game clears a body-part slot's
@@ -3065,13 +3094,12 @@ void ProxyManager::sync_pawn_appearance(AActor* actor, RemotePlayer& player)
         debug_log("sync_pawn_appearance: skinColor=" + a.skinColorName + " found=" + std::to_string(skinMat != nullptr));
         if (skinMat) {
             int idx = 0;
-            for (uintptr_t off : kBodyPartOffsets) {
+            for (const wchar_t* partName : kBodyPartNames) {
                 char pbuf[64];
-                snprintf(pbuf, sizeof(pbuf), "sync_pawn_appearance: skinColor loop idx=%d off=0x%llx enter",
-                         idx, static_cast<unsigned long long>(off));
+                snprintf(pbuf, sizeof(pbuf), "sync_pawn_appearance: skinColor loop idx=%d enter", idx);
                 debug_log(pbuf);
 
-                auto* comp = *reinterpret_cast<UObject**>(reinterpret_cast<uintptr_t>(actor) + off);
+                auto* comp = prop_obj(reinterpret_cast<UObject*>(actor), partName);
                 if (!comp) { debug_log("sync_pawn_appearance: skinColor loop comp is null, skip"); ++idx; continue; }
                 UFunction* fn = comp->GetFunctionByNameInChain(L"SetMaterial");
                 if (!fn) { debug_log("sync_pawn_appearance: skinColor loop SetMaterial NOT FOUND, skip"); ++idx; continue; }

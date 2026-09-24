@@ -13,9 +13,13 @@ kept deliberately blunt so nobody wastes an evening on something already known t
 ## Status
 
 > **Mid-port to UE 5.6.** The game updated from UE 5.3 to **UE 5.6.1** on 2026-09-24, which
-> invalidated most of the mod's assumptions about the game's memory. The mod now loads, and the
-> game runs with a save loaded — but **nothing below has been re-verified with two clients since
-> the port.** Treat the "Working" table as "worked on 5.3, expected to work, unproven on 5.6."
+> invalidated most of the mod's assumptions about the game's memory.
+>
+> As of 2026-09-24 two clients connect, spawn, and see each other. Getting there took fixing, in
+> order: two hardcoded executable addresses in the proxy spawn path (both clients died within
+> seconds of the second player joining), then a series of stale struct offsets that each broke
+> something different once the one in front of it was fixed. **Still unverified: whether gameplay
+> actually works with two clients.** Treat the "Working" table as "worked on 5.3, unproven on 5.6."
 
 Verified = observed working in a live two-client test *on UE 5.3*. Everything else is called out.
 
@@ -43,8 +47,10 @@ Verified = observed working in a live two-client test *on UE 5.3*. Everything el
 | Area | Notes |
 | --- | --- |
 | **Zombie proxy rendering** | **Disabled in code** (`spawn_zombie_actor` returns `nullptr` unconditionally). Zombies simulate correctly server-side but are invisible to clients. Five live crashes across three attempted fixes; root cause never found. Do not re-enable casually — read the doc comment on that function first. |
-| `EquipActorToSocket` | Looked up under its Blueprint *display* name (`"Equip Actor to Socket"`) on the wrong object; the real FName is `EquipActorToSocket` on `BP_PlayerCharacter`. Broken before the 5.6 port too. Left deliberately unfixed: correcting it would newly *enable* a `ProcessEvent` call that has never executed, and this project has a save-corruption incident from exactly that. Fix it as an isolated, deliberate test. |
+| `EquipActorToSocket` | Looked up under its Blueprint *display* name (`"Equip Actor to Socket"`). This was long believed never to resolve, and was left unfixed on the grounds that enabling a never-executed `ProcessEvent` call once cost a save. **The 2026-09-24 logs disprove that**: it resolves and fires — 1,859 re-attach calls in one session, because a stale `AttachParent` offset made every equipment slot look orphaned. The offset is fixed; the display-name lookup still wants verifying. |
 | `SpawnBuild` / `Svr_SpawnBuild` | Moved to `BuildingComponent` on 5.6; still looked up on the pawn, so building placement will not fire. |
+| Proxy body meshes | `JigsawItem_DataAsset +0x448` is read as a male/female torso mesh pair. On 5.6 that offset is `MaxWeight`, and no field in the header dump matches the shape the code wants. Left alone rather than guessed at — expect wrong or missing proxy meshes. |
+| Equip socket | Read as an `FGameplayTag` at `JigsawItem_DataAsset +0x280`. On 5.6 that is `EquippedTransform`, and `EquipSocket` is an `FName` at `0x02E0` — so both the offset *and* the type look wrong. Needs tracing before it is touched. |
 | Head-look sync | Proxy heads do not track where a player is looking. A fix is in the tree but **was never verified** — it was deployed as a session ended. Diagnostic logging (`proxy_head_write`) is still present, which is the tell. |
 | Attachment toggle-**off** | Turning a tactical light or NVG *off* did not revert on proxies (only the on-path existed). A fix is in the tree, **unverified**. |
 | `research/Exports/` + `world-data.json` | Re-extracted from the .8 pak (2026-09-24). 982 spawn zones, up from 913. Regenerate with `tools/asset-export` followed by `extract-zombie-data.js`. |
@@ -65,8 +71,12 @@ Verified = observed working in a live two-client test *on UE 5.3*. Everything el
 
 ### Porting to a new engine version
 
-Roughly 100 raw memory offsets remain in `src/`, in paths not yet exercised since the port. They
-will fail the same way the others did, so the loop is worth knowing:
+Most of the raw offsets are gone — a systematic pass on 2026-09-24 took the live count from
+119/45/4 (`mod.cpp`/`proxy_manager.cpp`/`entity_manager.cpp`) to 39/11/0. Almost all of what remains
+*cannot* be name-resolved and is correct as written: `TArray` count fields at `+0x08`, ProcessEvent
+parameter-block offsets, and offsets into plain structs rather than reflected `UObject`s.
+
+If a new one does surface, the loop is worth knowing:
 
 1. The crash dump names a file and line (Unreal symbolicates against the mod's PDB).
 2. Look the property up in `research/CXXHeaderDump/` to get its **name**.
@@ -85,6 +95,47 @@ rather than to corrected offsets. Two cautions learned the hard way:
 Regenerate the dump against the running game with **Ctrl+H** (and **Ctrl+Num6** for `Mappings.usmap`)
 via UE4SS's `Keybinds` mod, ideally with this mod disabled and a save loaded so the gameplay classes
 are actually in memory.
+
+Three more things the 5.6 port taught, each of which cost real time:
+
+- **Fixing one offset exposes the next.** `AttachChildren` was wrong, so every attachment walk bailed
+  on a garbage count and did nothing. Correcting it made the walk run for the first time — straight
+  into a second stale offset (`ItemDataAsset`) that faulted on every cycle. A "fix" that makes things
+  visibly worse usually means dead code just came alive.
+- **Defensive guards hide the bug they catch.** That fault was swallowed by an SEH handler that logged
+  *"stale pointer, likely a concurrent native equip/unequip change"* and discarded the cycle. A hard,
+  repeatable offset bug read as a benign race for a long time. Guards are worth having; their messages
+  should not assert a cause they have not established.
+- **Silent no-ops are worse than crashes.** The vitals write-back chased four stale component pointers
+  and wrote doubles into whatever now lives there, two seconds after every join. Nothing logged an
+  error. A name lookup that returns null at least says so.
+
+### Bisect switches
+
+When something breaks and the cause is not obvious, these disable groups of work so one launch
+eliminates a whole class of cause. Each is enabled by an environment variable **or** by an empty file
+of the matching name in `%APPDATA%\SDO\` — prefer the file:
+
+| Switch | Disables |
+| --- | --- |
+| `safe_mode.flag` | everything below marked (*) at once |
+| `no_tick_work.flag` | every per-tick step that touches the local player (network + proxies keep running) |
+| `no_world_state.flag` (*) | UltraDynamicSky time/weather writes |
+| `no_local_repair.flag` (*) | component-drift repair writes (the scan stays, read-only) |
+| `no_vitals_write.flag` (*) | deferred vitals write-back |
+| `no_equip_restore.flag` | step 3c, equip-restore retry |
+| `no_equip_send.flag` | step 8, equipment / attachment / appearance sends |
+| `no_pickup_resolve.flag` | step 6b, pickup resolve |
+| `no_profile_rev.flag` | step 7, profile revision |
+| `no_misc_sync.flag` | steps 9/9b/9c, lights, weapon-fire edge, head-look diagnostic |
+
+The file form matters. Windows applies a User-scope environment variable only to processes started
+afterwards, and the game inherits Steam's environment from whenever Steam launched — so setting a
+variable and relaunching the game silently tests the **old** value. That invalidated a whole bisect
+round before it was noticed. `session.cfg` exists for the same reason.
+
+Each switch logs a line when it engages. If that line is absent, the switch did not reach the mod and
+the result means nothing — check that before trusting any outcome.
 
 ---
 
@@ -233,13 +284,15 @@ than its numbers. `research/README.md` says what regenerates each artifact and h
 
 The highest-value open problems, roughly in order:
 
-1. **Re-verify the 5.6 port with two clients.** The mod loads and the game runs, but no
-   multiplayer session has been run since the engine bump. This is the gate on everything else.
-2. **Finish the offset conversion.** ~100 raw offsets remain in paths not yet exercised — proxy
-   sync, equipment visuals, entity spawning. See "Porting to a new engine version" above; the loop
-   is mechanical once a crash names a line.
-3. **Rehome `SpawnBuild`/`Svr_SpawnBuild`** onto `BuildingComponent`, and fix `EquipActorToSocket`'s
-   lookup — the latter carefully and in isolation, since it enables a call that has never run.
+1. **Verify gameplay with two clients.** They connect, spawn and see each other as of
+   2026-09-24, which is further than the port had got before. Whether movement, equipment and
+   inventory actually behave is still open, and it gates everything else.
+2. **Identify the two offsets left unresolved.** The `JigsawItem_DataAsset` torso mesh pair
+   (`+0x448`, now `MaxWeight`) and the equip-socket read (`+0x280`, where the type looks wrong
+   too). Both were deliberately not guessed at — see the "Broken / disabled" table.
+3. **Rehome `SpawnBuild`/`Svr_SpawnBuild`** onto `BuildingComponent`, and verify
+   `EquipActorToSocket`'s display-name lookup. Note the standing warning that this call "has never
+   run" is wrong: the logs show it firing thousands of times.
 4. **Zombie proxy rendering** — a genuinely hard crash bug, and the biggest single feature gap.
 5. **Verify the head-look and attachment-toggle fixes.** Both are written and unverified; confirming
    or refuting them is cheap.
