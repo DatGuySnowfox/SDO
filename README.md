@@ -79,20 +79,37 @@ maintained** — the two have drifted before.
 
 ### 2. Install the mod
 
-Copy into the game's `SurrounDead/Binaries/Win64/`:
+`scripts/deploy.ps1` does this for you and detects which UE4SS layout is installed. Manually, for
+current UE4SS builds:
 
 ```
 Win64/
-├─ dwmapi.dll                 # UE4SS loader
-├─ UE4SS.dll
-├─ UE4SS-settings.ini
-└─ Mods/
-   └─ SurrounDeadBridge/
-      ├─ enabled.txt          # empty file; its presence is what enables the mod
-      └─ dlls/main.dll        # the build output
+├─ dwmapi.dll                 # UE4SS loader, stays next to the game exe
+└─ ue4ss/
+   ├─ UE4SS.dll
+   ├─ UE4SS-settings.ini
+   └─ Mods/
+      └─ SurrounDeadBridge/
+         ├─ enabled.txt       # empty file; its presence is what enables the mod
+         └─ dlls/main.dll     # the build output
 ```
 
+**UE4SS changed this layout after v3.0.1** — `UE4SS.dll`, the settings file and `Mods/` all moved
+into a `ue4ss/` subdirectory. On v3.0.1 and earlier they sit directly in `Win64/` instead. Putting
+the mod in the wrong one fails silently: UE4SS loads, your mod simply never appears.
+
 `enabled.txt` is what actually enables a mod — `mods.txt` alone will not do it.
+
+### Engine version
+
+The game moved to **UE 5.6** in the 2026-09-24 update (previously 5.3). UE4SS support for 5.6 landed
+in `main` but is **not in any tagged release** — the newest tag predates 5.6 — so use the rolling
+`experimental-latest` nightly asset, which is rebuilt continuously. If UE4SS fails to detect the
+engine version, `[EngineVersionOverride]` in its settings file is the escape hatch.
+
+Note that an engine-version change invalidates every hardcoded offset in `src/` (about 107 of them)
+and every generated artifact under `research/`. Name-based lookups (roughly 276 of them) survive as
+long as the property names themselves did not change.
 
 ### 3. Run the server
 

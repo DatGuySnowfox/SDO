@@ -81,14 +81,12 @@ if (-not $UE4SSSrc) {
     $UE4SSSrc = Join-Path (Split-Path $root -Parent) `
         'sd-online-inspect\payload\bridge-runtime\ue4ss'
 }
-if (-not (Test-Path -LiteralPath (Join-Path $UE4SSSrc 'UE4SS.dll'))) {
-    Write-Error (
-        "UE4SS.dll not found at: $UE4SSSrc`n" +
-        "Extract SD-Online beside this repo or pass -UE4SSSrc <path>."
-    )
-    exit 1
+# No longer fatal: this script does not install UE4SS itself (see below), so a
+# missing vendored bundle is irrelevant. It used to `exit 1` here, which made
+# deploying the mod impossible whenever that path had moved or been cleaned up.
+if (Test-Path -LiteralPath (Join-Path $UE4SSSrc 'UE4SS.dll')) {
+    Write-Host "UE4SS bundle (informational only, not installed): $UE4SSSrc"
 }
-Write-Host "UE4SS bundle: $UE4SSSrc"
 
 # ── Generate import library (only if not already present) ─────────────────────
 
@@ -98,44 +96,60 @@ if (-not (Test-Path -LiteralPath $libPath)) {
     & "$PSScriptRoot\gen_import_lib.ps1"
 }
 
-# ── CMake build ───────────────────────────────────────────────────────────────
+# ── Build ─────────────────────────────────────────────────────────────────────
+#
+# xmake is the maintained build path; CMake still exists but has drifted (it
+# was missing the Shell32 link for a while, for instance). Build with xmake,
+# and accept either tool's output location when locating the DLL — xmake emits
+# build/out/main.dll, CMake's multi-config generators emit
+# build/out/<Config>/main.dll.
 
-$buildDir  = Join-Path $root 'build'
-$outputDll = Join-Path $buildDir 'out\Release\main.dll'
+$buildDir = Join-Path $root 'build'
 
 if (-not $SkipBuild) {
-    Write-Host "`nConfiguring …"
-    $ue4ssDll = Join-Path $UE4SSSrc 'UE4SS.dll'
-    cmake -B $buildDir `
-        -DCMAKE_BUILD_TYPE=Release `
-        "-DSDB_UE4SS_DLL=$ue4ssDll"
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-
-    Write-Host "`nBuilding …"
-    cmake --build $buildDir --config Release
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    Write-Host "`nBuilding (xmake) …"
+    Push-Location $root
+    try {
+        xmake build
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    } finally { Pop-Location }
 }
 
-if (-not (Test-Path -LiteralPath $outputDll)) {
-    Write-Error "Build output not found: $outputDll`nRun without -SkipBuild first."
+$candidates = @(
+    (Join-Path $buildDir 'out\main.dll'),           # xmake
+    (Join-Path $buildDir 'out\Release\main.dll')    # CMake multi-config
+)
+$outputDll = $candidates | Where-Object { Test-Path -LiteralPath $_ } |
+             Sort-Object { (Get-Item -LiteralPath $_).LastWriteTime } -Descending |
+             Select-Object -First 1
+
+if (-not $outputDll) {
+    Write-Error ("Build output not found. Looked in:`n  " + ($candidates -join "`n  ") +
+                 "`nRun without -SkipBuild first.")
     exit 1
 }
 
-# ── Install UE4SS files into Win64 ────────────────────────────────────────────
+# ── Locate the UE4SS install ──────────────────────────────────────────────────
+#
+# UE4SS changed its on-disk layout after v3.0.1: the loader (dwmapi.dll) still
+# sits next to the game exe, but UE4SS.dll, the settings file and Mods/ all
+# moved into a `ue4ss/` subdirectory. Detect which layout is present rather
+# than assuming, so this script works against both.
 
-Write-Host "`nInstalling UE4SS loader …"
-foreach ($name in 'dwmapi.dll', 'UE4SS.dll', 'UE4SS-settings.ini') {
-    $src  = Join-Path $UE4SSSrc $name
-    $dest = Join-Path $Win64 $name
-    if (Test-Path -LiteralPath $src) {
-        Copy-Item -LiteralPath $src -Destination $dest -Force
-        Write-Host "  $dest"
-    }
-}
+$modernRoot = Join-Path $Win64 'ue4ss'
+$IsModernLayout = Test-Path -LiteralPath (Join-Path $modernRoot 'UE4SS.dll')
+$ue4ssRoot = if ($IsModernLayout) { $modernRoot } else { $Win64 }
+Write-Host ("UE4SS layout: {0} ({1})" -f $(if ($IsModernLayout) { 'modern' } else { 'legacy v3.0.1' }), $ue4ssRoot)
+
+# Deliberately does NOT copy UE4SS itself any more. The old behaviour
+# overwrote UE4SS.dll/settings from a vendored bundle on every deploy, which
+# silently reverted a hand-updated UE4SS (and its settings) back to the
+# pinned copy — exactly the wrong thing while chasing engine-version support.
+# Install/update UE4SS yourself; this script only deploys the mod.
 
 # ── Create mod directory structure ────────────────────────────────────────────
 
-$modsRoot  = Join-Path $Win64 'Mods'
+$modsRoot  = Join-Path $ue4ssRoot 'Mods'
 $modRoot   = Join-Path $modsRoot 'SurrounDeadBridge'
 $dllsDir   = Join-Path $modRoot 'dlls'
 $enabledTxt= Join-Path $modRoot 'enabled.txt'
