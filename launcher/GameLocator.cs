@@ -56,11 +56,35 @@ public static class GameLocator
         return candidates.FirstOrDefault(Directory.Exists);
     }
 
+    // UE4SS moved its layout after v3.0.1: the loader (dwmapi.dll) still sits
+    // next to the game exe, but UE4SS.dll, the settings file and Mods/ all
+    // dropped into a ue4ss/ subdirectory. Both are in the wild, so resolve
+    // which one is present rather than assuming — scripts/deploy.ps1 already
+    // does exactly this, and this file assuming the old one meant a correctly
+    // installed mod on a current UE4SS reported as missing, which disables the
+    // Launch button.
+    public static string? FindUe4ssRoot(string win64)
+    {
+        var modern = Path.Combine(win64, "ue4ss");
+        if (File.Exists(Path.Combine(modern, "UE4SS.dll"))) return modern;
+        if (File.Exists(Path.Combine(win64, "UE4SS.dll"))) return win64;
+        return null;
+    }
+
+    // Where the mod's DLL belongs for a given install. Returns null when UE4SS
+    // itself is absent, since there is no correct answer in that case.
+    public static string? ModDllPath(string win64)
+    {
+        var root = FindUe4ssRoot(win64);
+        return root is null ? null : Path.Combine(root, "Mods", "SDO", "dlls", "main.dll");
+    }
+
     static ModStatus DetectModStatus(string win64)
     {
-        var ue4ssPresent = File.Exists(Path.Combine(win64, "UE4SS.dll"))
-                         && File.Exists(Path.Combine(win64, "dwmapi.dll"));
-        var modDllPresent = File.Exists(Path.Combine(win64, "Mods", "SDO", "dlls", "main.dll"));
-        return ue4ssPresent && modDllPresent ? ModStatus.Installed : ModStatus.NotInstalled;
+        // dwmapi.dll is the loader and stays beside the exe in both layouts.
+        if (!File.Exists(Path.Combine(win64, "dwmapi.dll"))) return ModStatus.NotInstalled;
+
+        var dll = ModDllPath(win64);
+        return dll != null && File.Exists(dll) ? ModStatus.Installed : ModStatus.NotInstalled;
     }
 }

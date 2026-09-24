@@ -92,7 +92,7 @@ if (Test-Path -LiteralPath (Join-Path $UE4SSSrc 'UE4SS.dll')) {
 
 $libPath = Join-Path $root 'vendor\ue4ss-stub\lib\UE4SS.lib'
 if (-not (Test-Path -LiteralPath $libPath)) {
-    Write-Host "`nGenerating UE4SS.lib …"
+    Write-Host "`nGenerating UE4SS.lib ..."
     & "$PSScriptRoot\gen_import_lib.ps1"
 }
 
@@ -107,7 +107,7 @@ if (-not (Test-Path -LiteralPath $libPath)) {
 $buildDir = Join-Path $root 'build'
 
 if (-not $SkipBuild) {
-    Write-Host "`nBuilding (xmake) …"
+    Write-Host "`nBuilding (xmake) ..."
     Push-Location $root
     try {
         xmake build
@@ -162,7 +162,7 @@ if (-not (Test-Path -LiteralPath $enabledTxt)) {
 
 # ── Copy main.dll ─────────────────────────────────────────────────────────────
 
-Write-Host "`nInstalling main.dll …"
+Write-Host "`nInstalling main.dll ..."
 Copy-Item -LiteralPath $outputDll -Destination (Join-Path $dllsDir 'main.dll') -Force
 Write-Host "  $dllsDir\main.dll"
 

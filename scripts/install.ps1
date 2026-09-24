@@ -90,20 +90,52 @@ if (-not $Win64) {
     exit 1
 }
 
+# ── Resolve the UE4SS layout ──────────────────────────────────────────────────
+#
+# UE4SS changed its on-disk layout after v3.0.1. The loader (dwmapi.dll) still
+# sits next to the game exe in both, but UE4SS.dll, the settings file and Mods/
+# moved into a `ue4ss/` subdirectory. Installing into the wrong one fails
+# silently — UE4SS loads and the mod simply never appears — so work out which
+# applies instead of assuming, the same way scripts/deploy.ps1 does.
+#
+# Precedence: an existing install in the game directory wins, because matching
+# whatever UE4SS is already there is always right. Otherwise mirror the shape
+# of the bundle being installed from.
+
+function Resolve-Ue4ssRoot {
+    param([string]$Win64, [string]$BundleDir)
+
+    if (Test-Path -LiteralPath (Join-Path $Win64 'ue4ss\UE4SS.dll')) {
+        return @{ Root = (Join-Path $Win64 'ue4ss'); Modern = $true;  Source = 'existing install' }
+    }
+    if (Test-Path -LiteralPath (Join-Path $Win64 'UE4SS.dll')) {
+        return @{ Root = $Win64; Modern = $false; Source = 'existing install' }
+    }
+    if ($BundleDir -and (Test-Path -LiteralPath (Join-Path $BundleDir 'ue4ss\UE4SS.dll'))) {
+        return @{ Root = (Join-Path $Win64 'ue4ss'); Modern = $true;  Source = 'bundle layout' }
+    }
+    return @{ Root = $Win64; Modern = $false; Source = 'legacy default' }
+}
+
+$layout    = Resolve-Ue4ssRoot -Win64 $Win64 -BundleDir $BundleDir
+$ue4ssRoot = $layout.Root
+$layoutName = if ($layout.Modern) { 'modern' } else { 'legacy v3.0.1' }
+Write-Host ("UE4SS layout: {0} ({1}) - {2}" -f $layoutName, $ue4ssRoot, $layout.Source)
+
 # ── Uninstall path ────────────────────────────────────────────────────────────
 
 if ($Uninstall) {
-    Write-Host "`nUninstalling SurrounDead Online …"
+    Write-Host "`nUninstalling SurrounDead Online ..."
 
     # Remove mod folder
-    $modRoot = Join-Path $Win64 'Mods\SDO'
+    $modRoot = Join-Path $ue4ssRoot 'Mods\SDO'
     if (Test-Path -LiteralPath $modRoot) {
         Remove-Item -LiteralPath $modRoot -Recurse -Force
         Write-Host "  Removed: $modRoot"
     }
 
     # Disable entry in mods.txt (don't delete the file – other mods may be listed)
-    $modsTxt = Join-Path $Win64 'Mods\mods.txt'
+    $modsTxt = Join-Path $ue4ssRoot 'Mods\mods.txt'
     if (Test-Path -LiteralPath $modsTxt) {
         $lines = @(Get-Content -LiteralPath $modsTxt)
         $lines = @($lines | ForEach-Object {
@@ -122,9 +154,21 @@ if ($Uninstall) {
             Select-Object -First 1
     }
     if (-not $otherModsEnabled) {
-        foreach ($f in 'dwmapi.dll', 'UE4SS.dll', 'UE4SS-settings.ini') {
-            $p = Join-Path $Win64 $f
+        # dwmapi.dll is the loader and sits beside the game exe in both
+        # layouts; UE4SS.dll and its settings live under the UE4SS root, which
+        # is the ue4ss/ subdirectory on anything newer than v3.0.1.
+        $targets = @((Join-Path $Win64 'dwmapi.dll'),
+                     (Join-Path $ue4ssRoot 'UE4SS.dll'),
+                     (Join-Path $ue4ssRoot 'UE4SS-settings.ini'))
+        foreach ($p in $targets) {
             if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Force; Write-Host "  Removed: $p" }
+        }
+        # On the modern layout the ue4ss/ directory is ours to clean up once
+        # nothing is left in it. Leave it alone if anything remains.
+        if ($layout.Modern -and (Test-Path -LiteralPath $ue4ssRoot) -and
+            -not (Get-ChildItem -LiteralPath $ue4ssRoot -Force)) {
+            Remove-Item -LiteralPath $ue4ssRoot -Force
+            Write-Host "  Removed: $ue4ssRoot"
         }
     } else {
         Write-Host "  Kept UE4SS files (other mods are still enabled)"
@@ -153,19 +197,26 @@ if (-not $Ticket) {
 
 # ── Install UE4SS loader ──────────────────────────────────────────────────────
 
-Write-Host "`nInstalling UE4SS mod loader …"
+Write-Host "`nInstalling UE4SS mod loader ..."
+if ($layout.Modern) { New-Item -ItemType Directory -Force -Path $ue4ssRoot | Out-Null }
 foreach ($name in 'dwmapi.dll', 'UE4SS.dll', 'UE4SS-settings.ini') {
-    $src = Join-Path $BundleDir $name
-    if (Test-Path -LiteralPath $src) {
-        $dest = Join-Path $Win64 $name
-        Copy-Item -LiteralPath $src -Destination $dest -Force
-        Write-Host "  $dest"
-    }
+    # The bundle may itself be either layout, so look in both places for each
+    # file rather than assuming where it sits inside the bundle.
+    $src = @((Join-Path $BundleDir $name), (Join-Path $BundleDir "ue4ss\$name")) |
+           Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+    if (-not $src) { continue }
+
+    # dwmapi.dll is the loader and must stay beside the game exe in both
+    # layouts; everything else belongs under the UE4SS root.
+    $dest = if ($name -eq 'dwmapi.dll') { Join-Path $Win64 $name }
+            else                        { Join-Path $ue4ssRoot $name }
+    Copy-Item -LiteralPath $src -Destination $dest -Force
+    Write-Host "  $dest"
 }
 
 # ── Create mod directory structure ────────────────────────────────────────────
 
-$modsRoot   = Join-Path $Win64 'Mods'
+$modsRoot   = Join-Path $ue4ssRoot 'Mods'
 $modRoot    = Join-Path $modsRoot 'SDO'
 $dllsDir    = Join-Path $modRoot 'dlls'
 $enabledTxt = Join-Path $modRoot 'enabled.txt'
@@ -178,7 +229,7 @@ if (-not (Test-Path -LiteralPath $enabledTxt)) {
 
 # ── Install main.dll ──────────────────────────────────────────────────────────
 
-Write-Host "`nInstalling SurrounDead Online mod …"
+Write-Host "`nInstalling SurrounDead Online mod ..."
 $srcDll  = Join-Path $BundleDir 'main.dll'
 $destDll = Join-Path $dllsDir 'main.dll'
 Copy-Item -LiteralPath $srcDll -Destination $destDll -Force
@@ -200,14 +251,17 @@ $lines = @($lines | ForEach-Object {
     $_
 })
 
-# Enable ours.
-$ourMod  = 'SDO'
-$matched = $false
-$lines   = @($lines | ForEach-Object {
-    if ($_ -match "^\s*$([regex]::Escape($ourMod))\s*:") { $matched = $true; "$ourMod : 1" }
-    else { $_ }
+# Ours is enabled by the enabled.txt created above, NOT by mods.txt.
+#
+# UE4SS runs both mechanisms in sequence: mods.txt load order first, then a
+# sweep for enabled.txt in any mod folder not already started. Listing the mod
+# as `: 1` here *and* giving it an enabled.txt starts it twice, which a C++
+# mod's global state does not survive. Force the mods.txt entry to 0 so exactly
+# one mechanism is live — scripts/deploy.ps1 was fixed for this same bug.
+$ourMod = 'SDO'
+$lines  = @($lines | ForEach-Object {
+    if ($_ -match "^\s*$([regex]::Escape($ourMod))\s*:") { "$ourMod : 0" } else { $_ }
 })
-if (-not $matched) { $lines += "$ourMod : 1" }
 $lines | Set-Content -LiteralPath $modsTxt -Encoding ASCII
 
 # ── Save connection settings as user environment variables ─────────────────────
@@ -216,7 +270,7 @@ $lines | Set-Content -LiteralPath $modsTxt -Encoding ASCII
 # user starts, including Steam and the game.  No reboot required – just
 # restart Steam after running this installer.
 
-Write-Host "`nSaving connection settings …"
+Write-Host "`nSaving connection settings ..."
 
 [System.Environment]::SetEnvironmentVariable('SDO_JOIN_TICKET', $Ticket, 'User')
 Write-Host "  SDO_JOIN_TICKET = (set)"

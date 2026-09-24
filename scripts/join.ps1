@@ -32,7 +32,7 @@ if ($servers.Count -eq 1) {
     Write-Host "Servers currently up:"
     for ($i = 0; $i -lt $servers.Count; $i++) {
         $s = $servers[$i]
-        Write-Host "  [$i] $($s.name) — $($s.host):$($s.port) ($($s.playerCount)/$($s.maxPlayers) players)"
+        Write-Host "  [$i] $($s.name) - $($s.host):$($s.port) ($($s.playerCount)/$($s.maxPlayers) players)"
     }
     $selection = Read-Host "Pick a server by number"
     $index = [int]$selection
