@@ -10406,3 +10406,122 @@ and documented rather than plausibly patched:
 - **Silent no-ops are worse than crashes.** Every bug here failed quietly: garbage counts clamped
   to zero, wrong pointers written through, orphan tests always true. A name lookup that returns
   null at least says so.
+
+### The fifth, sixth, seventh and eighth offset tables — and a latch
+
+Four sweeps declared clean still left four stale sites. Every one of them hid in a
+*conditional* path, which is why grepping for offsets that looked wrong was not enough — the
+code has to be read for when it runs, not just for what it dereferences.
+
+**The unequip-clear clothing table** (`sync_equipment`) was a third copy of the 5.3 clothing
+offsets, missed because it is the unequip half of a pair whose equip half had already been
+fixed, and because it only executes on a pass where *no* slot changed. On 5.6 all five entries
+name a different component:
+
+    slot 4 Torso     0x0770 -> Clothing_Torso  (0x0770 is the bare Feet body part)
+    slot 5 Gloves    0x0780 -> Clothing_Gloves (0x0780 is Legs)
+    slot 6 Legs      0x0768 -> Clothing_Legs   (0x0768 is EyebrowsMesh)
+    slot 7 Feet      0x0760 -> Clothing_Feet   (0x0760 is Arms)
+    slot 9 BodyArmor 0x07B8 -> Clothing_Armor  (0x07B8 is BuildingComponent)
+
+So taking off a shirt called `SetVisibility(false)` on the bare **Feet** mesh, taking off gloves
+hid **Legs**, and so on — and since nothing ever sets those back visible, the body part stayed
+gone for the rest of the session. This is the mechanism behind the "body parts missing" reports.
+They were never detached. They were hidden by the wrong component's unequip-clear.
+
+**`JigsawItem_DataAsset + 0x280`** was on the previous session's deliberately-not-fixed list
+(offset *and* type both suspect). The dump settles it without guessing: `EquippedTransform` is an
+`FTransform` (0x60 bytes) at `0x0280`, and `EquipSocket` is an `FName` at `0x02E0`. The hand-attach
+path was reading the first eight bytes of a rotation quaternion and handing them to
+`K2_AttachToComponent` as a socket name — attaching the weapon to a socket that cannot exist.
+
+**Ultra Dynamic Sky `+ 0x0A48`**, intended as UDS's own `Time Speed`, is
+`Multiscattering Eccentricity` on 5.6 (`Time Speed` moved to `0x0A58`). Unconditional, so it ran
+on every world-state apply: it wrote 0.0 into a scattering parameter and never stopped UDS's local
+time driver — the competing-driver oscillation its own comment describes trying to prevent.
+
+**Ultra Dynamic Weather's six fallback writes** (`0x0310`..`0x0360`) are each shifted by exactly
+one field on 5.6 — `Cloud Coverage` is `0x0320` not `0x0310`, `Rain` `0x0330` not `0x0320`, and so
+on down the list. The first write is the interesting one: `0x0310` is a `bool` immediately followed
+by the `UUDS_Weather_Settings_C* Weather` pointer at `0x0318`, so an 8-byte double smashed a live
+object pointer inside the actor. Dormant in practice — the named state-object API resolves and
+neither raw fallback has ever been observed to log — but a loaded gun. All resolved by name.
+
+Verified correct against the dump and left alone: `kSlotOffsets` (all 21 entries match
+`FS_ServerEquippedItems` exactly, stride `0x78` = `sizeof(FRepItemInfo)`), and
+`ClothingSettings + 0x18 + 0x00/0x40` (`FBodyPartSettings` really does begin at `0x18` inside
+`FClothingSettings`, with `MaleTorsoMesh` at `0x00` and `FemaleTorsoMesh` at `0x40`). The second of
+those also closes the other deliberately-not-fixed item from last session.
+
+### The latch: how one transient null permanently unclothed a proxy
+
+PC2 rendered PC1's proxy with no clothing while PC1 rendered PC2's correctly. The wire was fine in
+both directions (20 slots one way, 11 the other, confirmed by index), and the clothing slot indices
+were present in both payloads. `equip_clothing_to_mesh` had run **152 times on PC1 and 0 times on
+PC2**.
+
+What identified it was not the clothing code. `sync_pawn_appearance` ran 387 times in a 12-second
+window on PC2 — and it is the *last* branch of an if/else chain in `tick()` whose *first* branch is
+`if (player.equipmentDirty)`. So `equipmentDirty` was already false: `sync_equipment` had run,
+completed, and processed zero changed slots. Combined with zero `set_equipped_info_by_slot` log
+lines, that requires `equipItemChanged == false` for all 20 received slots — all 20 resume markers
+populated with zero visual work done.
+
+The cause was one line of ordering:
+
+    changedSlotThisCall = true;
+    player.appliedEquipItemId[slot.slotIndex] = slot.itemId;   // marker committed FIRST
+    const bool wrote = set_equipped_info_by_slot(...);          // then the work
+
+`set_equipped_info_by_slot` has four `return false` paths that all execute before it reaches
+`ProcessEvent` — null actor, no slot tag, no `BP_JigHelperComp`, no `SetEquippedInfoBySlot`
+UFunction. Every one of them skips the entire visual pipeline: clothing meshes, spawned visuals,
+all of it. Committing the marker first turned any one of those *transient* failures into a
+*permanent* one — the slot reads as already-applied forever, is never retried for the life of the
+proxy, and logs nothing at all. It closed during PC2's map load, while the freshly-spawned proxy's
+component tree was not yet populated and the helper lookup returned null. `tick()`'s 2-second grace
+period does not cover a map load.
+
+The marker now commits only on success, and a failed write does not consume the one-slot-per-call
+budget either — every false return happens before `ProcessEvent`, so there is no burst to spread
+out. All four returns now name themselves in the log.
+
+### The mouth at the origin: the repair was the bug
+
+`component_drift: local:Mouth re-snapped OFF-SOCKET component (was 157.001221 units from its own
+socket)` was dismissed earlier as a false positive *because it also fired on the local player*. That
+reasoning was backwards. Firing on the local player is what made the damage visible.
+
+The check flagged anything more than 50 units from its socket. But a socket-attached component's
+resting world position is the socket transform composed with its authored `RelativeLocation`, and
+`expectedSocket`'s own comment already recorded Mouth's as `(0,157,0.6)` — 157.00115 units — calling
+it "rock-steady on every healthy join". 157 > 50, so the check fired on every single join for a
+perfectly healthy component. Then the repair re-attached with `LocationRule = SnapToTarget`, which
+discards `RelativeLocation` and collapses the component onto the socket origin. Reported live as
+the local player's mouth sitting at the origin.
+
+Two changes. The check now compares against the component's own first-sample baseline rather than
+against ~0, keeping an absolute ceiling so a component already flung apart before the first sample
+is still caught. And the repair uses `KeepRelative` instead of `SnapToTarget`: re-establishing the
+parent/socket link is the entire point of the repair, and there is no reason for it to discard the
+authored transform while doing so. This branch was also the one place `local_repair_disabled()` was
+never checked, which is why the bisect flag never suppressed it.
+
+### Method note
+
+Three of this round's four stale tables ran only in a conditional branch, and the fourth was a
+fallback that has never once executed. Sweeping for offsets that *look* wrong finds the code that
+runs constantly; it does not find the unequip half of a pair, or an `else` branch guarding an API
+that currently resolves. The clean-sweep claim after Session 60's four passes was true of the hot
+path and false of the codebase.
+
+And the latch is worth remembering as a shape, not just a bug: a resume marker committed before the
+work it marks turns every transient failure underneath it into a permanent one, silently. The same
+shape exists anywhere an "already applied" cache is written optimistically.
+
+### Pak encryption: there is no key
+
+For the record, since it comes up: `SurrounDead-Windows.pak` (v11, 1.48 GB) is **not encrypted**.
+`EncryptionKeyGuid` is all zeros, `bEncryptedIndex` is 0, and the index reads as plaintext with
+mount point `../../../`. AES-key finders that report the exe as "protected" are finding no key
+because there is none to find. `tools/asset-export/` opens the pak with no key configured at all.

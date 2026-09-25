@@ -782,17 +782,33 @@ static bool get_equipped_info_by_slot(AActor* actor, uint8_t slotIndex,
 // UID match, appropriate for a purely cosmetic proxy.
 static bool set_equipped_info_by_slot(AActor* actor, uint8_t slotIndex, const std::string& itemId)
 {
-    if (!actor) return false;
+    // 2026-09-24: all four of these returned false silently, which is how a
+    // permanently-unclothed proxy produced no log line naming a cause on
+    // either side (see sync_equipment's resume-marker comment for the latch
+    // this fed). Name the gate that failed - silent no-ops being worse than
+    // crashes is this port's most expensive recurring lesson.
+    if (!actor) { debug_log("set_equipped_info_by_slot: SKIP actor is null"); return false; }
     RawFGameplayTag tag;
-    if (!slot_tag(slotIndex, tag)) return false;
+    if (!slot_tag(slotIndex, tag)) {
+        debug_log("set_equipped_info_by_slot: SKIP slot " + std::to_string(slotIndex) +
+                  " has no ComparisonIndex (see kSlotTagComparisonIndex)");
+        return false;
+    }
 
     const uintptr_t helper = reinterpret_cast<uintptr_t>(
         prop_obj(reinterpret_cast<UObject*>(actor), STR("BP_JigHelperComp")));
-    if (!helper) return false;
+    if (!helper) {
+        debug_log("set_equipped_info_by_slot: SKIP slot " + std::to_string(slotIndex) +
+                  " BP_JigHelperComp is null (component tree not populated yet?)");
+        return false;
+    }
 
     auto* helperObj = reinterpret_cast<UObject*>(helper);
     UFunction* fn = helperObj->GetFunctionByNameInChain(L"SetEquippedInfoBySlot");
-    if (!fn) return false;
+    if (!fn) {
+        debug_log("set_equipped_info_by_slot: SKIP SetEquippedInfoBySlot UFunction not found");
+        return false;
+    }
 
     struct Params {
         RawFGameplayTag Slot;
@@ -1793,6 +1809,14 @@ static bool equip_clothing_to_mesh(AActor* actor, void* itemAsset, const wchar_t
     // leader-pose followers too (confirmed via the export), so this swap
     // needs the exact same bone-mapping refresh as any base body part.
     auto** meshSlot = static_cast<UObject**>(actor->GetValuePtrByPropertyNameInChain(L"Mesh"));
+    {
+        UObject* cap = prop_obj(clothingComp, STR("AttachParent"));
+        auto* csock = static_cast<const uint32_t*>(
+            clothingComp->GetValuePtrByPropertyNameInChain(STR("AttachSocketName")));
+        debug_log("attach_diag: clothing=" + narrow(clothingCompName) +
+                  " attachParent=" + (cap ? narrow(cap->GetFullName()) : std::string("<NULL>")) +
+                  " socketCi=" + std::to_string(csock ? *csock : 0u));
+    }
     refresh_leader_pose(clothingComp, (meshSlot && *meshSlot) ? *meshSlot : nullptr);
 
     // The unequip-clear path hides this component (SetVisibility(false)) —
@@ -1996,9 +2020,41 @@ void ProxyManager::sync_equipment(AActor* actor, RemotePlayer& player)
         }
 
         if (kEnableEquipmentWrite && equipItemChanged && !changedSlotThisCall) {
-            changedSlotThisCall = true;
-            player.appliedEquipItemId[slot.slotIndex] = slot.itemId;
             const bool wrote = set_equipped_info_by_slot(actor, slot.slotIndex, slot.itemId);
+            // 2026-09-24: the resume marker used to be committed one line
+            // BEFORE this write, unconditionally. set_equipped_info_by_slot has
+            // four false returns that all happen before it reaches
+            // ProcessEvent (null actor, no slot tag, no BP_JigHelperComp, no
+            // SetEquippedInfoBySlot UFunction), and every one of them skips the
+            // whole visual pipeline below - clothing meshes, spawned visuals,
+            // all of it. Committing the marker first turned any one of those
+            // transient failures into a PERMANENT one: the slot then reads as
+            // already-applied forever, is never retried for the life of the
+            // proxy, and logs nothing at all.
+            //
+            // Root-caused live 2026-09-24. PC2 rendered PC1's proxy with no
+            // clothing while PC1 rendered PC2's correctly. On PC2
+            // equip_clothing_to_mesh had run 0 times against PC1's 152, and
+            // equipmentDirty was already false - proven by sync_pawn_appearance
+            // running 387 times in a 12-second window, which is only reachable
+            // as the LAST branch of the else-if chain in tick() whose FIRST
+            // branch is equipmentDirty. Those two facts together require
+            // equipItemChanged == false for all 20 received slots, i.e. all 20
+            // markers populated with zero visual work done. That is the latch,
+            // closed during PC2's map load while the freshly-spawned proxy's
+            // component tree was not populated yet and the helper lookup
+            // returned null. tick()'s 2s grace period does not cover a map
+            // load, and nothing retried afterwards.
+            //
+            // Commit the marker only once the write actually succeeded. A
+            // failed write also does NOT consume the one-per-call budget:
+            // every false return above happens before ProcessEvent, so nothing
+            // heavy ran and there is no burst to spread out (see this
+            // function's own cap comment). The slot simply retries next pass.
+            if (wrote) {
+                changedSlotThisCall = true;
+                player.appliedEquipItemId[slot.slotIndex] = slot.itemId;
+            }
             Output::send<LogLevel::Normal>(
                 STR("SDO: equip-setter slot={:d} itemId={} ok={:d}\n"),
                 slot.slotIndex, widen(slot.itemId), wrote);
@@ -2304,18 +2360,33 @@ void ProxyManager::sync_equipment(AActor* actor, RemotePlayer& player)
                 // component underneath (Torso/Legs/Feet/etc.) is a separate,
                 // already-present component that shows through once the
                 // clothing layer is hidden.
-                uintptr_t clearClothingOffset = 0;
+                // Was a third UE 5.3 offset table (0x0770/0x0780/0x0768/
+                // 0x0760/0x07B8), missed by all four of Session 60's sweeps
+                // because it is the unequip half of the pair and only runs on
+                // a pass where no slot changed. On 5.6 every one of those five
+                // offsets names a DIFFERENT component
+                // (research/CXXHeaderDump/BP_PlayerCharacter.hpp): 0x0770 is
+                // the bare Feet body part, 0x0780 is Legs, 0x0768 is
+                // EyebrowsMesh, 0x0760 is Arms, and 0x07B8 is
+                // BuildingComponent. So taking off a shirt hid the bare Feet
+                // mesh, taking off gloves hid Legs, and so on - and since
+                // nothing ever sets these back visible, the body part stayed
+                // gone for the rest of the session. This is the mechanism
+                // behind the body-parts-missing reports: they were never
+                // detached, they were hidden by the wrong component's
+                // unequip-clear. Resolved by name, same table as the equip
+                // path above.
+                const wchar_t* clearClothingName = nullptr;
                 switch (i) {
-                    case 4:  clearClothingOffset = 0x0770; break; // Torso
-                    case 5:  clearClothingOffset = 0x0780; break; // Gloves
-                    case 6:  clearClothingOffset = 0x0768; break; // Legs
-                    case 7:  clearClothingOffset = 0x0760; break; // Feet
-                    case 9:  clearClothingOffset = 0x07B8; break; // BodyArmor
+                    case 4:  clearClothingName = STR("Clothing_Torso");  break;
+                    case 5:  clearClothingName = STR("Clothing_Gloves"); break;
+                    case 6:  clearClothingName = STR("Clothing_Legs");   break;
+                    case 7:  clearClothingName = STR("Clothing_Feet");   break;
+                    case 9:  clearClothingName = STR("Clothing_Armor");  break;
                     default: break;
                 }
-                if (cleared && clearClothingOffset) {
-                    auto* clothingComp = *reinterpret_cast<UObject**>(
-                        reinterpret_cast<uintptr_t>(actor) + clearClothingOffset);
+                if (cleared && clearClothingName) {
+                    auto* clothingComp = prop_obj(reinterpret_cast<UObject*>(actor), clearClothingName);
                     if (clothingComp) {
                         UFunction* visFn = clothingComp->GetFunctionByNameInChain(L"SetVisibility");
                         if (visFn) {
@@ -2466,8 +2537,25 @@ void ProxyManager::sync_active_weapon_hand(AActor* actor, RemotePlayer& player)
     void* itemAsset = resolve_item_asset(itemId);
     if (!itemAsset) return;
 
-    const RawFGameplayTag equipSocket = *reinterpret_cast<RawFGameplayTag*>(
-        reinterpret_cast<uintptr_t>(itemAsset) + 0x280);
+    // 2026-09-24: was itemAsset + 0x280 read as an FGameplayTag. Session 60's
+    // sweep spotted that both the offset AND the type looked wrong but left it
+    // broken rather than guess. The dump settles it -
+    // research/CXXHeaderDump/JigsawItem_DataAsset.hpp has EquippedTransform
+    // (FTransform, 0x60 bytes) at 0x0280 and EquipSocket (FName) at 0x02E0 - so
+    // this was reading the first 8 bytes of a transform's rotation quaternion
+    // and handing them to K2_AttachToComponent as a socket name, i.e. attaching
+    // the weapon to a socket that cannot exist. Resolved by name; FName and
+    // RawFGameplayTag share the same raw {ComparisonIndex, Number} layout,
+    // which is exactly why reattach_weapon_visual_to_socket takes the latter
+    // (see its own comment).
+    RawFGameplayTag equipSocket{};
+    if (auto* socketPtr = prop_ptr<RawFGameplayTag>(
+            reinterpret_cast<UObject*>(itemAsset), STR("EquipSocket"))) {
+        equipSocket = *socketPtr;
+    } else {
+        debug_log("sync_active_weapon_hand: EquipSocket not found on item asset, skipping hand attach");
+        return;
+    }
 
     auto* newActor = static_cast<AActor*>(*newSlot);
     const bool attached = reattach_weapon_visual_to_socket(actor, newActor, equipSocket);
@@ -3155,13 +3243,23 @@ void ProxyManager::sync_pawn_appearance(AActor* actor, RemotePlayer& player)
             // base Mesh still carries the male skeleton and every female part
             // hung off it fails to bind. Log what the leader actually is so
             // that is visible rather than inferred.
+            // Movement animates correctly now, so the remaining detachment is
+            // not an animation problem — the components are mis-placed. The
+            // clothing components render in the right place and the body parts
+            // do not, despite identical treatment, so log what each is actually
+            // attached to. Leader pose shares a pose; it does not position a
+            // component. That comes from the attachment, which has never been
+            // checked on a proxy.
             if (leaderMesh) {
-                UObject* leaderAsset = prop_obj(leaderMesh, STR("SkinnedAsset"));
-                debug_log("sync_pawn_appearance: leaderMesh asset=" +
-                          (leaderAsset ? narrow(leaderAsset->GetFullName()) : std::string("<none>")) +
-                          " follower=" + narrow(kBodyPartNames[i]));
+                UObject* ap = prop_obj(comp, STR("AttachParent"));
+                auto* sock = static_cast<const uint32_t*>(
+                    comp->GetValuePtrByPropertyNameInChain(STR("AttachSocketName")));
+                debug_log("attach_diag: part=" + narrow(kBodyPartNames[i]) +
+                          " attachParent=" + (ap ? narrow(ap->GetFullName()) : std::string("<NULL>")) +
+                          " socketCi=" + std::to_string(sock ? *sock : 0u) +
+                          " leader=0x" + std::to_string(reinterpret_cast<uintptr_t>(leaderMesh)));
             } else {
-                debug_log("sync_pawn_appearance: leaderMesh is NULL — followers cannot bind");
+                debug_log("attach_diag: leaderMesh is NULL — followers cannot bind");
             }
             refresh_leader_pose(comp, leaderMesh);
         }
@@ -3297,6 +3395,21 @@ void ProxyManager::on_equipment(uint64_t playerId, const Equipment& e)
 
     it->second.equipment = e.slots;
     it->second.equipmentDirty = true;
+    // Receive-side counter for the asymmetric-clothing bug: PC1 renders the
+    // proxy clothed and PC2 does not, and sync_equipment returns immediately
+    // unless equipmentDirty is set — so this is the line that decides whether
+    // the clothing path runs at all.
+    // Log the slot indices, not just the count: sync_equipment maps clothing
+    // off slotIndex (4/5/6/7/9), and one client produces 152 clothing calls
+    // from its peer's payload while the other produces none from a LARGER
+    // one — so the indices, not the volume, are what differ.
+    std::string idx;
+    for (const auto& sl : e.slots) {
+        idx += std::to_string(static_cast<int>(sl.slotIndex));
+        idx += sl.itemId.empty() ? "- " : "+ ";
+    }
+    debug_log("on_equipment: received " + std::to_string(e.slots.size()) +
+              " slots for player " + std::to_string(playerId) + " idx=[" + idx + "]");
 }
 
 void ProxyManager::on_weapon_attachments(uint64_t playerId, const WeaponAttachments& a)

@@ -1194,6 +1194,24 @@ static sdo::WeaponAttachments read_local_weapon_attachments(AActor* pawn)
 
     static constexpr uint8_t kAttachableSlots[] = {0, 1, 2, 10, 11, 12, 13, 14};
     const sdo::Equipment eq = read_local_equipment(pawn);
+    // Send-side counter, paired with on_equipment's receive log. Clothing is
+    // asymmetric between the two clients, so one of these two lines will show
+    // which side drops it.
+    {
+        size_t filled = 0;
+        for (const auto& sl : eq.slots) if (!sl.itemId.empty()) ++filled;
+        debug_log("send_equipment: " + std::to_string(eq.slots.size()) +
+                  " slots, " + std::to_string(filled) + " non-empty");
+    }
+    // Send-side counter, paired with on_equipment's receive log. Clothing is
+    // asymmetric between the two clients, so one of these two lines will show
+    // which side drops it.
+    {
+        size_t filled = 0;
+        for (const auto& sl : eq.slots) if (!sl.itemId.empty()) ++filled;
+        debug_log("send_equipment: " + std::to_string(eq.slots.size()) +
+                  " slots, " + std::to_string(filled) + " non-empty");
+    }
     std::unordered_map<std::string, uint8_t> itemIdToSlot;
     for (const auto& slot : eq.slots) {
         for (uint8_t s : kAttachableSlots) {
@@ -4353,6 +4371,11 @@ struct ComponentDriftCtx {
     // check already proven for item attachments (see do_attach_health_scan)
     // instead of the origin check.
     const wchar_t* expectedSocket = nullptr;
+    // 2026-09-24: a socket-attached component's healthy distance from its own
+    // socket is its authored RelativeLocation magnitude, which is NOT small -
+    // Mouth sits a rock-steady 157.00115 units out. Anchored on the first
+    // sample so the check can watch for a CHANGE instead of assuming ~0.
+    double socketBaselineDist = -1.0;
     uint64_t healthySinceUs = 0;   // 2026-08-16 — see do_component_drift_scan's firstSeenUs comment
     uint64_t lastLeaderPoseRefreshUs = 0; // 2026-08-16 — see check_component_drift's proactive-refresh comment
     int repairAttempts = 0;        // capped — see do_component_drift_scan's repair-call comment
@@ -4808,18 +4831,56 @@ static void do_component_drift_scan(void* ctxRaw)
                 const double sdx = clParams.ReturnValue.X - slParams.ReturnValue.X;
                 const double sdy = clParams.ReturnValue.Y - slParams.ReturnValue.Y;
                 const double sdz = clParams.ReturnValue.Z - slParams.ReturnValue.Z;
-                constexpr double kSocketDistSq = 50.0 * 50.0;
-                if (sdx * sdx + sdy * sdy + sdz * sdz > kSocketDistSq) {
+                const double socketDist = std::sqrt(sdx * sdx + sdy * sdy + sdz * sdz);
+                // 2026-09-24: this used to flag anything more than 50 units from
+                // its socket, which is wrong for every component that reaches
+                // this branch. A socket-attached component's resting world
+                // position is the socket transform composed with its authored
+                // RelativeLocation, and expectedSocket's own comment already
+                // records Mouth's as (0,157,0.6) - 157.00115 units - calling it
+                // "rock-steady ... on every healthy join". So the check fired on
+                // every single join for a perfectly healthy component, and the
+                // repair below then DESTROYED that authored offset by
+                // re-attaching with LocationRule = SnapToTarget, collapsing the
+                // component onto the socket origin.
+                //
+                // Reported live 2026-09-24 as the local player's mouth sitting
+                // at the origin. The repair was the bug. It had been dismissed
+                // earlier as a false positive precisely BECAUSE it also fired on
+                // the local player - the reasoning was backwards: firing on the
+                // local player is what made the damage visible.
+                //
+                // Two changes. Compare against this component's own first-sample
+                // baseline rather than against ~0, so a large authored offset is
+                // no longer mistaken for drift; and keep an absolute ceiling so a
+                // component already flung apart before the first sample is still
+                // caught (the case the absolute check was originally added for).
+                // The repair itself switches to KeepRelative below.
+                constexpr double kSocketDriftTol  = 50.0;    // change from this component's own baseline
+                constexpr double kSocketFlungDist = 1000.0;  // wrong regardless of baseline
+                if (ctx->socketBaselineDist < 0.0) ctx->socketBaselineDist = socketDist;
+                const double socketDev = std::fabs(socketDist - ctx->socketBaselineDist);
+                if ((socketDev > kSocketDriftTol || socketDist > kSocketFlungDist) &&
+                    !local_repair_disabled()) {
                     const uint64_t nowUs = sdo::now_micros();
                     if (ctx->firstSeenUs == 0) ctx->firstSeenUs = nowUs;
                     if (nowUs - ctx->firstSeenUs >= 2'000'000ULL &&
                         nowUs - ctx->lastRepairAttemptUs >= 1'000'000ULL) {
                         ctx->lastRepairAttemptUs = nowUs;
+                        // 2026-09-24: was SnapToTarget for location AND
+                        // rotation, which is what actually moved the mouth to
+                        // the socket origin - SnapToTarget discards the
+                        // component's authored RelativeLocation, and for these
+                        // four socket-attached face components that offset IS
+                        // their correct position (Mouth: (0,157,0.6)).
+                        // KeepRelative (EAttachmentRule 0) re-establishes the
+                        // parent/socket link, which is the whole point of the
+                        // repair, while preserving the authored transform.
                         struct AttachParams {
                             UObject* Parent = nullptr;
                             RawFGameplayTag SocketName{};
-                            uint8_t  LocationRule = 2;   // SnapToTarget
-                            uint8_t  RotationRule = 2;   // SnapToTarget
+                            uint8_t  LocationRule = 0;   // KeepRelative
+                            uint8_t  RotationRule = 0;   // KeepRelative
                             uint8_t  ScaleRule = 1;       // KeepWorld
                             bool     WeldSimulatedBodies = true;
                             bool     ReturnValue = false;
@@ -4827,9 +4888,10 @@ static void do_component_drift_scan(void* ctxRaw)
                         aparams.Parent = mesh;
                         aparams.SocketName = socket;
                         ctx->comp->ProcessEvent(attachFn, &aparams);
-                        debug_log("component_drift: " + ctx->key + " re-snapped OFF-SOCKET component (was " +
-                                  std::to_string(std::sqrt(sdx * sdx + sdy * sdy + sdz * sdz)) +
-                                  " units from its own socket), reattach returned " + std::to_string(aparams.ReturnValue));
+                        debug_log("component_drift: " + ctx->key + " re-attached OFF-SOCKET component (now " +
+                                  std::to_string(socketDist) + " units from its own socket, baseline " +
+                                  std::to_string(ctx->socketBaselineDist) + "), reattach returned " +
+                                  std::to_string(aparams.ReturnValue));
                     }
                 }
             }
@@ -6182,7 +6244,6 @@ static void apply_world_state()
     s_lastAppliedWorldRevision = ws.revision;
 
     if (AActor* sky = cached_find_sky_actor()) {
-        const auto base = reinterpret_cast<uintptr_t>(sky);
         // Live-confirmed 2026-08-17, two rounds: a raw write to "Time of
         // Day" alone caused visible oscillation (UDS's own "Time Speed"
         // kept advancing it locally between our ~2.2s applies, so each
@@ -6211,7 +6272,21 @@ static void apply_world_state()
         // explicit user instruction. Still genuinely unverified in
         // isolation; treat with real caution until it gets a clean,
         // isolated live test.
-        *reinterpret_cast<double*>(base + 0x0A48) = 0.0;
+        // 2026-09-24: was base + 0x0A48, a hardcoded 5.3 offset meant to be
+        // UDS's own "Time Speed". On 5.6 that offset is "Multiscattering
+        // Eccentricity" and Time Speed moved to 0x0A58
+        // (research/CXXHeaderDump/Ultra_Dynamic_Sky.hpp) - so this wrote 0.0
+        // into a scattering parameter on every apply and never actually stopped
+        // UDS's local time driver, which is the competing-driver oscillation
+        // the comment above describes trying to prevent. Unlike the two raw
+        // fallbacks below this one was unconditional, so it ran on every single
+        // world-state apply. Resolved by name.
+        if (auto* timeSpeed = static_cast<double*>(
+                sky->GetValuePtrByPropertyNameInChain(L"Time Speed"))) {
+            *timeSpeed = 0.0;
+        } else {
+            debug_log("apply_world_state: 'Time Speed' not found on sky actor");
+        }
         if (UFunction* fn = sky->GetFunctionByNameInChain(L"Transition Time of Day")) {
             struct Params {
                 double  NewTimeOfDay             = 0.0;
@@ -6226,8 +6301,16 @@ static void apply_world_state()
         } else {
             // Fallback so time sync doesn't silently stop working if the
             // function name/signature ever changes — not yet observed live.
-            *reinterpret_cast<double*>(base + 0x0320) = static_cast<double>(ws.timeOfDay);
-            debug_log("apply_world_state: Transition Time of Day not found, used raw write fallback");
+            // 2026-09-24: the raw-offset fallback that used to be here wrote
+            // base + 0x0320, which on 5.6 is "Cloud Wisps Opacity (Clear)".
+            // There is no plain "Time of Day" double on Ultra_Dynamic_Sky to
+            // redirect it to either - only Replicated/Current/Last Frame
+            // variants, none of which is the driver - and an unverified write
+            // into a live UObject is precisely what this port has paid for
+            // repeatedly. Removed rather than guessed at: if the named
+            // function ever disappears this now logs and does nothing, which
+            // is the honest failure mode.
+            debug_log("apply_world_state: 'Transition Time of Day' not found, time sync skipped this apply");
         }
     }
     if (AActor* weather = cached_find_weather_actor()) {
@@ -6284,14 +6367,32 @@ static void apply_world_state()
         } else {
             // Fallback so weather sync doesn't silently stop working if the
             // state-object API ever changes — not yet observed live.
-            const auto base = reinterpret_cast<uintptr_t>(weather);
-            *reinterpret_cast<double*>(base + 0x0310) = static_cast<double>(ws.cloudCover);
-            *reinterpret_cast<double*>(base + 0x0320) = static_cast<double>(ws.rain);
-            *reinterpret_cast<double*>(base + 0x0330) = static_cast<double>(ws.snow);
-            *reinterpret_cast<double*>(base + 0x0340) = static_cast<double>(ws.thunder);
-            *reinterpret_cast<double*>(base + 0x0350) = static_cast<double>(ws.wind);
-            *reinterpret_cast<double*>(base + 0x0360) = static_cast<double>(ws.fog);
-            debug_log("apply_world_state: weather state-object API unavailable, used raw write fallback");
+            // 2026-09-24: was six raw 5.3 offsets (0x0310..0x0360), every one
+            // of them shifted by exactly one field on 5.6
+            // (research/CXXHeaderDump/Ultra_Dynamic_Weather.hpp): Cloud
+            // Coverage is 0x0320 not 0x0310, Rain 0x0330 not 0x0320, and so on
+            // down the list. Worse than wrong values - the first write landed
+            // across 0x0310/0x0318, a bool immediately followed by the
+            // UUDS_Weather_Settings_C* Weather pointer, so an 8-byte double
+            // smashed a live object pointer inside the actor. Dormant in
+            // practice (the named state-object API above resolves, and neither
+            // fallback has ever been observed to log), but a loaded gun.
+            // Resolved by name.
+            const auto set_weather_prop = [&](const wchar_t* name, const char* logName, float value) {
+                if (auto* p = static_cast<double*>(
+                        weather->GetValuePtrByPropertyNameInChain(name))) {
+                    *p = static_cast<double>(value);
+                } else {
+                    debug_log(std::string("apply_world_state: weather property not found: ") + logName);
+                }
+            };
+            set_weather_prop(L"Cloud Coverage",    "Cloud Coverage",    ws.cloudCover);
+            set_weather_prop(L"Rain",              "Rain",              ws.rain);
+            set_weather_prop(L"Snow",              "Snow",              ws.snow);
+            set_weather_prop(L"Thunder/Lightning", "Thunder/Lightning", ws.thunder);
+            set_weather_prop(L"Wind Intensity",    "Wind Intensity",    ws.wind);
+            set_weather_prop(L"Fog",               "Fog",               ws.fog);
+            debug_log("apply_world_state: weather state-object API unavailable, used name-resolved writes");
         }
     }
 
