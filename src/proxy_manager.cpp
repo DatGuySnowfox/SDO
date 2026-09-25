@@ -2409,6 +2409,48 @@ static bool equip_clothing_to_mesh(AActor* actor, void* itemAsset, const wchar_t
         debug_log("equip_clothing_to_mesh: SetHiddenInGame NOT FOUND on " + narrow(clothingCompName));
     }
 
+    // 2026-09-25: tell the character it is actually WEARING this, which is the
+    // piece that was missing.
+    //
+    // Both writes above were confirmed to fire, and the component still read
+    // IsVisible()=0 eighty-eight milliseconds later, so something re-hides it
+    // immediately after we place the mesh. BP_PlayerCharacter has a replicated
+    // bool per clothing slot - ClothingTorsoEquipped? / ClothingGlovesEquipped? /
+    // ClothingLegsEquipped? / ClothingFeetEquipped?, 0x1DE8..0x1DEB - each with
+    // its own OnRep. On a proxy nothing ever sets them, so the game's own OnRep
+    // sees "no clothing on this slot" and hides the overlay straight back, which
+    // is it correctly doing its job with state we never gave it. Setting the
+    // mesh without setting the flag is describing half a fact.
+    //
+    // Same shape as set_primary_weapon_equipped followed by
+    // call_on_rep_primary_weapon_equipped, already proven in this file: write
+    // the replicated value, then run the OnRep the way replication would.
+    const wchar_t* equippedFlag = nullptr;
+    const wchar_t* equippedOnRep = nullptr;
+    {
+        const std::wstring n(clothingCompName);
+        if (n == L"Clothing_Torso")  { equippedFlag = STR("ClothingTorsoEquipped?");  equippedOnRep = STR("OnRep_ClothingTorsoEquipped?"); }
+        else if (n == L"Clothing_Gloves") { equippedFlag = STR("ClothingGlovesEquipped?"); equippedOnRep = STR("OnRep_ClothingGlovesEquipped?"); }
+        else if (n == L"Clothing_Legs")   { equippedFlag = STR("ClothingLegsEquipped?");   equippedOnRep = STR("OnRep_ClothingLegsEquipped?"); }
+        else if (n == L"Clothing_Feet")   { equippedFlag = STR("ClothingFeetEquipped?");   equippedOnRep = STR("OnRep_ClothingFeetEquipped?"); }
+        // Clothing_Armor has no such flag in the dump, so it is left alone
+        // rather than guessed at.
+    }
+    if (equippedFlag) {
+        bool wrote = false;
+        if (auto* flag = prop_ptr<bool>(reinterpret_cast<UObject*>(actor), equippedFlag)) {
+            *flag = true;
+            wrote = true;
+        }
+        bool repped = false;
+        if (UFunction* onRep = reinterpret_cast<UObject*>(actor)->GetFunctionByNameInChain(equippedOnRep)) {
+            reinterpret_cast<UObject*>(actor)->ProcessEvent(onRep, nullptr);
+            repped = true;
+        }
+        debug_log("equip_clothing_to_mesh: " + narrow(equippedFlag) + " set=" +
+                  std::to_string(wrote) + " onRep=" + std::to_string(repped));
+    }
+
     // The other half of what UpdateBodyParts would have done: clear the bare
     // body mesh this item covers. Without it the proxy wears its clothing over
     // a still-present naked body -- confirmed live, run 1 on PC2, where the
@@ -2974,6 +3016,25 @@ void ProxyManager::sync_equipment(AActor* actor, RemotePlayer& player)
                     // layer, so the slot never passes through a frame with
                     // neither of the two present.
                     restore_body_part_under_clothing(actor, clearClothingName);
+
+                    // Mirror of the equip side: clear the character's own
+                    // "wearing this" flag and run its OnRep, so the game agrees
+                    // the slot is empty rather than being told one thing by the
+                    // mesh and another by the flag.
+                    const wchar_t* offFlag = nullptr;
+                    const wchar_t* offOnRep = nullptr;
+                    switch (i) {
+                        case 4: offFlag = STR("ClothingTorsoEquipped?");  offOnRep = STR("OnRep_ClothingTorsoEquipped?");  break;
+                        case 5: offFlag = STR("ClothingGlovesEquipped?"); offOnRep = STR("OnRep_ClothingGlovesEquipped?"); break;
+                        case 6: offFlag = STR("ClothingLegsEquipped?");   offOnRep = STR("OnRep_ClothingLegsEquipped?");   break;
+                        case 7: offFlag = STR("ClothingFeetEquipped?");   offOnRep = STR("OnRep_ClothingFeetEquipped?");   break;
+                        default: break;
+                    }
+                    if (offFlag) {
+                        if (auto* f = prop_ptr<bool>(reinterpret_cast<UObject*>(actor), offFlag)) *f = false;
+                        if (UFunction* onRep = reinterpret_cast<UObject*>(actor)->GetFunctionByNameInChain(offOnRep))
+                            reinterpret_cast<UObject*>(actor)->ProcessEvent(onRep, nullptr);
+                    }
 
                     auto* clothingComp = prop_obj(reinterpret_cast<UObject*>(actor), clearClothingName);
                     if (clothingComp) {
