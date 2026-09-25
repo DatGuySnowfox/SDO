@@ -1195,6 +1195,56 @@ void log_anim_state(AActor* actor, const char* tag)
         c->ProcessEvent(fn, &p);
         return p.ReturnValue;
     };
+    // 2026-09-25: the layer below reflection. Every property either character
+    // exposes is now known to be identical: a correctly rendering dressed local
+    // player and a broken dressed proxy both read Torso MISSING bones=0,
+    // Clothing_Torso SET bones=69 attachParent=Torso visible=1, meshAsset=SET
+    // meshBones=69, visTickOption=4, recentlyRendered=1, one shared leader-pose
+    // target. Field for field, across five local passes and four proxy passes,
+    // there is nothing left to compare.
+    //
+    // What reflection cannot show is the evaluated pose. A follower whose
+    // leader-pose mapping is live reports the SAME component-space transform as
+    // its leader for a bone they share; one that has silently fallen back to its
+    // own reference pose does not, and no property changes when it does. Probe
+    // one mid-skeleton bone on the leader and on every follower, and the
+    // difference between working and broken becomes a number.
+    RawFGameplayTag probeBone{};
+    std::string probeBoneName = "<none>";
+    if (UFunction* fn = mesh->GetFunctionByNameInChain(L"GetBoneName")) {
+        struct BP { int32_t BoneIndex = 20; RawFGameplayTag ReturnValue{}; } bp;
+        mesh->ProcessEvent(fn, &bp);
+        probeBone = bp.ReturnValue;
+        if (probeBone.ComparisonIndex != 0)
+            probeBoneName = equip_native::fname_to_string(reinterpret_cast<uintptr_t>(&probeBone));
+    }
+    auto bone_pos = [&](UObject* c, double& x, double& y, double& z) -> bool {
+        x = y = z = 0.0;
+        if (!c || probeBone.ComparisonIndex == 0) return false;
+        UFunction* fn = c->GetFunctionByNameInChain(L"GetBoneTransform");
+        if (!fn) return false;
+        struct alignas(16) BTP {
+            RawFGameplayTag   InBoneName{};       // 0x00
+            uint8_t           TransformSpace = 2; // 0x08, RTS_Component
+            uint8_t           _pad[7]{};
+            NativeFTransform  ReturnValue{};      // 0x10
+        } btp;
+        static_assert(offsetof(BTP, ReturnValue) == 0x10, "Kismet param layout");
+        btp.InBoneName = probeBone;
+        c->ProcessEvent(fn, &btp);
+        x = btp.ReturnValue.locX; y = btp.ReturnValue.locY; z = btp.ReturnValue.locZ;
+        return true;
+    };
+    double lx = 0, ly = 0, lz = 0;
+    const bool leaderBoneOk = bone_pos(mesh, lx, ly, lz);
+    {
+        char bb[220];
+        snprintf(bb, sizeof(bb),
+                 "bone_probe: %s#%d leader bone=\"%s\" ok=%d component-space=(%.2f, %.2f, %.2f)",
+                 tag, pass, probeBoneName.c_str(), static_cast<int>(leaderBoneOk), lx, ly, lz);
+        debug_log(bb);
+    }
+
     void** meshAssetSlot = static_cast<void**>(mesh->GetValuePtrByPropertyNameInChain(STR("SkinnedAsset")));
     if (!meshAssetSlot) meshAssetSlot = static_cast<void**>(mesh->GetValuePtrByPropertyNameInChain(STR("SkeletalMesh")));
     const bool meshHasAsset = meshAssetSlot && *meshAssetSlot;
@@ -1277,6 +1327,17 @@ void log_anim_state(AActor* actor, const char* tag)
                  static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(cLeader)),
                  visibleBits ? static_cast<int>(*visibleBits & 0x01) : -1);
         debug_log(pb);
+
+        double cx = 0, cy = 0, cz = 0;
+        if (bone_pos(comp, cx, cy, cz)) {
+            const double dx = cx - lx, dy = cy - ly, dz = cz - lz;
+            const double drift = std::sqrt(dx * dx + dy * dy + dz * dz);
+            char bb[240];
+            snprintf(bb, sizeof(bb),
+                     "bone_probe: %s#%d %-16s component-space=(%.2f, %.2f, %.2f) deltaFromLeader=%.2f",
+                     tag, pass, narrow(partName).c_str(), cx, cy, cz, drift);
+            debug_log(bb);
+        }
     }
 }
 
