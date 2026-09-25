@@ -1,0 +1,18 @@
+PC2 crash, 2026-09-25 ~02:32, build FEDE553335C831506DD65781
+
+ErrorMessage : Unhandled Exception: EXCEPTION_ACCESS_VIOLATION reading address 0x0000000000000000
+CrashType    : Crash
+EngineVersion: 5.6.1-44394996+++UE5+Release-5.6
+
+Callstack carried no main.dll frames; all game-module frames.
+Last debug.log lines before the fault:
+  02:32:06.910 ProxyManager::tick: spawn_proxy ok result=1
+  02:32:06.917 head_rot_diag: ...
+  (no 'component_drift: proxy0:' line at all, which a healthy run always emits)
+
+Diagnosis: access violation reading 0x0 during the first component-drift
+scan of a freshly spawned proxy. drift_part_covered_by_clothing's first
+version ran unconditionally, once per component per scan, walking UObject
+properties on a proxy that was ~7ms old and not yet ready to be walked.
+Fixed by making it the last term of the repair condition, behind the
+existing 2s first-seen window, 1/sec throttle and attempt cap.
