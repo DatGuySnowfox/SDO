@@ -4379,6 +4379,7 @@ struct ComponentDriftCtx {
     uint64_t healthySinceUs = 0;   // 2026-08-16 - see do_component_drift_scan's firstSeenUs comment
     uint64_t lastLeaderPoseRefreshUs = 0; // 2026-08-16 - see check_component_drift's proactive-refresh comment
     int repairAttempts = 0;        // capped - see do_component_drift_scan's repair-call comment
+    bool coveredLogged = false;    // 2026-09-25 - see drift_part_covered_by_clothing
     // 2026-08-14, second root-cause pass: firstSeenUs anchors a grace period
     // before repair starts counting against the cap at all, lastRepairAttemptUs
     // throttles actual repair calls to once/second instead of once per 300ms
@@ -4768,6 +4769,47 @@ static bool vitals_write_disabled()
     return s_off || sm;
 }
 
+// True when this body part's mesh is empty on purpose, because clothing covers
+// it, which is not damage. Clearing the bare mesh under a clothing item is what
+// the game itself does, but the drift scan only sees SET -> MISSING and would
+// otherwise call force_resync_appearance once a second forever: 60 times in one
+// 2.5-minute run, each re-running the whole appearance stage machine,
+// re-applying Arms/Head through SetSkinnedAssetAndUpdate and remapping leader
+// poses (3,352 refresh_leader_pose calls in that same run). That churn was
+// visible as the shirts flickering.
+//
+// Called as the LAST term of the repair condition, so short-circuit evaluation
+// means this UObject property walk only happens once every other guard has
+// already passed. The first version of this check ran unconditionally, once per
+// component per scan, and crashed PC2 with an access violation reading address 0
+// about seven milliseconds after spawn_proxy, before the scan had logged a
+// single proxy0 line: a proxy that has only just been spawned is not ready to
+// have its properties walked. The two-second first-seen window, the
+// once-per-second throttle and the attempt cap all exist for that reason, and a
+// new property walk belongs behind them rather than in front of them.
+//
+// Returning true makes the whole repair branch false, so the caller falls
+// through to its normal trailing work (the wall-clock give-up log and the
+// ctx->hadMesh update) instead of skipping it.
+static bool drift_part_covered_by_clothing(ComponentDriftCtx* ctx)
+{
+    const std::string partName =
+        (ctx->key.find(':') != std::string::npos)
+            ? ctx->key.substr(ctx->key.find(':') + 1)
+            : ctx->key;
+    if (!sdo::body_part_is_covered_by_name(ctx->owner, partName)) return false;
+
+    // Same one-per-second throttle the repair path uses, so the property walk
+    // does not run on every scan tick just because the repair never fires.
+    ctx->lastRepairAttemptUs = sdo::now_micros();
+    if (!ctx->coveredLogged) {
+        ctx->coveredLogged = true;
+        debug_log("component_drift: " + ctx->key +
+                  " is empty because clothing covers it, not repairing");
+    }
+    return true;
+}
+
 static void do_component_drift_scan(void* ctxRaw)
 {
     auto* ctx = static_cast<ComponentDriftCtx*>(ctxRaw);
@@ -5107,33 +5149,17 @@ static void do_component_drift_scan(void* ctxRaw)
         }
         const bool wallClockExpired = ctx->firstSeenUs != 0 &&
                                        nowUs - ctx->firstSeenUs >= 300'000'000ULL; // 5 min hard ceiling, anchored to first-seen-BROKEN
-        // 2026-09-25: a body part whose mesh we cleared on purpose, because
-        // clothing covers it, is not damage. Without this the scan read the
-        // cleared Hands as a missing mesh and called force_resync_appearance
-        // every second forever - 60 times in one 2.5-minute run, each one
-        // re-running the whole appearance stage machine and re-applying
-        // Arms/Head via SetSkinnedAssetAndUpdate plus a leader-pose remap
-        // (3,352 refresh_leader_pose calls in that same run). Reported live as
-        // the shirts flickering. The clothing state is the authority on whether
-        // a part should be bare, exactly as it is in sync_pawn_appearance.
-        const std::string partName =
-            (ctx->key.find(':') != std::string::npos) ? ctx->key.substr(ctx->key.find(':') + 1) : ctx->key;
-        const bool coveredOnPurpose =
-            !hasMeshNow && ctx->owner &&
-            sdo::body_part_is_covered_by_name(ctx->owner, partName);
-        if (coveredOnPurpose && ctx->repairAttempts == 0 && ctx->firstSeenUs != 0) {
-            debug_log("component_drift: " + ctx->key + " is empty because clothing covers it, not repairing");
-            ctx->firstSeenUs = 0;
-        }
-
-        if (hasMeshNow || coveredOnPurpose) {
+        if (hasMeshNow) {
             ctx->repairAttempts = 0;
+            ctx->coveredLogged = false;
         } else if (kEnableBodyPartRepairCalls && ctx->owner &&
                    (ctx->bodyPartCi != 0 || ctx->clothingOnRepName ||
                     (kEnableAppearanceRepair && ctx->appearanceField)) &&
                    nowUs - ctx->firstSeenUs >= 2'000'000ULL &&
                    ctx->repairAttempts < 60 && !wallClockExpired &&
-                   nowUs - ctx->lastRepairAttemptUs >= 1'000'000ULL) {
+                   nowUs - ctx->lastRepairAttemptUs >= 1'000'000ULL &&
+                   // Last term on purpose - see drift_part_covered_by_clothing.
+                   !drift_part_covered_by_clothing(ctx)) {
             ctx->lastRepairAttemptUs = nowUs;
             ctx->repairAttempts++;
             // 2026-08-15: appearanceField entries (HairMesh/BeardMesh/
