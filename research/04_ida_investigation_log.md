@@ -10651,3 +10651,97 @@ mangles the value it exists to report is worse than no diagnostic, because it is
 - **`debug_log()` goes to debug.log; `Output::send` goes to UE4SS.log.** Counting `equip-getter` as
   zero in debug.log briefly looked like proof that a loop never ran. It only meant the line was in
   the other file.
+
+### Proxy clothing does not render: ten attempts, one real finding, still open
+
+This section is written mostly as a record of what was ruled out, because the
+symptom is unresolved and the next person to look at it should not repeat a day
+of work. Every claim below is backed by a measurement in the logs.
+
+**The symptom.** A proxy's `Clothing_Torso` and `Clothing_Gloves` do not draw.
+`Clothing_Legs` and `Clothing_Feet` on the same character, in the same frame, do.
+The local player wearing the same items renders correctly.
+
+**The one real finding.** `USceneComponent::IsVisible()` returns false when
+*either* the visible flag is clear *or* `bHiddenInGame` is set. These are separate
+flags, and only the first is named `bVisible`. Measured on the proxy, every pass:
+
+    Clothing_Torso   bVisible=1  isVisible=0
+    Clothing_Gloves  bVisible=1  isVisible=0
+    Clothing_Legs    bVisible=1  isVisible=1
+    Clothing_Feet    bVisible=1  isVisible=1
+    Torso / Hands    bVisible=1  isVisible=1   (parents are NOT hidden)
+
+That maps exactly onto what is on screen. Something hides two of the four
+overlays. What sets it has not been identified.
+
+**Ruled out by measurement, not argument.** All of these read identical between
+the proxy that draws wrong and the local player that draws right:
+
+    mesh assignment      bone count (69 both)    materials (n and mat0)
+    attach parent        leader-pose target      own visibility flag
+    component location   actor-space bone position
+    leader skeleton (meshAsset SET, 69 bones, visTickOption 4, recentlyRendered 1)
+
+Also ruled out: duplicate proxy actors (one actor, one mesh pointer, one spawn),
+the body-part clear (tested with `no_bodypart_clear.flag`, no change), and an
+ancestor hiding the overlay (parents read `IsVisible()=1`).
+
+**Tried and reverted.** Setting the character's own `ClothingTorsoEquipped?` /
+`ClothingGlovesEquipped?` flags (0x1DE8..0x1DEB) and running their OnReps made it
+strictly worse: the game correctly hid the bare body because the flag said
+clothing was on, and still did not show the overlay, leaving nothing rendered at
+all. Reverted in full. The reasoning was sound and the result was not, which is
+the whole argument for testing rather than shipping on a good argument.
+
+### Four process mistakes worth more than the findings
+
+**Measuring in a frame that cancels the signal.** The bone probe sampled in
+`RTS_Component`, which is relative to each component's own transform, and
+therefore reported `deltaFromLeader = 0.00` for every follower whether it rendered
+correctly or not. The symptom is "parts in the wrong place"; component space is
+precisely the coordinate space that hides that. Switching to `RTS_Actor` was the
+fix. The same error repeated one layer down with the position probe: every
+component reads `offsetFromActor=(0,0,-82)` because skeletal mesh components all
+sit at the mesh origin and it is the bones that place the geometry.
+
+**Reporting "identical on both" as progress.** Nine probes came back identical and
+each was reported as narrowing the problem. It was not narrowing anything: it only
+ever meant the right field had not been asked for yet. `bVisible` was honestly
+reporting 1 the entire time the component was hidden by a different flag. Every
+reading was true and the question was wrong.
+
+**Diagnostics that crash the game.** This probe took PC2 down twice: once reading
+address 0 by walking a proxy's properties seven milliseconds after spawn, once
+reading 0x0d by calling `GetFullName()` on a pointer from `GetMaterial` that was
+non-null but garbage. The second was predictable - the logs had already shown
+`GetNumMaterials` returning 0 while `GetMaterial(0)` returned a pointer, which is
+a plain statement that the out parameter is not reliably written. A read-only
+diagnostic has no business being able to take the game down; it now runs entirely
+inside `seh_invoke`.
+
+**Pattern-matching to a bug already solved.** Removing `SetVisibility(false)` on
+`Hands` genuinely fixed the gloves earlier in the port. When the shirt behaved
+similarly, the same explanation was applied to the general body-part path and
+announced as the answer. It was a real fault and worth fixing, but it was not this
+symptom: `Torso` and `Hands` both read `IsVisible()=1` while their children read 0.
+A prior win made a guess feel earned.
+
+### Dead ends worth not repeating
+
+- `Bounds` is not a reflected property. Every read returns NOT FOUND, so it cannot
+  be compared through the reflection layer.
+- `research/bytecode/`'s clothing decodes predate the port: the header records the
+  old `SurrounDeadBridge` path, and the property pointers in them do not resolve
+  against 5.6.
+- The UE4SS binding exposes no property enumeration, so the "dump every property
+  and diff" approach is not available without extending it.
+
+### The next move, when this is picked up again
+
+Re-dump `EquipClothingToMesh` and `UpdateBodyParts` against the current 5.6 build
+with `bytecode_dump.flag` and decode them properly. Every attempt recorded above
+guessed at what the game does when it dresses a character. The game will say, and
+this project already owns the pipeline to ask it. That is a deliberate piece of
+work rather than another patch, and it is what should have been started hours
+earlier.
