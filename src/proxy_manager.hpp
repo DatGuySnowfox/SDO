@@ -78,6 +78,12 @@ void refresh_leader_pose(RC::Unreal::UObject* followerComp, RC::Unreal::UObject*
 // outright which it is, instead of another inference.
 void log_anim_state(RC::Unreal::AActor* actor, const char* tag);
 
+// True when a bare body part is deliberately empty because clothing covers it.
+// Exported for mod.cpp's component-drift scan, which otherwise reads a cleared
+// part as damage and repairs it forever. Takes the narrow component name so the
+// scan can pass the tail of its own ctx->key ("proxy0:Hands" -> "Hands").
+bool body_part_is_covered_by_name(RC::Unreal::AActor* actor, const std::string& bodyPartName);
+
 // ProxyManager spawns and drives remote-player proxy actors in the UE5 world.
 //
 // Position tracking + actor teleport via K2_SetActorLocationAndRotation, and

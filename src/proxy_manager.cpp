@@ -1045,6 +1045,14 @@ static bool body_part_is_covered(AActor* actor, const wchar_t* bodyPartName)
     return comp && read_skinned_asset(comp) != nullptr;
 }
 
+bool body_part_is_covered_by_name(AActor* actor, const std::string& bodyPartName)
+{
+    // Component names are ASCII, and widen() is not declared this early in the
+    // file, so widen inline rather than duplicating the mapping table.
+    const std::wstring wide(bodyPartName.begin(), bodyPartName.end());
+    return body_part_is_covered(actor, wide.c_str());
+}
+
 // Sets a body part's mesh (null to clear) and re-establishes its leader-pose
 // bone mapping, which SetSkinnedAssetAndUpdate invalidates -- see
 // refresh_leader_pose's comment for why that refresh is mandatory after every
@@ -2496,19 +2504,16 @@ void ProxyManager::sync_equipment(AActor* actor, RemotePlayer& player)
                     // clear case" fix as the naked-body/clothing pulse from
                     // earlier tonight: hide the bare hands whenever gloves
                     // are genuinely equipped.
-                    if (called && slot.slotIndex == 5) {
-                        // Was actor+0x07B0, which is VehicleDrivingComponent on UE 5.6 - this was
-                        // grabbing the vehicle component and treating it as the Hands
-                        // mesh. Hands is at 0x0788; resolved by name.
-                        auto* handsComp = prop_obj(reinterpret_cast<UObject*>(actor), STR("Hands"));
-                        if (handsComp) {
-                            UFunction* visFn = handsComp->GetFunctionByNameInChain(L"SetVisibility");
-                            if (visFn) {
-                                struct Params { bool bNewVisibility = false; bool bPropagateToChildren = false; } vparams;
-                                handsComp->ProcessEvent(visFn, &vparams);
-                            }
-                        }
-                    }
+                    // 2026-09-25: the gloves case used to additionally call
+                    // SetVisibility(false) on the bare Hands component, to stop
+                    // it z-fighting the glove mesh. That is now handled properly
+                    // by hide_body_part_under_clothing, which CLEARS the Hands
+                    // mesh exactly as the game itself does, so the visibility
+                    // hack is redundant. It was also actively harmful:
+                    // Clothing_Gloves is a CHILD of Hands (confirmed in the
+                    // anim_part dump, on the local player too), so hiding Hands
+                    // took the gloves down with it - reported live as the
+                    // proxy's hands being invisible entirely.
                 }
             }
         }
@@ -2655,19 +2660,9 @@ void ProxyManager::sync_equipment(AActor* actor, RemotePlayer& player)
 
                 // Mirror of the hide-on-equip above: gloves coming off means
                 // the bare "Hands" body-part mesh needs to be shown again.
-                if (cleared && i == 5) {
-                    // Was actor+0x07B0, which is VehicleDrivingComponent on UE 5.6 - this was
-                        // grabbing the vehicle component and treating it as the Hands
-                        // mesh. Hands is at 0x0788; resolved by name.
-                        auto* handsComp = prop_obj(reinterpret_cast<UObject*>(actor), STR("Hands"));
-                    if (handsComp) {
-                        UFunction* visFn = handsComp->GetFunctionByNameInChain(L"SetVisibility");
-                        if (visFn) {
-                            struct Params { bool bNewVisibility = true; bool bPropagateToChildren = false; } vparams;
-                            handsComp->ProcessEvent(visFn, &vparams);
-                        }
-                    }
-                }
+                // The matching re-show is gone too: restore_body_part_under_clothing
+                // above puts the real Hands mesh back, which is the whole of what
+                // taking gloves off should do. See the equip side's comment.
             }
         }
     }

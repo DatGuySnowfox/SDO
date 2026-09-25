@@ -5107,7 +5107,26 @@ static void do_component_drift_scan(void* ctxRaw)
         }
         const bool wallClockExpired = ctx->firstSeenUs != 0 &&
                                        nowUs - ctx->firstSeenUs >= 300'000'000ULL; // 5 min hard ceiling, anchored to first-seen-BROKEN
-        if (hasMeshNow) {
+        // 2026-09-25: a body part whose mesh we cleared on purpose, because
+        // clothing covers it, is not damage. Without this the scan read the
+        // cleared Hands as a missing mesh and called force_resync_appearance
+        // every second forever - 60 times in one 2.5-minute run, each one
+        // re-running the whole appearance stage machine and re-applying
+        // Arms/Head via SetSkinnedAssetAndUpdate plus a leader-pose remap
+        // (3,352 refresh_leader_pose calls in that same run). Reported live as
+        // the shirts flickering. The clothing state is the authority on whether
+        // a part should be bare, exactly as it is in sync_pawn_appearance.
+        const std::string partName =
+            (ctx->key.find(':') != std::string::npos) ? ctx->key.substr(ctx->key.find(':') + 1) : ctx->key;
+        const bool coveredOnPurpose =
+            !hasMeshNow && ctx->owner &&
+            sdo::body_part_is_covered_by_name(ctx->owner, partName);
+        if (coveredOnPurpose && ctx->repairAttempts == 0 && ctx->firstSeenUs != 0) {
+            debug_log("component_drift: " + ctx->key + " is empty because clothing covers it, not repairing");
+            ctx->firstSeenUs = 0;
+        }
+
+        if (hasMeshNow || coveredOnPurpose) {
             ctx->repairAttempts = 0;
         } else if (kEnableBodyPartRepairCalls && ctx->owner &&
                    (ctx->bodyPartCi != 0 || ctx->clothingOnRepName ||
