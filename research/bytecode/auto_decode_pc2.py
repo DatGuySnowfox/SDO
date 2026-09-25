@@ -188,7 +188,14 @@ def resolve_cis(ci_num_pairs):
         return {}
 
     time.sleep(min(1.0 + len(ci_num_pairs) * 0.05, 6.0))
-    tail = get_remote_log_tail(max(50, len(ci_num_pairs) * 2 + 10))
+    # 2026-09-25: this tailed the log too, and lost to the same problem that
+    # made every dump look like a timeout: debug.log on a live client is
+    # megabytes and hundreds of lines a second, so the resolve_fname results
+    # scroll out of any fixed-size window before it is read. That is why a whole
+    # run reported "0 names resolved" while the resolver was working perfectly,
+    # which in turn left the decoded output identifying calls only by ci number.
+    # Grep the whole file, and ask for enough matches to cover the batch.
+    tail = grep_remote_log("resolve_fname: ci=", last=max(60, len(ci_num_pairs) * 2 + 20))
     results = {}
     for line in tail.splitlines():
         m = re.search(r'resolve_fname: ci=(-?\d+) num=(-?\d+) -> "(.*)"', line)
