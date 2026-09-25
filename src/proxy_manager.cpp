@@ -1131,8 +1131,28 @@ static void restore_body_part_under_clothing(AActor* actor, const wchar_t* cloth
 void log_anim_state(AActor* actor, const char* tag)
 {
     if (!actor) return;
-    static std::unordered_map<void*, bool> s_logged;
-    if (!s_logged.emplace(actor, true).second) return;
+
+    // 2026-09-25: repeat instead of one-shot. Live report: the shirt renders
+    // correctly and then disappears a moment later. The one-shot dump caught the
+    // proxy at 02:47:08.733 in a perfect state - Clothing_Torso SET, bones=69
+    // matching the leader, visible, leader pose set, every component agreeing
+    // with a correctly dressed local player - which means the state is right at
+    // the instant sampled and wrong afterwards. A single sample cannot show a
+    // transition, and no amount of staring at it will. Sample repeatedly and
+    // diff the dumps instead: whatever field differs between the pass where the
+    // shirt is visible and the pass where it is gone is the answer, without
+    // needing a theory first.
+    //
+    // Eight passes, five seconds apart, then it stops on its own so a long
+    // session does not accumulate noise.
+    static std::unordered_map<void*, std::pair<int, uint64_t>> s_dumps;
+    const uint64_t nowUs = now_micros();
+    auto& rec = s_dumps[actor];
+    if (rec.first >= 8) return;
+    if (rec.first > 0 && nowUs - rec.second < 5'000'000ULL) return;
+    rec.first++;
+    rec.second = nowUs;
+    const int pass = rec.first;
 
     auto* mesh = prop_obj(reinterpret_cast<UObject*>(actor), STR("Mesh"));
     if (!mesh) { debug_log(std::string("anim_state: ") + tag + " Mesh is NULL"); return; }
@@ -1180,13 +1200,13 @@ void log_anim_state(AActor* actor, const char* tag)
     const bool meshHasAsset = meshAssetSlot && *meshAssetSlot;
     const int meshBones = num_bones(mesh);
 
-    char buf[520];
+    char buf[560];
     snprintf(buf, sizeof(buf),
-             "anim_state: %s mesh=0x%llx meshAsset=%s meshBones=%d "
+             "anim_state: %s#%d mesh=0x%llx meshAsset=%s meshBones=%d "
              "animInstance=0x%llx animClass=0x%llx "
              "visTickOption=%d pauseAnims=%d noSkeletonUpdate=%d "
              "meshOwnLeaderPose=0x%llx recentlyRendered=%d",
-             tag,
+             tag, pass,
              static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(mesh)),
              (meshAssetSlot ? (meshHasAsset ? "SET" : "MISSING") : "NOPROP"),
              meshBones,
@@ -1223,7 +1243,8 @@ void log_anim_state(AActor* actor, const char* tag)
     for (const wchar_t* partName : kParts) {
         auto* comp = prop_obj(reinterpret_cast<UObject*>(actor), partName);
         if (!comp) {
-            debug_log(std::string("anim_part: ") + tag + " " + narrow(partName) + " COMPONENT NULL");
+            debug_log(std::string("anim_part: ") + tag + "#" + std::to_string(pass) +
+                      " " + narrow(partName) + " COMPONENT NULL");
             continue;
         }
         void** skinned = static_cast<void**>(comp->GetValuePtrByPropertyNameInChain(STR("SkinnedAsset")));
@@ -1247,8 +1268,8 @@ void log_anim_state(AActor* actor, const char* tag)
         }
         char pb[360];
         snprintf(pb, sizeof(pb),
-                 "anim_part: %s %-16s comp=0x%llx mesh=%s bones=%d attachParent=%s leaderPose=0x%llx visible=%d",
-                 tag, narrow(partName).c_str(),
+                 "anim_part: %s#%d %-16s comp=0x%llx mesh=%s bones=%d attachParent=%s leaderPose=0x%llx visible=%d",
+                 tag, pass, narrow(partName).c_str(),
                  static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(comp)),
                  (skinned ? (*skinned ? "SET" : "MISSING") : "NOPROP"),
                  num_bones(comp),
