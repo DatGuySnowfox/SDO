@@ -972,6 +972,110 @@ static bool equip_actor_to_socket(AActor* actor, AActor* itemActor, bool isSecon
 // Secondary/shotgun case, Sidearm = one-handed like the confirmed pistol
 // case), not independently verified per-slot — Melee (14) in particular is
 // unconfirmed either way.
+// 2026-09-24: the bare body part that a clothing slot covers.
+//
+// Live A/B (run 1 on the new diagnostic, PC2): a correctly dressed LOCAL player
+// reads Torso=MISSING / Clothing_Torso=SET, Legs=MISSING / Clothing_Legs=SET,
+// Feet=MISSING / Clothing_Feet=SET, Hands=MISSING / Clothing_Gloves=SET. The
+// proxy, after equip_clothing_to_mesh has run, reads BOTH set for every one of
+// those pairs -- the naked body and the clothing sharing one skeleton.
+//
+// The reason is in equip_clothing_to_mesh's own header comment: the game clears
+// the bare mesh inside UpdateBodyParts, which we deliberately bypass because its
+// DT_Clothing lookup has no row for roughly half the real items. We took the
+// mesh push from that function and left its body-part clear behind.
+//
+// Arms deliberately has no entry: the same dressed local player reads Arms=SET,
+// so a torso item does not clear it. Biceps/LowerLegs/LowerThighs are not
+// listed either -- they are in the per-component dump now, but until a dressed
+// local player is observed clearing them this table stays limited to the four
+// pairs actually seen, rather than guessing at the rest.
+static const wchar_t* body_part_under_clothing(const wchar_t* clothingCompName)
+{
+    const std::wstring n(clothingCompName);
+    if (n == L"Clothing_Torso")  return STR("Torso");
+    if (n == L"Clothing_Legs")   return STR("Legs");
+    if (n == L"Clothing_Feet")   return STR("Feet");
+    if (n == L"Clothing_Gloves") return STR("Hands");
+    return nullptr; // Clothing_Armor: local reads Clothing_Armor=MISSING even
+                    // while wearing a plate carrier, so no pairing is confirmed.
+}
+
+// Original bare-body meshes, keyed by the body-part component itself, so an
+// unequip can put back exactly what was there rather than re-deriving it from
+// appearance data. Populated on the first clear and never overwritten with null.
+static std::unordered_map<UObject*, UObject*>& original_body_mesh()
+{
+    static std::unordered_map<UObject*, UObject*> m;
+    return m;
+}
+
+static void* read_skinned_asset(UObject* comp)
+{
+    void** slot = static_cast<void**>(comp->GetValuePtrByPropertyNameInChain(STR("SkinnedAsset")));
+    if (!slot) slot = static_cast<void**>(comp->GetValuePtrByPropertyNameInChain(STR("SkeletalMesh")));
+    return slot ? *slot : nullptr;
+}
+
+// Sets a body part's mesh (null to clear) and re-establishes its leader-pose
+// bone mapping, which SetSkinnedAssetAndUpdate invalidates -- see
+// refresh_leader_pose's comment for why that refresh is mandatory after every
+// single swap on one of these followers.
+static bool set_body_part_mesh(AActor* actor, UObject* comp, UObject* newMesh, const char* why)
+{
+    if (!comp) return false;
+    UFunction* fn = comp->GetFunctionByNameInChain(L"SetSkinnedAssetAndUpdate");
+    if (!fn) { debug_log(std::string("body_part: SetSkinnedAssetAndUpdate not found (") + why + ")"); return false; }
+
+    struct Params { UObject* NewMesh = nullptr; bool bReinitPose = false; } params;
+    params.NewMesh = newMesh;
+    comp->ProcessEvent(fn, &params);
+
+    auto* leader = prop_obj(reinterpret_cast<UObject*>(actor), STR("Mesh"));
+    refresh_leader_pose(comp, leader);
+    return true;
+}
+
+// Clear the bare body part a freshly-equipped clothing item covers, caching what
+// was there first so unequip can restore it.
+static void hide_body_part_under_clothing(AActor* actor, const wchar_t* clothingCompName)
+{
+    const wchar_t* partName = body_part_under_clothing(clothingCompName);
+    if (!partName) return;
+    auto* part = prop_obj(reinterpret_cast<UObject*>(actor), partName);
+    if (!part) return;
+
+    void* current = read_skinned_asset(part);
+    if (!current) return; // already cleared - nothing to do, and do NOT cache null
+
+    auto& cache = original_body_mesh();
+    auto it = cache.find(part);
+    if (it == cache.end()) cache.emplace(part, static_cast<UObject*>(current));
+
+    set_body_part_mesh(actor, part, nullptr, "clear under clothing");
+    debug_log(std::string("body_part: cleared ") + narrow(partName) +
+              " under " + narrow(clothingCompName));
+}
+
+// Mirror: put the bare body part back when its clothing slot is emptied.
+static void restore_body_part_under_clothing(AActor* actor, const wchar_t* clothingCompName)
+{
+    const wchar_t* partName = body_part_under_clothing(clothingCompName);
+    if (!partName) return;
+    auto* part = prop_obj(reinterpret_cast<UObject*>(actor), partName);
+    if (!part) return;
+
+    auto& cache = original_body_mesh();
+    auto it = cache.find(part);
+    if (it == cache.end() || !it->second) {
+        debug_log(std::string("body_part: no cached mesh to restore for ") + narrow(partName));
+        return;
+    }
+    set_body_part_mesh(actor, part, it->second, "restore after unequip");
+    debug_log(std::string("body_part: restored ") + narrow(partName) +
+              " after " + narrow(clothingCompName) + " cleared");
+}
+
 void log_anim_state(AActor* actor, const char* tag)
 {
     if (!actor) return;
@@ -1034,6 +1138,11 @@ void log_anim_state(AActor* actor, const char* tag)
         STR("Torso"), STR("Clothing_Torso"), STR("Clothing_Armor"),
         STR("Legs"),  STR("Clothing_Legs"),  STR("Feet"), STR("Clothing_Feet"),
         STR("Hands"), STR("Clothing_Gloves"), STR("Arms"), STR("Head"),
+        // Added after run 1: these three are covered by a torso/legs item on a
+        // real character but were not in the first dump, so whether a dressed
+        // local player clears them is still unknown. They stay out of
+        // body_part_under_clothing until this says otherwise.
+        STR("Biceps"), STR("LowerLegs"), STR("LowerThighs"),
     };
     for (const wchar_t* partName : kParts) {
         auto* comp = prop_obj(reinterpret_cast<UObject*>(actor), partName);
@@ -1045,7 +1154,11 @@ void log_anim_state(AActor* actor, const char* tag)
         if (!skinned) skinned = static_cast<void**>(comp->GetValuePtrByPropertyNameInChain(STR("SkeletalMesh")));
         UObject* parent  = prop_obj(comp, STR("AttachParent"));
         UObject* cLeader = prop_obj(comp, STR("LeaderPoseComponent"));
-        auto* visible    = prop_ptr<bool>(comp, STR("bVisible"));
+        // 2026-09-24: bVisible is a one-bit BITFIELD on USceneComponent, not a
+        // bool. Reading it as a bool returns the whole packed flag byte -- run 1
+        // printed visible=99 and visible=67, which are 0b01100011 and 0b01000011,
+        // not booleans. Mask bit 0 for the real value.
+        auto* visibleBits = prop_ptr<uint8_t>(comp, STR("bVisible"));
 
         std::string parentName = "<NULL>";
         if (parent) {
@@ -1064,7 +1177,7 @@ void log_anim_state(AActor* actor, const char* tag)
                  (skinned ? (*skinned ? "SET" : "MISSING") : "NOPROP"),
                  parentName.c_str(),
                  static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(cLeader)),
-                 visible ? static_cast<int>(*visible) : -1);
+                 visibleBits ? static_cast<int>(*visibleBits & 0x01) : -1);
         debug_log(pb);
     }
 }
@@ -1933,6 +2046,13 @@ static bool equip_clothing_to_mesh(AActor* actor, void* itemAsset, const wchar_t
         clothingComp->ProcessEvent(visFn, &vparams);
     }
 
+    // The other half of what UpdateBodyParts would have done: clear the bare
+    // body mesh this item covers. Without it the proxy wears its clothing over
+    // a still-present naked body -- confirmed live, run 1 on PC2, where the
+    // proxy read Torso=SET and Clothing_Torso=SET simultaneously while a
+    // correctly dressed local player read Torso=MISSING / Clothing_Torso=SET.
+    hide_body_part_under_clothing(actor, clothingCompName);
+
     debug_log("equip_clothing_to_mesh: itemId=\"" +
         equip_native::fname_to_string(reinterpret_cast<uintptr_t>(itemAsset) + 0x30) +
         "\" set mesh directly (bypassing DT_Clothing)");
@@ -2490,6 +2610,11 @@ void ProxyManager::sync_equipment(AActor* actor, RemotePlayer& player)
                     default: break;
                 }
                 if (cleared && clearClothingName) {
+                    // Put the bare body mesh back before hiding the clothing
+                    // layer, so the slot never passes through a frame with
+                    // neither of the two present.
+                    restore_body_part_under_clothing(actor, clearClothingName);
+
                     auto* clothingComp = prop_obj(reinterpret_cast<UObject*>(actor), clearClothingName);
                     if (clothingComp) {
                         UFunction* visFn = clothingComp->GetFunctionByNameInChain(L"SetVisibility");
