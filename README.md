@@ -15,11 +15,17 @@ kept deliberately blunt so nobody wastes an evening on something already known t
 > **Mid-port to UE 5.6.** The game updated from UE 5.3 to **UE 5.6.1** on 2026-09-24, which
 > invalidated most of the mod's assumptions about the game's memory.
 >
-> As of 2026-09-24 two clients connect, spawn, and see each other. Getting there took fixing, in
-> order: two hardcoded executable addresses in the proxy spawn path (both clients died within
-> seconds of the second player joining), then a series of stale struct offsets that each broke
-> something different once the one in front of it was fixed. **Still unverified: whether gameplay
-> actually works with two clients.** Treat the "Working" table as "worked on 5.3, unproven on 5.6."
+> As of 2026-09-24 two clients connect, spawn, see each other, move, and render each other
+> correctly — clothed, with body parts attached and head-look tracking. Getting there took fixing,
+> in order: two hardcoded executable addresses in the proxy spawn path (both clients died within
+> seconds of the second player joining), then roughly forty stale struct offsets across ten
+> separate sites, and finally two logic bugs the offsets had been masking — a resume marker
+> committed before the work it marked, which silently turned any transient failure into a permanent
+> one, and two separate writers fighting over the same body-part mesh property.
+>
+> **Still unverified: everything past "two dressed players standing next to each other."** Combat,
+> vehicles, building, zombies and death/respawn have not been re-tested on 5.6 with two clients.
+> Treat the table below as "worked on 5.3, unproven on 5.6."
 
 Verified = observed working in a live two-client test *on UE 5.3*. Everything else is called out.
 
@@ -49,11 +55,17 @@ Verified = observed working in a live two-client test *on UE 5.3*. Everything el
 | **Zombie proxy rendering** | **Disabled in code** (`spawn_zombie_actor` returns `nullptr` unconditionally). Zombies simulate correctly server-side but are invisible to clients. Five live crashes across three attempted fixes; root cause never found. Do not re-enable casually — read the doc comment on that function first. |
 | `EquipActorToSocket` | Looked up under its Blueprint *display* name (`"Equip Actor to Socket"`). This was long believed never to resolve, and was left unfixed on the grounds that enabling a never-executed `ProcessEvent` call once cost a save. **The 2026-09-24 logs disprove that**: it resolves and fires — 1,859 re-attach calls in one session, because a stale `AttachParent` offset made every equipment slot look orphaned. The offset is fixed; the display-name lookup still wants verifying. |
 | `SpawnBuild` / `Svr_SpawnBuild` | Moved to `BuildingComponent` on 5.6; still looked up on the pawn, so building placement will not fire. |
-| Proxy body meshes | `JigsawItem_DataAsset +0x448` is read as a male/female torso mesh pair. On 5.6 that offset is `MaxWeight`, and no field in the header dump matches the shape the code wants. Left alone rather than guessed at — expect wrong or missing proxy meshes. |
-| Equip socket | Read as an `FGameplayTag` at `JigsawItem_DataAsset +0x280`. On 5.6 that is `EquippedTransform`, and `EquipSocket` is an `FName` at `0x02E0` — so both the offset *and* the type look wrong. Needs tracing before it is touched. |
-| Head-look sync | Proxy heads do not track where a player is looking. A fix is in the tree but **was never verified** — it was deployed as a session ended. Diagnostic logging (`proxy_head_write`) is still present, which is the tell. |
 | Attachment toggle-**off** | Turning a tactical light or NVG *off* did not revert on proxies (only the on-path existed). A fix is in the tree, **unverified**. |
 | `research/Exports/` + `world-data.json` | Re-extracted from the .8 pak (2026-09-24). 982 spawn zones, up from 913. Regenerate with `tools/asset-export` followed by `extract-zombie-data.js`. |
+
+### Known rough edges on 5.6
+
+| Area | Notes |
+| --- | --- |
+| Proxy dress latency | A joining player's proxy takes ~2.3s to finish dressing. Measured: 1.99s of that is the fixed `proxySpawnedAtUs` grace gate, and only 325ms is the actual 20-slot burst (~16ms/slot). The gate was added after reproducible load crashes from touching not-yet-ready proxy state, so it is left alone deliberately. The real fix is to gate on the component tree actually being populated rather than on wall-clock — now safe to attempt, since a not-ready write returns false harmlessly and retries instead of latching. |
+| `Clothing_Armor` pairing | Every other clothing slot clears the bare body part underneath it. Armour has no confirmed pairing: a dressed local player reads `Clothing_Armor = MISSING` while visibly wearing a plate carrier, which is not yet understood. |
+| `Biceps` / `LowerLegs` / `LowerThighs` | Covered by a real torso or legs item, but no dressed local player has been observed clearing them, so they are excluded from the clothing/body-part table rather than guessed at. They are in the per-component diagnostic dump. |
+| Hair / beard sync | The hair/beard write path used UE 5.3 offsets (`0x7C0`/`0x7C8` — `AIOInvoker` and `RadiationComponent` on 5.6) and therefore silently did nothing for the entire port. Now resolved by name, but **unverified**: whatever hair and beard currently render come from some other path, so fixing this may change appearance rather than merely restore it. |
 
 ### Built but never tested
 

@@ -10525,3 +10525,129 @@ For the record, since it comes up: `SurrounDead-Windows.pak` (v11, 1.48 GB) is *
 `EncryptionKeyGuid` is all zeros, `bEncryptedIndex` is 0, and the index reads as plaintext with
 mount point `../../../`. AES-key finders that report the exe as "protected" are finding no key
 because there is none to find. `tools/asset-export/` opens the pak with no key configured at all.
+
+### Two dressed players: the last three bugs, and four theories the data killed
+
+The latch above got `equip_clothing_to_mesh` running on PC2 for the first time — 0 calls before,
+5 after, one per clothing slot, no failures. The proxy's chest was still invisible. The latch was
+real, it just was not the whole story; it had been hiding a second bug behind it the entire time.
+
+What cracked it was a repeatable user-side experiment rather than any log: **take the shirt off and
+the bare chest appears, put it back on and the whole chest vanishes.** That rules out a great deal
+at once. The mesh resolves, the slot is processed, the component is visible, and the skeleton
+animates — otherwise the bare chest could not render correctly in the same spot a moment later.
+
+#### Dump both sides and diff them
+
+Four separate theories had already been reasoned out and each was wrong:
+
+1. **The leader is not animating.** Killed by the shirt-off test — the bare chest renders and
+   animates fine, so `Mesh` is evaluating.
+2. **A stale leader-pose bone mapping.** `refresh_leader_pose` fires after every single
+   `SetSkinnedAssetAndUpdate`, with a real leader pointer, confirmed in the log.
+3. **`equip_clothing_to_mesh` never re-shows the component.** It does; `SetVisibility(true)` is
+   right there.
+4. **The proxy's `Clothing_Torso` is wrongly re-parented**, because `attach_diag` showed its
+   `AttachParent` as the bare `Torso` component rather than `Mesh`.
+
+The fix for guessing was to stop guessing: dump the same fields for the *local* pawn and for each
+proxy, once per actor, and read the difference. The local player renders correctly, so it is the
+control sample. That one diagnostic answered it immediately and killed theory 4 as well —
+`AttachParent` is **identical** on both (`Clothing_Torso` → `Torso` on the local player too), so
+that is simply how the game assembles a character, not a defect. `animClass` is the same pointer on
+both. `visTickOption` is 4 on both. All of it healthy.
+
+The one column that differed:
+
+    local  (dressed, correct)      proxy (after our clothing sync)
+    Torso            MISSING       Torso            SET
+    Clothing_Torso   SET           Clothing_Torso   SET
+    Legs             MISSING       Legs             SET
+    Clothing_Legs    SET           Clothing_Legs    SET
+    Feet             MISSING       Feet             SET
+    Hands            MISSING       Hands            SET
+
+A dressed character has the **bare body mesh cleared**. The proxy was wearing its clothes over a
+still-present naked body, both skinned to one skeleton.
+
+#### The half of UpdateBodyParts we dropped
+
+The cause was already written down in this codebase, in `equip_clothing_to_mesh`'s own header
+comment. The game clears the bare mesh inside `UpdateBodyParts`, and we bypass that function
+deliberately because its `DT_Clothing` lookup has no row for roughly half the real items (50 of 97,
+confirmed 2026-08-12). We took the mesh *push* out of that function and left its body-part *clear*
+behind. Every symptom since — z-fighting "pulsing" in earlier sessions, an invisible chest in this
+one — traces to that omission.
+
+`equip_clothing_to_mesh` now clears the covered part, caching the original mesh keyed by the
+component so unequip restores exactly what was there. The pairing table covers only the four pairs
+actually observed on a dressed local player. `Arms` is deliberately excluded — that same player
+reads `Arms = SET` while dressed. `Clothing_Armor` has no pairing either, because a local player
+wearing a plate carrier reads `Clothing_Armor = MISSING`, which is still not understood.
+
+#### Then the coat flickered
+
+Reported immediately after: the coat flickers before settling. Two writers were fighting over one
+property. `sync_pawn_appearance` applies `bodyPartMeshNames[i]` whenever it is non-empty — which
+puts the naked mesh *back* — and it runs on a repeating stage cycle, roughly once a second per
+part. Clear, restore, clear, restore, until the two happened to agree.
+
+The clothing state is the one that knows whether a part should be bare, so the appearance path now
+defers to it: a non-empty restore is suppressed while a `Clothing_*` component over that part
+actually holds a mesh. The empty-name case is untouched and still wins, since that is the sender
+correctly reporting a covered part. This is the third distinct instance this project has hit of the
+same shape — two independent writers of one piece of visual state, with no agreed owner.
+
+#### Tenth offset site, found while chasing the flicker
+
+The hair/beard stage used a hardcoded `{0x7C0, 0x7C8}` pair. On 5.6 `HairMesh` is `0x0798` and
+`BeardMesh` is `0x07A0`, while `0x07C0` is `AIOInvoker` and `0x07C8` is `RadiationComponent`. The
+loop had been fetching two unrelated non-mesh components and calling `SetStaticMesh` /
+`SetMaterial` / `SetVisibility` on them — resolving nothing, doing nothing, logging nothing, for the
+entire port. Resolved by name, and explicitly **unverified**: whatever hair and beard currently
+render must come from some other path, so this may change appearance rather than restore it.
+
+#### The slowness was measured, not guessed
+
+A joining player's proxy takes a visible moment to dress. The one-slot-per-call cap in
+`sync_equipment` was the obvious suspect and had been flagged as such early. It is not the cause:
+
+    22:08:00.474  proxy spawned
+    22:08:02.464  first equipment write   <- 1.99s of waiting
+    22:08:02.789  all 20 slots done       <- 325ms of actual work
+
+The burst runs at roughly 16ms per slot. Essentially all of the latency is the fixed 2-second
+`proxySpawnedAtUs` grace gate. That gate is left alone on purpose — it was added after
+*reproducible* load crashes from touching not-yet-ready proxy state, and trading a working crash
+guard for 1.7 seconds is not a change to make on a hunch. The principled version is to gate on the
+component tree actually being populated instead of on wall-clock, which the latch fix now makes
+safe to attempt: a not-ready write returns false harmlessly and retries rather than latching.
+
+#### Two diagnostics that lied
+
+- `equip_clothing_to_mesh`'s "about to ProcessEvent" line used `char[96]` for a literal already 86
+  characters long, so every heap pointer it printed lost its last two hex digits. In one window that
+  made `equip_clothing_to_mesh` and `refresh_leader_pose` look like they were touching two different
+  components when they were touching the same one.
+- `bVisible` is a one-bit **bitfield** on `USceneComponent`, not a bool. Reading it through a
+  `bool*` returns the whole packed flag byte — the first dump printed `visible=99` and `visible=67`,
+  which are `0b01100011` and `0b01000011`. Masked to bit 0.
+
+Both are the same lesson as the SEH handler from earlier in this port: a diagnostic that quietly
+mangles the value it exists to report is worse than no diagnostic, because it is trusted.
+
+#### Method notes
+
+- **When one side works and the other does not, dump both and diff.** Four reasoned theories cost
+  hours; one A/B dump of the same fields for the local pawn and the proxy answered it in a single
+  run, and killed a fifth theory that would otherwise have led to "fixing" correct code.
+- **A user-side experiment can be worth more than any log.** "Off shows the chest, on hides it"
+  eliminated the mesh path, the visibility path, the attachment path and the animation path in one
+  sentence.
+- **Clear the logs between runs.** A single accumulated `debug.log` reached 30 MB spanning four runs
+  and two different builds, and message wording from an older build was nearly read as evidence that
+  a fix had not deployed. A 4000-line tail covered 12 seconds and missed the map-load window where
+  the real failure happened. Both cost real time this session.
+- **`debug_log()` goes to debug.log; `Output::send` goes to UE4SS.log.** Counting `equip-getter` as
+  zero in debug.log briefly looked like proof that a loop never ran. It only meant the line was in
+  the other file.
