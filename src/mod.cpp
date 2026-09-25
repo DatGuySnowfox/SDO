@@ -917,7 +917,8 @@ static sdo::Equipment read_local_equipment(AActor* pawn)
 
     sdo::Equipment eq;
 
-    // BP_PlayerCharacter_C.BP_JigHelperComp is a named property at pawn+0x700
+    // BP_PlayerCharacter_C.BP_JigHelperComp, resolved by name (it was at
+    // pawn+0x700 on UE 5.3 and is 0x06D8 on 5.6 — hence by name)
     // (research/CXXHeaderDump/BP_PlayerCharacter.hpp) — read it directly
     // rather than via FindFirstOf("BP_JigHelperComp_C"), which only happened
     // to return the right instance in solo testing; with more than one
@@ -4390,7 +4391,7 @@ struct ComponentDriftCtx {
 // entries themselves, which ARE the counterpart). See do_body_part_repair's
 // own comment for why this is needed: a null base-mesh slot is CORRECT,
 // not broken, whenever clothing actually covers that slot.
-struct BodyPartRepairCtx { AActor* owner; int32_t ci; const std::string* key; const wchar_t* clothingOnRepName; UObject* comp; uintptr_t clothingCompOffset; };
+struct BodyPartRepairCtx { AActor* owner; int32_t ci; const std::string* key; const wchar_t* clothingOnRepName; UObject* comp; const wchar_t* clothingCompName; };
 
 // UpdateBodyParts alone reapplies the BARE body mesh only — live-reported
 // 2026-08-14: after repair, bare skin showed through gaps in the pants
@@ -4450,9 +4451,8 @@ static void do_body_part_repair(void* ctxRaw)
     // entirely — nothing to repair. Only proceed to UpdateBodyParts below
     // when clothing is NOT covering this slot, i.e. bare skin should
     // genuinely be showing and isn't.
-    if (ctx->clothingCompOffset) {
-        auto* clothingComp = *reinterpret_cast<UObject**>(
-            reinterpret_cast<uintptr_t>(ctx->owner) + ctx->clothingCompOffset);
+    if (ctx->clothingCompName) {
+        auto* clothingComp = obj_prop(ctx->owner, ctx->clothingCompName);
         if (clothingComp) {
             void** clothMeshSlot = static_cast<void**>(clothingComp->GetValuePtrByPropertyNameInChain(L"SkinnedAsset"));
             if (!clothMeshSlot) clothMeshSlot = static_cast<void**>(clothingComp->GetValuePtrByPropertyNameInChain(L"SkeletalMesh"));
@@ -5098,11 +5098,16 @@ static void do_component_drift_scan(void* ctxRaw)
                 // kNames table) — 0 for anything without a base/overlay
                 // pair (including the Clothing_X rows themselves, ci==0,
                 // which don't need this check at all).
-                uintptr_t clothingOffset = 0;
+                // Was a second copy of the UE 5.3 clothing-offset table -
+                // 0x0770/0x0768/0x0760 are Feet/(unused)/Arms on 5.6, so the
+                // local repair reached for the wrong components entirely. The
+                // proxy-side copy of this table was corrected earlier; this one
+                // was missed. Names now, so the two cannot diverge again.
+                const wchar_t* clothingOffset = nullptr;
                 switch (ctx->bodyPartCi) {
-                    case 1732710: clothingOffset = 0x0770; break; // Torso
-                    case 1732718: clothingOffset = 0x0768; break; // Legs
-                    case 1732721: clothingOffset = 0x0760; break; // Feet
+                    case 1732710: clothingOffset = STR("Clothing_Torso"); break;
+                    case 1732718: clothingOffset = STR("Clothing_Legs");  break;
+                    case 1732721: clothingOffset = STR("Clothing_Feet");  break;
                     default: break;
                 }
                 BodyPartRepairCtx repairCtx{ ctx->owner, ctx->bodyPartCi, &ctx->key, ctx->clothingOnRepName, ctx->comp, clothingOffset };
