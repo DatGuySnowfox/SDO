@@ -1159,13 +1159,37 @@ void log_anim_state(AActor* actor, const char* tag)
     auto* compTick   = prop_ptr<bool>(mesh, STR("bTickInEditor"));
     (void)compTick;
 
-    char buf[400];
+    // 2026-09-25: the leader's OWN skeleton state. Every follower property the
+    // mod can read is healthy and identical to a correctly dressed local player,
+    // yet the proxy renders its parts spread apart as though each were drawn
+    // against a different skeleton. A leader-pose follower can only be as good as
+    // its leader: if the proxy's Mesh has no SkinnedAsset, or a different bone
+    // count from the followers mapped onto it, every follower falls back to its
+    // own reference pose and nothing in the follower's own properties would show
+    // it. This is the one thing in the chain that was never dumped.
+    auto num_bones = [](UObject* c) -> int {
+        if (!c) return -1;
+        UFunction* fn = c->GetFunctionByNameInChain(L"GetNumBones");
+        if (!fn) return -2;
+        struct P { int32_t ReturnValue = 0; } p;
+        c->ProcessEvent(fn, &p);
+        return p.ReturnValue;
+    };
+    void** meshAssetSlot = static_cast<void**>(mesh->GetValuePtrByPropertyNameInChain(STR("SkinnedAsset")));
+    if (!meshAssetSlot) meshAssetSlot = static_cast<void**>(mesh->GetValuePtrByPropertyNameInChain(STR("SkeletalMesh")));
+    const bool meshHasAsset = meshAssetSlot && *meshAssetSlot;
+    const int meshBones = num_bones(mesh);
+
+    char buf[520];
     snprintf(buf, sizeof(buf),
-             "anim_state: %s mesh=0x%llx animInstance=0x%llx animClass=0x%llx "
+             "anim_state: %s mesh=0x%llx meshAsset=%s meshBones=%d "
+             "animInstance=0x%llx animClass=0x%llx "
              "visTickOption=%d pauseAnims=%d noSkeletonUpdate=%d "
              "meshOwnLeaderPose=0x%llx recentlyRendered=%d",
              tag,
              static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(mesh)),
+             (meshAssetSlot ? (meshHasAsset ? "SET" : "MISSING") : "NOPROP"),
+             meshBones,
              static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(anim)),
              static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(animClass)),
              visTick    ? static_cast<int>(*visTick)    : -1,
@@ -1221,12 +1245,13 @@ void log_anim_state(AActor* actor, const char* tag)
             const size_t dot = parentName.find_last_of('.');
             if (dot != std::string::npos) parentName = parentName.substr(dot + 1);
         }
-        char pb[320];
+        char pb[360];
         snprintf(pb, sizeof(pb),
-                 "anim_part: %s %-16s comp=0x%llx mesh=%s attachParent=%s leaderPose=0x%llx visible=%d",
+                 "anim_part: %s %-16s comp=0x%llx mesh=%s bones=%d attachParent=%s leaderPose=0x%llx visible=%d",
                  tag, narrow(partName).c_str(),
                  static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(comp)),
                  (skinned ? (*skinned ? "SET" : "MISSING") : "NOPROP"),
+                 num_bones(comp),
                  parentName.c_str(),
                  static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(cLeader)),
                  visibleBits ? static_cast<int>(*visibleBits & 0x01) : -1);
