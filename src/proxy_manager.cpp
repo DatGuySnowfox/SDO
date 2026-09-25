@@ -1076,6 +1076,22 @@ static bool set_body_part_mesh(AActor* actor, UObject* comp, UObject* newMesh, c
 // was there first so unequip can restore it.
 static void hide_body_part_under_clothing(AActor* actor, const wchar_t* clothingCompName)
 {
+    // 2026-09-25: switchable, because clearing the bare mesh is the one change
+    // that sits between a proxy that assembled correctly and one whose shirt and
+    // arms render in reference pose while its pants and boots render fine. Every
+    // property the mod can see says the proxy is configured exactly like a
+    // correctly dressed local player - mesh, attach parent, leader pose and
+    // visibility all match field for field - so the difference is in something
+    // not visible from reflection, and the only way to settle it is to turn this
+    // off and look. Flag file: no_bodypart_clear.flag in the SDO appdata
+    // folder, or SDO_NO_BODYPART_CLEAR=1.
+    static const bool disabled = env_flag_set_pm(L"SDO_NO_BODYPART_CLEAR", L"no_bodypart_clear.flag");
+    if (disabled) {
+        static bool logged = false;
+        if (!logged) { logged = true; debug_log("body_part: clear DISABLED by no_bodypart_clear.flag"); }
+        return;
+    }
+
     const wchar_t* partName = body_part_under_clothing(clothingCompName);
     if (!partName) return;
     auto* part = prop_obj(reinterpret_cast<UObject*>(actor), partName);
