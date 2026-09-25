@@ -1267,6 +1267,38 @@ void log_anim_state(AActor* actor, const char* tag)
         return "n=" + std::to_string(numMats) + " mat0=" + first;
     };
 
+    // 2026-09-25: WORLD-space component position, relative to the actor.
+    //
+    // The bone probe above samples in component space (RTS_Component), which by
+    // definition cancels out each component's own world transform. It proved the
+    // pose is shared - every component holding a mesh reads deltaFromLeader=0.00
+    // on the proxy exactly as on the working local player - but it is silent on
+    // WHERE each component sits, and "parts in the wrong places" is the entire
+    // symptom. Component space was the one coordinate space that mathematically
+    // hides what we are looking for.
+    //
+    // Offset from the actor's own location is the direct measurement: on a
+    // correctly assembled character every body part and clothing layer sits
+    // within roughly a body height of the actor origin, and two characters
+    // wearing the same items should read near-identical offsets. A part rendering
+    // detached shows up here as a number that does not match its counterpart.
+    double ax = 0, ay = 0, az = 0;
+    if (UFunction* fn = actor->GetFunctionByNameInChain(L"K2_GetActorLocation")) {
+        struct P { double X = 0, Y = 0, Z = 0; } p;
+        actor->ProcessEvent(fn, &p);
+        ax = p.X; ay = p.Y; az = p.Z;
+    }
+    auto world_offset = [&](UObject* c, double& ox, double& oy, double& oz) -> bool {
+        ox = oy = oz = 0.0;
+        if (!c) return false;
+        UFunction* fn = c->GetFunctionByNameInChain(L"K2_GetComponentLocation");
+        if (!fn) return false;
+        struct P { double X = 0, Y = 0, Z = 0; } p;
+        c->ProcessEvent(fn, &p);
+        ox = p.X - ax; oy = p.Y - ay; oz = p.Z - az;
+        return true;
+    };
+
     double lx = 0, ly = 0, lz = 0;
     const bool leaderBoneOk = bone_pos(mesh, lx, ly, lz);
     {
@@ -1275,6 +1307,14 @@ void log_anim_state(AActor* actor, const char* tag)
                  "bone_probe: %s#%d leader bone=\"%s\" ok=%d component-space=(%.2f, %.2f, %.2f)",
                  tag, pass, probeBoneName.c_str(), static_cast<int>(leaderBoneOk), lx, ly, lz);
         debug_log(bb);
+
+        double mx = 0, my = 0, mz = 0;
+        world_offset(mesh, mx, my, mz);
+        char wb[200];
+        snprintf(wb, sizeof(wb),
+                 "pos_probe: %s#%d %-16s offsetFromActor=(%.2f, %.2f, %.2f) actorAt=(%.1f, %.1f, %.1f)",
+                 tag, pass, "Mesh(leader)", mx, my, mz, ax, ay, az);
+        debug_log(wb);
     }
 
     void** meshAssetSlot = static_cast<void**>(mesh->GetValuePtrByPropertyNameInChain(STR("SkinnedAsset")));
@@ -1373,6 +1413,16 @@ void log_anim_state(AActor* actor, const char* tag)
 
         debug_log("mat_probe: " + std::string(tag) + "#" + std::to_string(pass) + " " +
                   narrow(partName) + " " + mat_summary(comp));
+
+        double ox = 0, oy = 0, oz = 0;
+        if (world_offset(comp, ox, oy, oz)) {
+            char wb[220];
+            snprintf(wb, sizeof(wb),
+                     "pos_probe: %s#%d %-16s offsetFromActor=(%.2f, %.2f, %.2f) dist=%.2f",
+                     tag, pass, narrow(partName).c_str(), ox, oy, oz,
+                     std::sqrt(ox * ox + oy * oy + oz * oz));
+            debug_log(wb);
+        }
     }
 }
 
