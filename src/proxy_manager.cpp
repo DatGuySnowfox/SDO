@@ -1128,6 +1128,18 @@ static void restore_body_part_under_clothing(AActor* actor, const wchar_t* cloth
               " after " + narrow(clothingCompName) + " cleared");
 }
 
+static bool seh_invoke(void (*fn)(void*), void* ctx); // defined below
+
+struct AnimProbeCtx { AActor* actor; const char* tag; int pass; };
+static void anim_probe_body(void* raw);
+
+// 2026-09-25: this probe has now crashed the game twice on PC2 - first an access
+// violation reading 0 from walking a proxy's properties seven milliseconds after
+// spawn, now one reading 0x0d, a garbage near-null pointer being dereferenced
+// while reading material names. Diagnostics exist to explain crashes, not to
+// cause them, and a read-only probe has no business being able to take the game
+// down. Everything it does now runs inside SEH: if any part of it faults, the
+// probe reports that and the game carries on.
 void log_anim_state(AActor* actor, const char* tag)
 {
     if (!actor) return;
@@ -1153,6 +1165,20 @@ void log_anim_state(AActor* actor, const char* tag)
     rec.first++;
     rec.second = nowUs;
     const int pass = rec.first;
+
+    AnimProbeCtx ctx{ actor, tag, pass };
+    if (!seh_invoke(anim_probe_body, &ctx)) {
+        debug_log(std::string("anim_state: ") + tag + "#" + std::to_string(pass) +
+                  " PROBE CRASHED, caught via SEH - the game is unaffected");
+    }
+}
+
+static void anim_probe_body(void* raw)
+{
+    auto* pctx = static_cast<AnimProbeCtx*>(raw);
+    AActor* actor    = pctx->actor;
+    const char* tag  = pctx->tag;
+    const int pass   = pctx->pass;
 
     auto* mesh = prop_obj(reinterpret_cast<UObject*>(actor), STR("Mesh"));
     if (!mesh) { debug_log(std::string("anim_state: ") + tag + " Mesh is NULL"); return; }
@@ -1225,7 +1251,18 @@ void log_anim_state(AActor* actor, const char* tag)
         if (!fn) return false;
         struct alignas(16) BTP {
             RawFGameplayTag   InBoneName{};       // 0x00
-            uint8_t           TransformSpace = 2; // 0x08, RTS_Component
+            // 2026-09-25: was RTS_Component (2). Component space is relative to
+            // the component's own transform, and every one of these components
+            // sits at the same mesh origin - the pos_probe confirmed all
+            // fourteen read offsetFromActor=(0,0,-82), identically. So component
+            // space cancelled exactly the displacement being hunted, and reported
+            // 0.00 for every follower whether it rendered correctly or not.
+            // RTS_Actor (1) places each bone relative to the actor, which is
+            // where the rendered geometry actually is: a correctly assembled
+            // character puts its head bone near the top and its feet near the
+            // bottom, and two characters in the same pose read near-identical
+            // values. This is the measurement the symptom has needed all along.
+            uint8_t           TransformSpace = 1; // 0x08, RTS_Actor
             uint8_t           _pad[7]{};
             NativeFTransform  ReturnValue{};      // 0x10
         } btp;
@@ -1252,19 +1289,24 @@ void log_anim_state(AActor* actor, const char* tag)
             c->ProcessEvent(fn, &p);
             numMats = p.ReturnValue;
         }
-        std::string first = "<none>";
+        // 2026-09-25: this used to call GetFullName() on the returned material,
+        // guarded only by a null check. GetNumMaterials and GetMaterial disagreed
+        // in the live logs - components reported n=0 while GetMaterial(0) handed
+        // back a non-null pointer - so the out parameter was not reliably being
+        // written, and a stale or garbage non-null value sails straight past a
+        // null check. Dereferencing one of those is what raised the access
+        // violation at 0x0d. Report the pointer instead: comparing local against
+        // proxy only needs to know whether the two match, and a pointer answers
+        // that without touching the object.
+        unsigned long long mat0 = 0;
         if (UFunction* fn = c->GetFunctionByNameInChain(L"GetMaterial")) {
             struct P { int32_t ElementIndex = 0; UObject* ReturnValue = nullptr; } p;
             c->ProcessEvent(fn, &p);
-            if (p.ReturnValue) {
-                first = narrow(p.ReturnValue->GetFullName());
-                const size_t dot = first.find_last_of('.');
-                if (dot != std::string::npos) first = first.substr(dot + 1);
-            } else {
-                first = "NULL";
-            }
+            mat0 = static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(p.ReturnValue));
         }
-        return "n=" + std::to_string(numMats) + " mat0=" + first;
+        char mb[64];
+        snprintf(mb, sizeof(mb), "n=%d mat0=0x%llx", numMats, mat0);
+        return std::string(mb);
     };
 
     // 2026-09-25: WORLD-space component position, relative to the actor.
@@ -1304,7 +1346,7 @@ void log_anim_state(AActor* actor, const char* tag)
     {
         char bb[220];
         snprintf(bb, sizeof(bb),
-                 "bone_probe: %s#%d leader bone=\"%s\" ok=%d component-space=(%.2f, %.2f, %.2f)",
+                 "bone_probe: %s#%d leader bone=\"%s\" ok=%d actor-space=(%.2f, %.2f, %.2f)",
                  tag, pass, probeBoneName.c_str(), static_cast<int>(leaderBoneOk), lx, ly, lz);
         debug_log(bb);
 
@@ -1406,7 +1448,7 @@ void log_anim_state(AActor* actor, const char* tag)
             const double drift = std::sqrt(dx * dx + dy * dy + dz * dz);
             char bb[240];
             snprintf(bb, sizeof(bb),
-                     "bone_probe: %s#%d %-16s component-space=(%.2f, %.2f, %.2f) deltaFromLeader=%.2f",
+                     "bone_probe: %s#%d %-16s actor-space=(%.2f, %.2f, %.2f) deltaFromLeader=%.2f",
                      tag, pass, narrow(partName).c_str(), cx, cy, cz, drift);
             debug_log(bb);
         }
