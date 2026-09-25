@@ -1129,14 +1129,24 @@ static void do_weapon_attach_scan(void* ctxRaw)
                     if (nestedGetOwnerFn) nestedComp->ProcessEvent(nestedGetOwnerFn, &nestedOwner);
                     if (!nestedOwner) continue;
 
-                    const uintptr_t attInfoDA = *reinterpret_cast<uintptr_t*>(
-                        reinterpret_cast<uintptr_t>(nestedOwner) + 0x02C0);
+                    // Was nestedOwner+0x02C0, which is AttachmentUID (an FGuid)
+                    // on UE 5.6 — the data asset is "Attachment Info" at
+                    // 0x02D0. Note the space: that is the real property name.
+                    auto** attInfoSlot = static_cast<UObject**>(
+                        reinterpret_cast<UObject*>(nestedOwner)
+                            ->GetValuePtrByPropertyNameInChain(L"Attachment Info"));
+                    const uintptr_t attInfoDA = reinterpret_cast<uintptr_t>(
+                        (attInfoSlot && *attInfoSlot) ? *attInfoSlot : nullptr);
                     if (!attInfoDA) continue;
                     std::string nestedItemId = native::fname_to_string(attInfoDA + 0x30);
                     if (nestedItemId.empty()) continue;
 
-                    const uint32_t activateCi = *reinterpret_cast<const uint32_t*>(
-                        reinterpret_cast<uintptr_t>(nestedOwner) + 0x02C8);
+                    // Was nestedOwner+0x02C8; ActivateState is at 0x02D8 on 5.6.
+                    uint32_t activateCi = 0;
+                    if (auto* actPtr = static_cast<const uint32_t*>(
+                            reinterpret_cast<UObject*>(nestedOwner)
+                                ->GetValuePtrByPropertyNameInChain(STR("ActivateState"))))
+                        activateCi = *actPtr;
                     nestedActiveByItemId[nestedItemId] = (activateCi != 0);
                 }
             }
@@ -1504,8 +1514,10 @@ static sdo::PlayerLights read_local_player_lights(AActor* pawn)
     if (out.flashlightOn) {
         auto* lightSlot = obj_prop(pawn, STR("Flashlight"));
         if (lightSlot)
-            out.flashlightIntensity = *reinterpret_cast<const float*>(
-                reinterpret_cast<uintptr_t>(lightSlot) + 0x02B4);
+            // Was lightSlot+0x02B4; Intensity is at 0x0264 on UE 5.6.
+            if (auto* ip = static_cast<const float*>(
+                    lightSlot->GetValuePtrByPropertyNameInChain(STR("Intensity"))))
+                out.flashlightIntensity = *ip;
     }
     return out;
 }
@@ -4038,7 +4050,11 @@ static void do_current_actor_scan(void* rawCtx)
         if (!pickupComp) continue;
 
         const uintptr_t pickupAddr = reinterpret_cast<uintptr_t>(pickupComp);
-        void* currentActor = *reinterpret_cast<void**>(pickupAddr + 0xE0);
+        // Was pickupAddr+0xE0, which is inside RandomStatConfig on UE 5.6;
+        // CurrentActor is at 0x00F8.
+        auto** curSlot = static_cast<void**>(
+            pickupComp->GetValuePtrByPropertyNameInChain(STR("CurrentActor")));
+        void* currentActor = curSlot ? *curSlot : nullptr;
         ctx->findings->push_back({ pickupAddr, currentActor, child });
     }
 }
@@ -5862,7 +5878,11 @@ static void check_one_gloves_flicker_component(AActor* pawn, const wchar_t* prop
     ReadCtx ctx{ comp, false, 0 };
     const bool ok = seh_invoke([](void* raw) {
         auto* c = static_cast<ReadCtx*>(raw);
-        c->visible = *reinterpret_cast<const uint8_t*>(reinterpret_cast<uintptr_t>(c->comp) + 0x188) != 0;
+        // Was comp+0x188, which is ComponentVelocity on UE 5.6; bVisible is
+        // at 0x01A0. The old read reported a float's bytes as a visibility flag.
+        const auto* visPtr = static_cast<const uint8_t*>(
+            c->comp->GetValuePtrByPropertyNameInChain(STR("bVisible")));
+        c->visible = visPtr && (*visPtr != 0);
         c->meshPtr = reinterpret_cast<uintptr_t>(obj_prop(static_cast<UObject*>(c->comp), STR("SkinnedAsset")));
     }, &ctx);
     if (!ok) return;
@@ -7542,7 +7562,10 @@ static void handle_build_hook(void* params)
         debug_log("handle_build_hook: pawn+0x7E0 BuildingComponent is null");
         return;
     }
-    const uintptr_t daRef = *reinterpret_cast<uintptr_t*>(buildingComp + 0x298);
+    // Was buildingComp+0x298; DARef is at 0x02C0 on UE 5.6.
+    auto** daSlot = static_cast<UObject**>(
+        reinterpret_cast<UObject*>(buildingComp)->GetValuePtrByPropertyNameInChain(STR("DARef")));
+    const uintptr_t daRef = reinterpret_cast<uintptr_t>((daSlot && *daSlot) ? *daSlot : nullptr);
     if (!daRef) {
         debug_log("handle_build_hook: BuildingComponent->DARef is null");
         return;

@@ -1449,7 +1449,11 @@ static AActor* spawn_and_equip_item_visual(AActor* actor, void* itemAsset, bool 
             itemActor->GetValuePtrByPropertyNameInChain(L"BP_JigPickupComponent"));
         UObject* pickupComp = (pickupCompSlot && *pickupCompSlot) ? *pickupCompSlot : nullptr;
         if (pickupComp) {
-            *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(pickupComp) + 0xE0) = nullptr;
+            // Was pickupComp+0xE0 (inside RandomStatConfig on UE 5.6);
+            // CurrentActor is at 0x00F8.
+            if (auto** curSlot = static_cast<void**>(
+                    pickupComp->GetValuePtrByPropertyNameInChain(STR("CurrentActor"))))
+                *curSlot = nullptr;
             debug_log("spawn_and_equip_item_visual: cleared CurrentActor to prevent CheckDistanceFromActor auto-release");
         } else {
             debug_log("spawn_and_equip_item_visual: BP_JigPickupComponent not found, could not clear CurrentActor");
@@ -1544,8 +1548,10 @@ static AActor* spawn_and_equip_item_visual(AActor* actor, void* itemAsset, bool 
         // world transform (K2_GetComponentToWorld) to see exactly where the
         // engine thinks this component is, instead of inferring it from
         // "falls through the map" descriptions alone.
-        const auto* relLoc = reinterpret_cast<const double*>(
-            reinterpret_cast<uintptr_t>(itemRoot) + 0x0128);
+        // RelativeLocation is 0x0140 on UE 5.6, not 0x0128 as the comment
+        // above says — resolved by name so it cannot drift again.
+        const auto* relLoc = static_cast<const double*>(
+            reinterpret_cast<UObject*>(itemRoot)->GetValuePtrByPropertyNameInChain(STR("RelativeLocation")));
         char buf2[128];
         snprintf(buf2, sizeof(buf2), "spawn_and_equip_item_visual: RelativeLocation=(%.1f, %.1f, %.1f)",
                  relLoc[0], relLoc[1], relLoc[2]);
@@ -1582,8 +1588,9 @@ static AActor* spawn_and_attach_weapon_attachment(AActor* weaponActor, void* att
 {
     if (!weaponActor || !attachmentItemAsset) return nullptr;
 
-    auto* actorClass = *reinterpret_cast<UClass**>(
-        reinterpret_cast<uintptr_t>(attachmentItemAsset) + 0x3D8);
+    // Was attachmentItemAsset+0x3D8; Local_ActorClass is at 0x0438 on UE 5.6.
+    auto* actorClass = static_cast<UClass*>(
+        prop_obj(reinterpret_cast<UObject*>(attachmentItemAsset), STR("Local_ActorClass")));
     if (!actorClass) {
         debug_log("spawn_and_attach_weapon_attachment: Local_ActorClass is null on item asset");
         return nullptr;
@@ -1636,8 +1643,14 @@ static AActor* spawn_and_attach_weapon_attachment(AActor* weaponActor, void* att
         return attachmentActor;
     }
 
-    const RawFGameplayTag socket = *reinterpret_cast<RawFGameplayTag*>(
-        reinterpret_cast<uintptr_t>(attachmentItemAsset) + 0x398);
+    // Was attachmentItemAsset+0x398. Local_AttachSocket is at 0x03F8 on UE 5.6
+    // and is an FName, not an FGameplayTag — the old read was the wrong offset
+    // AND the wrong type.
+    RawFGameplayTag socket{};
+    if (auto* sockPtr = static_cast<RawFGameplayTag*>(
+            reinterpret_cast<UObject*>(attachmentItemAsset)
+                ->GetValuePtrByPropertyNameInChain(STR("Local_AttachSocket"))))
+        socket = *sockPtr;
 
     UFunction* attachFn = attachmentRoot->GetFunctionByNameInChain(L"K2_AttachToComponent");
     if (attachFn) {
