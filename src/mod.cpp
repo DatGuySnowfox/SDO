@@ -2630,10 +2630,21 @@ static void check_max_vitals_trigger()
     if (n == 0 || n >= MAX_PATH) return;
     std::wstring flag = std::wstring(path, n) + L"\\SDO\\max_vitals.flag";
     if (GetFileAttributesW(flag.c_str()) == INVALID_FILE_ATTRIBUTES) return;
-    DeleteFileW(flag.c_str());
 
+    // 2026-09-25: the flag used to be deleted HERE, before the pawn was
+    // looked up. Dropping it while the game is closed means it fires during
+    // load, when find_local_pawn() is still null, so it consumed itself and
+    // did nothing: one "max_vitals: no local pawn" line and the flag gone.
+    // Reported live as the flag simply not working.
+    //
+    // Same shape as the equipment resume-marker bug fixed earlier in this
+    // port: the work is marked done before it is done. Delete only once a
+    // pawn was actually found, so the flag survives the loading screen and
+    // fires on the first tick that has something to act on.
     AActor* pawn = find_local_pawn();
-    if (!pawn) { debug_log("max_vitals: no local pawn"); return; }
+    if (!pawn) return; // polls every tick during load; no log line by design
+
+    DeleteFileW(flag.c_str());
 
     // Same UE 5.3 offsets as the other vitals writers had; resolved by name
     // now so this cannot scribble over unrelated pawn memory.
