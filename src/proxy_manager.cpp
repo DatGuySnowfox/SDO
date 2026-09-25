@@ -2384,6 +2384,31 @@ static bool equip_clothing_to_mesh(AActor* actor, void* itemAsset, const wchar_t
         clothingComp->ProcessEvent(visFn, &vparams);
     }
 
+    // 2026-09-25: and clear bHiddenInGame, which is a SEPARATE flag from
+    // bVisible and was the whole problem.
+    //
+    // Measured live on the proxy, every pass: Clothing_Torso and
+    // Clothing_Gloves read bVisible=1 but IsVisible()=0, while Clothing_Legs
+    // and Clothing_Feet read 1 and 1 - which is exactly what was on screen,
+    // pants and boots drawn, shirt and gloves not. Their parents (Torso, Hands)
+    // were visible, so this was not an ancestor hiding them.
+    // USceneComponent::IsVisible() returns false when EITHER the visible flag is
+    // clear OR bHiddenInGame is set, and nothing in this project ever sets
+    // bHiddenInGame - the game does, and its own equip path is what clears it
+    // again. We push the mesh directly and never did.
+    //
+    // This is why nine rounds of probing came back clean: bVisible is the flag
+    // everything here read, and it was honestly reporting 1 the entire time the
+    // component was hidden by the other flag. The reading was true; the question
+    // was wrong.
+    UFunction* hideFn = clothingComp->GetFunctionByNameInChain(L"SetHiddenInGame");
+    if (hideFn) {
+        struct HideParams { bool NewHidden = false; bool bPropagateToChildren = false; } hparams;
+        clothingComp->ProcessEvent(hideFn, &hparams);
+    } else {
+        debug_log("equip_clothing_to_mesh: SetHiddenInGame NOT FOUND on " + narrow(clothingCompName));
+    }
+
     // The other half of what UpdateBodyParts would have done: clear the bare
     // body mesh this item covers. Without it the proxy wears its clothing over
     // a still-present naked body -- confirmed live, run 1 on PC2, where the
