@@ -1,6 +1,6 @@
 'use strict';
 
-// Same wire format as runtime/src/protocol.js — kept as a separate copy so
+// Same wire format as runtime/src/protocol.js - kept as a separate copy so
 // the server directory is independently deployable without the runtime tree.
 
 const FRAME_MAGIC      = 0x53444F33;
@@ -108,7 +108,7 @@ function decodeString(buf, offset = 0) {
 
 // ── Entity kind constants ──────────────────────────────────────────────────────
 // Must match src/protocol.hpp's `enum class EntityKind` numeric values exactly
-// (the client decodes this byte directly into that enum) — NOT the same
+// (the client decodes this byte directly into that enum) - NOT the same
 // numbering as the old, unused EntityType/WorldEntityKind design.
 const EntityKind = Object.freeze({
     Unknown:         0,
@@ -126,20 +126,20 @@ const InteractionType = Object.freeze({
     USE:   3,   // generic use / activate
 });
 
-// ── EntitySpawn payload (entity descriptor — NO position, see EntityState) ────
+// ── EntitySpawn payload (entity descriptor - NO position, see EntityState) ────
 // Must match src/protocol.cpp's decode_entity_descriptor exactly.
 // Byte layout:
 //   0      uint8   format version (1)
 //   1      uint8   kind (EntityKind constant)
-//   2–5    uint32  revision
-//   6–7    uint16  quantity
-//   8–15   uint64  ownerPlayerId
-//   16–17  uint16  classPathLen
-//   18…    bytes   classPath utf8
-//   …–…+1  uint16  itemIdLen
-//   …      bytes   itemId utf8
+//   2 - 5    uint32  revision
+//   6 - 7    uint16  quantity
+//   8 - 15   uint64  ownerPlayerId
+//   16 - 17  uint16  classPathLen
+//   18...    bytes   classPath utf8
+//   ... - ...+1  uint16  itemIdLen
+//   ...      bytes   itemId utf8
 //
-// classPath is left empty for items — the client resolves the pickup
+// classPath is left empty for items - the client resolves the pickup
 // Blueprint locally from itemId (it already has the DataAsset loaded), so
 // the server doesn't need an itemId->asset-path table at all.
 function encodeEntityDescriptor({ kind, revision = 1, quantity = 0, ownerPlayerId = 0n,
@@ -159,9 +159,9 @@ function encodeEntityDescriptor({ kind, revision = 1, quantity = 0, ownerPlayerI
     return buf;
 }
 
-// ── EntityState payload (position/health — exactly 27 bytes) ──────────────────
+// ── EntityState payload (position/health - exactly 27 bytes) ──────────────────
 // Must match src/protocol.cpp's decode_entity_state exactly.
-// Byte layout: [tag=1][kind:u8][revision:u32BE][x/y/z/yaw/health:5×f32BE][state:u8]
+// Byte layout: [tag=1][kind:u8][revision:u32BE][x/y/z/yaw/health:5xf32BE][state:u8]
 function encodeEntityState({ kind, revision = 1, x, y, z, yaw = 0, health = 0, state = 0 }) {
     const buf = Buffer.allocUnsafe(27);
     buf.writeUInt8(1, 0);
@@ -176,7 +176,7 @@ function encodeEntityState({ kind, revision = 1, x, y, z, yaw = 0, health = 0, s
     return buf;
 }
 
-// Server-side decode of its own EntitySpawn/EntityState payload shapes —
+// Server-side decode of its own EntitySpawn/EntityState payload shapes - 
 // needed now that the gateway persists entities into the structured
 // `entities` table (db.js) instead of replaying opaque stored bytes, so it
 // has to read kind/x/y/z/itemId/etc. back out of what host-agent.js sends
@@ -213,30 +213,30 @@ function decodeEntityState(buf) {
 }
 
 // ── PlayerProgress payload (ProfileRevision / PlayerProgressRestore) ──────────
-// Same format both directions: ProfileRevision is client→server, and the
+// Same format both directions: ProfileRevision is client->server, and the
 // gateway persists that payload verbatim and replays it byte-for-byte as
-// PlayerProgressRestore on rejoin (see gateway.js) — so both encode/decode
+// PlayerProgressRestore on rejoin (see gateway.js) - so both encode/decode
 // here must stay in lockstep with the C++ side's encode_player_progress /
 // decode_player_progress in src/protocol.cpp.
 // Byte layout:
 //   0      uint8   format version (1)
-//   1–4    uint32  revision (monotonically increasing)
-//   5–8    float32 health  (0.0–1.0)
-//   9–12   float32 hunger
-//   13–16  float32 thirst
-//   17–20  float32 stamina
-//   21–24  float32 radiation
-//   25–28  uint32  level
-//   29–32  float32 xp
-//   33–36  float32 posX
-//   37–40  float32 posY
-//   41–44  float32 posZ
-//   45–48  float32 yaw
-//   49–50  uint16  containerCount
-//   51…    containers: [uint16 columns, uint16 rows, uint16 itemCount,
-//                        items: [uint8 slotIndex, uint16 itemIdLen, itemId utf8, uint16 quantity] × itemCount
-//                       ] × containerCount
-//   …      extended stats trailer (gap 4/7), optional — a payload persisted before this trailer
+//   1 - 4    uint32  revision (monotonically increasing)
+//   5 - 8    float32 health  (0.0 - 1.0)
+//   9 - 12   float32 hunger
+//   13 - 16  float32 thirst
+//   17 - 20  float32 stamina
+//   21 - 24  float32 radiation
+//   25 - 28  uint32  level
+//   29 - 32  float32 xp
+//   33 - 36  float32 posX
+//   37 - 40  float32 posY
+//   41 - 44  float32 posZ
+//   45 - 48  float32 yaw
+//   49 - 50  uint16  containerCount
+//   51...    containers: [uint16 columns, uint16 rows, uint16 itemCount,
+//                        items: [uint8 slotIndex, uint16 itemIdLen, itemId utf8, uint16 quantity] x itemCount
+//                       ] x containerCount
+//   ...      extended stats trailer (gap 4/7), optional - a payload persisted before this trailer
 //          existed just ends after the containers, and decode must tolerate that (see decodePlayerProgress):
 //            uint16  forenameLen, forename utf8
 //            uint16  surnameLen,  surname utf8
@@ -249,9 +249,9 @@ function decodeEntityState(buf) {
 //            uint32  infestationsDestroyed
 //
 // Gap 11 (2026-08-10): containers replaced a flat, globally-indexed slot list
-// capped at 40 — the game's own inventory has no fixed slot count and each
+// capped at 40 - the game's own inventory has no fixed slot count and each
 // container is independently resizable, so a flat cap was solving the wrong
-// problem. Breaking wire-format change — payloads persisted under the old
+// problem. Breaking wire-format change - payloads persisted under the old
 // flat format will not decode correctly against this container list (dev-stage
 // mod, no migration provided).
 
@@ -338,7 +338,7 @@ function decodePlayerProgress(payload) {
         containers.push({ columns, rows, items });
     }
 
-    // Extended stats trailer (gap 4/7) — optional. A payload persisted before
+    // Extended stats trailer (gap 4/7) - optional. A payload persisted before
     // this trailer existed just ends here, so leave defaults on short input
     // rather than throwing.
     let forename = '', surname = '';
@@ -384,19 +384,19 @@ function decodePlayerProgress(payload) {
 // ── ItemDropRequest payload ───────────────────────────────────────────────────
 // itemId-based rather than slotIndex-based: the client's real drop hook
 // (BP_JigHelperComp_C::RequestDropAsPickup) hands us the dropped item's
-// identity directly, not a container slot index — and since p.inventory's
+// identity directly, not a container slot index - and since p.inventory's
 // slotIndex is a flattened-across-containers bookkeeping array (gap 11, can
 // collide across containers), matching by itemId+quantity server-side is
 // actually more correct here than trusting a slot number the client can't
 // cleanly compute from this hook anyway.
 // Byte layout:
 //   0      uint8   format version (1)
-//   1–2    uint16  quantity
-//   3–6    float32 posX  (world position to drop at)
-//   7–10   float32 posY
-//   11–14  float32 posZ
-//   15–16  uint16  itemIdLen
-//   17…    bytes   itemId utf8
+//   1 - 2    uint16  quantity
+//   3 - 6    float32 posX  (world position to drop at)
+//   7 - 10   float32 posY
+//   11 - 14  float32 posZ
+//   15 - 16  uint16  itemIdLen
+//   17...    bytes   itemId utf8
 
 function decodeItemDropRequest(payload) {
     if (payload.length < 17) throw new Error('drop_request_too_short');
@@ -423,7 +423,7 @@ function decodeItemPickupRequest(payload) {
 
 // ── ItemPickupResult payload ──────────────────────────────────────────────────
 // Same JSON-via-encodeString codec as ItemDropResult (mod.cpp decodes both
-// with decode_world_action) — the previous fixed-binary layout also wrote
+// with decode_world_action) - the previous fixed-binary layout also wrote
 // itemId (a string, see p.inventory) through writeUInt32BE, which would have
 // thrown at runtime on any successful pickup.
 
@@ -436,7 +436,7 @@ function encodeItemPickupResult({ success, slot, itemId, quantity, reason }) {
 
 // ── ItemDropResult payload ────────────────────────────────────────────────────
 // The client decodes this via decode_world_action (mod.cpp: "JSON via
-// encodeWorldAction") — [uint16BE length][utf8 JSON], no tag byte — not a
+// encodeWorldAction") - [uint16BE length][utf8 JSON], no tag byte - not a
 // fixed binary layout, so this must go through encodeString, matching the
 // same JSON codec ItemPickupResult was already written to expect.
 // reason on fail: 0=slot_empty, 1=bad_slot
@@ -446,10 +446,10 @@ function encodeItemDropResult({ success, reason }) {
 }
 
 // ── ZombieAttackRequest / ZombieDamageResult payloads ─────────────────────
-// Same JSON-via-encodeString codec as ItemPickupResult/ItemDropResult —
+// Same JSON-via-encodeString codec as ItemPickupResult/ItemDropResult - 
 // entityId is the frame-header field (f.entityId), not part of either
 // payload, matching every other entity-targeted request/result in this
-// protocol. ZombieAttackRequest carries only the damage amount (V1 — see
+// protocol. ZombieAttackRequest carries only the damage amount (V1 - see
 // server/src/world/zombie-simulation.js's header comment on how that
 // amount gets computed client-side; ranged weapons are explicitly deferred).
 
@@ -468,21 +468,21 @@ function encodeZombieDamageResult({ newHealth, dead }) {
 // Byte layout:
 //   0      uint8   format version (1)
 //   1      uint8   interactionType (InteractionType constant)
-//   2…     type-specific data
+//   2...     type-specific data
 //
 // For BUILD (interactionType=1):
-//   2–5    float32 posX
-//   6–9    float32 posY
-//   10–13  float32 posZ
-//   14–17  float32 yaw
-//   18–19  uint16  itemIdLen
-//   20…    bytes   itemId utf8
+//   2 - 5    float32 posX
+//   6 - 9    float32 posY
+//   10 - 13  float32 posZ
+//   14 - 17  float32 yaw
+//   18 - 19  uint16  itemIdLen
+//   20...    bytes   itemId utf8
 //
-// itemId-based, not a numeric pieceTypeId — matches ItemDropRequest's
+// itemId-based, not a numeric pieceTypeId - matches ItemDropRequest's
 // already-proven shape. The real piece class is resolved client-side off
 // the same UJigsawItem_DataAsset_C the itemId already names (its
 // BuildActorClass field, research/04_ida_investigation_log.md Session 58),
-// the same way GroundItem already resolves PickupClass off itemId — a
+// the same way GroundItem already resolves PickupClass off itemId - a
 // numeric pieceTypeId had no DataAsset/class equivalent at all and was
 // always a dead end for rendering (see host-agent.js history).
 

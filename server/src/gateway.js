@@ -3,13 +3,13 @@
 // Gateway: TCP hub + HTTP ticket API.
 //
 // Two connection types share the same port:
-//   • host-agent  — identified by HostAuthenticate (type 1) as first frame
-//   • client      — identified by ClientAuthenticate (type 2) as first frame
+//   - host-agent - identified by HostAuthenticate (type 1) as first frame
+//   - client - identified by ClientAuthenticate (type 2) as first frame
 //
 // Frame routing:
-//   client  → gateway → host       (Movement, DeathRequest, RespawnRequest, …)
-//   gateway → clients (broadcast)  (PlayerConnected, Movement, WorldState, …)
-//   host    → gateway → specific client  (JoinAccepted, Death, PlayerDamage, …)
+//   client  -> gateway -> host       (Movement, DeathRequest, RespawnRequest, ...)
+//   gateway -> clients (broadcast)  (PlayerConnected, Movement, WorldState, ...)
+//   host    -> gateway -> specific client  (JoinAccepted, Death, PlayerDamage, ...)
 
 const net    = require('node:net');
 const http   = require('node:http');
@@ -35,17 +35,17 @@ const MAX_MALFORMED     = 3;
 
 class Connection {
     constructor(id, socket) {
-        this.id           = id;          // BigInt — gateway's internal handle
+        this.id           = id;          // BigInt - gateway's internal handle
         this.socket       = socket;
         this.decoder      = new FrameDecoder();
-        this.role         = null;        // 'host' | 'client' — set on first frame
+        this.role         = null;        // 'host' | 'client' - set on first frame
         this.state        = 'auth';      // auth | joining | joined
         this.sessionId    = null;        // Buffer(16)
         this.worldId      = null;        // Buffer(16)
         this.playerId     = 0n;
         this.entityId     = 0n;
         this.displayName  = '';
-        this.lastMovement = null;        // Buffer — cached for late-joiner replay
+        this.lastMovement = null;        // Buffer - cached for late-joiner replay
         this.malformed    = 0;
         this._rateStart   = Date.now();
         this._rateCount   = 0;
@@ -69,10 +69,10 @@ class Connection {
 
 class Gateway {
     constructor() {
-        this._host        = null;              // Connection — the host-agent
-        this._clients     = new Map();         // connectionId → Connection (all clients)
-        this._joined      = new Map();         // playerId     → Connection (joined only)
-        this._usedTickets = new Map();         // ticketId     → expiresAtMs (replay guard)
+        this._host        = null;              // Connection - the host-agent
+        this._clients     = new Map();         // connectionId -> Connection (all clients)
+        this._joined      = new Map();         // playerId     -> Connection (joined only)
+        this._usedTickets = new Map();         // ticketId     -> expiresAtMs (replay guard)
         this._nextId      = 1n;
 
         // World session identity (filled in by host on HostAuthenticate)
@@ -83,7 +83,7 @@ class Gateway {
         setInterval(() => this._checkTimeouts(), 5_000).unref();
 
         // Unconditional (unlike the directory heartbeat below, which is
-        // opt-in) — /v1/tickets' gatewayHost response needs this for ANY
+        // opt-in) - /v1/tickets' gatewayHost response needs this for ANY
         // remote client, not just ones going through the directory. See
         // this._publicHost's own comment for why it used to be wrong.
         this._resolvePublicHost().catch(e =>
@@ -96,13 +96,13 @@ class Gateway {
     }
 
     // 2026-08-26: previously /v1/tickets hardcoded gatewayHost to '127.0.0.1'
-    // whenever cfg.gatewayBind was '0.0.0.0' (the default) — correct only for
+    // whenever cfg.gatewayBind was '0.0.0.0' (the default) - correct only for
     // a client on the SAME machine as the gateway. Any real remote player
     // (the whole point of the directory/launcher work) would get told to
     // connect to their own localhost. Reuses the same resolution the
     // directory heartbeat already needed, just made unconditional instead of
     // gated behind cfg.directoryUrl. Resolved once at startup, not
-    // re-checked — see the original comment on _startDirectoryHeartbeat for
+    // re-checked - see the original comment on _startDirectoryHeartbeat for
     // why that's an acceptable tradeoff (a home IP changing mid-session is
     // rare, and a restart re-resolves).
     async _resolvePublicHost() {
@@ -118,7 +118,7 @@ class Gateway {
     }
 
     // ── Server-directory discovery (directory-worker/) ─────────────────────────
-    // Opt-in (cfg.directoryUrl unset ⇒ this whole block never runs). Persists a
+    // Opt-in (cfg.directoryUrl unset => this whole block never runs). Persists a
     // random id once so restarts update the same directory entry instead of
     // creating a duplicate that lingers until its old TTL expires.
     _loadOrCreateServerId() {
@@ -127,14 +127,14 @@ class Gateway {
         // volume; everything else is image content and is replaced wholesale on
         // every `docker compose up --build`. Keeping the id next to the source
         // therefore produced a brand-new identity on each deploy, leaking a
-        // duplicate directory entry that lingered until its TTL expired — the
+        // duplicate directory entry that lingered until its TTL expired - the
         // exact outcome the comment above says this function exists to prevent.
         const dbPath = process.env.SDO_DB_PATH || path.join(__dirname, '..', 'players.db');
         const idPath = path.join(path.dirname(dbPath), 'directory-server-id.txt');
         try {
             const existing = fs.readFileSync(idPath, 'utf8').trim();
             if (existing) return existing;
-        } catch { /* first run — fall through and create one */ }
+        } catch { /* first run - fall through and create one */ }
         const id = crypto.randomUUID();
         fs.writeFileSync(idPath, id, 'utf8');
         return id;
@@ -147,7 +147,7 @@ class Gateway {
         // be in flight) rather than re-resolving independently.
         for (let i = 0; i < 50 && this._publicHost === undefined; i++)
             await new Promise(r => setTimeout(r, 100));
-        if (!this._publicHost) return; // no usable host — don't heartbeat in with garbage
+        if (!this._publicHost) return; // no usable host - don't heartbeat in with garbage
 
         const send = async () => {
             try {
@@ -291,7 +291,7 @@ class Gateway {
             client.write(encodeFrame({ ...f, connectionId: client.id }));
 
             // Restore saved player progress (inventory, stats, position) if
-            // available — no row at all means this playerId has never saved
+            // available - no row at all means this playerId has never saved
             // before, i.e. a genuine first join, so tell the client to run
             // its new-character flow (spawn at the barber for customization,
             // then a random "usual" spawn point) instead of restoring.
@@ -345,7 +345,7 @@ class Gateway {
             break;
         }
 
-        // Sent to a specific client only — the subject's own confirmation,
+        // Sent to a specific client only - the subject's own confirmation,
         // nobody else needs it.
         case MsgType.PlayerDamage:
         case MsgType.InteractionResult:
@@ -358,16 +358,16 @@ class Gateway {
             break;
         }
 
-        // 2026-08-16: Death/Respawn need BOTH — the dying/respawning player's
+        // 2026-08-16: Death/Respawn need BOTH - the dying/respawning player's
         // own confirmation (unchanged, same as the group above) AND a
         // broadcast to every other client, so their proxy of this player
         // actually reflects the death/respawn. Previously only did the
-        // former — other clients had no way to ever learn a remote player
+        // former - other clients had no way to ever learn a remote player
         // died, so RemotePlayer::dead (which ProxyManager::tick() already
         // gates movement/rotation writes on) never got set for anyone but
         // yourself. host-agent.js's DeathRequest/RespawnRequest handlers
         // already stamp f.playerId with the dying/respawning player's own
-        // id, so that's the right exclude-id for the broadcast half — this
+        // id, so that's the right exclude-id for the broadcast half - this
         // player already gets their copy via the direct send just below.
         case MsgType.Death:
         case MsgType.Respawn: {
@@ -380,7 +380,7 @@ class Gateway {
             break;
         }
 
-        // Broadcast to all joined clients — entity spawns/despawns also persisted
+        // Broadcast to all joined clients - entity spawns/despawns also persisted
         // to the unified `entities` table (db.js) instead of replaying opaque
         // stored bytes, so the row stays queryable/mutable (by kind, by
         // position) for every entity kind, not just replay-able verbatim.
@@ -412,7 +412,7 @@ class Gateway {
 
         case MsgType.EntityState: {
             const buf = encodeFrame(f);
-            // Merge into the existing row rather than overwrite — EntityState
+            // Merge into the existing row rather than overwrite - EntityState
             // only carries kind/position/health/state, not itemId/quantity/
             // ownerPlayerId (those came from the EntitySpawn descriptor and
             // must survive this update).
@@ -472,7 +472,7 @@ class Gateway {
 
         const playerId = stableNumericId(`player-entity:${body.playerId}`);
 
-        // Evict stale duplicate connection for the same player — same pid
+        // Evict stale duplicate connection for the same player - same pid
         // authenticating twice while the old connection object is still
         // considered joined. Logged because this is otherwise invisible:
         // the evicted side just sees an ordinary AuthenticationRejected
@@ -542,7 +542,7 @@ class Gateway {
             }));
             break;
 
-        // Equipment is client-authoritative appearance data, same as Movement —
+        // Equipment is client-authoritative appearance data, same as Movement - 
         // relay directly to other clients for low latency, host gets a copy
         // for future server-side validation (currently a no-op there; see
         // host-agent.js). Previously only forwarded to host, which doesn't
@@ -560,7 +560,7 @@ class Gateway {
             break;
         }
 
-        // Same client-authoritative relay as Equipment above — which
+        // Same client-authoritative relay as Equipment above - which
         // attachments are installed on an equipped weapon, purely cosmetic.
         case MsgType.WeaponAttachments: {
             const out = encodeFrame({
@@ -574,7 +574,7 @@ class Gateway {
             break;
         }
 
-        // Same client-authoritative relay as Equipment/WeaponAttachments —
+        // Same client-authoritative relay as Equipment/WeaponAttachments - 
         // gender/hair/beard appearance, purely cosmetic.
         case MsgType.PawnAppearance: {
             const out = encodeFrame({
@@ -589,7 +589,7 @@ class Gateway {
         }
 
         // Same client-authoritative relay as Equipment/WeaponAttachments/
-        // PawnAppearance — one-shot montage playback (melee attacks etc.),
+        // PawnAppearance - one-shot montage playback (melee attacks etc.),
         // purely cosmetic, no server-side state to validate.
         case MsgType.PlayMontage: {
             const out = encodeFrame({
@@ -604,9 +604,9 @@ class Gateway {
         }
 
         // Same client-authoritative relay as Equipment/WeaponAttachments/
-        // PawnAppearance/PlayMontage — flashlight/NVG toggle state, purely
+        // PawnAppearance/PlayMontage - flashlight/NVG toggle state, purely
         // cosmetic, no server-side state to validate. 2026-08-17: added
-        // alongside the new PlayerLights frame — this switch has no default
+        // alongside the new PlayerLights frame - this switch has no default
         // case, so a MsgType this server doesn't know about is silently
         // dropped rather than erroring, which is exactly what happened the
         // first time this frame type was added client-side without also
@@ -623,11 +623,11 @@ class Gateway {
             break;
         }
 
-        // Same client-authoritative relay as PlayMontage/PlayerLights —
+        // Same client-authoritative relay as PlayMontage/PlayerLights - 
         // header-only, one-shot "I fired my weapon" event, purely cosmetic
         // (muzzle flash + recoil replay on proxies), no server-side state to
         // validate. Deliberately not folded into PlayMontage itself: firing
-        // doesn't play a UAnimMontage at all (confirmed via a live trace —
+        // doesn't play a UAnimMontage at all (confirmed via a live trace - 
         // it drives BP_FirearmPickup_C's own MuzzleEffects()/StartRecoil()
         // directly), so check_local_montage_change's GetCurrentMontage()
         // poll structurally can't see it.
@@ -647,22 +647,22 @@ class Gateway {
         // ItemPickupRequest is the odd one out: entityId here means "the
         // world entity being picked up" (set by the client to a value it
         // read from the entity list), not "my own entity" like every other
-        // message in this block — normalizing it to conn.entityId silently
+        // message in this block - normalizing it to conn.entityId silently
         // clobbered the pickup target with the sender's own id, so pickups
         // could never resolve server-side no matter what triggered the send
         // client-side (found 2026-08-12 after five ruled-out hook attempts
         // and a working polling-based sender that still didn't work end to
-        // end — the bug was here all along).
+        // end - the bug was here all along).
         // ZombieAttackRequest is the same shape of exception as
         // ItemPickupRequest just above: entityId means "the zombie being
         // attacked" (set by the client from what it's targeting), not "my
-        // own entity" — normalizing it to conn.entityId reproduces the exact
+        // own entity" - normalizing it to conn.entityId reproduces the exact
         // same class of bug the 2026-08-12 ItemPickupRequest fix already
         // describes (silently clobbers the target with the sender's own id,
         // so damage can never resolve server-side no matter what triggers
         // the send client-side). Caught by tests/integration.js's zombie
         // simulation section going straight to a timeout with zero server-
-        // side error log at all — same signature as the original bug.
+        // side error log at all - same signature as the original bug.
         case MsgType.ItemPickupRequest:
         case MsgType.ZombieAttackRequest:
             if (this._host) this._host.write(encodeFrame({
@@ -702,7 +702,7 @@ class Gateway {
 
         this._clients.delete(conn.id);
         if (conn.state !== 'joined') {
-            // Never made it past auth/join — this is exactly the case that
+            // Never made it past auth/join - this is exactly the case that
             // used to close with zero trace, making a rejected/spent
             // ticket or a mid-handshake drop indistinguishable from the
             // client just giving up on its own (2026-08-13, see
@@ -727,7 +727,7 @@ class Gateway {
             // Tell host so it can clean up; the host echoes back and we broadcast then.
             this._host.write(disconnFrame);
         } else {
-            // No host online — broadcast directly since no one will echo it.
+            // No host online - broadcast directly since no one will echo it.
             this._broadcast(conn.playerId, disconnFrame);
         }
 
@@ -779,7 +779,7 @@ class Gateway {
         }
 
         // Replay every world entity so the newcomer sees the current world
-        // state — reconstructed fresh from the structured `entities` table
+        // state - reconstructed fresh from the structured `entities` table
         // (EntitySpawn descriptor + EntityState position/health), not
         // replayed from stored raw bytes.
         for (const e of db.getAllEntitiesFull()) {
@@ -810,7 +810,7 @@ class Gateway {
     }
 
     _authReject(conn, reason) {
-        // This used to be silent server-side — the client-side "[tcp]
+        // This used to be silent server-side - the client-side "[tcp]
         // authentication rejected" log had no matching line here to
         // explain *why*, which made a stale replayed ticket, an expired
         // one, and a genuinely wrong signature all look identical from
@@ -839,7 +839,7 @@ class Gateway {
     _onHttp(req, res) {
         // CORS: lets a browser (directory-worker's status page, or any other
         // web-based launcher) call /v1/tickets directly via fetch() instead
-        // of needing a local script — see gateway.js's directory-heartbeat
+        // of needing a local script - see gateway.js's directory-heartbeat
         // comment for the matching client-side half of this feature.
         const corsHeaders = {
             'Access-Control-Allow-Origin':  '*',
@@ -904,7 +904,7 @@ class Gateway {
                         protocolVersion: 3,
                     }, cfg.ticketSecret);
 
-                    // See _resolvePublicHost's comment — falls back to the
+                    // See _resolvePublicHost's comment - falls back to the
                     // configured bind address only in the narrow window
                     // before startup resolution completes (or if it failed
                     // entirely), not as the normal-case behavior.

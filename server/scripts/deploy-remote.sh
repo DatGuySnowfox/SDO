@@ -5,7 +5,7 @@
 #   server/scripts/deploy-remote.sh <ssh-host> [remote-dir]
 #
 # Defaults to /opt/sdo-gateway. The remote host needs Docker, passwordless
-# sudo for it, and an existing .env holding the secrets — this script never
+# sudo for it, and an existing .env holding the secrets - this script never
 # creates or overwrites .env, because that file is the one piece of state
 # that is not in the repo and not reproducible.
 #
@@ -40,7 +40,7 @@ rsh() { ssh -o ConnectTimeout=15 "$HOST" "$@"; }
 say "Preflight"
 rsh "command -v docker >/dev/null || { echo 'docker not found'; exit 1; }
      sudo -n true 2>/dev/null   || { echo 'passwordless sudo unavailable'; exit 1; }
-     [ -f '$DIR/.env' ]         || { echo 'no $DIR/.env — create it first'; exit 1; }
+     [ -f '$DIR/.env' ]         || { echo 'no $DIR/.env - create it first'; exit 1; }
      echo '  docker, sudo, .env all present'"
 
 # Compare the env var names this checkout reads against the ones the remote
@@ -77,7 +77,7 @@ ID=\"\"
 if sudo -n docker compose ps -q gateway 2>/dev/null | grep -q .; then
     ID=\$(sudo -n docker compose exec -T gateway sh -c 'cat /app/data/directory-server-id.txt 2>/dev/null || cat /app/directory-server-id.txt 2>/dev/null' 2>/dev/null | tr -d '\r\n' || true)
 fi
-[ -n \"\$ID\" ] && echo \"  preserving directory id \${ID:0:8}…\" || echo '  no existing directory id'
+[ -n \"\$ID\" ] && echo \"  preserving directory id \${ID:0:8}...\" || echo '  no existing directory id'
 
 rm -rf .incoming && mkdir .incoming
 tar xzf /tmp/sdo-deploy.tgz -C .incoming
@@ -86,7 +86,7 @@ cp .incoming/package.json .incoming/package-lock.json .incoming/docker-compose.y
 rm -rf .incoming /tmp/sdo-deploy.tgz
 
 rollback() {
-    echo '  !! deploy failed — rolling back'
+    echo '  !! deploy failed - rolling back'
     rm -rf src && mv src.prev src
     cp -a \"\$BK\"/docker-compose.yml \"\$BK\"/Dockerfile \"\$BK\"/package.json \"\$BK\"/package-lock.json . 2>/dev/null || true
     sudo -n docker compose up -d --build >/dev/null 2>&1 || true
@@ -102,7 +102,7 @@ if [ -n \"\$ID\" ]; then
     sudo -n docker compose restart >/dev/null
 fi
 
-echo '  waiting for health…'
+echo '  waiting for health...'
 for i in \$(seq 1 30); do
     S=\$(sudo -n docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' \$(sudo -n docker compose ps -q gateway) 2>/dev/null || echo none)
     [ \"\$S\" = healthy ] && { echo '  healthy'; break; }
@@ -110,7 +110,7 @@ for i in \$(seq 1 30); do
     sleep 2
 done
 trap - ERR
-echo \"  done — previous release kept at \$BK and src.prev\"
+echo \"  done - previous release kept at \$BK and src.prev\"
 "
 
 say "Verifying"

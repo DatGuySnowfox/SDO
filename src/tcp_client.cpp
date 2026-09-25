@@ -102,13 +102,13 @@ void TcpClient::thread_func()
 {
     uint32_t reconnectMs = 250;
 
-    // Backoff applies to EVERY disconnect reason alike — a raw connect()
+    // Backoff applies to EVERY disconnect reason alike - a raw connect()
     // failure, an auth/join rejection, or a session that ran fine and then
     // dropped. Earlier this only guarded the connect()-failure branch and
     // reset to the 250ms floor on every successful TCP-level connect
     // regardless of what happened next; since the gateway can now be
     // configured to allow ticket replay (cfg.ticketReplayProtection=false,
-    // a dev/LAN-only escape hatch — see gateway.js — until the launcher
+    // a dev/LAN-only escape hatch - see gateway.js - until the launcher
     // owns fetching a fresh ticket per reconnect), a rejected/expired
     // ticket against a *protected* server would otherwise tight-loop
     // reconnecting with zero delay between attempts. 2026-08-13: exactly
@@ -140,7 +140,7 @@ void TcpClient::thread_func()
             if (wasActive) {
                 reconnectMs = 250;
                 Output::send<LogLevel::Warning>(
-                    STR("[tcp] disconnected after {:d}ms active, reconnecting in {:d}ms …\n"),
+                    STR("[tcp] disconnected after {:d}ms active, reconnecting in {:d}ms ...\n"),
                     aliveMs, reconnectMs);
             } else {
                 Output::send<LogLevel::Error>(

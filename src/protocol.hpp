@@ -127,7 +127,7 @@ struct EntityDescriptorData {
 };
 
 // ── Entity state (from EntityState frame payload, exactly 27 bytes) ───────────
-// Wire format: [tag=1][kind:u8][revision:u32BE][x/y/z/yaw/health:5×f32BE][state:u8]
+// Wire format: [tag=1][kind:u8][revision:u32BE][x/y/z/yaw/health:5xf32BE][state:u8]
 struct EntityStateData {
     uint64_t   entityId = 0;    // filled from frame header
     EntityKind kind     = EntityKind::Unknown;
@@ -149,12 +149,12 @@ struct LocalVitals {
     double  xp        = 0.0;
 
     // Extended PlayerController stats (gap 4/7, offsets from research
-    // Session 32, live-confirmed Session 37 — forename/surname resolved
+    // Session 32, live-confirmed Session 37 - forename/surname resolved
     // correctly via a plain in-place FString read, no crash). respawnLoc/
     // passive skills intentionally NOT included yet: RespawnLoc is a full
     // FTransform whose internal FQuat/FVector byte layout hasn't been
     // live-verified, and the 10 passive skills are a much larger separate
-    // chunk of data — both deferred.
+    // chunk of data - both deferred.
     std::string forename;
     std::string surname;
     int32_t zombieKills           = 0;
@@ -166,7 +166,7 @@ struct LocalVitals {
     int32_t infestationsDestroyed = 0;
 };
 
-// ── ProfileRevision payload (client→server) ───────────────────────────────────
+// ── ProfileRevision payload (client->server) ───────────────────────────────────
 // Per-item wire format: [slotIndex:u8][itemIdLen:u16BE][itemId...][qty:u16BE]
 struct InventorySlot {
     uint8_t     slotIndex = 0;   // index within its container, not global
@@ -175,7 +175,7 @@ struct InventorySlot {
 };
 
 // A single real container from BP_JigMultiplayer_C.MainJigContainers
-// (backpack, secure container, etc.) — Columns/Rows are runtime-resizable
+// (backpack, secure container, etc.) - Columns/Rows are runtime-resizable
 // (ExpandContainer), never a fixed constant (research/04_ida_investigation_log.md
 // Session 29), so they're carried on the wire instead of assumed. Per-container
 // wire format: [columns:u16BE][rows:u16BE][itemCount:u16BE][items...]
@@ -194,7 +194,7 @@ struct PlayerProgress {
     float posX=0, posY=0, posZ=0, yaw=0;
     std::vector<InventoryContainer> containers;
 
-    // Extended stats trailer (gap 4/7) — appended after slots on the wire so
+    // Extended stats trailer (gap 4/7) - appended after slots on the wire so
     // the original 51-byte header + slot list is untouched; a payload that
     // ends right after the slots (already-persisted pre-gap-4/7 saves) still
     // decodes fine, just with these left at their defaults.
@@ -229,7 +229,7 @@ static constexpr int EQUIPMENT_SLOT_COUNT = 21;
 // ── WeaponAttachments payload (from BP_JigPickupComponent_C.RepAttachments) ───
 // One entry per attachment currently installed on one of the local player's
 // equipped weapon slots (11 Primary / 12 Secondary / 13 Sidearm / 14 Melee).
-// Flat list (not grouped per weapon) — same style as EquipmentSlot, simpler
+// Flat list (not grouped per weapon) - same style as EquipmentSlot, simpler
 // to encode/decode and there are rarely more than a handful of entries.
 // Wire format: [tag=1][entryCount:u16BE], per entry:
 //   [weaponSlotIndex:u8][containerIndex:u8][itemIdLen:u16BE][itemId...]
@@ -238,11 +238,11 @@ struct WeaponAttachmentEntry {
     uint8_t     containerIndex  = 0; // FS_RepAttachmentInfo.AttachmentContainerIndex
     std::string itemId;              // attachment's own DA_ ItemID, e.g. "HolographicSight"
     // 2026-08-17: only meaningful for toggleable attachments (tactical
-    // lights/lasers — ABP_AMainLocalAttachment_C::ActivateState, +0x2C8,
+    // lights/lasers - ABP_AMainLocalAttachment_C::ActivateState, +0x2C8,
     // shared by every attachment subclass); false/ignored for anything else
     // (mags, scopes, suppressors have no on/off state). Appended after the
     // original fields so old encodings without it still decode (defaults to
-    // false) — same forward-compat approach as PlayerProgress's trailer.
+    // false) - same forward-compat approach as PlayerProgress's trailer.
     bool        active = false;
 };
 
@@ -251,10 +251,10 @@ struct WeaponAttachments {
 };
 
 // ── PawnAppearance payload (from BP_PlayerCharacter_C's own customization
-// fields — IsPlayerMale?/HairMesh/Hair Color/BeardMesh/Beard Color) ───────────
+// fields - IsPlayerMale?/HairMesh/Hair Color/BeardMesh/Beard Color) ───────────
 // Asset references are carried as their short object name (e.g.
 // "Chr_MaleHair3"), resolved on the receiving end via
-// UObjectGlobals::FindObject against already-loaded assets — the small,
+// UObjectGlobals::FindObject against already-loaded assets - the small,
 // fixed set of character-creation options is always resident in memory once
 // any character exists, no on-demand asset loading needed. Empty string =
 // not set (e.g. no beard).
@@ -265,7 +265,7 @@ struct WeaponAttachments {
 // mod.cpp's kBodyPartOffsets exactly: Torso, Biceps, LowerThighs, head, Arms,
 // Feet, LowerLegs, Legs, Hands. Needed because just syncing isMale doesn't
 // retroactively change which body-shape mesh a proxy (spawned once, at a
-// fixed default gender) is using — the actual per-part SkeletalMesh has to
+// fixed default gender) is using - the actual per-part SkeletalMesh has to
 // be synced too, same as hair/beard. Read/matched from the real assigned
 // mesh rather than computed from a naming convention: the male variants
 // aren't uniformly named (e.g. Biceps is "SK_Chr_Underwear_Male_01_Biceps",
@@ -282,7 +282,7 @@ struct PawnAppearance {
     std::array<std::string, BODY_PART_COUNT> bodyPartMeshNames;
     std::string mouthMeshName;     // BP_PlayerCharacter.hpp Mouth @0x0740, no dedicated color property
     std::string eyebrowsMeshName;  // BP_PlayerCharacter.hpp EyebrowsMesh @0x0790, no dedicated color property
-    // Accessory1/2/3 (BP_PlayerCharacter.hpp @0x0758/@0x0750/@0x0748) — three
+    // Accessory1/2/3 (BP_PlayerCharacter.hpp @0x0758/@0x0750/@0x0748) - three
     // separate face-prop slots (piercings/etc.), confirmed via the real
     // CharacterCreatorMenu Blueprint's AccessoryType1/2/3 functions, same
     // preset-mesh-dropdown mechanism as Hair/Beard/Mouth/Eyebrows.
@@ -296,7 +296,7 @@ struct PawnAppearance {
 // no server-side decode). montageName is the asset's short object name
 // (e.g. "AM_Melee_Knife_1"), resolved on the receiving end the same way
 // itemId strings resolve to a live UObject* via a name-keyed FindAllOf scan
-// (see proxy_manager.cpp's item_asset_cache/resolve_item_asset — this reuses
+// (see proxy_manager.cpp's item_asset_cache/resolve_item_asset - this reuses
 // that exact pattern for the "AnimMontage" class instead).
 struct PlayMontageData {
     std::string montageName;
@@ -304,8 +304,8 @@ struct PlayMontageData {
 };
 
 // ── PlayerLights payload (character-level toggles, not per-item equip
-// state — see Equipment's own slot 16 for whether a flashlight item is
-// equipped at all) — BP_PlayerCharacter.hpp: FlashlightOn? @0x13E5,
+// state - see Equipment's own slot 16 for whether a flashlight item is
+// equipped at all) - BP_PlayerCharacter.hpp: FlashlightOn? @0x13E5,
 // PlayerUsingNightVision? @0x1401, both plain bools read directly off the
 // pawn. Relayed client-authoritative same as Equipment/WeaponAttachments/
 // PawnAppearance. Wire format: [tag=1][flashlightOn:u8][nightVisionOn:u8]
@@ -314,12 +314,12 @@ struct PlayMontageData {
 // flashlightIntensity (2026-08-17, added after live-testing SetVisibility
 // alone did nothing): ground-truth bytecode decode of FlashlightToggle
 // (research/04_ida_investigation_log.md) found the real toggle mechanism is
-// ULightComponentBase::SetIntensity(float) — not SetVisibility at all, a
+// ULightComponentBase::SetIntensity(float) - not SetVisibility at all, a
 // common UE pattern (visibility stays true, intensity zeroes instead, to
 // avoid recreating the render proxy). The ON-path intensity is a *computed*
 // value (per-equipped-item, not a bytecode constant), so it's read live off
 // the sender's own Flashlight component and carried across rather than
-// guessed/hardcoded — only meaningful when flashlightOn is true.
+// guessed/hardcoded - only meaningful when flashlightOn is true.
 struct PlayerLights {
     bool  flashlightOn        = false;
     bool  nightVisionOn       = false;
@@ -345,15 +345,15 @@ std::vector<uint8_t>       encode_world_action(const std::string& json);
 std::optional<std::string> decode_world_action(const uint8_t* p, size_t n);
 
 // ItemDropRequest: itemId-based (see server/src/lib/protocol.js decodeItemDropRequest
-// for the full rationale — matches by itemId server-side, not a container slot
+// for the full rationale - matches by itemId server-side, not a container slot
 // index the client can't cleanly reproduce from the RequestDropAsPickup hook).
 // Format: [version=1][quantity:u16BE][posX/Y/Z:f32BE][itemIdLen:u16BE][itemId utf8]
 std::vector<uint8_t> encode_item_drop_request(const std::string& itemId, uint16_t quantity,
                                                float x, float y, float z);
 
-// InteractionRequest/BUILD payload — itemId-based (see protocol.cpp for
+// InteractionRequest/BUILD payload - itemId-based (see protocol.cpp for
 // full rationale). f.entityId is left 0 on this frame (there's no entity
-// yet — the server assigns one and replies via EntitySpawn/InteractionResult).
+// yet - the server assigns one and replies via EntitySpawn/InteractionResult).
 std::vector<uint8_t> encode_interaction_request_build(const std::string& itemId,
                                                         float x, float y, float z, float yaw);
 
@@ -366,9 +366,9 @@ double      json_double(const std::string& json, const std::string& key);
 std::string next_request_id();
 
 // ProfileRevision encode/decode (inventory slot itemId encoded as length-prefixed
-// string). Shared format for both ProfileRevision (client→server) and
-// PlayerProgressRestore (server→client, replays the last-saved ProfileRevision
-// payload verbatim) — decode_player_progress must be used for both, not
+// string). Shared format for both ProfileRevision (client->server) and
+// PlayerProgressRestore (server->client, replays the last-saved ProfileRevision
+// payload verbatim) - decode_player_progress must be used for both, not
 // decode_movement.
 std::vector<uint8_t>            encode_player_progress(const PlayerProgress& p);
 std::optional<PlayerProgress>   decode_player_progress(const uint8_t* p, size_t n);

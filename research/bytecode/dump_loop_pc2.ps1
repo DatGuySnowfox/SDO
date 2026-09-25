@@ -4,8 +4,8 @@
 #   2. Writes bytecode_dump.flag (2 lines: class, function).
 #   3. Polls debug.log by reading from that fixed byte offset to current
 #      EOF each iteration (NOT Get-Content -Tail N: this log is extremely
-#      chatty — 08:18:41 alone had 10+ lines land within a single ms window
-#      — so a fixed-line tail can blow past the completion line before the
+#      chatty - 08:18:41 alone had 10+ lines land within a single ms window
+# - so a fixed-line tail can blow past the completion line before the
 #      next 200ms poll ever looks, causing false "timed out" skips even
 #      though the dump itself completed in under a millisecond, confirmed
 #      2026-08-17 against "AI Camera Activate": wrote its .bin at .618,
@@ -75,7 +75,7 @@ foreach ($line in $targets) {
     $flagPath = "$FlagDir\bytecode_dump.flag"
     [System.IO.File]::WriteAllText($flagPath, "$className`n$funcName`n")
 
-    # Poll local debug.log for the completion line — read everything from
+    # Poll local debug.log for the completion line - read everything from
     # $startOffset to current EOF each iteration (not just the last N
     # lines), so heavy interleaved logging can't push the target line out
     # of view before we see it.
@@ -89,7 +89,7 @@ foreach ($line in $targets) {
         if (-not $newText) { continue }
         if ($newText -like "*wrote *bytes to $realBinName*") { $found = $true; break }
         if ($newText -like "*$funcName*not found*") { $notFound = $true; break }
-        # "<ClassName> instance/CDO not found" — no live instance exists right
+        # "<ClassName> instance/CDO not found" - no live instance exists right
         # now (e.g. no zombie/vehicle currently spawned nearby). Distinct from
         # the function-not-found case above; without this check the loop just
         # burns the full 10s timeout instead of failing fast.

@@ -14,7 +14,7 @@ public enum ModStatus
 public record GameInfo(string? Win64Path, string? GameExePath, ModStatus ModStatus);
 
 // Steam-path detection ported from the previous WinForms launcher
-// (launcher/Launcher.cs, since removed) — same logic, just relocated.
+// (launcher/Launcher.cs, since removed) - same logic, just relocated.
 public static class GameLocator
 {
     public static GameInfo Locate()
@@ -51,7 +51,7 @@ public static class GameLocator
                             @"steamapps\common\SurrounDead\SurrounDead\Binaries\Win64"));
             }
         }
-        catch { /* no Steam registry entry — fall through to whatever else was found */ }
+        catch { /* no Steam registry entry - fall through to whatever else was found */ }
 
         return candidates.FirstOrDefault(Directory.Exists);
     }
@@ -59,7 +59,7 @@ public static class GameLocator
     // UE4SS moved its layout after v3.0.1: the loader (dwmapi.dll) still sits
     // next to the game exe, but UE4SS.dll, the settings file and Mods/ all
     // dropped into a ue4ss/ subdirectory. Both are in the wild, so resolve
-    // which one is present rather than assuming — scripts/deploy.ps1 already
+    // which one is present rather than assuming - scripts/deploy.ps1 already
     // does exactly this, and this file assuming the old one meant a correctly
     // installed mod on a current UE4SS reported as missing, which disables the
     // Launch button.

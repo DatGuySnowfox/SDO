@@ -1,9 +1,9 @@
-// protocol_roundtrip.cpp — standalone, dependency-free round-trip test for
+// protocol_roundtrip.cpp - standalone, dependency-free round-trip test for
 // src/protocol.hpp / src/protocol.cpp.
 //
 // protocol.cpp has no UE4SS/UE5 dependency (only <array>/<cstdint>/<optional>/
-// <string>/<vector> plus <Windows.h> for now_micros()), so it — and this test
-// — build and run completely standalone, no game or mod DLL involved.
+// <string>/<vector> plus <Windows.h> for now_micros()), so it - and this test
+// - build and run completely standalone, no game or mod DLL involved.
 //
 // What this covers, per MsgType (see src/protocol.hpp MsgType enum, ~30
 // values):
@@ -33,7 +33,7 @@
 //
 // Every field is checked with a value chosen to catch endianness, sign, and
 // truncation bugs (negative floats, values with high bits set, non-ASCII-safe
-// but valid UTF-8 strings, near-uint16 boundary lengths, etc.) — not all-zero
+// but valid UTF-8 strings, near-uint16 boundary lengths, etc.) - not all-zero
 // data.
 
 #include "../src/protocol.hpp"
@@ -116,7 +116,7 @@ static float get_f32(const uint8_t* p) {
 }
 
 // ---------------------------------------------------------------------------
-// 1. Frame envelope — encode_frame / decode_frame
+// 1. Frame envelope - encode_frame / decode_frame
 //    Exercises every header field plus arbitrary payload bytes, and is also
 //    the sole round-trip coverage for the pure header-only MsgTypes (no
 //    dedicated payload struct exists for these in protocol.cpp):
@@ -136,7 +136,7 @@ static void test_frame_roundtrip(MsgType type, const std::string& label,
     f.connectionId = 0x0102030405060708ULL;
     for (int i = 0; i < 16; ++i) f.sessionId[i] = static_cast<uint8_t>(0xA0 + i);
     for (int i = 0; i < 16; ++i) f.worldId[i]   = static_cast<uint8_t>(0x50 + i);
-    f.playerId    = 0xFFEEDDCCBBAA9988ULL;   // high bit set — catches sign bugs
+    f.playerId    = 0xFFEEDDCCBBAA9988ULL;   // high bit set - catches sign bugs
     f.entityId    = 0x1122334455667799ULL;
     f.timestampUs = 0x0011223344556677ULL;
     f.payload     = payload;
@@ -241,7 +241,7 @@ static void test_frame_envelope_all_header_only_types() {
 }
 
 // ---------------------------------------------------------------------------
-// 2. Movement — encode_movement / decode_movement
+// 2. Movement - encode_movement / decode_movement
 // ---------------------------------------------------------------------------
 
 static void test_movement() {
@@ -296,7 +296,7 @@ static void test_movement() {
 }
 
 // ---------------------------------------------------------------------------
-// 3. WorldState — decode_world_state only in protocol.cpp; encode here
+// 3. WorldState - decode_world_state only in protocol.cpp; encode here
 //    mirrors the documented format: [tag=1][revision:u32BE][authorityMs:u64BE]
 //    [timeOfDay/rain/snow/fog/cloudCover/wind/thunder: 7xf32BE] = 41 bytes.
 // ---------------------------------------------------------------------------
@@ -365,7 +365,7 @@ static void test_world_state() {
 }
 
 // ---------------------------------------------------------------------------
-// 4. PlayerDamage — decode_player_damage only; mirror encoder per doc:
+// 4. PlayerDamage - decode_player_damage only; mirror encoder per doc:
 //    [tag=1][current:f32BE][maximum:f32BE][revision:u32BE] = 13 bytes.
 // ---------------------------------------------------------------------------
 
@@ -397,7 +397,7 @@ static void test_player_damage() {
     ok(feq(d->maximum, dmg.maximum), "PlayerDamage.maximum round-trips");
     ok(d->revision == dmg.revision, "PlayerDamage.revision (high bits set) round-trips");
 
-    // current > maximum is allowed by decode (only current<0 / maximum<=0 rejected) —
+    // current > maximum is allowed by decode (only current<0 / maximum<=0 rejected) -
     // confirm the boundary rules instead.
     {
         PlayerDamage bad = dmg;
@@ -416,7 +416,7 @@ static void test_player_damage() {
 }
 
 // ---------------------------------------------------------------------------
-// 5. EntitySpawn (EntityDescriptorData) — decode_entity_descriptor only;
+// 5. EntitySpawn (EntityDescriptorData) - decode_entity_descriptor only;
 //    mirror encoder per doc: [tag=1][kind:u8][revision:u32BE][qty:u16BE]
 //    [ownerPlayerId:u64BE][classPathLen:u16BE][classPath...][itemIdLen:u16BE][itemId...]
 // ---------------------------------------------------------------------------
@@ -473,7 +473,7 @@ static void test_entity_descriptor() {
 }
 
 // ---------------------------------------------------------------------------
-// 6. EntityState (EntityStateData) — decode_entity_state only; mirror encoder
+// 6. EntityState (EntityStateData) - decode_entity_state only; mirror encoder
 //    per doc: [tag=1][kind:u8][revision:u32BE][x/y/z/yaw/health:5xf32BE][state:u8]
 //    = exactly 27 bytes.
 // ---------------------------------------------------------------------------
@@ -526,7 +526,7 @@ static void test_entity_state() {
 }
 
 // ---------------------------------------------------------------------------
-// 7. ItemDropRequest — encode_item_drop_request only; mirror decoder per doc:
+// 7. ItemDropRequest - encode_item_drop_request only; mirror decoder per doc:
 //    [version=1][quantity:u16BE][posX/Y/Z:f32BE][itemIdLen:u16BE][itemId utf8]
 // ---------------------------------------------------------------------------
 
@@ -582,7 +582,7 @@ static void test_item_drop_request() {
 }
 
 // ---------------------------------------------------------------------------
-// 7b. InteractionRequest/BUILD — encode_interaction_request_build only;
+// 7b. InteractionRequest/BUILD - encode_interaction_request_build only;
 //     mirror decoder per doc: [version=1][interactionType=1][posX/Y/Z/yaw:f32BE]
 //     [itemIdLen:u16BE][itemId utf8]
 // ---------------------------------------------------------------------------
@@ -639,7 +639,7 @@ static void test_interaction_request_build() {
 }
 
 // ---------------------------------------------------------------------------
-// 8. PlayerProgress — encode_player_progress / decode_player_progress
+// 8. PlayerProgress - encode_player_progress / decode_player_progress
 //    (shared wire format for ProfileRevision client->server AND
 //    PlayerProgressRestore server->client)
 // ---------------------------------------------------------------------------
@@ -651,7 +651,7 @@ static void test_player_progress() {
     p.revision = 0xCAFEBABEu;
     p.health = 0.42f; p.hunger = 0.1f; p.thirst = 0.99f;
     p.stamina = 0.0f; p.radiation = 1.0f;
-    p.level = -1; // int32_t: encode casts to uint32_t and decode casts back — verify sign survives
+    p.level = -1; // int32_t: encode casts to uint32_t and decode casts back - verify sign survives
     p.xp = 123456.75f;
     p.posX = -9999.5f; p.posY = 0.0f; p.posZ = 42.25f; p.yaw = -180.0f;
 
@@ -667,7 +667,7 @@ static void test_player_progress() {
     p.containers = { backpack, secureContainer };
 
     p.forename = "Jean-Luc";
-    p.surname = "O'Neil";  // apostrophe — catches naive-escaping-style bugs
+    p.surname = "O'Neil";  // apostrophe - catches naive-escaping-style bugs
     p.zombieKills = 12345;
     p.daysSurvived = -7;   // shouldn't happen in practice, but exercises sign round-trip
     p.bossZombieKills = 3;
@@ -750,7 +750,7 @@ static void test_player_progress() {
 }
 
 // ---------------------------------------------------------------------------
-// 9. Equipment — encode_equipment / decode_equipment
+// 9. Equipment - encode_equipment / decode_equipment
 // ---------------------------------------------------------------------------
 
 static void test_equipment() {
@@ -789,7 +789,7 @@ static void test_equipment() {
 }
 
 // ---------------------------------------------------------------------------
-// 10. WeaponAttachments — encode_weapon_attachments / decode_weapon_attachments
+// 10. WeaponAttachments - encode_weapon_attachments / decode_weapon_attachments
 // ---------------------------------------------------------------------------
 
 static void test_weapon_attachments() {
@@ -823,7 +823,7 @@ static void test_weapon_attachments() {
 }
 
 // ---------------------------------------------------------------------------
-// 11. PawnAppearance — encode_pawn_appearance / decode_pawn_appearance
+// 11. PawnAppearance - encode_pawn_appearance / decode_pawn_appearance
 // ---------------------------------------------------------------------------
 
 static void test_pawn_appearance() {
@@ -892,7 +892,7 @@ static void test_pawn_appearance() {
 }
 
 // ---------------------------------------------------------------------------
-// 11b. PlayMontage — encode_play_montage / decode_play_montage
+// 11b. PlayMontage - encode_play_montage / decode_play_montage
 // ---------------------------------------------------------------------------
 
 static void test_play_montage() {
@@ -927,7 +927,7 @@ static void test_play_montage() {
 }
 
 // ---------------------------------------------------------------------------
-// 12. World-action JSON envelope — encode_world_action / decode_world_action
+// 12. World-action JSON envelope - encode_world_action / decode_world_action
 //     Used for: CharacterCreate, InteractionRequest, InteractionResult,
 //     ItemPickupResult, ItemDropResult (all flat single-level JSON objects).
 //     Also exercises json_str/json_bool/json_double helpers.
@@ -977,7 +977,7 @@ static void test_world_action_json() {
 
 int main() {
     std::printf("SDO protocol round-trip test\n");
-    std::printf("(standalone — no UE4SS/UE5 dependency, see src/protocol.cpp)\n");
+    std::printf("(standalone - no UE4SS/UE5 dependency, see src/protocol.cpp)\n");
 
     test_frame_envelope_all_header_only_types();
     test_movement();

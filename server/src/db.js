@@ -25,8 +25,8 @@ db.exec(`
 
     -- Live world entities: dropped items, placed building pieces, containers.
     -- Keyed by entityId (string of BigInt) so we can delete by entityId on despawn.
-    -- spawnFrame is the complete encoded wire frame — replayed verbatim to late joiners.
-    -- DEPRECATED — superseded by the entities table below (structured, queryable
+    -- spawnFrame is the complete encoded wire frame - replayed verbatim to late joiners.
+    -- DEPRECATED - superseded by the entities table below (structured, queryable
     -- by kind/position, field-mutable). Kept only until every entity kind still
     -- reading/writing it (see host-agent.js) is migrated over; do not add new
     -- callers of world_entities.
@@ -36,7 +36,7 @@ db.exec(`
         spawnedAt  INTEGER NOT NULL
     );
 
-    -- Unified world-entity store — every shared entity kind (GroundItem, Zombie,
+    -- Unified world-entity store - every shared entity kind (GroundItem, Zombie,
     -- Vehicle, PlacedStructure, Container) lives here as one row, not a bespoke
     -- table/Map per kind. attributes is kind-specific JSON (health, inventory
     -- contents, archetype, owner, ...); x/y/z are plain columns (not buried in
@@ -93,15 +93,15 @@ const _spawnEntity   = db.prepare(
     'INSERT OR REPLACE INTO world_entities (entityId, spawnFrame, spawnedAt) VALUES (?, ?, ?)');
 // Appends a follow-up EntityState frame's bytes onto the stored descriptor
 // frame so a late joiner's replay (see gateway.js) gets both frames back to
-// back — the client's own frame decoder splits them apart exactly as if
+// back - the client's own frame decoder splits them apart exactly as if
 // they'd arrived as two separate writes. No-op if the entity isn't tracked
 // (e.g. an EntityState for something other than a world entity).
 //
-// Concatenated in JS, not via SQL `spawnFrame || ?` — that raw-SQL BLOB
+// Concatenated in JS, not via SQL `spawnFrame || ?` - that raw-SQL BLOB
 // concat got coerced through SQLite's TEXT/UTF-8 affinity, replacing any
 // byte sequence that wasn't valid UTF-8 with U+FFFD (0xEF 0xBF 0xBD),
 // corrupting the binary frame and breaking every later replay of that
-// entity (decodeFrame: bad_magic) — which broke EVERY subsequent client
+// entity (decodeFrame: bad_magic) - which broke EVERY subsequent client
 // join, not just drops, once any entity had been dropped (2026-08-12).
 const _getEntityFrame = db.prepare('SELECT spawnFrame FROM world_entities WHERE entityId = ?');
 const _setEntityFrame = db.prepare('UPDATE world_entities SET spawnFrame = ? WHERE entityId = ?');
@@ -111,7 +111,7 @@ const _allEntities   = db.prepare(
 
 // ── Unified entities ─────────────────────────────────────────────────────────
 // Generic store for every shared world-entity kind. `attributes` is passed/
-// returned as a plain JS object — JSON (de)serialization happens at this
+// returned as a plain JS object - JSON (de)serialization happens at this
 // boundary so callers never touch a raw JSON string.
 
 const _upsertEntity = db.prepare(`

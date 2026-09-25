@@ -17,7 +17,7 @@ public class DirectoryClient(string directoryUrl)
     }
 
     // Pings a server's own health endpoint directly (not through the
-    // Worker) — this is the actual gateway's own reachability/latency, not
+    // Worker) - this is the actual gateway's own reachability/latency, not
     // the directory's. httpPort convention: gatewayPort+1 (see
     // scripts/join.ps1 and directory-worker's handleJoin, which both assume
     // this same relationship).
@@ -43,7 +43,7 @@ public class DirectoryClient(string directoryUrl)
     }
 
     // Fetches a ticket directly from the target server's own HTTP API (not
-    // proxied through the Worker — unlike the browser status page, a native
+    // proxied through the Worker - unlike the browser status page, a native
     // app has no mixed-content restriction, so there's no need for the
     // /v1/join indirection directory-worker's handleJoin exists for).
     public async Task<(string ticket, string gatewayHost, int gatewayPort)> GetTicketAsync(

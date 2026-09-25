@@ -1,4 +1,4 @@
-# gen_import_lib.ps1 – run once from a Visual Studio Developer PowerShell.
+# gen_import_lib.ps1 - run once from a Visual Studio Developer PowerShell.
 #
 # Generates vendor/ue4ss-stub/lib/UE4SS.lib from the .def file so that
 # CMake's find_library(UE4SS_LIB ...) resolves at configure time.

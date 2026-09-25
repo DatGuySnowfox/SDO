@@ -1,6 +1,6 @@
 'use strict';
 
-// Full integration test — starts the server in-process and exercises every
+// Full integration test - starts the server in-process and exercises every
 // major protocol flow with two fake players.
 //
 // Covered:
@@ -9,11 +9,11 @@
 //   3. Client TCP authentication (AuthenticationAccepted)
 //   4. Player join handshake (JoinAccepted)
 //   5. Late-joiner replay  (PlayerConnected for existing players)
-//   6. Movement relay      (A → gateway → B)
-//   7. DeathRequest        (A → host → Death back to A)
-//   8. RespawnRequest      (A → host → Respawn back to A)
-//   9. WorldState broadcast (host → all clients)
-//  10. Disconnect broadcast (A leaves → B gets PlayerDisconnected)
+//   6. Movement relay      (A -> gateway -> B)
+//   7. DeathRequest        (A -> host -> Death back to A)
+//   8. RespawnRequest      (A -> host -> Respawn back to A)
+//   9. WorldState broadcast (host -> all clients)
+//  10. Disconnect broadcast (A leaves -> B gets PlayerDisconnected)
 //  11. Duplicate-ticket replay protection
 //  12. Bad-ticket rejection
 
@@ -29,11 +29,11 @@ process.env.SDO_HTTP_PORT            = '43701';
 process.env.SDO_WORLD_ID             = 'deadbeef-cafe-4000-8000-123456789abc';
 process.env.SDO_WORLD_STATE_INTERVAL_MS = '1000'; // faster for tests
 process.env.SDO_HEARTBEAT_MS         = '200';
-// Isolated throwaway DB — must not touch the real server/players.db.
+// Isolated throwaway DB - must not touch the real server/players.db.
 process.env.SDO_DB_PATH = require('node:path').join(
     require('node:os').tmpdir(), `sdo_integration_test_${Date.now()}.db`);
 // Small synthetic world (one zone at the origin) instead of the real
-// 913-zone extracted data — keeps the zombie-spawn test deterministic and
+// 913-zone extracted data - keeps the zombie-spawn test deterministic and
 // independent of whether server/scripts/extract-zombie-data.js has been run.
 process.env.SDO_ZOMBIE_TICK_INTERVAL_MS = '300';
 {
@@ -66,7 +66,7 @@ let total = 0, failures = 0;
 
 const feq = (a, b, eps = 1e-4) => Math.abs(a - b) < eps;
 
-// EntitySpawn/EntityState payloads both start [tag=1][kind:u8]... — with the
+// EntitySpawn/EntityState payloads both start [tag=1][kind:u8]... - with the
 // zombie-simulation background tick now also emitting these, tests that care
 // about a specific entity kind need to filter, not just match on MsgType.
 const byKind = (kind) => (f) => f.payload && f.payload.length > 1 && f.payload.readUInt8(1) === kind;
@@ -100,7 +100,7 @@ const httpPost = (url, body, token) => new Promise((res, rej) => {
     req.end(b);
 });
 
-// ── FakeClient — speaks binary protocol over TCP ──────────────────────────────
+// ── FakeClient - speaks binary protocol over TCP ──────────────────────────────
 
 class FakeClient {
     constructor(name) {
@@ -139,7 +139,7 @@ class FakeClient {
     send(f) { this.socket.write(encodeFrame(f)); }
 
     // Resolves with the next frame of the given type (optionally matching a
-    // predicate too — needed once more than one live source can emit the
+    // predicate too - needed once more than one live source can emit the
     // same MsgType, e.g. the zombie-simulation background tick alongside a
     // specific item-drop/build test's own EntitySpawn/EntityState frames;
     // matching by type alone is racy there). Checks the queue first.
@@ -266,7 +266,7 @@ async function runTests() {
 
     // ── 4b. Vehicle entity replay ─────────────────────────────────────────────
     // _broadcastVehicles() fires once at host-agent's own authentication,
-    // before any real client has joined — nobody catches it live. Verifies
+    // before any real client has joined - nobody catches it live. Verifies
     // the vehicle still reaches a joining client via the persisted-entity
     // replay path (gateway.js's _replayTo, reconstructed from the unified
     // entities table), the same mechanism GroundItem/PlacedStructure/Zombie
@@ -307,7 +307,7 @@ async function runTests() {
     const aliceGotMov = await alice.waitFor(MsgType.Movement);
     ok(aliceGotMov.playerId === bob.playerId, 'alice receives bob movement');
 
-    // ── 7. DeathRequest → Death ───────────────────────────────────────────────
+    // ── 7. DeathRequest -> Death ───────────────────────────────────────────────
     console.log('\n── 7. Death flow ────────────────────────');
     alice.send({
         type: MsgType.DeathRequest,
@@ -321,7 +321,7 @@ async function runTests() {
     ok(aliceDeath !== null,                        'alice received Death confirmation');
     ok(aliceDeath.playerId === alice.playerId,     'Death has correct playerId');
 
-    // ── 8. RespawnRequest → Respawn ───────────────────────────────────────────
+    // ── 8. RespawnRequest -> Respawn ───────────────────────────────────────────
     console.log('\n── 8. Respawn flow ──────────────────────');
     alice.send({
         type: MsgType.RespawnRequest,
@@ -351,7 +351,7 @@ async function runTests() {
     // ── 9b. Item drop + pickup roundtrip (unified `entities` table) ──────────
     // Exercises the entity persistence path migrated onto db.js's new
     // structured `entities` table (gateway.js EntitySpawn/EntityState/
-    // EntityDespawn handling) — not covered by any earlier section.
+    // EntityDespawn handling) - not covered by any earlier section.
     console.log('\n── 9b. Item drop + pickup ───────────────');
     {
         const itemId = 'DA_TestWidget';
@@ -409,7 +409,7 @@ async function runTests() {
 
     // ── 9c. Building placement (InteractionRequest/BUILD, itemId-based) ──────
     // Verifies the migration off the old meaningless numeric pieceTypeId
-    // onto a real itemId (research/04_ida_investigation_log.md Session 58 —
+    // onto a real itemId (research/04_ida_investigation_log.md Session 58 - 
     // BuildActorClass resolves off the same DataAsset GroundItem already
     // uses) and that PlacedStructure lands correctly in the unified table.
     console.log('\n── 9c. Building placement ───────────────');
@@ -449,7 +449,7 @@ async function runTests() {
 
     // ── 9d. Zombie simulation (spawn near a player, damage, death) ───────────
     // End-to-end wiring check on top of tests/zombie-simulation.js's own
-    // pure-state-machine unit tests — exercises the actual host-agent tick
+    // pure-state-machine unit tests - exercises the actual host-agent tick
     // timer, frame encoding, and gateway relay/persistence path together.
     console.log('\n── 9d. Zombie simulation ────────────────');
     {
@@ -476,7 +476,7 @@ async function runTests() {
         const stored = db.getEntity(zSpawn.entityId);
         ok(stored !== null && stored.kind === EntityKind.Zombie, 'zombie entity landed in unified table with kind=Zombie');
 
-        // Attack it — entityId is the frame-header field, damage is JSON payload.
+        // Attack it - entityId is the frame-header field, damage is JSON payload.
         const dmgJson = Buffer.from(JSON.stringify({ damage: 30 }), 'utf8');
         const dmgPayload = Buffer.alloc(2 + dmgJson.length);
         dmgPayload.writeUInt16BE(dmgJson.length, 0);

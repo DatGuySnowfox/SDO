@@ -18,7 +18,7 @@ function str(envName, fileKey, def) {
     if (e && e.trim()) return e.trim();
     const f = file[fileKey];
     // `f &&` used to treat a literal JSON `false` (falsy, but very much a
-    // deliberate, defined value — e.g. ticketReplayProtection: false) as
+    // deliberate, defined value - e.g. ticketReplayProtection: false) as
     // "unset", silently falling through to def instead. 2026-08-13: this
     // is why ticketReplayProtection stayed enabled all night despite
     // settings.json explicitly setting it to false.
@@ -51,12 +51,12 @@ module.exports = {
 
     // Per-client inbound frames/sec before the gateway drops the connection
     // as abusive. 2026-08-13: the default (120) was tuned before montage
-    // sync existed — movement alone is already ~20/s at the default
+    // sync existed - movement alone is already ~20/s at the default
     // SDO_MOVE_INTERVAL_MS, and a real melee combo now fires several
     // PlayMontage sends in well under a second on top of that, plus
     // whatever periodic equipment/appearance/attachment resyncs land in
     // the same window. Both PC1 and PC2 got server-side "rate limited"
-    // and dropped mid-combat tonight at the old default — was previously
+    // and dropped mid-combat tonight at the old default - was previously
     // misdiagnosed as a crash/network issue before the rate-limit logging
     // added this session (gateway.js's _onData) made the real cause
     // visible. Bumped way up for this dev server; a production deployment
@@ -67,11 +67,11 @@ module.exports = {
     // Dev/LAN-testing escape hatch: tickets are normally single-use
     // (replay-protected), which means a client that already used its
     // ticket has no way to reconnect after any drop short of fetching a
-    // brand new one out of band and relaunching the whole game — the
+    // brand new one out of band and relaunching the whole game - the
     // launcher is meant to own that refresh flow, but it doesn't exist
     // yet. Until it does, allow the same ticket to be replayed so the
     // built-in reconnect-with-backoff (tcp_client.cpp) can actually
-    // recover on its own. Defaults to protected/off — only disable this
+    // recover on its own. Defaults to protected/off - only disable this
     // on a local or otherwise trusted dev server, never in production.
     ticketReplayProtection: str('SDO_TICKET_REPLAY_PROTECTION', 'ticketReplayProtection', 'true') !== 'false',
 
@@ -84,7 +84,7 @@ module.exports = {
     clientTimeoutMs:      int('SDO_CLIENT_TIMEOUT_MS',      'clientTimeoutMs',      15_000),
 
     // Server-directory discovery (directory-worker/, a free Cloudflare
-    // Worker) — opt-in: unset directoryUrl entirely disables it, so an
+    // Worker) - opt-in: unset directoryUrl entirely disables it, so an
     // existing LAN-only setup is unaffected. directoryKey must match the
     // Worker's DIRECTORY_KEY secret. publicHost overrides auto-detection
     // (via a public IP-echo call, see gateway.js) for a DDNS hostname or a
@@ -95,7 +95,7 @@ module.exports = {
     serverName:            str('SDO_SERVER_NAME',             'serverName',            'SurrounDead Server'),
     publicHost:            str('SDO_PUBLIC_HOST',             'publicHost',            ''),
 
-    // Ground-item lifecycle and BUILD-placement validation — ported from the
+    // Ground-item lifecycle and BUILD-placement validation - ported from the
     // old SDO v3 alpha's host-agent, which had this world tuned from real
     // play (that codebase is not distributed with this repo). TTL/max-count
     // defaults match that alpha's

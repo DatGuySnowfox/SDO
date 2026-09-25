@@ -7,7 +7,7 @@ namespace SDO;
 // Matches directory-worker's GET /v1/servers response shape exactly
 // (directory-worker/src/index.js: listServers()). Implements
 // INotifyPropertyChanged so the DataGrid picks up PingAsync's results
-// live — these come in asynchronously well after the initial data-bind,
+// live - these come in asynchronously well after the initial data-bind,
 // not just once at load.
 public class ServerEntry : INotifyPropertyChanged
 {
@@ -29,7 +29,7 @@ public class ServerEntry : INotifyPropertyChanged
     [JsonPropertyName("maxPlayers")]
     public int MaxPlayers { get; set; }
 
-    // UI-only, filled in by DirectoryClient.PingAsync — not part of the
+    // UI-only, filled in by DirectoryClient.PingAsync - not part of the
     // directory payload. Pinged distinguishes "not checked yet" from
     // "checked and confirmed offline" (IsOnline=false covers both, which
     // isn't enough for the status column to render correctly before the
@@ -42,7 +42,7 @@ public class ServerEntry : INotifyPropertyChanged
     public bool  IsOnline { get => _isOnline; set { _isOnline = value; Raise(); Raise(nameof(StatusText)); } }
     public bool  Pinged   { get => _pinged;   set { _pinged = value;   Raise(); Raise(nameof(StatusText)); } }
 
-    public string StatusText => !Pinged ? "…" : IsOnline ? "Online" : "Offline";
+    public string StatusText => !Pinged ? "..." : IsOnline ? "Online" : "Offline";
 
     public event PropertyChangedEventHandler? PropertyChanged;
     void Raise([CallerMemberName] string? name = null) =>

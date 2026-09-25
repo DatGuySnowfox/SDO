@@ -1,22 +1,22 @@
 'use strict';
 
-// SDO server directory — a minimal, free-tier Cloudflare Worker replacement
+// SDO server directory - a minimal, free-tier Cloudflare Worker replacement
 // for the old production system's server-directory service (that codebase is
 // not distributed with this repo). Deliberately much
 // smaller: no pre-registered server list, no Steam ownership/OpenID, no
-// trials, no mod registry, no icons — just "which home-hosted servers are
+// trials, no mod registry, no icons - just "which home-hosted servers are
 // currently up and how do I reach one." Each server self-registers with a
 // heartbeat.
 //
 // Storage: a single SQLite-backed Durable Object, NOT Workers KV.
 //
 // 2026-09-24: this started on KV, using its native per-key TTL for expiry.
-// That does not survive contact with a heartbeat workload on the free plan —
+// That does not survive contact with a heartbeat workload on the free plan - 
 // KV's free tier allows 1,000 writes/DAY account-wide, and one server
 // heartbeating on the default 60s interval (server/src/config.js
 // directoryHeartbeatMs) is 1,440 writes/day on its own. A single server blew
 // the daily quota in ~17 hours; the reads were never the problem (100,000/day)
-// and neither was storage size — it is purely that "refresh a liveness
+// and neither was storage size - it is purely that "refresh a liveness
 // timestamp on a timer" is a write-shaped workload and KV prices writes like
 // a scarce resource. Raising the interval only buys headroom until the second
 // or third community-hosted server shows up, so the store was replaced rather
@@ -31,7 +31,7 @@
 //
 // One Durable Object instance holds the whole registry (idFromName REGISTRY_ID),
 // so every heartbeat and every read serialize through the same object. That is
-// the point — it is a single small shared list, not something to shard — and at
+// the point - it is a single small shared list, not something to shard - and at
 // this scale (a handful of servers, a few requests a minute) the single-threaded
 // execution model is a feature, not a bottleneck.
 
@@ -64,7 +64,7 @@ function clampInt(value, min, max, fallback) {
 }
 
 // The registry itself. Methods are called as RPC from the Worker below via a
-// stub — no internal fetch()/URL routing, which is the older Durable Object
+// stub - no internal fetch()/URL routing, which is the older Durable Object
 // pattern and buys nothing here.
 export class ServerRegistry extends DurableObject {
     constructor(ctx, env) {
@@ -86,7 +86,7 @@ export class ServerRegistry extends DurableObject {
     }
 
     // Drops entries whose last heartbeat is older than the TTL. This replaces
-    // KV's per-key expirationTtl — there is no built-in row expiry, so the
+    // KV's per-key expirationTtl - there is no built-in row expiry, so the
     // sweep happens on read instead of on a timer. No alarm: an alarm would
     // keep waking the object up to delete rows nobody is currently asking
     // about, which is the opposite of what we want on a free-tier budget.
@@ -136,7 +136,7 @@ function registry(env) {
 async function handleHeartbeat(request, env) {
     const key = request.headers.get('x-directory-key') || '';
     // Timing-safe-ish enough for this threat model (a low-value discovery
-    // list, not an auth system with real secrets behind it) — a plain ===
+    // list, not an auth system with real secrets behind it) - a plain ===
     // is fine here, no need for crypto.subtle.timingSafeEqual.
     if (!env.DIRECTORY_KEY || key !== env.DIRECTORY_KEY) {
         return json({ ok: false, error: 'unauthorized' }, 401);
@@ -153,8 +153,8 @@ async function handleHeartbeat(request, env) {
     const name = typeof body.name === 'string' ? body.name.trim().slice(0, 64) : '';
     const host = typeof body.host === 'string' ? body.host.trim() : '';
     const port = Number.parseInt(body.port, 10);
-    // playerCount/maxPlayers are just display stats — clamping a garbage
-    // value is fine. port is a connection instruction, not a stat — an
+    // playerCount/maxPlayers are just display stats - clamping a garbage
+    // value is fine. port is a connection instruction, not a stat - an
     // out-of-range one must be rejected outright, not silently clamped to
     // the nearest valid boundary (which would point players at the wrong
     // port instead of just failing loudly).
@@ -180,7 +180,7 @@ async function handleList(env) {
 
 // Proxies a ticket request to the chosen server's own HTTP API. Needed
 // because the status page is always HTTPS (Cloudflare Workers) while a
-// home-hosted gateway's ticket endpoint is plain HTTP — browsers block that
+// home-hosted gateway's ticket endpoint is plain HTTP - browsers block that
 // combination outright as mixed content. A Worker's outbound fetch is a
 // server-to-server request, not subject to that browser restriction, so
 // proxying through here is what actually makes the browser-based "Join"
@@ -245,11 +245,11 @@ const STATUS_PAGE_TEMPLATE = `<!doctype html>
 <h1>SurrounDead servers</h1>
 
 <h2>Currently up</h2>
-<div id="servers" class="empty">Loading…</div>
+<div id="servers" class="empty">Loading...</div>
 
 <script>
 // Persisted per-browser identity, same role as the PowerShell scripts'
-// %APPDATA%\SDO\player.id file — generated once, reused on
+// %APPDATA%\SDO\player.id file - generated once, reused on
 // every future visit so a returning tester keeps the same in-game identity/
 // progress instead of getting a fresh one every join.
 function getPlayerId() {
@@ -286,17 +286,17 @@ async function refresh() {
     }
 }
 
-// Fetches a ticket via the Worker's own /v1/join proxy (see handleJoin —
+// Fetches a ticket via the Worker's own /v1/join proxy (see handleJoin - 
 // needed because this page is HTTPS and a home-hosted gateway's ticket API
 // is plain HTTP, which browsers block outright as mixed content if called
-// directly), then hands off to Steam with the ticket as a launch argument —
-// steam://run/<appid>//-sdo_host=... -sdo_port=... -sdo_ticket=... — which
+// directly), then hands off to Steam with the ticket as a launch argument - 
+// steam://run/<appid>//-sdo_host=... -sdo_port=... -sdo_ticket=... - which
 // the mod reads via its own command line on startup. No local script, no
 // download, no OS security prompt: just this one click.
 async function joinServer(index, button) {
     const server = servers[index];
     button.disabled = true;
-    button.textContent = 'Joining…';
+    button.textContent = 'Joining...';
     try {
         const res = await fetch('/v1/join', {
             method: 'POST',
@@ -307,7 +307,7 @@ async function joinServer(index, button) {
         if (!data.ok) throw new Error(data.error || 'join failed');
         const args = '-sdo_host=' + data.host + ' -sdo_port=' + data.port + ' -sdo_ticket=' + data.ticket;
         window.location.href = 'steam://run/1645820//' + encodeURIComponent(args);
-        button.textContent = 'Launching…';
+        button.textContent = 'Launching...';
     } catch (e) {
         button.disabled = false;
         button.textContent = 'Join';

@@ -32,8 +32,8 @@ namespace sdo {
 // calls send_bytes() / recv_all() which are thread-safe queue ops.
 //
 // State machine (TCP thread only):
-//   Disconnected → Auth → Joining → Active
-//   Any error → Disconnected → reconnect with exponential backoff.
+//   Disconnected -> Auth -> Joining -> Active
+//   Any error -> Disconnected -> reconnect with exponential backoff.
 class TcpClient {
 public:
     TcpClient() = default;
@@ -83,14 +83,14 @@ private:
     // ...with one deliberate exception: sock_ is also written by shutdown()
     // (tcp_client.cpp), called from whatever thread owns this TcpClient at
     // mod-unload (game thread, not the TCP thread) via close_socket().
-    // That's intentional, not an oversight — closesocket()/close() on a
+    // That's intentional, not an oversight - closesocket()/close() on a
     // socket another thread is blocked on inside select()/recv() is a
     // standard, well-defined way to unblock it (both Winsock and POSIX
     // guarantee this), and it's the only way shutdown() can make the TCP
     // thread's select() loop (run_connected(), below) exit promptly instead
     // of waiting out up to one full SELECT_TIMEOUT_US. Audited 2026-08-16:
-    // the only cross-thread call is this one, exactly once, at teardown —
-    // never during normal operation — so there's no concurrent-mutation
+    // the only cross-thread call is this one, exactly once, at teardown - 
+    // never during normal operation - so there's no concurrent-mutation
     // window while the TCP thread is actively using sock_ for anything
     // other than the same select()/recv() call this is meant to interrupt.
     sdo_socket_t         sock_         = SDO_INVALID_SOCKET;

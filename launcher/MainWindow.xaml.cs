@@ -10,7 +10,7 @@ public partial class MainWindow : Window
     const string SteamAppId = "1645820";
 
     readonly Settings _settings = SettingsStore.Load();
-    // No server address ships with this repo — configure one via
+    // No server address ships with this repo - configure one via
     // SDO_DIRECTORY_URL or HKCU\Software\SDO\DirectoryUrl.
     // See SettingsStore.DirectoryUrl().
     readonly string          _directoryUrl = SettingsStore.DirectoryUrl();
@@ -35,7 +35,7 @@ public partial class MainWindow : Window
     {
         (string text, Brush color) = _game.ModStatus switch
         {
-            ModStatus.NotFound     => ("Game not found — launch through Steam at least once first.", (Brush)FindResource("Bad")),
+            ModStatus.NotFound     => ("Game not found - launch through Steam at least once first.", (Brush)FindResource("Bad")),
             ModStatus.NotInstalled => ("Mod not installed. See the project README to install it manually for now.", (Brush)FindResource("Warn")),
             ModStatus.Installed    => ("Mod installed.", (Brush)FindResource("Good")),
             _                      => ("", (Brush)FindResource("Muted")),
@@ -50,11 +50,11 @@ public partial class MainWindow : Window
         if (string.IsNullOrWhiteSpace(_directoryUrl))
         {
             _servers.Clear();
-            SetStatus("No directory configured — set SDO_DIRECTORY_URL (or HKCU\\Software\\SDO\\DirectoryUrl).",
+            SetStatus("No directory configured - set SDO_DIRECTORY_URL (or HKCU\\Software\\SDO\\DirectoryUrl).",
                       (Brush)FindResource("Bad"));
             return;
         }
-        SetStatus("Loading server list…", (Brush)FindResource("Warn"));
+        SetStatus("Loading server list...", (Brush)FindResource("Warn"));
         BtnRefresh.IsEnabled = false;
         try
         {
@@ -68,7 +68,7 @@ public partial class MainWindow : Window
                 return;
             }
 
-            SetStatus($"{_servers.Count} server(s) found. Pinging…", (Brush)FindResource("Muted"));
+            SetStatus($"{_servers.Count} server(s) found. Pinging...", (Brush)FindResource("Muted"));
             await Task.WhenAll(_servers.Select(s => _directory.PingAsync(s)));
             SetStatus("Ready.", (Brush)FindResource("Muted"));
         }
@@ -106,7 +106,7 @@ public partial class MainWindow : Window
         }
         if (_game.GameExePath is null)
         {
-            SetStatus("Game not found — launch through Steam at least once first.", (Brush)FindResource("Bad"));
+            SetStatus("Game not found - launch through Steam at least once first.", (Brush)FindResource("Bad"));
             return;
         }
 
@@ -114,20 +114,20 @@ public partial class MainWindow : Window
         SettingsStore.Save(_settings);
 
         BtnLaunch.IsEnabled = false;
-        SetStatus($"Contacting {server.Host}…", (Brush)FindResource("Warn"));
+        SetStatus($"Contacting {server.Host}...", (Brush)FindResource("Warn"));
         try
         {
             var (ticket, gwHost, gwPort) = await _directory.GetTicketAsync(
                 server.Host, server.Port + 1, _settings.PlayerId, nickname);
 
             // Steam launch-option handoff (mod.cpp: merge_command_line_args)
-            // — the mod reads these three as command-line switches, same
+            // - the mod reads these three as command-line switches, same
             // convention as directory-worker's served join.ps1 used before
             // this launcher replaced it. No local file write, no env var,
             // just launch args straight to the process.
             var args = $"-sdo_host={gwHost} -sdo_port={gwPort} -sdo_ticket={ticket}";
             Process.Start(new ProcessStartInfo(_game.GameExePath, args) { UseShellExecute = true });
-            SetStatus("Launching…", (Brush)FindResource("Good"));
+            SetStatus("Launching...", (Brush)FindResource("Good"));
         }
         catch (Exception ex)
         {

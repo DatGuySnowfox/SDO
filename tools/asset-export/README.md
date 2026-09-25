@@ -1,6 +1,6 @@
 # asset-export
 
-Headless asset extractor — a scriptable replacement for FModel's
+Headless asset extractor - a scriptable replacement for FModel's
 **Export Folder Packages (.json)**, built on the same underlying library
 ([CUE4Parse](https://www.nuget.org/packages/CUE4Parse)).
 
@@ -10,10 +10,10 @@ update used to mean clicking through a GUI, and the one asset that matters most
 in particular are silent:
 
 - **Double-clicking an asset in FModel only previews it.** It loads into a tab
-  and writes nothing to disk. Only right-click → *Export Folder Packages* saves.
+  and writes nothing to disk. Only right-click -> *Export Folder Packages* saves.
 - **FModel's engine version is a per-game setting that does not follow the game.**
   Extracting a UE 5.6 pak while the profile still says 5.3 fails with
-  `VersionException: Read size is smaller than zero` at byte 28 — which reads
+  `VersionException: Read size is smaller than zero` at byte 28 - which reads
   like a corrupt asset rather than a misconfiguration.
 
 This tool takes the version as code, not as a remembered setting.
@@ -38,14 +38,14 @@ cd ../..
 node server/scripts/extract-zombie-data.js
 ```
 
-Output mirrors FModel's layout — `<outDir>/<asset/path>.json` — so
+Output mirrors FModel's layout - `<outDir>/<asset/path>.json` - so
 `extract-zombie-data.js` reads either interchangeably.
 
 ## Keeping it working across game updates
 
 The engine version is hardcoded as `EGame.GAME_UE5_6` in `Program.cs`. When the
 game's engine version changes, update that constant. Confirm the new version
-from the game's own executable or from UE4SS's log, not by guessing — a wrong
+from the game's own executable or from UE4SS's log, not by guessing - a wrong
 value produces the byte-28 failure above rather than a clear error.
 
 `Mappings.usmap` must also be regenerated for the new version (UE4SS `Keybinds`

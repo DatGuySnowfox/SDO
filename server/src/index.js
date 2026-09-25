@@ -1,6 +1,6 @@
 'use strict';
 
-// SurrounDead Online – dedicated server
+// SurrounDead Online - dedicated server
 //
 // Required env vars:
 //   SDO_HOST_SECRET    pre-shared key the host-agent uses with the gateway
@@ -14,7 +14,7 @@
 //   SDO_ADMIN_TOKEN    if set, POST /v1/tickets requires Authorization: Bearer <token>
 //   SDO_MAX_PLAYERS    maximum concurrent joined players (default 32)
 
-// Timestamp every console line (log/warn/error) with local HH:MM:SS.mmm —
+// Timestamp every console line (log/warn/error) with local HH:MM:SS.mmm - 
 // applies globally to this process, so gateway.js/host-agent.js need no
 // changes of their own. Added 2026-08-13 after a long session of trying to
 // correlate this log against the client's separately-timestamped-nothing

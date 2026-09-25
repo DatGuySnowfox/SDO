@@ -41,7 +41,7 @@ static uint64_t r64(const uint8_t* p) {
     return (static_cast<uint64_t>(r32(p)) << 32) | r32(p + 4);
 }
 
-// float ↔ uint32 bit-cast (avoids strict-alias UB)
+// float <-> uint32 bit-cast (avoids strict-alias UB)
 static uint32_t f2u(float f) { uint32_t u; std::memcpy(&u, &f, 4); return u; }
 static float    u2f(uint32_t u) { float f; std::memcpy(&f, &u, 4); return f; }
 
@@ -115,7 +115,7 @@ std::optional<Frame> decode_frame(const uint8_t* data, int len)
 }
 
 // ---------------------------------------------------------------------------
-// Movement  (39-byte payload, no tag byte — matches encodeMovement in JS)
+// Movement  (39-byte payload, no tag byte - matches encodeMovement in JS)
 // ---------------------------------------------------------------------------
 
 void encode_movement(const Movement& m, uint8_t out[MOVEMENT_PAYLOAD_SIZE])
@@ -242,7 +242,7 @@ std::optional<EntityDescriptorData> decode_entity_descriptor(const uint8_t* p, s
 
 // ---------------------------------------------------------------------------
 // EntityState  (exactly 27 bytes, from encodeWorldEntityState in JS)
-// Format: [tag=1][kind:u8][revision:u32BE][x/y/z/yaw/health:5×f32BE][state:u8]
+// Format: [tag=1][kind:u8][revision:u32BE][x/y/z/yaw/health:5xf32BE][state:u8]
 // ---------------------------------------------------------------------------
 
 std::optional<EntityStateData> decode_entity_state(const uint8_t* p, size_t n)
@@ -268,7 +268,7 @@ std::optional<EntityStateData> decode_entity_state(const uint8_t* p, size_t n)
 
 // ---------------------------------------------------------------------------
 // World-action JSON codec  (encodeWorldAction / decodeWorldAction in JS)
-// Wire format: uint16BE length + UTF-8 JSON  — no tag byte.
+// Wire format: uint16BE length + UTF-8 JSON - no tag byte.
 // ---------------------------------------------------------------------------
 
 std::vector<uint8_t> encode_world_action(const std::string& json)
@@ -298,7 +298,7 @@ std::vector<uint8_t> encode_item_drop_request(const std::string& itemId, uint16_
 
 // InteractionRequest/BUILD: itemId-based, matching encode_item_drop_request's
 // shape (see server/src/lib/protocol.js's decodeInteractionRequest for the
-// full rationale — a numeric pieceTypeId had no DataAsset/class equivalent
+// full rationale - a numeric pieceTypeId had no DataAsset/class equivalent
 // and was a dead end for client-side rendering; itemId resolves through the
 // same UJigsawItem_DataAsset_C machinery GroundItem already uses, just
 // reading BuildActorClass instead of PickupClass off the result).
@@ -377,8 +377,8 @@ std::string next_request_id()
 }
 
 // ---------------------------------------------------------------------------
-// ProfileRevision payload  (client→server, and replayed verbatim server→client
-// as PlayerProgressRestore — see decode_player_progress)
+// ProfileRevision payload  (client->server, and replayed verbatim server->client
+// as PlayerProgressRestore - see decode_player_progress)
 // Header: [tag=1][revision:u32][health:f32][hunger:f32][thirst:f32]
 //         [stamina:f32][radiation:f32][level:u32][xp:f32]
 //         [posX:f32][posY:f32][posZ:f32][yaw:f32][containerCount:u16]  = 51 bytes
@@ -387,9 +387,9 @@ std::string next_request_id()
 //
 // Gap 11 (2026-08-10): replaces the earlier flat, globally-indexed slot list
 // capped at MAX_INV_SLOTS=40. The game's own inventory (BP_JigMultiplayer_C.
-// MainJigContainers) has no fixed slot count — each container carries its own
+// MainJigContainers) has no fixed slot count - each container carries its own
 // runtime-resizable Columns/Rows (research/04_ida_investigation_log.md Session
-// 29) — so encoding a flat cap was solving the wrong problem. This is a
+// 29) - so encoding a flat cap was solving the wrong problem. This is a
 // breaking wire-format change: old payloads persisted in the server DB under
 // the previous flat format will not decode correctly against this container
 // list and should be treated as stale (dev-stage mod, no migration provided).
@@ -518,7 +518,7 @@ std::optional<PlayerProgress> decode_player_progress(const uint8_t* p, size_t n)
         prog.containers.push_back(std::move(container));
     }
 
-    // Extended stats trailer — optional; absent entirely on payloads persisted
+    // Extended stats trailer - optional; absent entirely on payloads persisted
     // before gap 4/7 landed, so a short remainder just leaves the defaults.
     auto read_str = [&](std::string& out) -> bool {
         if (off + 2 > n) return false;
@@ -640,7 +640,7 @@ std::optional<WeaponAttachments> decode_weapon_attachments(const uint8_t* p, siz
         if (off + idLen > n) return std::nullopt;
         e.itemId = std::string(reinterpret_cast<const char*>(p + off), idLen);
         off += idLen;
-        // Appended field — defaults to false if a peer sends the old,
+        // Appended field - defaults to false if a peer sends the old,
         // shorter encoding (shouldn't happen once both ends are on this
         // build, but decoding shouldn't hard-fail over one missing byte).
         e.active = (off < n) ? (p[off++] != 0) : false;
@@ -769,7 +769,7 @@ std::optional<PlayerLights> decode_player_lights(const uint8_t* p, size_t n)
     PlayerLights l;
     l.flashlightOn  = p[1] != 0;
     l.nightVisionOn = p[2] != 0;
-    // Appended field — defaults to 0.0 if a peer sends the old, shorter
+    // Appended field - defaults to 0.0 if a peer sends the old, shorter
     // encoding (shouldn't happen once both ends are on this build).
     l.flashlightIntensity = (n >= 7) ? u2f(r32(p + 3)) : 0.0f;
     return l;

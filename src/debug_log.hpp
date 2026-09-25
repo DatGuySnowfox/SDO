@@ -1,7 +1,7 @@
 #pragma once
 // Minimal, dependency-free file logger, independent of UE4SS's own
 // Output::send/console pipeline. Exists solely to answer "did this code path
-// actually run" when Output::send's own destination is in question — not a
+// actually run" when Output::send's own destination is in question - not a
 // replacement for normal logging.
 //
 // Location (2026-09-24): defaults to %APPDATA%\SDO, but
@@ -34,7 +34,7 @@ inline std::wstring debug_log_dir()
 
 // Renames an oversized log to .prev (replacing any existing .prev) so a
 // session always starts with room, without losing the immediately-previous
-// run. Checked on first use and then only occasionally — this is called from
+// run. Checked on first use and then only occasionally - this is called from
 // per-tick paths and must not stat the file on every line.
 inline void debug_log_rotate_if_needed(const std::wstring& file, bool force)
 {
@@ -60,7 +60,7 @@ inline void debug_log(const std::string& line)
 
     debug_log_rotate_if_needed(s_file, false);
 
-    // Local HH:MM:SS.mmm on every line — added 2026-08-13. Without this,
+    // Local HH:MM:SS.mmm on every line - added 2026-08-13. Without this,
     // correlating an event here against SDO.log or the server's own log
     // (also now timestamped, see index.js) meant matching by line-number
     // proximity and guessing, across three separate files with no shared

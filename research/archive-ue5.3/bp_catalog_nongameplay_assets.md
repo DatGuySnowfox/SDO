@@ -4,7 +4,7 @@ Covers folders spot-checked and skipped from the main gameplay catalogs. Re-veri
 
 ## Audio (538 files)
 
-538 files, almost entirely SoundWave/SoundCue/SoundClass/SoundMix/SoundAttenuation assets — no gameplay logic. One Blueprint with functions:
+538 files, almost entirely SoundWave/SoundCue/SoundClass/SoundMix/SoundAttenuation assets - no gameplay logic. One Blueprint with functions:
 
 ### BP_AmbientSoundController.json
 Ambient audio state controller, presumably reacting to Ultra Dynamic Sky (UDS) / Ultra Dynamic Weather (UDW) plugin dispatchers to drive weather/time-of-day ambience.
@@ -22,11 +22,11 @@ Test/placeholder vehicle AnimBlueprint. Functions: AnimGraph, ExecuteUbergraph_T
 
 ## ButtonIcons (55 files)
 
-55 files, confirmed zero Function entries — all Texture2D icon assets for UI buttons/prompts.
+55 files, confirmed zero Function entries - all Texture2D icon assets for UI buttons/prompts.
 
 ## PolygonFiles (2251 files)
 
-2251 files, confirmed zero Function entries — StaticMesh/Material/Texture assets (Synty-style "Polygon" asset pack props/environment pieces).
+2251 files, confirmed zero Function entries - StaticMesh/Material/Texture assets (Synty-style "Polygon" asset pack props/environment pieces).
 
 ## EditorOnly (2 files)
 
@@ -36,10 +36,10 @@ Test/placeholder vehicle AnimBlueprint. Functions: AnimGraph, ExecuteUbergraph_T
 Editor-only debug marker actor. Single function: UserConstructionScript (placement/visualization logic only). No Net-flagged properties.
 
 ### DEBUG_Marker_QuestLoc.json
-Zero Function entries — static/data-only variant, presumably a marker subtype used to tag quest locations in-editor.
+Zero Function entries - static/data-only variant, presumably a marker subtype used to tag quest locations in-editor.
 
 ## Summary
 
 Total files covered: 3743 (538 Audio + 897 Meshes + 55 ButtonIcons + 2251 PolygonFiles + 2 EditorOnly).
-Files with real Blueprint logic: 3 (BP_AmbientSoundController, TestChargerVehicle, DEBUG_Marker) — all documented above.
+Files with real Blueprint logic: 3 (BP_AmbientSoundController, TestChargerVehicle, DEBUG_Marker) - all documented above.
 All confirmed asset-only otherwise: no Net-flagged/replicated properties found anywhere in this scope, consistent with these folders being cosmetic/editor-only and irrelevant to multiplayer sync work.

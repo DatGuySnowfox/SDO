@@ -13,10 +13,10 @@
 | String count | ~94,226 |
 
 ## Segments
-- `.text` — code, functions starting at `0x140001000`
-- `.rdata` — read-only data (strings, vtables, UFunction registration structs)
-- `.data` — global mutable state
-- Main data range: `0x140000000 – 0x148000000` (valid pointer check)
+- `.text` - code, functions starting at `0x140001000`
+- `.rdata` - read-only data (strings, vtables, UFunction registration structs)
+- `.data` - global mutable state
+- Main data range: `0x140000000 - 0x148000000` (valid pointer check)
 
 ## Build Path Evidence
 From embedded strings:
@@ -36,11 +36,11 @@ Confirms UE 5.3, AMD FSR3 plugin present.
 | `dxgi.dll` | DXGI factory (D3D12 renderer) |
 | `WINMM.dll` | Timer resolution |
 
-All UE5 engine code is statically compiled in — no UnrealGame DLLs.
+All UE5 engine code is statically compiled in - no UnrealGame DLLs.
 
 ## Online Subsystem
 ```
-/Script/OnlineSubsystemSteam   ← primary online backend
+/Script/OnlineSubsystemSteam   <- primary online backend
 /Script/OnlineSubsystem
 /Script/OnlineSubsystemUtils
 ```
@@ -48,7 +48,7 @@ Steam is the transport. The game uses native WS2_32 sockets alongside Steam netw
 
 ## Game Module
 ```
-/Script/SurrounDead  →  0x145e83190
+/Script/SurrounDead  ->  0x145e83190
 ```
 Module registration struct: `0x145e83150`
 Module init function: `0x1436f89e0`

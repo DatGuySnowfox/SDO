@@ -10,12 +10,12 @@ namespace RC::Unreal {
 
 namespace sdo {
 
-// EntityManager spawns and tracks world entities (ground items, zombies, vehicles, …)
+// EntityManager spawns and tracks world entities (ground items, zombies, vehicles, ...)
 // in the UE5 world.  It mirrors the server's authoritative entity list.
 //
 // Two-phase lifecycle:
-//   1. on_entity_descriptor() — stores classPath/itemId/kind; no actor yet (no position).
-//   2. on_entity_state()      — stores position/health; triggers actor spawn via tick().
+//   1. on_entity_descriptor() - stores classPath/itemId/kind; no actor yet (no position).
+//   2. on_entity_state() - stores position/health; triggers actor spawn via tick().
 class EntityManager {
 public:
     EntityManager() = default;

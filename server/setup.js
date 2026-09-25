@@ -11,7 +11,7 @@ const file = path.join(__dirname, 'settings.json');
 let existing = {};
 if (fs.existsSync(file)) {
     try { existing = JSON.parse(fs.readFileSync(file, 'utf8')); }
-    catch { console.error('Could not parse existing settings.json — starting fresh.'); }
+    catch { console.error('Could not parse existing settings.json - starting fresh.'); }
 }
 
 const settings = {

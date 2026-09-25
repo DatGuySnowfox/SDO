@@ -1,7 +1,7 @@
 'use strict';
 
 // Server-authoritative zombie simulation core (approved rewrite plan, Phase 2).
-// Pure state machine — no socket/protocol knowledge at all, so it's fully
+// Pure state machine - no socket/protocol knowledge at all, so it's fully
 // testable without a live client or gateway connection (see
 // tests/zombie-simulation.js). host-agent.js drives it with player positions
 // each tick and turns the returned spawn/update/despawn events into
@@ -11,7 +11,7 @@
 //   - Roam-only movement (small periodic drift within the spawn zone).
 //     Realistic chase/pathing needs real navmesh data this project doesn't
 //     have yet (see research/04_ida_investigation_log.md Session 58 / the
-//     approved plan's Phase 0) — deferred, not attempted here.
+//     approved plan's Phase 0) - deferred, not attempted here.
 //   - One representative archetype per spawner kind, not the game's real
 //     population-mix logic (which needs further, not-yet-done research into
 //     SpawnedActorClass/weighted spawn tables). 'zombie' zones -> Roamer,
@@ -19,7 +19,7 @@
 //   - Relevance-scoped: only zones within RELEVANCE_RADIUS of at least one
 //     tracked player position are actively spawned/ticked, matching the
 //     approved plan's area-of-interest requirement (~900 zones total across
-//     the map — ticking/broadcasting all of them regardless of player
+//     the map - ticking/broadcasting all of them regardless of player
 //     position would be wasteful and pointless).
 
 const RELEVANCE_RADIUS   = 15000;  // UU (~150m) around a player, zones outside this don't spawn/tick
@@ -64,7 +64,7 @@ class ZombieSimulation {
     }
 
     _spawnCapacityFor(zone) {
-        const base = zone.spawnAmount || 3; // most zones don't set an explicit override — small sane default
+        const base = zone.spawnAmount || 3; // most zones don't set an explicit override - small sane default
         const mult = this.difficulty.ZombieSpawnAmountMultiplier || 1;
         return Math.max(1, Math.round(base * mult));
     }
@@ -75,7 +75,7 @@ class ZombieSimulation {
 
     // Random point inside the zone's box extent, ignoring the box's own yaw
     // rotation (a real oriented-box placement is a further refinement, not
-    // needed for a first working version — box extents here are typically
+    // needed for a first working version - box extents here are typically
     // large enough relative to zombie count that this doesn't look wrong).
     _randomPointInZone(zone) {
         const rx = (Math.random() * 2 - 1) * (zone.boxExtentX || 200);
@@ -92,7 +92,7 @@ class ZombieSimulation {
 
         const spawns = [], updates = [], despawns = [];
         if (!playerPositions || playerPositions.length === 0) {
-            // No one online to be relevant to — nothing to do. Existing
+            // No one online to be relevant to - nothing to do. Existing
             // zombies are left as-is rather than despawned, so they're still
             // there (from the server's perspective) if someone reconnects
             // shortly after; a real idle-cleanup pass could be added later
@@ -130,7 +130,7 @@ class ZombieSimulation {
             spawns.push({ entityId, archetype, x: zombie.x, y: zombie.y, z: zombie.z, yaw: 0, health: maxHealth, maxHealth });
         }
 
-        // ── Movement (roam only — see class doc for why) ────────────────
+        // ── Movement (roam only - see class doc for why) ────────────────
         for (const z of this.zombies.values()) {
             if (z.aiState !== 'roam') continue;
             if (nowMs >= z.nextRoamMs) {

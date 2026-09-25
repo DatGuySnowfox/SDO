@@ -1,9 +1,9 @@
-# install.ps1 – End-user installer for SurrounDead Online
+# install.ps1 - End-user installer for SurrounDead Online
 #
 # Installs the UE4SS mod loader and the SurrounDead Online client into the game.
 # Run this once; then launch SurrounDead normally through Steam.
 #
-# The simplest usage – extract the release zip and run:
+# The simplest usage - extract the release zip and run:
 #   .\install.ps1 -Ticket "eyJ..."
 #
 # All parameters are optional except -Ticket (or answer the prompt):
@@ -95,7 +95,7 @@ if (-not $Win64) {
 # UE4SS changed its on-disk layout after v3.0.1. The loader (dwmapi.dll) still
 # sits next to the game exe in both, but UE4SS.dll, the settings file and Mods/
 # moved into a `ue4ss/` subdirectory. Installing into the wrong one fails
-# silently — UE4SS loads and the mod simply never appears — so work out which
+# silently - UE4SS loads and the mod simply never appears - so work out which
 # applies instead of assuming, the same way scripts/deploy.ps1 does.
 #
 # Precedence: an existing install in the game directory wins, because matching
@@ -134,7 +134,7 @@ if ($Uninstall) {
         Write-Host "  Removed: $modRoot"
     }
 
-    # Disable entry in mods.txt (don't delete the file – other mods may be listed)
+    # Disable entry in mods.txt (don't delete the file - other mods may be listed)
     $modsTxt = Join-Path $ue4ssRoot 'Mods\mods.txt'
     if (Test-Path -LiteralPath $modsTxt) {
         $lines = @(Get-Content -LiteralPath $modsTxt)
@@ -257,7 +257,7 @@ $lines = @($lines | ForEach-Object {
 # sweep for enabled.txt in any mod folder not already started. Listing the mod
 # as `: 1` here *and* giving it an enabled.txt starts it twice, which a C++
 # mod's global state does not survive. Force the mods.txt entry to 0 so exactly
-# one mechanism is live — scripts/deploy.ps1 was fixed for this same bug.
+# one mechanism is live - scripts/deploy.ps1 was fixed for this same bug.
 $ourMod = 'SDO'
 $lines  = @($lines | ForEach-Object {
     if ($_ -match "^\s*$([regex]::Escape($ourMod))\s*:") { "$ourMod : 0" } else { $_ }
@@ -267,7 +267,7 @@ $lines | Set-Content -LiteralPath $modsTxt -Encoding ASCII
 # ── Save connection settings as user environment variables ─────────────────────
 #
 # Setting them at User scope makes them visible to any process the current
-# user starts, including Steam and the game.  No reboot required – just
+# user starts, including Steam and the game.  No reboot required - just
 # restart Steam after running this installer.
 
 Write-Host "`nSaving connection settings ..."

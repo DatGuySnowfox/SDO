@@ -1,4 +1,4 @@
-# Lua Script Analysis — SD-Online Client Bridge
+# Lua Script Analysis - SD-Online Client Bridge
 
 Source package: `SD-Online-Player-3.0.0-alpha.138`
 Path: `payload/src/client-bridge/`
@@ -12,15 +12,15 @@ Scripts read: `main.lua`, `phase5h21_appearance_only.lua`, `fixed_day.lua`,
 
 ```
 main.lua (orchestrator)
-  ├─ dofile(phase5h21_appearance_only.lua)   — always
-  ├─ dofile(visual_capability_probe.lua)     — always
-  ├─ dofile(targeted_world_probe.lua)        — if SDO_WORLD_PROBE_ENABLED=1
-  ├─ dofile(world_event_probe.lua)           — if SDO_WORLD_PROBE_ENABLED=1
-  └─ dofile(fixed_day.lua)                   — if NOT protocol-v3 mode
+  ├─ dofile(phase5h21_appearance_only.lua) - always
+  ├─ dofile(visual_capability_probe.lua) - always
+  ├─ dofile(targeted_world_probe.lua) - if SDO_WORLD_PROBE_ENABLED=1
+  ├─ dofile(world_event_probe.lua) - if SDO_WORLD_PROBE_ENABLED=1
+  └─ dofile(fixed_day.lua) - if NOT protocol-v3 mode
 
-LoopAsync(180ms)   — heartbeat, legacy capture, native hook registration
-LoopAsync(250ms)   — spawn alignment
-LoopAsync(500ms)   — remote player count log
+LoopAsync(180ms) - heartbeat, legacy capture, native hook registration
+LoopAsync(250ms) - spawn alignment
+LoopAsync(500ms) - remote player count log
 ```
 
 ---
@@ -43,7 +43,7 @@ LoopAsync(500ms)   — remote player count log
 | `lua_native_bridge_loaded.txt` | Lua | Capability manifest on startup |
 | `lua_native_bridge_error.txt` | Lua | Error messages |
 | `game_heartbeat.txt` | Lua | `os.time()` timestamp, written every 180ms |
-| `lua_capture_status.txt` | Lua | Version, captureCount, source, map — updated once/sec |
+| `lua_capture_status.txt` | Lua | Version, captureCount, source, map - updated once/sec |
 | `lua_capture_ready.txt` | Lua | Written on first successful capture |
 
 ### Local Player State (legacy-file mode)
@@ -72,10 +72,10 @@ Validation: coordinates must be `|v| < 10,000,000` and not all-zero.
 ### Spawn Alignment
 | File | Direction | Content |
 |------|-----------|---------|
-| `spawn_alignment_once.txt` | runtime→Lua | Trigger: presence means "align now" |
-| `spawn_alignment_target.tsv` | runtime→Lua | `X\tY\tZ\tYaw\tmapName\tmode` |
-| `lua_spawn_alignment_result.txt` | Lua→runtime | Success: spawnAligned=1, actual position, errorDistance |
-| `lua_spawn_alignment_error.txt` | Lua→runtime | Failure reason |
+| `spawn_alignment_once.txt` | runtime->Lua | Trigger: presence means "align now" |
+| `spawn_alignment_target.tsv` | runtime->Lua | `X\tY\tZ\tYaw\tmapName\tmode` |
+| `lua_spawn_alignment_result.txt` | Lua->runtime | Success: spawnAligned=1, actual position, errorDistance |
+| `lua_spawn_alignment_error.txt` | Lua->runtime | Failure reason |
 
 Alignment validation:
 - Map must contain `"PersistentLevel"` (rejects non-game-world levels)
@@ -85,14 +85,14 @@ Alignment validation:
 ### Asset Loading
 | File | Direction | Content |
 |------|-----------|---------|
-| `world_asset_load_request.txt` | runtime→Lua | Class path (must be `/Game/Inventory/Items/..._C`) |
-| `world_asset_load_status.txt` | Lua→runtime | loaded=true/false + error |
+| `world_asset_load_request.txt` | runtime->Lua | Class path (must be `/Game/Inventory/Items/..._C`) |
+| `world_asset_load_status.txt` | Lua->runtime | loaded=true/false + error |
 
 Loads via `LoadAsset(assetPath)` in game thread. Only `_C` suffixed paths under `/Game/Inventory/Items/` are accepted.
 
 ---
 
-## Hook Paths — Native Item System
+## Hook Paths - Native Item System
 
 Only registered in `protocol-v3` mode with `native_drop_hook.enable.txt` present.
 All via `RegisterHook(path, callback)`.
@@ -141,7 +141,7 @@ actor:GetClass():GetFullName()  -- e.g. "BlueprintGeneratedClass /Game/Inventory
 ```
 
 Item ID from class path: last path segment, strip dot extension.
-- `/Game/Inventory/Items/BP_Rifle.BP_Rifle_C` → `BP_Rifle_C`
+- `/Game/Inventory/Items/BP_Rifle.BP_Rifle_C` -> `BP_Rifle_C`
 
 Allowed ground item class path prefixes:
 - `/Game/Inventory/`
@@ -151,7 +151,7 @@ Allowed ground item class path prefixes:
 
 ---
 
-## Player Capture — Local State
+## Player Capture - Local State
 
 ```lua
 pawn:K2_GetActorLocation()   -- {X, Y, Z}
@@ -160,13 +160,13 @@ pawn:GetWorld():GetFName():ToString()  -- map name
 ```
 
 Player acquisition order:
-1. `UEHelpers:GetPlayerController()` → `.Pawn`
-2. `FindFirstOf("BP_PlayerController_C")` → `.Pawn` / `:GetPawn()`
+1. `UEHelpers:GetPlayerController()` -> `.Pawn`
+2. `FindFirstOf("BP_PlayerController_C")` -> `.Pawn` / `:GetPawn()`
 3. `FindFirstOf("BP_PlayerCharacter_C")` fallback
 
 ---
 
-## Remote Players — Proxy Placement (legacy-file mode)
+## Remote Players - Proxy Placement (legacy-file mode)
 
 Each line in `remote_players.tsv` becomes a proxy:
 ```
@@ -179,7 +179,7 @@ handles proxy rendering; Lua only provides diagnostics.
 
 ## Proxy Setup (phase5h21_appearance_only.lua)
 
-1. `FindAllOf("BP_PlayerCharacter_C")` — get all character actors
+1. `FindAllOf("BP_PlayerCharacter_C")` - get all character actors
 2. Filter: address != local pawn
 3. Wait 25 ticks (5 seconds at 200ms) for stability
 4. Apply per proxy:

@@ -1,6 +1,6 @@
 'use strict';
 
-// Standalone test for ZombieSimulation — pure state machine, no socket/
+// Standalone test for ZombieSimulation - pure state machine, no socket/
 // gateway/live-client dependency at all (see its own file-header comment).
 // Uses a small synthetic world instead of the real 913-zone extracted data
 // so test outcomes are deterministic and don't depend on research/Exports/ being
@@ -49,7 +49,7 @@ console.log('\n── Spawning respects capacity ──────────�
     const sim = new ZombieSimulation(makeWorld(), fakeRandomId);
     let nowMs = 1000;
     let totalSpawns = 0;
-    // Tick many times well past every zone's spawningInterval (1s) —
+    // Tick many times well past every zone's spawningInterval (1s) - 
     // capacity (ZoneA=2, ZoneBoss=1) must still cap the count.
     for (let i = 0; i < 20; i++) {
         nowMs += 2000;

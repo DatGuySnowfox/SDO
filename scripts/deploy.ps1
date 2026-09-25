@@ -1,4 +1,4 @@
-# deploy.ps1 – Build main.dll and install it into Surroundead.
+# deploy.ps1 - Build main.dll and install it into Surroundead.
 #
 # Run from a VS 2022 x64 Native Tools Command Prompt (needed for cmake + cl.exe).
 # Or just supply -SkipBuild if you already built.
@@ -41,7 +41,7 @@ function Find-Win64 {
         } catch {}
     }
 
-    # 3. Steam registry → default library
+    # 3. Steam registry -> default library
     $steamReg = Get-ItemProperty -Path 'HKCU:\Software\Valve\Steam' -ErrorAction SilentlyContinue
     if ($steamReg) {
         $steamPath = $steamReg.SteamPath
@@ -100,7 +100,7 @@ if (-not (Test-Path -LiteralPath $libPath)) {
 #
 # xmake is the maintained build path; CMake still exists but has drifted (it
 # was missing the Shell32 link for a while, for instance). Build with xmake,
-# and accept either tool's output location when locating the DLL — xmake emits
+# and accept either tool's output location when locating the DLL - xmake emits
 # build/out/main.dll, CMake's multi-config generators emit
 # build/out/<Config>/main.dll.
 
@@ -144,7 +144,7 @@ Write-Host ("UE4SS layout: {0} ({1})" -f $(if ($IsModernLayout) { 'modern' } els
 # Deliberately does NOT copy UE4SS itself any more. The old behaviour
 # overwrote UE4SS.dll/settings from a vendored bundle on every deploy, which
 # silently reverted a hand-updated UE4SS (and its settings) back to the
-# pinned copy — exactly the wrong thing while chasing engine-version support.
+# pinned copy - exactly the wrong thing while chasing engine-version support.
 # Install/update UE4SS yourself; this script only deploys the mod.
 
 # ── Create mod directory structure ────────────────────────────────────────────

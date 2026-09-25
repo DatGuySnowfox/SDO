@@ -16,7 +16,7 @@ Object that `wrangler deploy` creates on first deploy from the
 `[exports.ServerRegistry]` block in `wrangler.toml`.
 
 Then set the shared secret hosts must present to heartbeat in (pick any
-random string — this is not a per-player secret, just a "don't let strangers
+random string - this is not a per-player secret, just a "don't let strangers
 spam fake server entries" gate):
 
 ```
@@ -40,7 +40,7 @@ name `v1` so every request hits the same instance.
 
 It was originally Workers KV, which did not survive a heartbeat workload on the free plan: KV allows
 **1,000 writes/day account-wide**, and a single server heartbeating on the default 60s interval is
-1,440 writes/day by itself — the quota was exhausted in roughly 17 hours. Reads (100,000/day) and
+1,440 writes/day by itself - the quota was exhausted in roughly 17 hours. Reads (100,000/day) and
 storage size were never close to their limits; the problem is specific to refreshing a liveness
 timestamp on a timer, which is write-shaped. Raising the heartbeat interval only defers the cliff
 until the second or third community-hosted server, so the store was swapped rather than retuned.
@@ -65,15 +65,15 @@ so deploying with a config that omits your custom domain can detach it.
 
 ## API
 
-- `POST /v1/heartbeat` — header `X-Directory-Key: <the secret>`, JSON body
+- `POST /v1/heartbeat` - header `X-Directory-Key: <the secret>`, JSON body
   `{ serverId, name, host, port, playerCount, maxPlayers }`. Upserts the
-  entry with a 90s TTL — stop heartbeating and it disappears on its own, no
+  entry with a 90s TTL - stop heartbeating and it disappears on its own, no
   explicit despawn/cleanup needed.
-- `GET /v1/servers` — public, no auth. Returns `{ ok: true, servers: [...] }`,
+- `GET /v1/servers` - public, no auth. Returns `{ ok: true, servers: [...] }`,
   sorted by name.
 
 ## Local testing
 
 `npm run dev` runs it against Cloudflare's local Miniflare simulator
-(`http://127.0.0.1:8787` by default) — same KV semantics, no need to deploy
+(`http://127.0.0.1:8787` by default) - same KV semantics, no need to deploy
 to iterate.

@@ -1,9 +1,9 @@
-# Archive — Unreal Engine 5.3 era
+# Archive - Unreal Engine 5.3 era
 
 Everything in this directory was produced against the **UE 5.3** build of SurrounDead, before the
 game shipped its 5.6.1 (`++UE5+Release-5.6-CL-44394996`) update. It is kept because the *reasoning*
-is still the best record of how these systems were worked out, but the concrete numbers in it —
-addresses, struct offsets, pak contents, asset lists — describe a binary that no longer exists.
+is still the best record of how these systems were worked out, but the concrete numbers in it - 
+addresses, struct offsets, pak contents, asset lists - describe a binary that no longer exists.
 
 **Treat every offset, address and asset path in here as historical.** The current material lives one
 directory up:
@@ -18,13 +18,13 @@ directory up:
 ## Contents
 
 ### Binary / engine analysis
-- `01_binary_overview.md` — first pass over the 5.3 shipping executable.
-- `02_ue5_key_addresses.md` — hardcoded RVAs for `ProcessEvent`, `GObjects`, `FName::ToString` and
+- `01_binary_overview.md` - first pass over the 5.3 shipping executable.
+- `02_ue5_key_addresses.md` - hardcoded RVAs for `ProcessEvent`, `GObjects`, `FName::ToString` and
   friends. **Entirely invalid on 5.6**: the exe went 122 MB to 165 MB and every address moved. These
   are exactly the sort of constants the port replaced with name-based reflection.
-- `03_modding_framework_plan.md` — the original plan for standing the mod up on UE4SS.
-- `05_lua_script_analysis.md` — analysis of the older Lua-based mod's scripts.
-- `06_protocol_gap_analysis.md` — where the game's own replication stops and the bridge has to
+- `03_modding_framework_plan.md` - the original plan for standing the mod up on UE4SS.
+- `05_lua_script_analysis.md` - analysis of the older Lua-based mod's scripts.
+- `06_protocol_gap_analysis.md` - where the game's own replication stops and the bridge has to
   take over. Largely conceptual, so it aged better than the rest, but it was written against 5.3.
 
 ### Asset / Blueprint catalogs
@@ -35,10 +35,10 @@ Generated from the 5.3 FModel exports; names/flags/properties only, no implement
   `bp_catalog_misc_systems.md`, `bp_catalog_sky_terrain_levels.md`, `bp_catalog_ui.md`,
   `bp_catalog_nongameplay_assets.md`, `bp_catalog_anim_input_wip.md`,
   `bp_catalog_jigpickup_bytecode.md`
-- `bp_*_props.txt`, `bp_final_sweep.txt` — raw property dumps the catalogs were built from.
-- `AssetRegistry.json` (16 MB) and `pak_all_files.txt` (2.2 MB) — the 5.3 pak's full asset
+- `bp_*_props.txt`, `bp_final_sweep.txt` - raw property dumps the catalogs were built from.
+- `AssetRegistry.json` (16 MB) and `pak_all_files.txt` (2.2 MB) - the 5.3 pak's full asset
   registry and file listing.
-- `ground_item_research.txt` — ground-item spawning notes.
+- `ground_item_research.txt` - ground-item spawning notes.
 
 ### Bytecode
 - `bytecode_decode_status.md`, `bytecode_decoded_batch1.md`, `bytecode_decoded_batch2_animbp.md`,
@@ -51,5 +51,5 @@ these documents get replaced rather than repaired.
 ## Note on cross-references
 
 `../04_ida_investigation_log.md` and `../audit_todo.md` refer to these files by bare filename in
-prose (roughly 45 places). Those references were deliberately left alone — the log is an append-only
+prose (roughly 45 places). Those references were deliberately left alone - the log is an append-only
 record of what was true at the time. If a filename in the log has no match at `research/`, look here.

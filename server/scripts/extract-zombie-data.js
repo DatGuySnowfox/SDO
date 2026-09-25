@@ -1,11 +1,11 @@
 'use strict';
 
-// One-time data extraction script (not part of the live server) — mines
+// One-time data extraction script (not part of the live server) - mines
 // research/Exports/ (FModel property dumps) for zombie/vehicle archetype stats,
 // difficulty multipliers, and spawn-zone/spawn-point world positions, and
 // writes them into a single compact JSON file the server loads at startup.
 // See research/04_ida_investigation_log.md Session 58 and the approved
-// rewrite plan for the full rationale — this replaces re-parsing a 210MB
+// rewrite plan for the full rationale - this replaces re-parsing a 210MB
 // level export at runtime.
 //
 // Usage: node server/scripts/extract-zombie-data.js
@@ -31,7 +31,7 @@ const SPAWNER_KINDS = {
 // element (object) at a time via brace-depth tracking. FModel's own
 // pretty-printer never emits a literal '{'/'}' inside a string value in this
 // export (class paths/names don't contain braces), so simple counting is
-// safe here — verified against known-good entries during development.
+// safe here - verified against known-good entries during development.
 async function* streamLevelObjects(filePath) {
     const rl = readline.createInterface({
         input: fs.createReadStream(filePath, { encoding: 'utf8' }),
@@ -79,7 +79,7 @@ function actorInstanceNameFromOuter(outerObjectName) {
 }
 
 async function extractSpawnZones() {
-    console.log(`[extract] scanning ${LEVEL_FILE} (this takes a while — 210MB, two passes)...`);
+    console.log(`[extract] scanning ${LEVEL_FILE} (this takes a while - 210MB, two passes)...`);
 
     // Pass 1: collect every target spawner actor's own Properties.
     const spawners = new Map(); // instanceName -> { kind, ...props }
@@ -126,7 +126,7 @@ async function extractSpawnZones() {
 
     const missing = [...spawners.values()].filter(s => s.x === null);
     if (missing.length > 0) {
-        console.warn(`[extract] WARNING: ${missing.length} spawners have no matched position (left null) — e.g. ${missing.slice(0, 3).map(s => s.name).join(', ')}`);
+        console.warn(`[extract] WARNING: ${missing.length} spawners have no matched position (left null) - e.g. ${missing.slice(0, 3).map(s => s.name).join(', ')}`);
     }
 
     return [...spawners.values()];
@@ -150,7 +150,7 @@ function findClassDefaults(exported, typeName) {
 }
 
 // Health lives on a SEPARATE array entry in the same file (a DamageComponent_C
-// component-template override), not on the archetype's own Properties —
+// component-template override), not on the archetype's own Properties - 
 // correlated by Outer.ObjectName containing "BlueprintGeneratedClass'<Class>_C'",
 // the same "position/value lives on a related entry, not the actor itself"
 // shape as the spawn-zone DefaultSceneRoot lookup above, just within one
@@ -228,7 +228,7 @@ function extractZombieStats() {
 }
 
 // FModel suffixes struct-property keys with an internal id + hash (e.g.
-// "ZombieHealthMultiplier_9_C2B4BF884AFA926137E0B6900A8761BF") — stable
+// "ZombieHealthMultiplier_9_C2B4BF884AFA926137E0B6900A8761BF") - stable
 // within one export but not something to hardcode against, and liable to
 // change on a re-export. Strip back to the plain field name.
 function stripPropertySuffix(key) {
