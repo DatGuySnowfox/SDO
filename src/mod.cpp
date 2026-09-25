@@ -2648,10 +2648,37 @@ static void check_max_vitals_trigger()
 
     // Same UE 5.3 offsets as the other vitals writers had; resolved by name
     // now so this cannot scribble over unrelated pawn memory.
+    // 2026-09-25: reads the value back and logs it, instead of assuming the
+    // write landed. The previous version returned void and the caller logged
+    // success unconditionally, so "set to 100" appeared in the log whether the
+    // component resolved, the field resolved, or neither did. That is the same
+    // unconditional-success trap that has cost this port repeatedly: a
+    // diagnostic asserting an outcome it never checked.
+    // Component and field names here are ASCII, so a plain widening-narrow is
+    // enough and avoids pulling a converter in just for a log line.
+    auto nw = [](const wchar_t* w) {
+        std::string out;
+        for (; w && *w; ++w) out.push_back(static_cast<char>(*w));
+        return out;
+    };
     auto set_double = [&](const wchar_t* comp, const wchar_t* field, double value) {
-        if (UObject* c = obj_prop(pawn, comp))
-            if (auto* slot = static_cast<double*>(c->GetValuePtrByPropertyNameInChain(field)))
-                *slot = value;
+        UObject* c = obj_prop(pawn, comp);
+        if (!c) {
+            debug_log(std::string("max_vitals: component NOT FOUND: ") + nw(comp));
+            return;
+        }
+        auto* slot = static_cast<double*>(c->GetValuePtrByPropertyNameInChain(field));
+        if (!slot) {
+            debug_log(std::string("max_vitals: field NOT FOUND: ") + nw(comp) + "." + nw(field));
+            return;
+        }
+        const double before = *slot;
+        *slot = value;
+        const double after = *slot;
+        char vb[160];
+        snprintf(vb, sizeof(vb), "max_vitals: %s.%s %.2f -> wrote %.2f, reads back %.2f",
+                 nw(comp).c_str(), nw(field).c_str(), before, value, after);
+        debug_log(vb);
     };
     set_double(STR("MedicalComponent"),       STR("Health"),        100.0);
     set_double(STR("Hunger&ThirstComponent"), STR("CurrentHunger"), 100.0);
