@@ -2656,6 +2656,12 @@ static void check_max_vitals_trigger()
     set_double(STR("MedicalComponent"),       STR("Health"),        100.0);
     set_double(STR("Hunger&ThirstComponent"), STR("CurrentHunger"), 100.0);
     set_double(STR("Hunger&ThirstComponent"), STR("CurrentThirst"), 100.0);
+    // Radiation is the one vital where full is bad: CurrentRadiation goes to
+    // 0, not 100. Field confirmed in research/CXXHeaderDump/RadiationComponent.hpp
+    // (CurrentRadiation 0x00D8, MaxRadiation 0x00E0), and it is the same field
+    // vitals_restore writes, so the stored value below has to match.
+    set_double(STR("RadiationComponent"),     STR("CurrentRadiation"), 0.0);
+    set_double(STR("StaminaComponent"),       STR("CurrentStamina"),   100.0);
 
     // 2026-09-25: and the STORED values the deferred restore replays, or
     // this write lasts about two seconds.
@@ -2675,8 +2681,10 @@ static void check_max_vitals_trigger()
     st.vitalsHealth = 100.0f;
     st.vitalsHunger = 100.0f;
     st.vitalsThirst = 100.0f;
+    st.vitalsStamina = 100.0f;
+    st.vitalsRadiation = 0.0f;
 
-    debug_log("max_vitals: health/hunger/thirst set to 100 (live components and stored vitals)");
+    debug_log("max_vitals: health/hunger/thirst/stamina=100, radiation=0 (live components and stored vitals)");
 }
 
 // Raw FName(const wchar_t*, EFindName, void*) constructor, resolved by
