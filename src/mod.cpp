@@ -5471,6 +5471,11 @@ static void check_attach_health_trigger(bool cleanContext)
             snprintf(line, sizeof(line), "pawn_ptr_hex: local pawn=0x%llx",
                      static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(localPawn)));
             debug_log(line);
+            // 2026-09-24: the local pawn is the control sample for the proxy's
+            // reference-pose rendering. log_anim_state is one-shot per actor, so
+            // this costs one line per session and gives a direct A/B against the
+            // proxy's own dump in the same log.
+            sdo::log_anim_state(localPawn, "local");
         }
     }
     // s_itemHadMesh is keyed by raw item pointer only (not by label — an

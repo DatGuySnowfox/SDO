@@ -66,6 +66,18 @@ bool reapply_named_mesh(RC::Unreal::UObject* component, const std::string& meshS
 // comment (proxy_manager.cpp) for the full rationale.
 void refresh_leader_pose(RC::Unreal::UObject* followerComp, RC::Unreal::UObject* leaderMesh);
 
+// 2026-09-24: one-shot-per-actor animation state dump. A proxy renders with its
+// body parts in reference pose (head high, hands splayed, clothing floating)
+// while every check this project owns reports healthy -- attach_health says
+// socket-dist=0.0 offSocket=0, component_drift logs no position events at all,
+// every Clothing_* mesh applies, and refresh_leader_pose already runs after each
+// SetSkinnedAssetAndUpdate. A follower faithfully mirroring a leader that is
+// itself not animating looks exactly like a stale bone mapping, and is also what
+// "the proxy just slides around" has been describing all along. Log the leader's
+// own animation state for the local pawn and for each proxy so the next run says
+// outright which it is, instead of another inference.
+void log_anim_state(RC::Unreal::AActor* actor, const char* tag);
+
 // ProxyManager spawns and drives remote-player proxy actors in the UE5 world.
 //
 // Position tracking + actor teleport via K2_SetActorLocationAndRotation, and

@@ -972,6 +972,103 @@ static bool equip_actor_to_socket(AActor* actor, AActor* itemActor, bool isSecon
 // Secondary/shotgun case, Sidearm = one-handed like the confirmed pistol
 // case), not independently verified per-slot — Melee (14) in particular is
 // unconfirmed either way.
+void log_anim_state(AActor* actor, const char* tag)
+{
+    if (!actor) return;
+    static std::unordered_map<void*, bool> s_logged;
+    if (!s_logged.emplace(actor, true).second) return;
+
+    auto* mesh = prop_obj(reinterpret_cast<UObject*>(actor), STR("Mesh"));
+    if (!mesh) { debug_log(std::string("anim_state: ") + tag + " Mesh is NULL"); return; }
+
+    UObject* anim = nullptr;
+    if (UFunction* fn = mesh->GetFunctionByNameInChain(L"GetAnimInstance")) {
+        struct P { UObject* ReturnValue = nullptr; } p;
+        mesh->ProcessEvent(fn, &p);
+        anim = p.ReturnValue;
+    }
+
+    bool recentlyRendered = false;
+    if (UFunction* fn = mesh->GetFunctionByNameInChain(L"WasRecentlyRendered")) {
+        struct P { float Tolerance = 0.2f; bool ReturnValue = false; } p;
+        mesh->ProcessEvent(fn, &p);
+        recentlyRendered = p.ReturnValue;
+    }
+
+    auto* animClass  = prop_obj(mesh, STR("AnimClass"));
+    auto* leaderPose = prop_obj(mesh, STR("LeaderPoseComponent"));
+    auto* visTick    = prop_ptr<uint8_t>(mesh, STR("VisibilityBasedAnimTickOption"));
+    auto* pauseAnims = prop_ptr<bool>(mesh, STR("bPauseAnims"));
+    auto* noSkelUpd  = prop_ptr<bool>(mesh, STR("bNoSkeletonUpdate"));
+    auto* compTick   = prop_ptr<bool>(mesh, STR("bTickInEditor"));
+    (void)compTick;
+
+    char buf[400];
+    snprintf(buf, sizeof(buf),
+             "anim_state: %s mesh=0x%llx animInstance=0x%llx animClass=0x%llx "
+             "visTickOption=%d pauseAnims=%d noSkeletonUpdate=%d "
+             "meshOwnLeaderPose=0x%llx recentlyRendered=%d",
+             tag,
+             static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(mesh)),
+             static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(anim)),
+             static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(animClass)),
+             visTick    ? static_cast<int>(*visTick)    : -1,
+             pauseAnims ? static_cast<int>(*pauseAnims) : -1,
+             noSkelUpd  ? static_cast<int>(*noSkelUpd)  : -1,
+             static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(leaderPose)),
+             static_cast<int>(recentlyRendered));
+    debug_log(buf);
+
+    // Per-component A/B. The local pawn renders correctly and the proxy does
+    // not, so the single most useful thing any log can carry is the same set of
+    // fields for both, side by side, for every component involved in wearing
+    // clothes. Live evidence this is aimed at: on the proxy Clothing_Torso's
+    // AttachParent reads as the bare "Torso" body part rather than "Mesh",
+    // while a dressed character has that bare Torso's own mesh CLEARED -- a
+    // leader-pose follower parented to a skeletal mesh with no asset is a
+    // plausible way to get "the chest is simply not drawn", which is exactly
+    // what taking the shirt off and putting it back on demonstrates. Whether
+    // that parenting is the bug or just how the game builds the character is
+    // not something to guess at: dump it for both and compare.
+    static const wchar_t* const kParts[] = {
+        STR("Torso"), STR("Clothing_Torso"), STR("Clothing_Armor"),
+        STR("Legs"),  STR("Clothing_Legs"),  STR("Feet"), STR("Clothing_Feet"),
+        STR("Hands"), STR("Clothing_Gloves"), STR("Arms"), STR("Head"),
+    };
+    for (const wchar_t* partName : kParts) {
+        auto* comp = prop_obj(reinterpret_cast<UObject*>(actor), partName);
+        if (!comp) {
+            debug_log(std::string("anim_part: ") + tag + " " + narrow(partName) + " COMPONENT NULL");
+            continue;
+        }
+        void** skinned = static_cast<void**>(comp->GetValuePtrByPropertyNameInChain(STR("SkinnedAsset")));
+        if (!skinned) skinned = static_cast<void**>(comp->GetValuePtrByPropertyNameInChain(STR("SkeletalMesh")));
+        UObject* parent  = prop_obj(comp, STR("AttachParent"));
+        UObject* cLeader = prop_obj(comp, STR("LeaderPoseComponent"));
+        auto* visible    = prop_ptr<bool>(comp, STR("bVisible"));
+
+        std::string parentName = "<NULL>";
+        if (parent) {
+            // GetFullName is what this file's other diagnostics use (UObject
+            // exposes no GetName in this UE4SS binding); keep only the trailing
+            // component name so the A/B lines stay readable.
+            parentName = narrow(parent->GetFullName());
+            const size_t dot = parentName.find_last_of('.');
+            if (dot != std::string::npos) parentName = parentName.substr(dot + 1);
+        }
+        char pb[320];
+        snprintf(pb, sizeof(pb),
+                 "anim_part: %s %-16s comp=0x%llx mesh=%s attachParent=%s leaderPose=0x%llx visible=%d",
+                 tag, narrow(partName).c_str(),
+                 static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(comp)),
+                 (skinned ? (*skinned ? "SET" : "MISSING") : "NOPROP"),
+                 parentName.c_str(),
+                 static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(cLeader)),
+                 visible ? static_cast<int>(*visible) : -1);
+        debug_log(pb);
+    }
+}
+
 static bool call_combat_state(AActor* actor, int32_t blendSpace)
 {
     if (!actor) return false;
@@ -1797,7 +1894,14 @@ static bool equip_clothing_to_mesh(AActor* actor, void* itemAsset, const wchar_t
 
     params.NewMesh = mesh;
     {
-        char buf[96];
+        // 2026-09-24: was char[96]. The literal alone is 86 characters, leaving
+        // 9 for a 12-digit heap pointer plus its NUL, so every pointer printed
+        // here was silently truncated by two hex digits -- which in the 21:51:09
+        // window read as equip_clothing_to_mesh and refresh_leader_pose touching
+        // two DIFFERENT components when they were in fact the same one. A log
+        // line that quietly mangles the value it exists to report is worse than
+        // no line at all.
+        char buf[160];
         snprintf(buf, sizeof(buf), "equip_clothing_to_mesh: about to ProcessEvent SetSkinnedAssetAndUpdate clothingComp=0x%llx",
                  reinterpret_cast<unsigned long long>(clothingComp));
         debug_log(buf);
@@ -2985,6 +3089,7 @@ bool reapply_named_mesh(UObject* component, const std::string& meshShortName, bo
 
 void ProxyManager::sync_pawn_appearance(AActor* actor, RemotePlayer& player)
 {
+    log_anim_state(actor, "proxy");
     if (!actor || !player.appearanceDirty) return;
 
     const auto& a = player.appearance;
