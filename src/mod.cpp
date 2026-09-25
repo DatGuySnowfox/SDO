@@ -4620,7 +4620,23 @@ static void do_body_part_repair(void* ctxRaw)
     // path), the one place calling it is actually correct - there, a
     // missing Clothing_X mesh while the OWN component's read shows null is
     // exactly the case this function is meant to fix.
-    if (ctx->clothingOnRepName && ctx->ci == 0) {
+    // 2026-09-25: and only when there is actually an overlay to re-cover with.
+    //
+    // Traced live: Clothing_Armor on a proxy wearing no armour has a null mesh,
+    // which this scan reads as damage, so it ran this repair once every ~1.2
+    // seconds forever. meshBefore=0x0 in its own log line says there was nothing
+    // to restore, and it called the OnRep anyway. Per the comment above, that
+    // OnRep toggles between showing the clothing overlay and showing bare skin
+    // from the real equip state - state a proxy never receives - so firing it
+    // with an empty slot can only hide things. It is what hid Clothing_Torso:
+    // the shirt reads IsVisible()=1 immediately after equip and 0 from the next
+    // sample on, with these repair lines in between and nothing else touching it.
+    //
+    // An empty Clothing_X is a legitimate state when no item occupies that slot,
+    // not damage. Same lesson as the body-part rows, which needed the same guard
+    // for the same reason.
+    const void* overlayMesh = meshSlot ? *meshSlot : nullptr;
+    if (ctx->clothingOnRepName && ctx->ci == 0 && overlayMesh) {
         UFunction* clothFn = ctx->owner->GetFunctionByNameInChain(ctx->clothingOnRepName);
         if (clothFn) {
             ctx->owner->ProcessEvent(clothFn, nullptr);
