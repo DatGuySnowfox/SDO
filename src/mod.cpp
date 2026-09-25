@@ -2656,7 +2656,27 @@ static void check_max_vitals_trigger()
     set_double(STR("MedicalComponent"),       STR("Health"),        100.0);
     set_double(STR("Hunger&ThirstComponent"), STR("CurrentHunger"), 100.0);
     set_double(STR("Hunger&ThirstComponent"), STR("CurrentThirst"), 100.0);
-    debug_log("max_vitals: health/hunger/thirst set to 100");
+
+    // 2026-09-25: and the STORED values the deferred restore replays, or
+    // this write lasts about two seconds.
+    //
+    // Measured live: max_vitals wrote its 100s at 09:55:06.711 and
+    // vitals_restore applied the profile's own health/hunger/thirst over
+    // the top at 09:55:08.866, so the HUD still read 25% / 23% / 0%. The
+    // restore is deliberately deferred by vitalsRestoreReadyAtUs (+2s) and
+    // fires after any flag the player can drop before launching, so the
+    // flag could never win on its own.
+    //
+    // Setting both keeps the two in agreement rather than racing: the live
+    // component is correct now, and the restore replays the same numbers
+    // when it lands. These are also what the next ProfileRevision sends, so
+    // the values persist to the server instead of reverting on relaunch.
+    auto& st = sdo::g_state();
+    st.vitalsHealth = 100.0f;
+    st.vitalsHunger = 100.0f;
+    st.vitalsThirst = 100.0f;
+
+    debug_log("max_vitals: health/hunger/thirst set to 100 (live components and stored vitals)");
 }
 
 // Raw FName(const wchar_t*, EFindName, void*) constructor, resolved by
