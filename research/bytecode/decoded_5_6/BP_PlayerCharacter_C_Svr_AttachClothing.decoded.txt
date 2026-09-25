@@ -1,0 +1,29 @@
+; BP_PlayerCharacter_C::Svr_AttachClothing
+; dump: [08:59:27.956] bytecode_dump: wrote 126 bytes to BP_PlayerCharacter_C_Svr_AttachClothing.bin
+
+; C:/temp/GIT/SDO/research/bytecode/decoded_5_6/BP_PlayerCharacter_C_Svr_AttachClothing.bin  (126 bytes from file offset 0x0)
+[0x0000] EX_LetValueOnPersistentFrame frame_slot=0x1b52cc4c280
+  assignment:
+    [0x0009] EX_LocalVariable prop=0x1b4fec78700
+[0x0012] EX_LetValueOnPersistentFrame frame_slot=0x1b52cc4c200
+  assignment:
+    [0x001b] EX_LocalVariable prop=0x1b4fec78800
+[0x0024] EX_LetValueOnPersistentFrame frame_slot=0x1b52cc4c180
+  assignment:
+    [0x002d] EX_LocalVariable prop=0x1b4fec78900
+[0x0036] EX_LetValueOnPersistentFrame frame_slot=0x1b52cc4c100
+  assignment:
+    [0x003f] EX_LocalVariable prop=0x1b4fec78c00
+[0x0048] EX_LetValueOnPersistentFrame frame_slot=0x1b52cbdf740
+  assignment:
+    [0x0051] EX_LocalVariable prop=0x1b52cba5a30
+[0x005a] EX_LetValueOnPersistentFrame frame_slot=0x1b52cc4c080
+  assignment:
+    [0x0063] EX_LocalVariable prop=0x1b4fec78c80
+[0x006c] EX_LocalFinalFunction func=0x1b52c743b00
+  param[0]:
+    [0x0075] EX_IntConst 140506
+  EX_EndFunctionParms
+[0x007b] EX_Return
+  [0x007c] EX_Nothing
+[0x007d] EX_EndOfScript

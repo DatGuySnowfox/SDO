@@ -1,0 +1,595 @@
+; BP_PlayerCharacter_C::BodyPartVisibility
+; dump: [08:58:51.586] bytecode_dump: wrote 2716 bytes to BP_PlayerCharacter_C_BodyPartVisibility.bin
+
+; C:/temp/GIT/SDO/research/bytecode/decoded_5_6/BP_PlayerCharacter_C_BodyPartVisibility.bin  (2716 bytes from file offset 0x0)
+[0x0000] EX_JumpIfNot -> 0x0341 if NOT:
+  [0x0005] EX_LocalVariable prop=0x1b52c6a9f00
+[0x000e] EX_JumpIfNot -> 0x05ce if NOT:
+  [0x0013] EX_LocalVariable prop=0x1b52c6a9f80
+[0x001c] EX_Context
+  object_expr:
+    [0x001d] EX_InstanceVariable prop=0x1b52c9c0100
+  skip=28 field=0x0
+  context_expr:
+    [0x0032] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x003b] EX_StructMemberContext member_prop=0x1b440759680
+          struct_expr:
+            [0x0044] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x004e] EX_Context
+  object_expr:
+    [0x004f] EX_InstanceVariable prop=0x1b52c9c1700
+  skip=28 field=0x0
+  context_expr:
+    [0x0064] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x006d] EX_StructMemberContext member_prop=0x1b440759600
+          struct_expr:
+            [0x0076] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x0080] EX_Context
+  object_expr:
+    [0x0081] EX_InstanceVariable prop=0x1b52c9c1e80
+  skip=28 field=0x0
+  context_expr:
+    [0x0096] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x009f] EX_StructMemberContext member_prop=0x1b440759580
+          struct_expr:
+            [0x00a8] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x00b2] EX_Context
+  object_expr:
+    [0x00b3] EX_InstanceVariable prop=0x1b52c9c1480
+  skip=28 field=0x0
+  context_expr:
+    [0x00c8] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x00d1] EX_StructMemberContext member_prop=0x1b440758c80
+          struct_expr:
+            [0x00da] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x00e4] EX_Context
+  object_expr:
+    [0x00e5] EX_InstanceVariable prop=0x1b52c9c1500
+  skip=28 field=0x0
+  context_expr:
+    [0x00fa] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x0103] EX_StructMemberContext member_prop=0x1b440758c00
+          struct_expr:
+            [0x010c] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x0116] EX_Context
+  object_expr:
+    [0x0117] EX_InstanceVariable prop=0x1b52c9c1e00
+  skip=28 field=0x0
+  context_expr:
+    [0x012c] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x0135] EX_StructMemberContext member_prop=0x1b44075b380
+          struct_expr:
+            [0x013e] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x0148] EX_Context
+  object_expr:
+    [0x0149] EX_InstanceVariable prop=0x1b52c9c1580
+  skip=28 field=0x0
+  context_expr:
+    [0x015e] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x0167] EX_StructMemberContext member_prop=0x1b44075b300
+          struct_expr:
+            [0x0170] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x017a] EX_Context
+  object_expr:
+    [0x017b] EX_InstanceVariable prop=0x1b52c9c1600
+  skip=28 field=0x0
+  context_expr:
+    [0x0190] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x0199] EX_StructMemberContext member_prop=0x1b44075b280
+          struct_expr:
+            [0x01a2] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x01ac] EX_Context
+  object_expr:
+    [0x01ad] EX_InstanceVariable prop=0x1b52c9c0100
+  skip=28 field=0x0
+  context_expr:
+    [0x01c2] EX_VirtualFunction FName(ci=127923, disp=0, num=0)
+      param[0]:
+        [0x01cf] EX_IntConst 0
+      param[1]:
+        [0x01d4] EX_InstanceVariable prop=0x1b52c9c4680
+      EX_EndFunctionParms
+[0x01de] EX_Context
+  object_expr:
+    [0x01df] EX_InstanceVariable prop=0x1b52c9c1700
+  skip=28 field=0x0
+  context_expr:
+    [0x01f4] EX_VirtualFunction FName(ci=127923, disp=0, num=0)
+      param[0]:
+        [0x0201] EX_IntConst 0
+      param[1]:
+        [0x0206] EX_InstanceVariable prop=0x1b52c9c4680
+      EX_EndFunctionParms
+[0x0210] EX_Context
+  object_expr:
+    [0x0211] EX_InstanceVariable prop=0x1b52c9c1e80
+  skip=28 field=0x0
+  context_expr:
+    [0x0226] EX_VirtualFunction FName(ci=127923, disp=0, num=0)
+      param[0]:
+        [0x0233] EX_IntConst 0
+      param[1]:
+        [0x0238] EX_InstanceVariable prop=0x1b52c9c4680
+      EX_EndFunctionParms
+[0x0242] EX_Context
+  object_expr:
+    [0x0243] EX_InstanceVariable prop=0x1b52c9c1480
+  skip=28 field=0x0
+  context_expr:
+    [0x0258] EX_VirtualFunction FName(ci=127923, disp=0, num=0)
+      param[0]:
+        [0x0265] EX_IntConst 0
+      param[1]:
+        [0x026a] EX_InstanceVariable prop=0x1b52c9c4680
+      EX_EndFunctionParms
+[0x0274] EX_Context
+  object_expr:
+    [0x0275] EX_InstanceVariable prop=0x1b52c9c1500
+  skip=28 field=0x0
+  context_expr:
+    [0x028a] EX_VirtualFunction FName(ci=127923, disp=0, num=0)
+      param[0]:
+        [0x0297] EX_IntConst 0
+      param[1]:
+        [0x029c] EX_InstanceVariable prop=0x1b52c9c4680
+      EX_EndFunctionParms
+[0x02a6] EX_Context
+  object_expr:
+    [0x02a7] EX_InstanceVariable prop=0x1b52c9c1e00
+  skip=28 field=0x0
+  context_expr:
+    [0x02bc] EX_VirtualFunction FName(ci=127923, disp=0, num=0)
+      param[0]:
+        [0x02c9] EX_IntConst 0
+      param[1]:
+        [0x02ce] EX_InstanceVariable prop=0x1b52c9c4680
+      EX_EndFunctionParms
+[0x02d8] EX_Context
+  object_expr:
+    [0x02d9] EX_InstanceVariable prop=0x1b52c9c1580
+  skip=28 field=0x0
+  context_expr:
+    [0x02ee] EX_VirtualFunction FName(ci=127923, disp=0, num=0)
+      param[0]:
+        [0x02fb] EX_IntConst 0
+      param[1]:
+        [0x0300] EX_InstanceVariable prop=0x1b52c9c4680
+      EX_EndFunctionParms
+[0x030a] EX_Context
+  object_expr:
+    [0x030b] EX_InstanceVariable prop=0x1b52c9c1600
+  skip=28 field=0x0
+  context_expr:
+    [0x0320] EX_VirtualFunction FName(ci=127923, disp=0, num=0)
+      param[0]:
+        [0x032d] EX_IntConst 0
+      param[1]:
+        [0x0332] EX_InstanceVariable prop=0x1b52c9c4680
+      EX_EndFunctionParms
+[0x033c] EX_Jump -> 0x0a99
+[0x0341] EX_LetBool
+  variable:
+    [0x0342] EX_LocalVariable prop=0x1b52c6a9e80
+  assignment:
+    [0x034b] EX_CallMath func=0x7ff485d4d9b8
+      param[0]:
+        [0x0354] EX_LocalVariable prop=0x1b52c88c640
+      param[1]:
+        [0x035d] EX_NameConst FName(ci=1534056, disp=0, num=0)
+      EX_EndFunctionParms
+[0x036b] EX_JumpIfNot -> 0x0426 if NOT:
+  [0x0370] EX_LocalVariable prop=0x1b52c6a9e80
+[0x0379] EX_LetBool
+  variable:
+    [0x037a] EX_LocalVariable prop=0x1b52c6a9e80
+  assignment:
+    [0x0383] EX_CallMath func=0x7ff485d4d9b8
+      param[0]:
+        [0x038c] EX_LocalVariable prop=0x1b52c88c640
+      param[1]:
+        [0x0395] EX_NameConst FName(ci=1574440, disp=0, num=0)
+      EX_EndFunctionParms
+[0x03a3] EX_JumpIfNot -> 0x0763 if NOT:
+  [0x03a8] EX_LocalVariable prop=0x1b52c6a9e80
+[0x03b1] EX_LetBool
+  variable:
+    [0x03b2] EX_LocalVariable prop=0x1b52c6a9e80
+  assignment:
+    [0x03bb] EX_CallMath func=0x7ff485d4d9b8
+      param[0]:
+        [0x03c4] EX_LocalVariable prop=0x1b52c88c640
+      param[1]:
+        [0x03cd] EX_NameConst FName(ci=1534053, disp=0, num=0)
+      EX_EndFunctionParms
+[0x03db] EX_JumpIfNot -> 0x0811 if NOT:
+  [0x03e0] EX_LocalVariable prop=0x1b52c6a9e80
+[0x03e9] EX_LetBool
+  variable:
+    [0x03ea] EX_LocalVariable prop=0x1b52c6a9e80
+  assignment:
+    [0x03f3] EX_CallMath func=0x7ff485d4d9b8
+      param[0]:
+        [0x03fc] EX_LocalVariable prop=0x1b52c88c640
+      param[1]:
+        [0x0405] EX_NameConst FName(ci=1534050, disp=0, num=0)
+      EX_EndFunctionParms
+[0x0413] EX_JumpIfNot -> 0x09eb if NOT:
+  [0x0418] EX_LocalVariable prop=0x1b52c6a9e80
+[0x0421] EX_Jump -> 0x0a99
+[0x0426] EX_JumpIfNot -> 0x0533 if NOT:
+  [0x042b] EX_LocalVariable prop=0x1b52c6a9f80
+[0x0434] EX_Context
+  object_expr:
+    [0x0435] EX_InstanceVariable prop=0x1b52c9c0100
+  skip=28 field=0x0
+  context_expr:
+    [0x044a] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x0453] EX_StructMemberContext member_prop=0x1b440759680
+          struct_expr:
+            [0x045c] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x0466] EX_Context
+  object_expr:
+    [0x0467] EX_InstanceVariable prop=0x1b52c9c1700
+  skip=28 field=0x0
+  context_expr:
+    [0x047c] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x0485] EX_StructMemberContext member_prop=0x1b440759600
+          struct_expr:
+            [0x048e] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x0498] EX_Context
+  object_expr:
+    [0x0499] EX_InstanceVariable prop=0x1b52c9c1e80
+  skip=28 field=0x0
+  context_expr:
+    [0x04ae] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x04b7] EX_StructMemberContext member_prop=0x1b440759580
+          struct_expr:
+            [0x04c0] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x04ca] EX_Context
+  object_expr:
+    [0x04cb] EX_InstanceVariable prop=0x1b52c9c0100
+  skip=28 field=0x0
+  context_expr:
+    [0x04e0] EX_VirtualFunction FName(ci=127923, disp=0, num=0)
+      param[0]:
+        [0x04ed] EX_IntConst 0
+      param[1]:
+        [0x04f2] EX_InstanceVariable prop=0x1b52c9c4680
+      EX_EndFunctionParms
+[0x04fc] EX_Context
+  object_expr:
+    [0x04fd] EX_InstanceVariable prop=0x1b52c9c1700
+  skip=28 field=0x0
+  context_expr:
+    [0x0512] EX_VirtualFunction FName(ci=127923, disp=0, num=0)
+      param[0]:
+        [0x051f] EX_IntConst 0
+      param[1]:
+        [0x0524] EX_InstanceVariable prop=0x1b52c9c4680
+      EX_EndFunctionParms
+[0x052e] EX_Jump -> 0x0a99
+[0x0533] EX_Context
+  object_expr:
+    [0x0534] EX_InstanceVariable prop=0x1b52c9c0100
+  skip=28 field=0x0
+  context_expr:
+    [0x0549] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x0552] EX_StructMemberContext member_prop=0x1b44075b200
+          struct_expr:
+            [0x055b] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x0565] EX_Context
+  object_expr:
+    [0x0566] EX_InstanceVariable prop=0x1b52c9c1700
+  skip=28 field=0x0
+  context_expr:
+    [0x057b] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x0584] EX_StructMemberContext member_prop=0x1b44075b180
+          struct_expr:
+            [0x058d] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x0597] EX_Context
+  object_expr:
+    [0x0598] EX_InstanceVariable prop=0x1b52c9c1e80
+  skip=28 field=0x0
+  context_expr:
+    [0x05ad] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x05b6] EX_StructMemberContext member_prop=0x1b44075b100
+          struct_expr:
+            [0x05bf] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x05c9] EX_Jump -> 0x04ca
+[0x05ce] EX_Context
+  object_expr:
+    [0x05cf] EX_InstanceVariable prop=0x1b52c9c0100
+  skip=28 field=0x0
+  context_expr:
+    [0x05e4] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x05ed] EX_StructMemberContext member_prop=0x1b44075b200
+          struct_expr:
+            [0x05f6] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x0600] EX_Context
+  object_expr:
+    [0x0601] EX_InstanceVariable prop=0x1b52c9c1700
+  skip=28 field=0x0
+  context_expr:
+    [0x0616] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x061f] EX_StructMemberContext member_prop=0x1b44075b180
+          struct_expr:
+            [0x0628] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x0632] EX_Context
+  object_expr:
+    [0x0633] EX_InstanceVariable prop=0x1b52c9c1e80
+  skip=28 field=0x0
+  context_expr:
+    [0x0648] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x0651] EX_StructMemberContext member_prop=0x1b44075b100
+          struct_expr:
+            [0x065a] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x0664] EX_Context
+  object_expr:
+    [0x0665] EX_InstanceVariable prop=0x1b52c9c1480
+  skip=28 field=0x0
+  context_expr:
+    [0x067a] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x0683] EX_StructMemberContext member_prop=0x1b44075b080
+          struct_expr:
+            [0x068c] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x0696] EX_Context
+  object_expr:
+    [0x0697] EX_InstanceVariable prop=0x1b52c9c1500
+  skip=28 field=0x0
+  context_expr:
+    [0x06ac] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x06b5] EX_StructMemberContext member_prop=0x1b44075b000
+          struct_expr:
+            [0x06be] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x06c8] EX_Context
+  object_expr:
+    [0x06c9] EX_InstanceVariable prop=0x1b52c9c1e00
+  skip=28 field=0x0
+  context_expr:
+    [0x06de] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x06e7] EX_StructMemberContext member_prop=0x1b44075af80
+          struct_expr:
+            [0x06f0] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x06fa] EX_Context
+  object_expr:
+    [0x06fb] EX_InstanceVariable prop=0x1b52c9c1580
+  skip=28 field=0x0
+  context_expr:
+    [0x0710] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x0719] EX_StructMemberContext member_prop=0x1b44075af00
+          struct_expr:
+            [0x0722] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x072c] EX_Context
+  object_expr:
+    [0x072d] EX_InstanceVariable prop=0x1b52c9c1600
+  skip=28 field=0x0
+  context_expr:
+    [0x0742] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x074b] EX_StructMemberContext member_prop=0x1b44075ae80
+          struct_expr:
+            [0x0754] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x075e] EX_Jump -> 0x01ac
+[0x0763] EX_JumpIfNot -> 0x07da if NOT:
+  [0x0768] EX_LocalVariable prop=0x1b52c6a9f80
+[0x0771] EX_Context
+  object_expr:
+    [0x0772] EX_InstanceVariable prop=0x1b52c9c1480
+  skip=28 field=0x0
+  context_expr:
+    [0x0787] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x0790] EX_StructMemberContext member_prop=0x1b440758c80
+          struct_expr:
+            [0x0799] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x07a3] EX_Context
+  object_expr:
+    [0x07a4] EX_InstanceVariable prop=0x1b52c9c1480
+  skip=28 field=0x0
+  context_expr:
+    [0x07b9] EX_VirtualFunction FName(ci=127923, disp=0, num=0)
+      param[0]:
+        [0x07c6] EX_IntConst 0
+      param[1]:
+        [0x07cb] EX_InstanceVariable prop=0x1b52c9c4680
+      EX_EndFunctionParms
+[0x07d5] EX_Jump -> 0x0a99
+[0x07da] EX_Context
+  object_expr:
+    [0x07db] EX_InstanceVariable prop=0x1b52c9c1480
+  skip=28 field=0x0
+  context_expr:
+    [0x07f0] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x07f9] EX_StructMemberContext member_prop=0x1b44075b080
+          struct_expr:
+            [0x0802] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x080c] EX_Jump -> 0x07a3
+[0x0811] EX_JumpIfNot -> 0x0950 if NOT:
+  [0x0816] EX_LocalVariable prop=0x1b52c6a9f80
+[0x081f] EX_Context
+  object_expr:
+    [0x0820] EX_InstanceVariable prop=0x1b52c9c1500
+  skip=28 field=0x0
+  context_expr:
+    [0x0835] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x083e] EX_StructMemberContext member_prop=0x1b440758c00
+          struct_expr:
+            [0x0847] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x0851] EX_Context
+  object_expr:
+    [0x0852] EX_InstanceVariable prop=0x1b52c9c1580
+  skip=28 field=0x0
+  context_expr:
+    [0x0867] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x0870] EX_StructMemberContext member_prop=0x1b44075b300
+          struct_expr:
+            [0x0879] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x0883] EX_Context
+  object_expr:
+    [0x0884] EX_InstanceVariable prop=0x1b52c9c1e00
+  skip=28 field=0x0
+  context_expr:
+    [0x0899] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x08a2] EX_StructMemberContext member_prop=0x1b44075b380
+          struct_expr:
+            [0x08ab] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x08b5] EX_Context
+  object_expr:
+    [0x08b6] EX_InstanceVariable prop=0x1b52c9c1500
+  skip=28 field=0x0
+  context_expr:
+    [0x08cb] EX_VirtualFunction FName(ci=127923, disp=0, num=0)
+      param[0]:
+        [0x08d8] EX_IntConst 0
+      param[1]:
+        [0x08dd] EX_InstanceVariable prop=0x1b52c9c4680
+      EX_EndFunctionParms
+[0x08e7] EX_Context
+  object_expr:
+    [0x08e8] EX_InstanceVariable prop=0x1b52c9c1580
+  skip=28 field=0x0
+  context_expr:
+    [0x08fd] EX_VirtualFunction FName(ci=127923, disp=0, num=0)
+      param[0]:
+        [0x090a] EX_IntConst 0
+      param[1]:
+        [0x090f] EX_InstanceVariable prop=0x1b52c9c4680
+      EX_EndFunctionParms
+[0x0919] EX_Context
+  object_expr:
+    [0x091a] EX_InstanceVariable prop=0x1b52c9c1e00
+  skip=28 field=0x0
+  context_expr:
+    [0x092f] EX_VirtualFunction FName(ci=127923, disp=0, num=0)
+      param[0]:
+        [0x093c] EX_IntConst 0
+      param[1]:
+        [0x0941] EX_InstanceVariable prop=0x1b52c9c4680
+      EX_EndFunctionParms
+[0x094b] EX_Jump -> 0x0a99
+[0x0950] EX_Context
+  object_expr:
+    [0x0951] EX_InstanceVariable prop=0x1b52c9c1500
+  skip=28 field=0x0
+  context_expr:
+    [0x0966] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x096f] EX_StructMemberContext member_prop=0x1b44075b000
+          struct_expr:
+            [0x0978] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x0982] EX_Context
+  object_expr:
+    [0x0983] EX_InstanceVariable prop=0x1b52c9c1580
+  skip=28 field=0x0
+  context_expr:
+    [0x0998] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x09a1] EX_StructMemberContext member_prop=0x1b44075af00
+          struct_expr:
+            [0x09aa] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x09b4] EX_Context
+  object_expr:
+    [0x09b5] EX_InstanceVariable prop=0x1b52c9c1e00
+  skip=28 field=0x0
+  context_expr:
+    [0x09ca] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x09d3] EX_StructMemberContext member_prop=0x1b44075af80
+          struct_expr:
+            [0x09dc] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x09e6] EX_Jump -> 0x08b5
+[0x09eb] EX_JumpIfNot -> 0x0a62 if NOT:
+  [0x09f0] EX_LocalVariable prop=0x1b52c6a9f80
+[0x09f9] EX_Context
+  object_expr:
+    [0x09fa] EX_InstanceVariable prop=0x1b52c9c1600
+  skip=28 field=0x0
+  context_expr:
+    [0x0a0f] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x0a18] EX_StructMemberContext member_prop=0x1b44075b280
+          struct_expr:
+            [0x0a21] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x0a2b] EX_Context
+  object_expr:
+    [0x0a2c] EX_InstanceVariable prop=0x1b52c9c1600
+  skip=28 field=0x0
+  context_expr:
+    [0x0a41] EX_VirtualFunction FName(ci=127923, disp=0, num=0)
+      param[0]:
+        [0x0a4e] EX_IntConst 0
+      param[1]:
+        [0x0a53] EX_InstanceVariable prop=0x1b52c9c4680
+      EX_EndFunctionParms
+[0x0a5d] EX_Jump -> 0x0a99
+[0x0a62] EX_Context
+  object_expr:
+    [0x0a63] EX_InstanceVariable prop=0x1b52c9c1600
+  skip=28 field=0x0
+  context_expr:
+    [0x0a78] EX_FinalFunction func=0x7ff485d017b8
+      param[0]:
+        [0x0a81] EX_StructMemberContext member_prop=0x1b44075ae80
+          struct_expr:
+            [0x0a8a] EX_LocalVariable prop=0x1b52c6aa000
+      EX_EndFunctionParms
+[0x0a94] EX_Jump -> 0x0a2b
+[0x0a99] EX_Return
+  [0x0a9a] EX_Nothing
+[0x0a9b] EX_EndOfScript

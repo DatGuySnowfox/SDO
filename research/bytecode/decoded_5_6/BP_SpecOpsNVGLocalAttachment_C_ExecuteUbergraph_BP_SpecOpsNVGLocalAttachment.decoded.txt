@@ -1,0 +1,109 @@
+; BP_SpecOpsNVGLocalAttachment_C::ExecuteUbergraph_BP_SpecOpsNVGLocalAttachment
+; dump: [09:15:22.118] bytecode_dump: wrote 494 bytes to BP_SpecOpsNVGLocalAttachment_C_ExecuteUbergraph_BP_SpecOpsNVGLocalAttachment.bin
+
+; C:/temp/GIT/SDO/research/bytecode/decoded_5_6/BP_SpecOpsNVGLocalAttachment_C_ExecuteUbergraph_BP_SpecOpsNVGLocalAttachment.bin  (494 bytes from file offset 0x0)
+[0x0000] EX_ComputedJump offset_expr:
+  [0x0001] EX_LocalVariable prop=0x1b52da0ed30
+[0x000a] EX_Jump -> 0x01eb
+[0x000f] EX_Let property=0x0
+  variable:
+    [0x0018] EX_LocalVariable prop=0x1b52da0ec50
+  assignment:
+    [0x0021] EX_Cast conv_type=4
+      [0x0023] EX_InstanceVariable prop=0x1b52da0eda0
+[0x002c] EX_Let property=0x1b52da0ecc0
+  variable:
+    [0x0035] EX_LocalVariable prop=0x1b52da0ecc0
+  assignment:
+    [0x003e] EX_CallMath func=0x7ff485d43b58
+      param[0]:
+        [0x0047] EX_DoubleConst 0.0
+      param[1]:
+        [0x0050] EX_DoubleConst -60.0
+      param[2]:
+        [0x0059] EX_LocalVariable prop=0x1b52da0ec50
+      EX_EndFunctionParms
+[0x0063] EX_Let property=0x0
+  variable:
+    [0x006c] EX_LocalVariable prop=0x1b52da0ebe0
+  assignment:
+    [0x0075] EX_Cast conv_type=3
+      [0x0077] EX_LocalVariable prop=0x1b52da0ecc0
+[0x0080] EX_Let property=0x1b52e2eb780
+  variable:
+    [0x0089] EX_LocalVariable prop=0x1b52e2eb780
+  assignment:
+    [0x0092] EX_CallMath func=0x7ff485d46fd8
+      param[0]:
+        [0x009b] EX_LocalVariable prop=0x1b52da0ebe0
+      param[1]:
+        [0x00a4] EX_FloatConst 0.0
+      param[2]:
+        [0x00a9] EX_FloatConst 0.0
+      EX_EndFunctionParms
+[0x00af] EX_Context
+  object_expr:
+    [0x00b0] EX_InstanceVariable prop=0x1b52be7b100
+  skip=30 field=0x0
+  context_expr:
+    [0x00c5] EX_FinalFunction func=0x7ff485aeab78
+      param[0]:
+        [0x00ce] EX_LocalVariable prop=0x1b52e2eb780
+      param[1]:
+        [0x00d7] EX_False
+      param[2]:
+        [0x00d8] EX_LocalVariable prop=0x1b52e2eb600
+      param[3]:
+        [0x00e1] EX_False
+      EX_EndFunctionParms
+[0x00e3] EX_Jump -> 0x01eb
+[0x00e8] EX_Context
+  object_expr:
+    [0x00e9] EX_InstanceVariable prop=0x1b52e2eb880
+  skip=10 field=0x0
+  context_expr:
+    [0x00fe] EX_FinalFunction func=0x7ff485cd7518
+      EX_EndFunctionParms
+[0x0108] EX_Jump -> 0x01eb
+[0x010d] EX_Context
+  object_expr:
+    [0x010e] EX_InstanceVariable prop=0x1b52e2eb880
+  skip=10 field=0x0
+  context_expr:
+    [0x0123] EX_FinalFunction func=0x7ff485cd7358
+      EX_EndFunctionParms
+[0x012d] EX_Jump -> 0x01eb
+[0x0132] EX_LetBool
+  variable:
+    [0x0133] EX_LocalVariable prop=0x1b52e2eb700
+  assignment:
+    [0x013c] EX_CallMath func=0x7ff485cb22f8
+      param[0]:
+        [0x0145] EX_InstanceVariable prop=0x1b52be7af00
+      param[1]:
+        [0x014e] EX_StringConst "Jig.AttachmentActivate.State1"
+      EX_EndFunctionParms
+[0x016e] EX_JumpIfNot -> 0x010d if NOT:
+  [0x0173] EX_LocalVariable prop=0x1b52e2eb700
+[0x017c] EX_LetBool
+  variable:
+    [0x017d] EX_LocalVariable prop=0x1b52e2eb700
+  assignment:
+    [0x0186] EX_CallMath func=0x7ff485cb22f8
+      param[0]:
+        [0x018f] EX_InstanceVariable prop=0x1b52be7af00
+      param[1]:
+        [0x0198] EX_StringConst "Jig.AttachmentActivate.State2"
+      EX_EndFunctionParms
+[0x01b8] EX_JumpIfNot -> 0x00e8 if NOT:
+  [0x01bd] EX_LocalVariable prop=0x1b52e2eb700
+[0x01c6] EX_Jump -> 0x01eb
+[0x01cb] EX_Let property=0x1b52be7af00
+  variable:
+    [0x01d4] EX_InstanceVariable prop=0x1b52be7af00
+  assignment:
+    [0x01dd] EX_LocalVariable prop=0x1b52e2eb680
+[0x01e6] EX_Jump -> 0x0132
+[0x01eb] EX_Return
+  [0x01ec] EX_Nothing
+[0x01ed] EX_EndOfScript

@@ -1,0 +1,22 @@
+; BP_SpecOpsNVGLocalAttachment_C::Jig_SetAttachmentInfo
+; dump: [09:15:33.237] bytecode_dump: wrote 60 bytes to BP_SpecOpsNVGLocalAttachment_C_Jig_SetAttachmentInfo.bin
+
+; C:/temp/GIT/SDO/research/bytecode/decoded_5_6/BP_SpecOpsNVGLocalAttachment_C_Jig_SetAttachmentInfo.bin  (60 bytes from file offset 0x0)
+[0x0000] EX_Let property=0x1b52be7b000
+  variable:
+    [0x0009] EX_InstanceVariable prop=0x1b52be7b000
+  assignment:
+    [0x0012] EX_LocalVariable prop=0x1b52be7a700
+[0x001b] EX_LetObj
+  variable:
+    [0x001c] EX_InstanceVariable prop=0x1b52be7af80
+  assignment:
+    [0x0025] EX_LocalVariable prop=0x1b52be7a680
+[0x002e] EX_LetBool
+  variable:
+    [0x002f] EX_LocalOutVariable prop=0x1b52be7a600
+  assignment:
+    [0x0038] EX_True
+[0x0039] EX_Return
+  [0x003a] EX_Nothing
+[0x003b] EX_EndOfScript

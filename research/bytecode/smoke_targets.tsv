@@ -1,0 +1,3 @@
+BP_PlayerCharacter_C	MC_AttachClothing
+BP_PlayerCharacter_C	UpdateBodyParts
+BP_PlayerCharacter_C	BodyPartVisibility

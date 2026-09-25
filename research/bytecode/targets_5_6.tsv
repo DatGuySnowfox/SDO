@@ -1,5 +1,4 @@
 # Re-dump against UE 5.6. Clothing path first: that is what this run is for.
-BP_PlayerCharacter_C	EquipClothingToMesh
 BP_PlayerCharacter_C	UpdateBodyParts
 BP_PlayerCharacter_C	BodyPartVisibility
 BP_PlayerCharacter_C	MC_AttachClothing

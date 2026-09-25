@@ -1,0 +1,14 @@
+; BP_SpecOpsNVGLocalAttachment_C::Jig_SetAttachmentActiveState
+; dump: [09:14:38.430] bytecode_dump: wrote 36 bytes to BP_SpecOpsNVGLocalAttachment_C_Jig_SetAttachmentActiveState.bin
+
+; C:/temp/GIT/SDO/research/bytecode/decoded_5_6/BP_SpecOpsNVGLocalAttachment_C_Jig_SetAttachmentActiveState.bin  (36 bytes from file offset 0x0)
+[0x0000] EX_LetValueOnPersistentFrame frame_slot=0x1b52e2eb680
+  assignment:
+    [0x0009] EX_LocalVariable prop=0x1b52e2eb800
+[0x0012] EX_LocalFinalFunction func=0x1b52e52b500
+  param[0]:
+    [0x001b] EX_IntConst 459
+  EX_EndFunctionParms
+[0x0021] EX_Return
+  [0x0022] EX_Nothing
+[0x0023] EX_EndOfScript

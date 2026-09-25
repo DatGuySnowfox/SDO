@@ -1,0 +1,11 @@
+; BP_FirearmPickup_C::StartRecoil
+; dump: [09:04:22.406] bytecode_dump: wrote 18 bytes to BP_FirearmPickup_C_StartRecoil.bin
+
+; C:/temp/GIT/SDO/research/bytecode/decoded_5_6/BP_FirearmPickup_C_StartRecoil.bin  (18 bytes from file offset 0x0)
+[0x0000] EX_LocalFinalFunction func=0x1b52ce2bd00
+  param[0]:
+    [0x0009] EX_IntConst 11087
+  EX_EndFunctionParms
+[0x000f] EX_Return
+  [0x0010] EX_Nothing
+[0x0011] EX_EndOfScript

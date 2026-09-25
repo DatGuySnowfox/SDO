@@ -1,0 +1,30 @@
+; BP_AMainLocalAttachment_C::ExecuteUbergraph_BP_AMainLocalAttachment
+; dump: [09:01:40.254] bytecode_dump: wrote 129 bytes to BP_AMainLocalAttachment_C_ExecuteUbergraph_BP_AMainLocalAttachment.bin
+
+; C:/temp/GIT/SDO/research/bytecode/decoded_5_6/BP_AMainLocalAttachment_C_ExecuteUbergraph_BP_AMainLocalAttachment.bin  (129 bytes from file offset 0x0)
+[0x0000] EX_ComputedJump offset_expr:
+  [0x0001] EX_LocalVariable prop=0x1b52c2f20e0
+[0x000a] EX_LocalVirtualFunction FName(ci=1672425, disp=0, num=0)
+  EX_EndFunctionParms
+[0x0018] EX_Jump -> 0x007e
+[0x001d] EX_Jump -> 0x007e
+[0x0022] EX_Let property=0x1b52be7af00
+  variable:
+    [0x002b] EX_InstanceVariable prop=0x1b52be7af00
+  assignment:
+    [0x0034] EX_StructConst struct=0x7ff485b38b78 size=12
+      member[0]:
+        [0x0041] EX_NameConst FName(ci=0, disp=0, num=0)
+      EX_EndStructConst
+[0x004f] EX_Jump -> 0x000a
+[0x0054] EX_Let property=0x1b52be7af00
+  variable:
+    [0x005d] EX_InstanceVariable prop=0x1b52be7af00
+  assignment:
+    [0x0066] EX_LocalVariable prop=0x1b52be7d200
+[0x006f] EX_Jump -> 0x000a
+[0x0074] EX_Jump -> 0x007e
+[0x0079] EX_Jump -> 0x007e
+[0x007e] EX_Return
+  [0x007f] EX_Nothing
+[0x0080] EX_EndOfScript

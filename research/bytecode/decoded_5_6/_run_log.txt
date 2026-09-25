@@ -1,0 +1,202 @@
+
+=== run started, 85 targets ===
+[1/85] BP_PlayerCharacter_C::EquipClothingToMesh -> skip: timed out waiting for dump confirmation
+[2/85] BP_PlayerCharacter_C::UpdateBodyParts -> skip: timed out waiting for dump confirmation
+[3/85] BP_PlayerCharacter_C::BodyPartVisibility -> skip: timed out waiting for dump confirmation
+[4/85] BP_PlayerCharacter_C::MC_AttachClothing -> skip: timed out waiting for dump confirmation
+[5/85] BP_PlayerCharacter_C::Svr_AttachClothing -> skip: timed out waiting for dump confirmation
+[6/85] BP_PlayerCharacter_C::OnRep_ClothingTorsoEquipped? -> skip: timed out waiting for dump confirmation
+[7/85] BP_PlayerCharacter_C::OnRep_ClothingGlovesEquipped? -> skip: timed out waiting for dump confirmation
+[8/85] BP_PlayerCharacter_C::OnRep_ClothingLegsEquipped? -> skip: timed out waiting for dump confirmation
+[9/85] BP_PlayerCharacter_C::OnRep_ClothingFeetEquipped? -> skip: timed out waiting for dump confirmation
+[10/85] BP_AMainLocalAttachment_C::ExecuteUbergraph_BP_AMainLocalAttachment -> skip: timed out waiting for dump confirmation
+[11/85] BP_FirearmPickup_C::ExecuteUbergraph_BP_FirearmPickup -> skip: timed out waiting for dump confirmation
+[12/85] BP_FirearmPickup_C::FireBullet -> skip: timed out waiting for dump confirmation
+
+=== run started, 2 targets ===
+[1/2] BP_PlayerCharacter_C::EquipClothingToMesh -> skip: function not found on live class: [08:57:14.341] bytecode_dump: EquipClothingToMesh function not found
+[2/2] BP_PlayerCharacter_C::UpdateBodyParts -> skip: scp of .bin failed: scp: :APPDATA\\SDO\\BP_PlayerCharacter_C_UpdateBodyParts.bin: No such file or directory
+
+
+=== run started, 3 targets ===
+[1/3] BP_PlayerCharacter_C::MC_AttachClothing -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_PlayerCharacter_C_MC_AttachClothing.decoded.txt
+[2/3] BP_PlayerCharacter_C::UpdateBodyParts -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_PlayerCharacter_C_UpdateBodyParts.decoded.txt
+[3/3] BP_PlayerCharacter_C::BodyPartVisibility -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_PlayerCharacter_C_BodyPartVisibility.decoded.txt
+
+=== run started, 84 targets ===
+[1/84] BP_PlayerCharacter_C::UpdateBodyParts -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_PlayerCharacter_C_UpdateBodyParts.decoded.txt
+[2/84] BP_PlayerCharacter_C::BodyPartVisibility -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_PlayerCharacter_C_BodyPartVisibility.decoded.txt
+[3/84] BP_PlayerCharacter_C::MC_AttachClothing -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_PlayerCharacter_C_MC_AttachClothing.decoded.txt
+
+=== run started, 84 targets ===
+[1/84] BP_PlayerCharacter_C::UpdateBodyParts -> skip: function not found on live class: [08:59:06.676] bytecode_dump: wrote 126 bytes to BP_PlayerCharacter_C_Svr_AttachClothing.bin
+[4/84] BP_PlayerCharacter_C::Svr_AttachClothing -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_PlayerCharacter_C_Svr_AttachClothing.decoded.txt
+[2/84] BP_PlayerCharacter_C::BodyPartVisibility -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_PlayerCharacter_C_BodyPartVisibility.decoded.txt
+[3/84] BP_PlayerCharacter_C::MC_AttachClothing -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_PlayerCharacter_C_MC_AttachClothing.decoded.txt
+[5/84] BP_PlayerCharacter_C::OnRep_ClothingTorsoEquipped? -> skip: function not found on live class: [08:59:27.956] bytecode_dump: wrote 126 bytes to BP_PlayerCharacter_C_Svr_AttachClothing.bin
+[4/84] BP_PlayerCharacter_C::Svr_AttachClothing -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_PlayerCharacter_C_Svr_AttachClothing.decoded.txt
+[6/84] BP_PlayerCharacter_C::OnRep_ClothingGlovesEquipped? -> skip: timed out waiting for dump confirmation
+[5/84] BP_PlayerCharacter_C::OnRep_ClothingTorsoEquipped? -> skip: timed out waiting for dump confirmation
+[7/84] BP_PlayerCharacter_C::OnRep_ClothingLegsEquipped? -> skip: timed out waiting for dump confirmation
+[6/84] BP_PlayerCharacter_C::OnRep_ClothingGlovesEquipped? -> skip: timed out waiting for dump confirmation
+[8/84] BP_PlayerCharacter_C::OnRep_ClothingFeetEquipped? -> skip: timed out waiting for dump confirmation
+[7/84] BP_PlayerCharacter_C::OnRep_ClothingLegsEquipped? -> skip: timed out waiting for dump confirmation
+[9/84] BP_AMainLocalAttachment_C::ExecuteUbergraph_BP_AMainLocalAttachment -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_AMainLocalAttachment_C_ExecuteUbergraph_BP_AMainLocalAttachment.decoded.txt
+[10/84] BP_FirearmPickup_C::ExecuteUbergraph_BP_FirearmPickup -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_FirearmPickup_C_ExecuteUbergraph_BP_FirearmPickup.decoded.txt
+[8/84] BP_PlayerCharacter_C::OnRep_ClothingFeetEquipped? -> skip: function not found on live class: [09:02:16.698] tick: step 6b done (pickup resolve)
+[11/84] BP_FirearmPickup_C::FireBullet -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_FirearmPickup_C_FireBullet.decoded.txt
+[12/84] BP_FirearmPickup_C::Local_StartShooting -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_FirearmPickup_C_Local_StartShooting.decoded.txt
+[9/84] BP_AMainLocalAttachment_C::ExecuteUbergraph_BP_AMainLocalAttachment -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_AMainLocalAttachment_C_ExecuteUbergraph_BP_AMainLocalAttachment.decoded.txt
+[13/84] BP_FirearmPickup_C::MuzzleDurability -> skip: function not found on live class: [09:02:33.004] bytecode_dump: wrote 11100 bytes to BP_FirearmPickup_C_ExecuteUbergraph_BP_FirearmPickup.bin
+[14/84] BP_FirearmPickup_C::MuzzleEffects -> skip: function not found on live class: [09:02:44.334] tick: step 6b done (pickup resolve)
+[10/84] BP_FirearmPickup_C::ExecuteUbergraph_BP_FirearmPickup -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_FirearmPickup_C_ExecuteUbergraph_BP_FirearmPickup.decoded.txt
+[15/84] BP_FirearmPickup_C::StartRecoil -> skip: function not found on live class: [09:02:55.858] tick: step 6b done (pickup resolve)
+[11/84] BP_FirearmPickup_C::FireBullet -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_FirearmPickup_C_FireBullet.decoded.txt
+[16/84] BP_JigHelperComp_C::OnRep_ActiveWeapon -> skip: function not found on live class: [09:02:57.812] bytecode_dump: wrote 3409 bytes to BP_FirearmPickup_C_Local_StartShooting.bin
+[17/84] BP_JigMultiplayer_C::ExecuteUbergraph_BP_JigMultiplayer -> skip: function not found on live class: [09:03:24.886] head_rot_diag: controlPitch=0.00 controlYaw=0.00 actorYaw=46.14 | headRot(P=0.00 Y=5.82 R=0.00) headQuat(X=-9.000 Y=-9.000 Z=-9.000 W=-9.000)
+[12/84] BP_FirearmPickup_C::Local_StartShooting -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_FirearmPickup_C_Local_StartShooting.decoded.txt
+[13/84] BP_FirearmPickup_C::MuzzleDurability -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_FirearmPickup_C_MuzzleDurability.decoded.txt
+[18/84] BP_JigMultiplayer_C::HandleActorEquipped -> skip: timed out waiting for dump confirmation
+[14/84] BP_FirearmPickup_C::MuzzleEffects -> skip: timed out waiting for dump confirmation
+[15/84] BP_FirearmPickup_C::StartRecoil -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_FirearmPickup_C_StartRecoil.decoded.txt
+[19/84] BP_JigMultiplayer_C::HandleItemOverItem -> skip: timed out waiting for dump confirmation
+[16/84] BP_JigHelperComp_C::OnRep_ActiveWeapon -> skip: timed out waiting for dump confirmation
+[20/84] BP_JigMultiplayer_C::ServerFuncHandleEquipActor -> skip: timed out waiting for dump confirmation
+[17/84] BP_JigMultiplayer_C::ExecuteUbergraph_BP_JigMultiplayer -> skip: function not found on live class: [09:05:34.679] bytecode_dump: CanInteract_ function not found
+[21/84] BP_JigPickupComponent_C::CanInteract_ -> skip: function not found on live class: [09:05:34.679] bytecode_dump: CanInteract_ function not found
+[18/84] BP_JigMultiplayer_C::HandleActorEquipped -> skip: function not found on live class: [09:05:39.642] bytecode_dump: wrote 492 bytes to BP_JigPickupComponent_C_CheckDistanceFromActor.bin
+[22/84] BP_JigPickupComponent_C::CheckDistanceFromActor -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_JigPickupComponent_C_CheckDistanceFromActor.decoded.txt
+[23/84] BP_JigPickupComponent_C::CheckMismatch -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_JigPickupComponent_C_CheckMismatch.decoded.txt
+[19/84] BP_JigMultiplayer_C::HandleItemOverItem -> skip: function not found on live class: [09:06:20.229] bytecode_dump: wrote 3407 bytes to BP_JigPickupComponent_C_ExecuteUbergraph_BP_JigPickupComponent.bin
+[20/84] BP_JigMultiplayer_C::ServerFuncHandleEquipActor -> skip: function not found on live class: [09:06:31.923] head_rot_diag: controlPitch=0.00 controlYaw=0.00 actorYaw=46.14 | headRot(P=0.00 Y=5.82 R=0.00) headQuat(X=-9.000 Y=-9.000 Z=-9.000 W=-9.000)
+[24/84] BP_JigPickupComponent_C::ExecuteUbergraph_BP_JigPickupComponent -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_JigPickupComponent_C_ExecuteUbergraph_BP_JigPickupComponent.decoded.txt
+[25/84] BP_JigPickupComponent_C::FindLocalAttachmentByUID -> skip: function not found on live class: [09:05:34.679] bytecode_dump: CanInteract_ function not found
+[21/84] BP_JigPickupComponent_C::CanInteract_ -> skip: function not found on live class: [09:05:34.679] bytecode_dump: CanInteract_ function not found
+[26/84] BP_JigPickupComponent_C::OnExecuteInteract -> skip: function not found on live class: 144376
+[27/84] BP_JigPickupComponent_C::OnRep_CanBePicked_ -> skip: function not found on live class: [09:06:49.010] tick: step 6b done (pickup resolve)
+[22/84] BP_JigPickupComponent_C::CheckDistanceFromActor -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_JigPickupComponent_C_CheckDistanceFromActor.decoded.txt
+[23/84] BP_JigPickupComponent_C::CheckMismatch -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_JigPickupComponent_C_CheckMismatch.decoded.txt
+[28/84] BP_JigPickupComponent_C::OnRep_EnablePhysics_ -> skip: timed out waiting for dump confirmation
+[29/84] BP_JigPickupComponent_C::ProcessAttachments -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_JigPickupComponent_C_ProcessAttachments.decoded.txt
+[24/84] BP_JigPickupComponent_C::ExecuteUbergraph_BP_JigPickupComponent -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_JigPickupComponent_C_ExecuteUbergraph_BP_JigPickupComponent.decoded.txt
+[25/84] BP_JigPickupComponent_C::FindLocalAttachmentByUID -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_JigPickupComponent_C_FindLocalAttachmentByUID.decoded.txt
+[30/84] BP_JigPickupComponent_C::SERVER_UpdateAttachmentState -> skip: function not found on live class: [09:07:58.571] bytecode_dump: wrote 54 bytes to BP_JigPickupComponent_C_OnExecuteInteract.bin
+[26/84] BP_JigPickupComponent_C::OnExecuteInteract -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_JigPickupComponent_C_OnExecuteInteract.decoded.txt
+[27/84] BP_JigPickupComponent_C::OnRep_CanBePicked_ -> skip: function not found on live class: [09:08:01.905] bytecode_dump: OnRep_CanBePicked_ function not found
+[31/84] BP_JigPickupComponent_C::SetCanInteract -> skip: function not found on live class: [09:08:23.012] bytecode_dump: OnRep_EnablePhysics_ function not found
+[28/84] BP_JigPickupComponent_C::OnRep_EnablePhysics_ -> skip: function not found on live class: [09:08:23.012] bytecode_dump: OnRep_EnablePhysics_ function not found
+[32/84] BP_JigPickupComponent_C::UpdateAttachmentStateByUID -> skip: function not found on live class: [09:08:36.474] tick: step 6b done (pickup resolve)
+[29/84] BP_JigPickupComponent_C::ProcessAttachments -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_JigPickupComponent_C_ProcessAttachments.decoded.txt
+[30/84] BP_JigPickupComponent_C::SERVER_UpdateAttachmentState -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_JigPickupComponent_C_SERVER_UpdateAttachmentState.decoded.txt
+[33/84] BP_JigPickupComponent_C::UpdateAttachments -> skip: timed out waiting for dump confirmation
+[34/84] BP_JigPickupComponent_C::ValidateAttachedActor -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_JigPickupComponent_C_ValidateAttachedActor.decoded.txt
+[31/84] BP_JigPickupComponent_C::SetCanInteract -> skip: function not found on live class: [09:09:32.502] bytecode_dump: wrote 676 bytes to BP_MeleePickup_C_MeleeTrace.bin
+[35/84] BP_MeleePickup_C::MeleeTrace -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_MeleePickup_C_MeleeTrace.decoded.txt
+[36/84] BP_MilitarySuppressorLocalAttachment_C::Jig_SetAttachmentActiveState -> skip: remote move failed: scp: dest open "C:/sdo_remote_cmd.ps1": Failure
+scp: failed to upload file C:/Users/mccau/AppData/Local/Temp/claude/C--Users-mccau/7b5f3f2f-bcdb-4d8e-afbd-151c82c05958/scratchpad/remote_cmd.ps1 to C:/sdo_remote_cmd.ps1
+
+[37/84] BP_PlayerCharacter_C::ExecuteUbergraph_BP_PlayerCharacter -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_PlayerCharacter_C_ExecuteUbergraph_BP_PlayerCharacter.decoded.txt
+[38/84] BP_PlayerCharacter_C::InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_13 -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_PlayerCharacter_C_InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_13.decoded.txt
+[32/84] BP_JigPickupComponent_C::UpdateAttachmentStateByUID -> skip: function not found on live class: [09:10:07.318] bytecode_dump: wrote 90 bytes to BP_PlayerCharacter_C_InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_23.bin
+[39/84] BP_PlayerCharacter_C::InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_23 -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_PlayerCharacter_C_InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_23.decoded.txt
+[40/84] BP_PlayerCharacter_C::InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_24 -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_PlayerCharacter_C_InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_24.decoded.txt
+[33/84] BP_JigPickupComponent_C::UpdateAttachments -> skip: function not found on live class: [09:10:24.710] bytecode_dump: wrote 90 bytes to BP_PlayerCharacter_C_InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_4.bin
+[41/84] BP_PlayerCharacter_C::InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_4 -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_PlayerCharacter_C_InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_4.decoded.txt
+[42/84] BP_PlayerCharacter_C::InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_6 -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_PlayerCharacter_C_InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_6.decoded.txt
+[34/84] BP_JigPickupComponent_C::ValidateAttachedActor -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_JigPickupComponent_C_ValidateAttachedActor.decoded.txt
+[43/84] BP_PlayerCharacter_C::InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_64 -> skip: function not found on live class: [09:10:40.348] bytecode_dump: wrote 676 bytes to BP_MeleePickup_C_MeleeTrace.bin
+[35/84] BP_MeleePickup_C::MeleeTrace -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_MeleePickup_C_MeleeTrace.decoded.txt
+[44/84] BP_PlayerCharacter_C::InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_65 -> skip: timed out waiting for dump confirmation
+[45/84] BP_PlayerCharacter_C::InpActEvt_IA_ToggleTactical_K2Node_EnhancedInputActionEvent_68 -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_PlayerCharacter_C_InpActEvt_IA_ToggleTactical_K2Node_EnhancedInputActionEvent_68.decoded.txt
+[36/84] BP_MilitarySuppressorLocalAttachment_C::Jig_SetAttachmentActiveState -> skip: timed out waiting for dump confirmation
+[37/84] BP_PlayerCharacter_C::ExecuteUbergraph_BP_PlayerCharacter -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_PlayerCharacter_C_ExecuteUbergraph_BP_PlayerCharacter.decoded.txt
+[46/84] BP_PlayerCharacter_C::OnActiveWeaponSlotChanged_Event_0 -> skip: function not found on live class: [09:10:02.772] bytecode_dump: wrote 90 bytes to BP_PlayerCharacter_C_InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_13.bin
+[38/84] BP_PlayerCharacter_C::InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_13 -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_PlayerCharacter_C_InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_13.decoded.txt
+[39/84] BP_PlayerCharacter_C::InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_23 -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_PlayerCharacter_C_InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_23.decoded.txt
+[47/84] BP_PlayerCharacter_C::OnRep_ClothingLegsEquipped_ -> skip: function not found on live class: [09:10:20.357] bytecode_dump: wrote 90 bytes to BP_PlayerCharacter_C_InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_24.bin
+[40/84] BP_PlayerCharacter_C::InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_24 -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_PlayerCharacter_C_InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_24.decoded.txt
+[41/84] BP_PlayerCharacter_C::InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_4 -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_PlayerCharacter_C_InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_4.decoded.txt
+[48/84] BP_PlayerCharacter_C::OnRep_FacewearEquipped_ -> skip: function not found on live class: [09:12:34.560] bytecode_dump: wrote 90 bytes to BP_PlayerCharacter_C_InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_6.bin
+[42/84] BP_PlayerCharacter_C::InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_6 -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_PlayerCharacter_C_InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_6.decoded.txt
+[43/84] BP_PlayerCharacter_C::InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_64 -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_PlayerCharacter_C_InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_64.decoded.txt
+[49/84] BP_PlayerCharacter_C::OnRep_PrimaryWeaponEquipped -> skip: function not found on live class: [09:12:57.866] bytecode_dump: wrote 90 bytes to BP_PlayerCharacter_C_InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_65.bin
+[44/84] BP_PlayerCharacter_C::InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_65 -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_PlayerCharacter_C_InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_65.decoded.txt
+[50/84] BP_PlayerCharacter_C::OnRep_PrimaryWeaponEquipped_ -> skip: function not found on live class: [09:13:01.226] bytecode_dump: wrote 90 bytes to BP_PlayerCharacter_C_InpActEvt_IA_ToggleTactical_K2Node_EnhancedInputActionEvent_68.bin
+[45/84] BP_PlayerCharacter_C::InpActEvt_IA_ToggleTactical_K2Node_EnhancedInputActionEvent_68 -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_PlayerCharacter_C_InpActEvt_IA_ToggleTactical_K2Node_EnhancedInputActionEvent_68.decoded.txt
+[46/84] BP_PlayerCharacter_C::OnActiveWeaponSlotChanged_Event_0 -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_PlayerCharacter_C_OnActiveWeaponSlotChanged_Event_0.decoded.txt
+[47/84] BP_PlayerCharacter_C::OnRep_ClothingLegsEquipped_ -> skip: function not found on live class: [09:13:28.587] bytecode_dump: OnRep_ClothingLegsEquipped_ function not found
+[51/84] BP_PlayerCharacter_C::ToggleTacticalAttachment -> skip: function not found on live class: [09:13:36.041] bytecode_dump: OnRep_FacewearEquipped_ function not found
+[48/84] BP_PlayerCharacter_C::OnRep_FacewearEquipped_ -> skip: function not found on live class: [09:13:36.041] bytecode_dump: OnRep_FacewearEquipped_ function not found
+[49/84] BP_PlayerCharacter_C::OnRep_PrimaryWeaponEquipped -> skip: function not found on live class: [09:13:40.867] bytecode_dump: OnRep_PrimaryWeaponEquipped function not found
+[52/84] BP_PlayerController_C::ExecuteUbergraph_BP_PlayerController -> skip: timed out waiting for dump confirmation
+[50/84] BP_PlayerCharacter_C::OnRep_PrimaryWeaponEquipped_ -> skip: function not found on live class: [09:14:22.729] bytecode_dump: OnRep_PrimaryWeaponEquipped_ function not found
+[51/84] BP_PlayerCharacter_C::ToggleTacticalAttachment -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_PlayerCharacter_C_ToggleTacticalAttachment.decoded.txt
+[53/84] BP_SpecOpsNVGLocalAttachment_C::ExecuteUbergraph_BP_SpecOpsNVGLocalAttachment -> skip: function not found on live class: [09:14:36.609] tick: step 6b done (pickup resolve)
+[54/84] BP_SpecOpsNVGLocalAttachment_C::Jig_SetAttachmentActiveState -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_SpecOpsNVGLocalAttachment_C_Jig_SetAttachmentActiveState.decoded.txt
+[52/84] BP_PlayerController_C::ExecuteUbergraph_BP_PlayerController -> skip: timed out waiting for dump confirmation
+[53/84] BP_SpecOpsNVGLocalAttachment_C::ExecuteUbergraph_BP_SpecOpsNVGLocalAttachment -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_SpecOpsNVGLocalAttachment_C_ExecuteUbergraph_BP_SpecOpsNVGLocalAttachment.decoded.txt
+[55/84] BP_SpecOpsNVGLocalAttachment_C::Jig_SetAttachmentInfo -> skip: timed out waiting for dump confirmation
+[54/84] BP_SpecOpsNVGLocalAttachment_C::Jig_SetAttachmentActiveState -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_SpecOpsNVGLocalAttachment_C_Jig_SetAttachmentActiveState.decoded.txt
+[56/84] BP_TacticalLaserLightComboLocalAttachment_C::ExecuteUbergraph_BP_TacticalLaserLightComboLocalAttachment -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_TacticalLaserLightComboLocalAttachment_C_ExecuteUbergraph_BP_TacticalLaserLightComboLocalAttachment.decoded.txt
+[55/84] BP_SpecOpsNVGLocalAttachment_C::Jig_SetAttachmentInfo -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_SpecOpsNVGLocalAttachment_C_Jig_SetAttachmentInfo.decoded.txt
+[57/84] BP_TacticalLaserLightComboLocalAttachment_C::Jig_SetAttachmentActiveState -> skip: function not found on live class: 205653
+[58/84] BP_WeaponsPickupComponent_C::ExecuteUbergraph_BP_WeaponsPickupComponent -> skip: function not found on live class: [09:15:53.228] tick: step 6b done (pickup resolve)
+[56/84] BP_TacticalLaserLightComboLocalAttachment_C::ExecuteUbergraph_BP_TacticalLaserLightComboLocalAttachment -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\BP_TacticalLaserLightComboLocalAttachment_C_ExecuteUbergraph_BP_TacticalLaserLightComboLocalAttachment.decoded.txt
+[57/84] BP_TacticalLaserLightComboLocalAttachment_C::Jig_SetAttachmentActiveState -> skip: remote move failed: The process cannot access the file 'C:\sdo_remote_cmd.ps1' because it is being used by another process.
+    + CategoryInfo          : ObjectNotFound: (:String) [], ParentContainsErrorRecordException
+    + FullyQualifiedErrorId : CommandNotFoundException
+ 
+
+[59/84] CharacterBarberMenu_C::ExecuteUbergraph_CharacterBarberMenu -> skip: timed out waiting for dump confirmation
+[58/84] BP_WeaponsPickupComponent_C::ExecuteUbergraph_BP_WeaponsPickupComponent -> skip: timed out waiting for dump confirmation
+[60/84] JSIContainer_C::OnDrop -> skip: function not found on live class: 211853
+[59/84] CharacterBarberMenu_C::ExecuteUbergraph_CharacterBarberMenu -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\CharacterBarberMenu_C_ExecuteUbergraph_CharacterBarberMenu.decoded.txt
+[61/84] JSIContainer_C::PerfromDrop -> skip: timed out waiting for dump confirmation
+[60/84] JSIContainer_C::OnDrop -> skip: timed out waiting for dump confirmation
+[61/84] JSIContainer_C::PerfromDrop -> skip: function not found on live class: [09:17:48.198] tick: step 6b done (pickup resolve)
+[62/84] LevellingComponent_C::XPDeath -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\LevellingComponent_C_XPDeath.decoded.txt
+[63/84] Player_AnimBP_C::BlueprintThreadSafeUpdateAnimation -> skip: function not found on live class: 218202
+[64/84] Player_AnimBP_C::CombatState -> skip: function not found on live class: [09:18:00.061] tick: step 6b done (pickup resolve)
+[62/84] LevellingComponent_C::XPDeath -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\LevellingComponent_C_XPDeath.decoded.txt
+[63/84] Player_AnimBP_C::BlueprintThreadSafeUpdateAnimation -> skip: timed out waiting for dump confirmation
+[65/84] Player_AnimBP_C::DeathState -> skip: timed out waiting for dump confirmation
+[64/84] Player_AnimBP_C::CombatState -> skip: timed out waiting for dump confirmation
+[66/84] Player_AnimBP_C::EvaluateGraphExposedInputs_ExecuteUbergraph_Player_AnimBP_AnimGraphNode_Fabrik_31BAC05D486A8E2F5D5AFF87706BFF20 -> skip: timed out waiting for dump confirmation
+[65/84] Player_AnimBP_C::DeathState -> skip: timed out waiting for dump confirmation
+[67/84] Player_AnimBP_C::EvaluateGraphExposedInputs_ExecuteUbergraph_Player_AnimBP_AnimGraphNode_Fabrik_AF8CB55449FDEB26FA14F38357C17595 -> skip: timed out waiting for dump confirmation
+[66/84] Player_AnimBP_C::EvaluateGraphExposedInputs_ExecuteUbergraph_Player_AnimBP_AnimGraphNode_Fabrik_31BAC05D486A8E2F5D5AFF87706BFF20 -> skip: timed out waiting for dump confirmation
+[68/84] Player_AnimBP_C::EvaluateGraphExposedInputs_ExecuteUbergraph_Player_AnimBP_AnimGraphNode_TransitionResult_1D52F779406FC4110BBFC4B70C211957 -> skip: timed out waiting for dump confirmation
+[67/84] Player_AnimBP_C::EvaluateGraphExposedInputs_ExecuteUbergraph_Player_AnimBP_AnimGraphNode_Fabrik_AF8CB55449FDEB26FA14F38357C17595 -> skip: timed out waiting for dump confirmation
+[69/84] Player_AnimBP_C::ExecuteUbergraph_Player_AnimBP -> skip: timed out waiting for dump confirmation
+[70/84] Player_AnimBP_C::GetAimOffset -> skip: timed out waiting for dump confirmation
+[68/84] Player_AnimBP_C::EvaluateGraphExposedInputs_ExecuteUbergraph_Player_AnimBP_AnimGraphNode_TransitionResult_1D52F779406FC4110BBFC4B70C211957 -> skip: timed out waiting for dump confirmation
+[69/84] Player_AnimBP_C::ExecuteUbergraph_Player_AnimBP -> skip: timed out waiting for dump confirmation
+[71/84] Player_AnimBP_C::GetAnimationInfoFromCharacter -> skip: timed out waiting for dump confirmation
+[70/84] Player_AnimBP_C::GetAimOffset -> skip: timed out waiting for dump confirmation
+[72/84] Player_AnimBP_C::GetHeadRot -> skip: timed out waiting for dump confirmation
+[71/84] Player_AnimBP_C::GetAnimationInfoFromCharacter -> skip: timed out waiting for dump confirmation
+[73/84] Player_AnimBP_C::GetLeftHandLoc -> skip: timed out waiting for dump confirmation
+[74/84] Player_AnimBP_C::GetSpeed&Direction -> skip: timed out waiting for dump confirmation
+[72/84] Player_AnimBP_C::GetHeadRot -> skip: timed out waiting for dump confirmation
+[73/84] Player_AnimBP_C::GetLeftHandLoc -> skip: timed out waiting for dump confirmation
+[75/84] Player_AnimBP_C::GetThreadSafeBooleans -> skip: timed out waiting for dump confirmation
+[76/84] PressAnyKeyWidget_C::ExecuteUbergraph_PressAnyKeyWidget -> skip: timed out waiting for dump confirmation
+[74/84] Player_AnimBP_C::GetSpeed&Direction -> skip: timed out waiting for dump confirmation
+[75/84] Player_AnimBP_C::GetThreadSafeBooleans -> skip: timed out waiting for dump confirmation
+[77/84] PressAnyKeyWidget_C::OnKeyDown -> skip: timed out waiting for dump confirmation
+[78/84] PressAnyKeyWidget_C::Tick -> skip: timed out waiting for dump confirmation
+[76/84] PressAnyKeyWidget_C::ExecuteUbergraph_PressAnyKeyWidget -> skip: timed out waiting for dump confirmation
+[77/84] PressAnyKeyWidget_C::OnKeyDown -> skip: timed out waiting for dump confirmation
+[79/84] SD_GameInstance_C::Survival_SuicideRespawn -> skip: timed out waiting for dump confirmation
+[80/84] SaveMenu_C::BndEvt__SaveMenu_Load_YES_K2Node_ComponentBoundEvent_7_OnButtonClickedEvent__DelegateSignature -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\SaveMenu_C_BndEvt__SaveMenu_Load_YES_K2Node_ComponentBoundEvent_7_OnButtonClickedEvent__DelegateSignature.decoded.txt
+[78/84] PressAnyKeyWidget_C::Tick -> skip: function not found on live class: [09:28:56.975] bytecode_dump: wrote 725 bytes to SaveMenu_C_CreateNewSlotAndCheckName.bin
+[81/84] SaveMenu_C::CreateNewSlotAndCheckName -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\SaveMenu_C_CreateNewSlotAndCheckName.decoded.txt
+[79/84] SD_GameInstance_C::Survival_SuicideRespawn -> skip: timed out waiting for dump confirmation
+[80/84] SaveMenu_C::BndEvt__SaveMenu_Load_YES_K2Node_ComponentBoundEvent_7_OnButtonClickedEvent__DelegateSignature -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\SaveMenu_C_BndEvt__SaveMenu_Load_YES_K2Node_ComponentBoundEvent_7_OnButtonClickedEvent__DelegateSignature.decoded.txt
+[82/84] SaveMenu_C::ExecuteUbergraph_SaveMenu -> skip: function not found on live class: [09:29:51.731] bytecode_dump: wrote 725 bytes to SaveMenu_C_CreateNewSlotAndCheckName.bin
+[81/84] SaveMenu_C::CreateNewSlotAndCheckName -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\SaveMenu_C_CreateNewSlotAndCheckName.decoded.txt
+[83/84] SaveMenu_C::LoadGameFromSlot -> skip: function not found on live class: 292321
+[82/84] SaveMenu_C::ExecuteUbergraph_SaveMenu -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\SaveMenu_C_ExecuteUbergraph_SaveMenu.decoded.txt
+[84/84] SaveMenu_C::SetCurrentSaveSlotByName -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\SaveMenu_C_SetCurrentSaveSlotByName.decoded.txt
+[83/84] SaveMenu_C::LoadGameFromSlot -> skip: timed out waiting for dump confirmation
+[84/84] SaveMenu_C::SetCurrentSaveSlotByName -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\SaveMenu_C_SetCurrentSaveSlotByName.decoded.txt

@@ -1,0 +1,17 @@
+; BP_JigPickupComponent_C::OnExecuteInteract
+; dump: [09:07:58.571] bytecode_dump: wrote 54 bytes to BP_JigPickupComponent_C_OnExecuteInteract.bin
+
+; C:/temp/GIT/SDO/research/bytecode/decoded_5_6/BP_JigPickupComponent_C_OnExecuteInteract.bin  (54 bytes from file offset 0x0)
+[0x0000] EX_LetValueOnPersistentFrame frame_slot=0x1b52be78c80
+  assignment:
+    [0x0009] EX_LocalVariable prop=0x1b52be79400
+[0x0012] EX_LetValueOnPersistentFrame frame_slot=0x1b52be78c00
+  assignment:
+    [0x001b] EX_LocalVariable prop=0x1b52be79380
+[0x0024] EX_LocalFinalFunction func=0x1b5253aaa00
+  param[0]:
+    [0x002d] EX_IntConst 2365
+  EX_EndFunctionParms
+[0x0033] EX_Return
+  [0x0034] EX_Nothing
+[0x0035] EX_EndOfScript

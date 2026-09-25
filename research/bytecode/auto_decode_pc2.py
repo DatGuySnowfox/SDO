@@ -37,6 +37,11 @@ GIT_BASH = r"C:\Program Files\Git\bin\bash.exe"
 
 REMOTE_HOST = "sdo-client2"
 REMOTE_APPDATA_FLAG_DIR = r"$env:APPDATA\SDO"
+# scp speaks no PowerShell, so $env:APPDATA never expands in an scp path and
+# every fetch failed with "No such file or directory" even though the dump
+# had succeeded. Literal path for scp; the PowerShell-side constant above
+# stays as-is because it is only ever used inside PowerShell.
+REMOTE_BIN_DIR_SCP = "C:/Users/mccau/AppData/Roaming/SDO"
 LOCAL_TMP = r"C:\Users\mccau\AppData\Local\Temp\claude\C--Users-mccau\7b5f3f2f-bcdb-4d8e-afbd-151c82c05958\scratchpad"
 LOCAL_OUT_DIR = r"C:\temp\GIT\SDO\research\bytecode\decoded_5_6"
 DISASM_SCRIPT = r"C:\temp\GIT\SDO\research\bytecode\kismet_disasm.py"
@@ -102,6 +107,31 @@ def get_remote_log_tail(n):
     return out
 
 
+def grep_remote_log(pattern, last=8):
+    """Search the WHOLE remote debug.log for a pattern, newest matches last.
+
+    2026-09-25: the dump poll used to tail 30 lines and look for the completion
+    line in them. That worked when debug.log was quiet. It is not quiet: on a
+    live client it reaches multiple megabytes and hundreds of lines per second,
+    so the "wrote N bytes" line is pushed out of a 30-line window long before
+    the next poll two seconds later arrives to look for it. Every target then
+    reported "timed out waiting for dump confirmation" while the dumps were in
+    fact succeeding - 38 completion lines and 12 .bin files on disk from a run
+    where the pipeline believed nothing worked at all.
+
+    Grepping the whole file instead is immune to log volume, which is the
+    property that actually matters here.
+    """
+    safe = pattern.replace("'", "''")
+    rc, out, err = ssh_ps(
+        "Select-String -Path \"%s\" -SimpleMatch -Pattern '%s' "
+        "-ErrorAction SilentlyContinue | Select-Object -Last %d | "
+        "ForEach-Object { $_.Line }" % (DEBUG_LOG_REMOTE, safe, last))
+    if rc != 0:
+        return ""
+    return out
+
+
 def dump_function(class_name, func_name):
     """Trigger a bytecode dump for class_name::func_name, wait for it, scp
     the .bin down. Returns (local_bin_path_or_None, message)."""
@@ -111,27 +141,29 @@ def dump_function(class_name, func_name):
 
     safe_func = re.sub(r"[^A-Za-z0-9_]", "_", func_name)
     bin_name = f"{class_name}_{safe_func}.bin"
-    remote_bin = f"{REMOTE_APPDATA_FLAG_DIR}\\{bin_name}"
+    remote_bin = f"{REMOTE_BIN_DIR_SCP}/{bin_name}"
 
     # Each poll iteration is itself a ~1.5-2s ssh round trip, on top of the
     # two round trips write_remote_flag() already spent (scp + move) — a
     # short deadline here blows through before ever catching the completion
     # line, confirmed live 2026-08-17 (the dump itself completed in ~100ms
     # server-side every time; the timeout was purely local polling overhead).
-    deadline = time.time() + 25
+    deadline = time.time() + 40
     wrote_line = None
     while time.time() < deadline:
-        tail = get_remote_log_tail(30)
-        if f"wrote " in tail and bin_name in tail:
-            for line in tail.splitlines():
-                if "wrote " in line and bin_name in line:
-                    wrote_line = line
-            if wrote_line:
-                break
-        if "NOT FOUND" in tail or "not found" in tail:
-            for line in tail.splitlines():
-                if (class_name in line or func_name in line) and ("NOT FOUND" in line or "not found" in line):
-                    return None, f"function not found on live class: {line.strip()}"
+        # Grep the whole log for THIS bin name, rather than hoping the line is
+        # still inside a short tail window. See grep_remote_log's comment.
+        hits = grep_remote_log(bin_name, last=4)
+        for line in hits.splitlines():
+            if "wrote " in line and bin_name in line:
+                wrote_line = line
+        if wrote_line:
+            break
+        # A function the live class does not have is a definite answer, not
+        # something to keep waiting on.
+        missing = grep_remote_log(func_name + " function not found", last=2)
+        if missing.strip():
+            return None, f"function not found on live class: {missing.strip().splitlines()[-1]}"
 
     if not wrote_line:
         return None, "timed out waiting for dump confirmation"

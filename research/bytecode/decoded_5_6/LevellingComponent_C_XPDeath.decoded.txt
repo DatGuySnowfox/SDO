@@ -1,0 +1,115 @@
+; LevellingComponent_C::XPDeath
+; dump: [09:17:37.463] bytecode_dump: wrote 469 bytes to LevellingComponent_C_XPDeath.bin
+
+; C:/temp/GIT/SDO/research/bytecode/decoded_5_6/LevellingComponent_C_XPDeath.bin  (469 bytes from file offset 0x0)
+[0x0000] EX_LetBool
+  variable:
+    [0x0001] EX_LocalVariable prop=0x1b52cde0400
+  assignment:
+    [0x000a] EX_CallMath func=0x7ff485d41bd8
+      param[0]:
+        [0x0013] EX_InstanceVariable prop=0x1b52cd947d0
+      param[1]:
+        [0x001c] EX_IntConst 1
+      EX_EndFunctionParms
+[0x0022] EX_JumpIfNot -> 0x01d2 if NOT:
+  [0x0027] EX_LocalVariable prop=0x1b52cde0400
+[0x0030] EX_Let property=0x1b52cd945a0
+  variable:
+    [0x0039] EX_InstanceVariable prop=0x1b52cd945a0
+  assignment:
+    [0x0042] EX_DoubleConst 0.0
+[0x004b] EX_Let property=0x1b52cd946f0
+  variable:
+    [0x0054] EX_InstanceVariable prop=0x1b52cd946f0
+  assignment:
+    [0x005d] EX_DoubleConst 0.0
+[0x0066] EX_Let property=0x1b52cd941b0
+  variable:
+    [0x006f] EX_LocalVariable prop=0x1b52cd941b0
+  assignment:
+    [0x0078] EX_CallMath func=0x7ff485d54d38
+      param[0]:
+        [0x0081] EX_InstanceVariable prop=0x1b52cd947d0
+      param[1]:
+        [0x008a] EX_IntConst 1
+      EX_EndFunctionParms
+[0x0090] EX_Let property=0x1b52cd94300
+  variable:
+    [0x0099] EX_LocalVariable prop=0x1b52cd94300
+  assignment:
+    [0x00a2] EX_LocalVariable prop=0x1b52cd941b0
+[0x00ab] EX_Let property=0x1b52cd947d0
+  variable:
+    [0x00b4] EX_InstanceVariable prop=0x1b52cd947d0
+  assignment:
+    [0x00bd] EX_LocalVariable prop=0x1b52cd94300
+[0x00c6] EX_Let property=0x1b52cd943e0
+  variable:
+    [0x00cf] EX_LocalVariable prop=0x1b52cd943e0
+  assignment:
+    [0x00d8] EX_CallMath func=0x7ff485d3af58
+      param[0]:
+        [0x00e1] EX_InstanceVariable prop=0x1b52cd94680
+      param[1]:
+        [0x00ea] EX_DoubleConst 2.65
+      EX_EndFunctionParms
+[0x00f4] EX_Let property=0x1b52cd94370
+  variable:
+    [0x00fd] EX_LocalVariable prop=0x1b52cd94370
+  assignment:
+    [0x0106] EX_CallMath func=0x7ff485d4b098
+      param[0]:
+        [0x010f] EX_LocalVariable prop=0x1b52cd943e0
+      param[1]:
+        [0x0118] EX_DoubleConst 2.0
+      EX_EndFunctionParms
+[0x0122] EX_Let property=0x1b52cd94290
+  variable:
+    [0x012b] EX_LocalVariable prop=0x1b52cd94290
+  assignment:
+    [0x0134] EX_CallMath func=0x7ff485d53138
+      param[0]:
+        [0x013d] EX_LocalVariable prop=0x1b52cd94370
+      EX_EndFunctionParms
+[0x0147] EX_Let property=0x1b52cd94220
+  variable:
+    [0x0150] EX_LocalVariable prop=0x1b52cd94220
+  assignment:
+    [0x0159] EX_CallMath func=0x7ff485d38398
+      param[0]:
+        [0x0162] EX_LocalVariable prop=0x1b52cd94290
+      EX_EndFunctionParms
+[0x016c] EX_Let property=0x1b52cd94680
+  variable:
+    [0x0175] EX_InstanceVariable prop=0x1b52cd94680
+  assignment:
+    [0x017e] EX_LocalVariable prop=0x1b52cd94220
+[0x0187] EX_CallMath func=0x7ff485ad5910
+  param[0]:
+    [0x0190] EX_Self
+  param[1]:
+    [0x0191] EX_StringConst "XP DEATH"
+  param[2]:
+    [0x019b] EX_True
+  param[3]:
+    [0x019c] EX_True
+  param[4]:
+    [0x019d] EX_StructConst struct=0x7ff485aba788 size=16
+      member[0]:
+        [0x01aa] EX_FloatConst 0.0
+      member[1]:
+        [0x01af] EX_FloatConst 0.6600000262260437
+      member[2]:
+        [0x01b4] EX_FloatConst 1.0
+      member[3]:
+        [0x01b9] EX_FloatConst 1.0
+      EX_EndStructConst
+  param[5]:
+    [0x01bf] EX_FloatConst 2.0
+  param[6]:
+    [0x01c4] EX_NameConst FName(ci=0, disp=0, num=0)
+  EX_EndFunctionParms
+[0x01d2] EX_Return
+  [0x01d3] EX_Nothing
+[0x01d4] EX_EndOfScript

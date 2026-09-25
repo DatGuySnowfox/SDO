@@ -1,0 +1,14 @@
+; BP_PlayerCharacter_C::OnActiveWeaponSlotChanged_Event_0
+; dump: [09:13:24.206] bytecode_dump: wrote 36 bytes to BP_PlayerCharacter_C_OnActiveWeaponSlotChanged_Event_0.bin
+
+; C:/temp/GIT/SDO/research/bytecode/decoded_5_6/BP_PlayerCharacter_C_OnActiveWeaponSlotChanged_Event_0.bin  (36 bytes from file offset 0x0)
+[0x0000] EX_LetValueOnPersistentFrame frame_slot=0x1b52cc5f600
+  assignment:
+    [0x0009] EX_LocalVariable prop=0x1b52cb6ac00
+[0x0012] EX_LocalFinalFunction func=0x1b52c743b00
+  param[0]:
+    [0x001b] EX_IntConst 104079
+  EX_EndFunctionParms
+[0x0021] EX_Return
+  [0x0022] EX_Nothing
+[0x0023] EX_EndOfScript

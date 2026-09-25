@@ -1,0 +1,118 @@
+; BP_JigPickupComponent_C::CheckDistanceFromActor
+; dump: [09:06:38.912] bytecode_dump: wrote 492 bytes to BP_JigPickupComponent_C_CheckDistanceFromActor.bin
+
+; C:/temp/GIT/SDO/research/bytecode/decoded_5_6/BP_JigPickupComponent_C_CheckDistanceFromActor.bin  (492 bytes from file offset 0x0)
+[0x0000] EX_LetBool
+  variable:
+    [0x0001] EX_LocalVariable prop=0x1b52be76880
+  assignment:
+    [0x000a] EX_CallMath func=0x7ff485ad1648
+      param[0]:
+        [0x0013] EX_InstanceVariable prop=0x1b52be70c80
+      EX_EndFunctionParms
+[0x001d] EX_JumpIfNot -> 0x01b1 if NOT:
+  [0x0022] EX_LocalVariable prop=0x1b52be76880
+[0x002b] EX_Let property=0x1b52be76800
+  variable:
+    [0x0034] EX_LocalVariable prop=0x1b52be76800
+  assignment:
+    [0x003d] EX_Context
+      object_expr:
+        [0x003e] EX_InstanceVariable prop=0x1b52be70c80
+      skip=10 field=0x1b52be76800
+      context_expr:
+        [0x0053] EX_FinalFunction func=0x7ff485ba0378
+          EX_EndFunctionParms
+[0x005d] EX_Let property=0x1b52be76780
+  variable:
+    [0x0066] EX_LocalVariable prop=0x1b52be76780
+  assignment:
+    [0x006f] EX_CallMath func=0x7ff485d556d8
+      param[0]:
+        [0x0078] EX_InstanceVariable prop=0x1b52be70c00
+      param[1]:
+        [0x0081] EX_LocalVariable prop=0x1b52be76800
+      EX_EndFunctionParms
+[0x008b] EX_Let property=0x1b52c2f16d0
+  variable:
+    [0x0094] EX_LocalVariable prop=0x1b52c2f16d0
+  assignment:
+    [0x009d] EX_CallMath func=0x7ff485d5af38
+      param[0]:
+        [0x00a6] EX_LocalVariable prop=0x1b52be76780
+      EX_EndFunctionParms
+[0x00b0] EX_LetBool
+  variable:
+    [0x00b1] EX_LocalVariable prop=0x1b52be76700
+  assignment:
+    [0x00ba] EX_CallMath func=0x7ff485d41a18
+      param[0]:
+        [0x00c3] EX_LocalVariable prop=0x1b52c2f16d0
+      param[1]:
+        [0x00cc] EX_DoubleConst 300.0
+      EX_EndFunctionParms
+[0x00d6] EX_JumpIfNot -> 0x01e9 if NOT:
+  [0x00db] EX_LocalVariable prop=0x1b52be76700
+[0x00e4] EX_CallMath func=0x7ff485ad1e08
+  param[0]:
+    [0x00ed] EX_Self
+  param[1]:
+    [0x00ee] EX_StringConst "CheckDistanceFromActor"
+  EX_EndFunctionParms
+[0x0107] EX_Let property=0x0
+  variable:
+    [0x0110] EX_LocalVariable prop=0x1b52be76a00
+  assignment:
+    [0x0119] EX_ObjToInterfaceCast class=0x1b504f098b0
+      [0x0122] EX_InstanceVariable prop=0x1b52be70c80
+[0x012b] EX_Let property=0x0
+  variable:
+    [0x0134] EX_LocalVariable prop=0x1b52be76980
+  assignment:
+    [0x013d] EX_Cast conv_type=2
+      [0x013f] EX_LocalVariable prop=0x1b52be76a00
+[0x0148] EX_JumpIfNot -> 0x01d9 if NOT:
+  [0x014d] EX_LocalVariable prop=0x1b52be76980
+[0x0156] EX_LetObj
+  variable:
+    [0x0157] EX_LocalVariable prop=0x1b52be76a80
+  assignment:
+    [0x0160] EX_FinalFunction func=0x7ff485ac51a8
+      EX_EndFunctionParms
+[0x016a] EX_Context
+  object_expr:
+    [0x016b] EX_InterfaceContext
+      object_expr:
+        [0x016c] EX_LocalVariable prop=0x1b52be76a00
+      skip=32 field=0x0
+      context_expr:
+        [0x0181] EX_LocalVirtualFunction FName(ci=1711900, disp=0, num=0)
+          param[0]:
+            [0x018e] EX_LocalVariable prop=0x1b52be76a80
+          param[1]:
+            [0x0197] EX_LocalVariable prop=0x1b52be76900
+          EX_EndFunctionParms
+  (no skip/field — object_expr was InterfaceContext)
+  context_expr:
+    [0x01a1] EX_LetObj
+      variable:
+        [0x01a2] EX_InstanceVariable prop=0x1b52be70c80
+      assignment:
+        [0x01ab] EX_NoObject
+[0x01ac] EX_Jump -> 0x01e9
+[0x01b1] EX_CallMath func=0x7ff485ad1e08
+  param[0]:
+    [0x01ba] EX_Self
+  param[1]:
+    [0x01bb] EX_StringConst "CheckDistanceFromActor"
+  EX_EndFunctionParms
+[0x01d4] EX_Jump -> 0x01e9
+[0x01d9] EX_LetBool
+  variable:
+    [0x01da] EX_LocalVariable prop=0x1b52be76900
+  assignment:
+    [0x01e3] EX_False
+[0x01e4] EX_Jump -> 0x01a1
+[0x01e9] EX_Return
+  [0x01ea] EX_Nothing
+[0x01eb] EX_EndOfScript

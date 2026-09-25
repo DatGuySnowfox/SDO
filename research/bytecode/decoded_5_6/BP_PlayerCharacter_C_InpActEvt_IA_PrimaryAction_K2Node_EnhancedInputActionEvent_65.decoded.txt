@@ -1,0 +1,23 @@
+; BP_PlayerCharacter_C::InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_65
+; dump: [09:12:57.866] bytecode_dump: wrote 90 bytes to BP_PlayerCharacter_C_InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_65.bin
+
+; C:/temp/GIT/SDO/research/bytecode/decoded_5_6/BP_PlayerCharacter_C_InpActEvt_IA_PrimaryAction_K2Node_EnhancedInputActionEvent_65.bin  (90 bytes from file offset 0x0)
+[0x0000] EX_LetValueOnPersistentFrame frame_slot=0x1b52cc57580
+  assignment:
+    [0x0009] EX_LocalVariable prop=0x1b52cb64380
+[0x0012] EX_LetValueOnPersistentFrame frame_slot=0x1b52cbd2e70
+  assignment:
+    [0x001b] EX_LocalVariable prop=0x1b52cba0080
+[0x0024] EX_LetValueOnPersistentFrame frame_slot=0x1b52cbd2e00
+  assignment:
+    [0x002d] EX_LocalVariable prop=0x1b52cba0010
+[0x0036] EX_LetValueOnPersistentFrame frame_slot=0x1b52cc57500
+  assignment:
+    [0x003f] EX_LocalVariable prop=0x1b52cb64300
+[0x0048] EX_LocalFinalFunction func=0x1b52c743b00
+  param[0]:
+    [0x0051] EX_IntConst 80380
+  EX_EndFunctionParms
+[0x0057] EX_Return
+  [0x0058] EX_Nothing
+[0x0059] EX_EndOfScript

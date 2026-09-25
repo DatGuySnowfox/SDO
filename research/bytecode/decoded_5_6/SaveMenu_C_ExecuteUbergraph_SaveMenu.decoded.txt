@@ -1,0 +1,2320 @@
+; SaveMenu_C::ExecuteUbergraph_SaveMenu
+; dump: [09:30:04.491] bytecode_dump: wrote 10242 bytes to SaveMenu_C_ExecuteUbergraph_SaveMenu.bin
+
+; C:/temp/GIT/SDO/research/bytecode/decoded_5_6/SaveMenu_C_ExecuteUbergraph_SaveMenu.bin  (10242 bytes from file offset 0x0)
+[0x0000] EX_PushExecutionFlow -> 0x27ff
+[0x0005] EX_ComputedJump offset_expr:
+  [0x0006] EX_LocalVariable prop=0x1b52d36f4a0
+[0x000f] EX_LetBool
+  variable:
+    [0x0010] EX_LocalVariable prop=0x1b52d3f7800
+  assignment:
+    [0x0019] EX_CallMath func=0x7ff485ad1648
+      param[0]:
+        [0x0022] EX_InstanceVariable prop=0x1b52d3f4000
+      EX_EndFunctionParms
+[0x002c] EX_PopExecutionFlowIfNot if NOT:
+  [0x002d] EX_LocalVariable prop=0x1b52d3f7800
+[0x0036] EX_CallMath func=0x7ff485dcbc58
+  param[0]:
+    [0x003f] EX_Self
+  param[1]:
+    [0x0040] EX_Context
+      object_expr:
+        [0x0041] EX_InstanceVariable prop=0x1b52d3f4000
+      skip=9 field=0x1b441e43f80
+      context_expr:
+        [0x0056] EX_InstanceVariable prop=0x1b441e43f80
+  EX_EndFunctionParms
+[0x0060] EX_LetObj
+  variable:
+    [0x0061] EX_LocalVariable prop=0x1b52d3f7a80
+  assignment:
+    [0x006a] EX_CallMath func=0x7ff485dc9a38
+      param[0]:
+        [0x0073] EX_Self
+      param[1]:
+        [0x0074] EX_ByteConst 0
+      param[2]:
+        [0x0076] EX_StringConst ""
+      param[3]:
+        [0x0078] EX_True
+      EX_EndFunctionParms
+[0x007a] EX_LetBool
+  variable:
+    [0x007b] EX_LocalVariable prop=0x1b52d3f7a00
+  assignment:
+    [0x0084] EX_CallMath func=0x7ff485ad1648
+      param[0]:
+        [0x008d] EX_LocalVariable prop=0x1b52d3f7a80
+      EX_EndFunctionParms
+[0x0097] EX_JumpIfNot -> 0x0189 if NOT:
+  [0x009c] EX_LocalVariable prop=0x1b52d3f7a00
+[0x00a5] EX_BindDelegate FName(ci=1946643,disp=0,num=0)
+  delegate:
+    [0x00b2] EX_LocalVariable prop=0x1b52d3f9080
+  object:
+    [0x00bb] EX_Self
+[0x00bc] EX_AddMulticastDelegate
+  delegate:
+    [0x00bd] EX_Context
+      object_expr:
+        [0x00be] EX_LocalVariable prop=0x1b52d3f7a80
+      skip=9 field=0x1b4cfe5e700
+      context_expr:
+        [0x00d3] EX_InstanceVariable prop=0x1b4cfe5e700
+  value:
+    [0x00dc] EX_LocalVariable prop=0x1b52d3f9080
+[0x00e5] EX_BindDelegate FName(ci=1946666,disp=0,num=0)
+  delegate:
+    [0x00f2] EX_LocalVariable prop=0x1b52d3fa480
+  object:
+    [0x00fb] EX_Self
+[0x00fc] EX_AddMulticastDelegate
+  delegate:
+    [0x00fd] EX_Context
+      object_expr:
+        [0x00fe] EX_LocalVariable prop=0x1b52d3f7a80
+      skip=9 field=0x1b4cfe5c680
+      context_expr:
+        [0x0113] EX_InstanceVariable prop=0x1b4cfe5c680
+  value:
+    [0x011c] EX_LocalVariable prop=0x1b52d3fa480
+[0x0125] EX_BindDelegate FName(ci=1946688,disp=0,num=0)
+  delegate:
+    [0x0132] EX_LocalVariable prop=0x1b52d3fa380
+  object:
+    [0x013b] EX_Self
+[0x013c] EX_AddMulticastDelegate
+  delegate:
+    [0x013d] EX_Context
+      object_expr:
+        [0x013e] EX_LocalVariable prop=0x1b52d3f7a80
+      skip=9 field=0x1b4cfe5c700
+      context_expr:
+        [0x0153] EX_InstanceVariable prop=0x1b4cfe5c700
+  value:
+    [0x015c] EX_LocalVariable prop=0x1b52d3fa380
+[0x0165] EX_Context
+  object_expr:
+    [0x0166] EX_LocalVariable prop=0x1b52d3f7a80
+  skip=14 field=0x0
+  context_expr:
+    [0x017b] EX_VirtualFunction FName(ci=125342, disp=0, num=0)
+      EX_EndFunctionParms
+[0x0189] EX_VirtualFunction FName(ci=147305, disp=0, num=0)
+  EX_EndFunctionParms
+[0x0197] EX_CallMulticastDelegate func=0x1b52ce27d00
+  delegate:
+    [0x01a0] EX_InstanceVariable prop=0x1b52d3f3e80
+  EX_EndFunctionParms
+[0x01aa] EX_PopExecutionFlow
+[0x01ab] EX_Context
+  object_expr:
+    [0x01ac] EX_InstanceVariable prop=0x1b52d3f2700
+  skip=16 field=0x0
+  context_expr:
+    [0x01c1] EX_VirtualFunction FName(ci=126215, disp=0, num=0)
+      param[0]:
+        [0x01ce] EX_ByteConst 2
+      EX_EndFunctionParms
+[0x01d1] EX_Context
+  object_expr:
+    [0x01d2] EX_InstanceVariable prop=0x1b52d3f4200
+  skip=16 field=0x0
+  context_expr:
+    [0x01e7] EX_VirtualFunction FName(ci=126215, disp=0, num=0)
+      param[0]:
+        [0x01f4] EX_ByteConst 0
+      EX_EndFunctionParms
+[0x01f7] EX_Let property=0x1b52d36f0b0
+  variable:
+    [0x0200] EX_LocalVariable prop=0x1b52d36f0b0
+  assignment:
+    [0x0209] EX_CallMath func=0x7ff485ccaa18
+      param[0]:
+        [0x0212] EX_Context
+          object_expr:
+            [0x0213] EX_InstanceVariable prop=0x1b52d3f4000
+          skip=9 field=0x1b441e43f80
+          context_expr:
+            [0x0228] EX_InstanceVariable prop=0x1b441e43f80
+      EX_EndFunctionParms
+[0x0232] EX_Let property=0x1b4d8f16de0
+  variable:
+    [0x023b] EX_StructMemberContext member_prop=0x1b4d8f16de0
+      struct_expr:
+        [0x0244] EX_LocalVariable prop=0x1b52d3f7680
+  assignment:
+    [0x024d] EX_StringConst "A"
+[0x0250] EX_Let property=0x1b4d9170780
+  variable:
+    [0x0259] EX_StructMemberContext member_prop=0x1b4d9170780
+      struct_expr:
+        [0x0262] EX_LocalVariable prop=0x1b52d3f7680
+  assignment:
+    [0x026b] EX_ByteConst 4
+[0x026d] EX_Let property=0x1b4d8f16e50
+  variable:
+    [0x0276] EX_StructMemberContext member_prop=0x1b4d8f16e50
+      struct_expr:
+        [0x027f] EX_LocalVariable prop=0x1b52d3f7680
+  assignment:
+    [0x0288] EX_LocalVariable prop=0x1b52d36f0b0
+[0x0291] EX_Let property=0x1b4d8f16ec0
+  variable:
+    [0x029a] EX_StructMemberContext member_prop=0x1b4d8f16ec0
+      struct_expr:
+        [0x02a3] EX_LocalVariable prop=0x1b52d3f7680
+  assignment:
+    [0x02ac] EX_Int64Const 0
+[0x02b5] EX_Let property=0x1b4d8f16f30
+  variable:
+    [0x02be] EX_StructMemberContext member_prop=0x1b4d8f16f30
+      struct_expr:
+        [0x02c7] EX_LocalVariable prop=0x1b52d3f7680
+  assignment:
+    [0x02d0] EX_FloatConst 0.0
+[0x02d5] EX_Let property=0x1b4d8f16fa0
+  variable:
+    [0x02de] EX_StructMemberContext member_prop=0x1b4d8f16fa0
+      struct_expr:
+        [0x02e7] EX_LocalVariable prop=0x1b52d3f7680
+  assignment:
+    [0x02f0] EX_DoubleConst 0.0
+[0x02f9] EX_Let property=0x1b4d9170880
+  variable:
+    [0x0302] EX_StructMemberContext member_prop=0x1b4d9170880
+      struct_expr:
+        [0x030b] EX_LocalVariable prop=0x1b52d3f7680
+  assignment:
+    [0x0314] EX_ByteConst 0
+[0x0316] EX_SetArray
+  elem[0]:
+    [0x0317] EX_LocalVariable prop=0x1b52d3f7580
+  elem[1]:
+    [0x0320] EX_LocalVariable prop=0x1b52d3f7680
+  EX_EndArray
+[0x032a] EX_Let property=0x1b52d36f040
+  variable:
+    [0x0333] EX_LocalVariable prop=0x1b52d36f040
+  assignment:
+    [0x033c] EX_CallMath func=0x7ff485ccb2d8
+      param[0]:
+        [0x0345] EX_TextConst subtype=1 <best-effort, may misparse>
+      param[1]:
+        [0x0347] EX_StringConst "Save file <Bold28>{A}</> is from an outdated version. 
+
+
+
+You may encounter game breaking issues and more.
+
+
+
+It is recommended to delete all outdated saves and create a new save.
+
+
+
+Do you want to carry on and play this save? (Not recommended)"
+      param[2]:
+        [0x043d] EX_StringConst "09B557984788A5C7376C979C8A7C93FD"
+      param[3]:
+        [0x045f] EX_StringConst ""
+      param[4]:
+        [0x0461] EX_LocalVariable prop=0x1b52d3f7580
+      EX_EndFunctionParms
+[0x046b] EX_Context
+  object_expr:
+    [0x046c] EX_InstanceVariable prop=0x1b52d3f3100
+  skip=23 field=0x0
+  context_expr:
+    [0x0481] EX_VirtualFunction FName(ci=150374, disp=0, num=0)
+      param[0]:
+        [0x048e] EX_LocalVariable prop=0x1b52d36f040
+      EX_EndFunctionParms
+[0x0498] EX_PopExecutionFlow
+[0x0499] EX_Let property=0x1b52d36efd0
+  variable:
+    [0x04a2] EX_LocalVariable prop=0x1b52d36efd0
+  assignment:
+    [0x04ab] EX_Context
+      object_expr:
+        [0x04ac] EX_InstanceVariable prop=0x1b52d3f2500
+      skip=10 field=0x1b52d36efd0
+      context_expr:
+        [0x04c1] EX_FinalFunction func=0x7ff485b037f0
+          EX_EndFunctionParms
+[0x04cb] EX_LetBool
+  variable:
+    [0x04cc] EX_LocalVariable prop=0x1b52d3f7400
+  assignment:
+    [0x04d5] EX_CallMath func=0x7ff485ccbd58
+      param[0]:
+        [0x04de] EX_LocalVariable prop=0x1b52d36efd0
+      EX_EndFunctionParms
+[0x04e8] EX_JumpIfNot -> 0x0505 if NOT:
+  [0x04ed] EX_LocalVariable prop=0x1b52d3f7400
+[0x04f6] EX_LocalVirtualFunction FName(ci=1946593, disp=0, num=0)
+  EX_EndFunctionParms
+[0x0504] EX_PopExecutionFlow
+[0x0505] EX_LocalVirtualFunction FName(ci=1946606, disp=0, num=0)
+  EX_EndFunctionParms
+[0x0513] EX_PopExecutionFlow
+[0x0514] EX_LocalVirtualFunction FName(ci=1946789, disp=0, num=0)
+  EX_EndFunctionParms
+[0x0522] EX_PopExecutionFlow
+[0x0523] EX_CallMath func=0x7ff485dcbc58
+  param[0]:
+    [0x052c] EX_Self
+  param[1]:
+    [0x052d] EX_Context
+      object_expr:
+        [0x052e] EX_InstanceVariable prop=0x1b52d3f4000
+      skip=9 field=0x1b441e43f80
+      context_expr:
+        [0x0543] EX_InstanceVariable prop=0x1b441e43f80
+  EX_EndFunctionParms
+[0x054d] EX_LetObj
+  variable:
+    [0x054e] EX_LocalVariable prop=0x1b52d3fa200
+  assignment:
+    [0x0557] EX_CallMath func=0x7ff485dcb018
+      param[0]:
+        [0x0560] EX_Self
+      param[1]:
+        [0x0561] EX_LocalVariable prop=0x1b52d36ff20
+      EX_EndFunctionParms
+[0x056b] EX_CallMath func=0x7ff485ad5910
+  param[0]:
+    [0x0574] EX_Self
+  param[1]:
+    [0x0575] EX_LocalVariable prop=0x1b52d36ff20
+  param[2]:
+    [0x057e] EX_True
+  param[3]:
+    [0x057f] EX_True
+  param[4]:
+    [0x0580] EX_StructConst struct=0x7ff485aba788 size=16
+      member[0]:
+        [0x058d] EX_FloatConst 1.0
+      member[1]:
+        [0x0592] EX_FloatConst 0.0
+      member[2]:
+        [0x0597] EX_FloatConst 0.0
+      member[3]:
+        [0x059c] EX_FloatConst 1.0
+      EX_EndStructConst
+  param[5]:
+    [0x05a2] EX_FloatConst 2.0
+  param[6]:
+    [0x05a7] EX_NameConst FName(ci=0, disp=0, num=0)
+  EX_EndFunctionParms
+[0x05b5] EX_Let property=0x1b52d36f190
+  variable:
+    [0x05be] EX_LocalVariable prop=0x1b52d36f190
+  assignment:
+    [0x05c7] EX_IntConst 0
+[0x05cc] EX_Let property=0x1b52d36f430
+  variable:
+    [0x05d5] EX_LocalVariable prop=0x1b52d36f430
+  assignment:
+    [0x05de] EX_Context
+      object_expr:
+        [0x05df] EX_InstanceVariable prop=0x1b52d3f2d00
+      skip=10 field=0x1b52d36f430
+      context_expr:
+        [0x05f4] EX_FinalFunction func=0x7ff485b051d0
+          EX_EndFunctionParms
+[0x05fe] EX_LetBool
+  variable:
+    [0x05ff] EX_LocalVariable prop=0x1b52d3f7980
+  assignment:
+    [0x0608] EX_CallMath func=0x7ff485d444f8
+      param[0]:
+        [0x0611] EX_LocalVariable prop=0x1b52d36f190
+      param[1]:
+        [0x061a] EX_LocalVariable prop=0x1b52d36f430
+      EX_EndFunctionParms
+[0x0624] EX_JumpIfNot -> 0x073d if NOT:
+  [0x0629] EX_LocalVariable prop=0x1b52d3f7980
+[0x0632] EX_PushExecutionFlow -> 0x0dfa
+[0x0637] EX_LetObj
+  variable:
+    [0x0638] EX_LocalVariable prop=0x1b52d3f9c80
+  assignment:
+    [0x0641] EX_Context
+      object_expr:
+        [0x0642] EX_InstanceVariable prop=0x1b52d3f2d00
+      skip=19 field=0x1b52d3f9c80
+      context_expr:
+        [0x0657] EX_FinalFunction func=0x7ff485b05010
+          param[0]:
+            [0x0660] EX_LocalVariable prop=0x1b52d36f190
+          EX_EndFunctionParms
+[0x066a] EX_LetBool
+  variable:
+    [0x066b] EX_LocalVariable prop=0x1b52d3f9a00
+  assignment:
+    [0x0674] EX_CallMath func=0x7ff485d4da98
+      param[0]:
+        [0x067d] EX_InstanceVariable prop=0x1b52d3f4000
+      param[1]:
+        [0x0686] EX_LocalVariable prop=0x1b52d3f9c80
+      EX_EndFunctionParms
+[0x0690] EX_PopExecutionFlowIfNot if NOT:
+  [0x0691] EX_LocalVariable prop=0x1b52d3f9a00
+[0x069a] EX_LetObj
+  variable:
+    [0x069b] EX_LocalVariable prop=0x1b52d3f9c80
+  assignment:
+    [0x06a4] EX_Context
+      object_expr:
+        [0x06a5] EX_InstanceVariable prop=0x1b52d3f2d00
+      skip=19 field=0x1b52d3f9c80
+      context_expr:
+        [0x06ba] EX_FinalFunction func=0x7ff485b05010
+          param[0]:
+            [0x06c3] EX_LocalVariable prop=0x1b52d36f190
+          EX_EndFunctionParms
+[0x06cd] EX_Let property=0x0
+  variable:
+    [0x06d6] EX_LocalVariable prop=0x1b52d3f9b00
+  assignment:
+    [0x06df] EX_DynamicCast class=0x1b4f9a38200
+      [0x06e8] EX_LocalVariable prop=0x1b52d3f9c80
+[0x06f1] EX_Let property=0x0
+  variable:
+    [0x06fa] EX_LocalVariable prop=0x1b52d3f9a80
+  assignment:
+    [0x0703] EX_Cast conv_type=1
+      [0x0705] EX_LocalVariable prop=0x1b52d3f9b00
+[0x070e] EX_PopExecutionFlowIfNot if NOT:
+  [0x070f] EX_LocalVariable prop=0x1b52d3f9a80
+[0x0718] EX_Context
+  object_expr:
+    [0x0719] EX_LocalVariable prop=0x1b52d3f9b00
+  skip=14 field=0x0
+  context_expr:
+    [0x072e] EX_LocalVirtualFunction FName(ci=1946461, disp=0, num=0)
+      EX_EndFunctionParms
+[0x073c] EX_PopExecutionFlow
+[0x073d] EX_LetObj
+  variable:
+    [0x073e] EX_LocalVariable prop=0x1b52d3fa100
+  assignment:
+    [0x0747] EX_CallMath func=0x7ff485dcb018
+      param[0]:
+        [0x0750] EX_Self
+      param[1]:
+        [0x0751] EX_LocalVariable prop=0x1b52d36feb0
+      EX_EndFunctionParms
+[0x075b] EX_Let property=0x1b52d36fdd0
+  variable:
+    [0x0764] EX_LocalVariable prop=0x1b52d36fdd0
+  assignment:
+    [0x076d] EX_Context
+      object_expr:
+        [0x076e] EX_ObjectConst obj=0x1b4fbeda6c0
+      skip=55 field=0x1b52d36fdd0
+      context_expr:
+        [0x0783] EX_LocalVirtualFunction FName(ci=1844234, disp=0, num=0)
+          param[0]:
+            [0x0790] EX_StructMemberContext member_prop=0x1b45d5d8200
+              struct_expr:
+                [0x0799] EX_Context
+                  object_expr:
+                    [0x079a] EX_LocalVariable prop=0x1b52d3fa100
+                  skip=9 field=0x1b4cfe60a00
+                  context_expr:
+                    [0x07af] EX_InstanceVariable prop=0x1b4cfe60a00
+          param[1]:
+            [0x07b8] EX_Self
+          EX_EndFunctionParms
+[0x07ba] EX_Let property=0x1b52d36fd60
+  variable:
+    [0x07c3] EX_LocalVariable prop=0x1b52d36fd60
+  assignment:
+    [0x07cc] EX_CallMath func=0x7ff485ccaa18
+      param[0]:
+        [0x07d5] EX_LocalVariable prop=0x1b52d36fdd0
+      EX_EndFunctionParms
+[0x07df] EX_Let property=0x1b4d8f16de0
+  variable:
+    [0x07e8] EX_StructMemberContext member_prop=0x1b4d8f16de0
+      struct_expr:
+        [0x07f1] EX_LocalVariable prop=0x1b52d3f9f00
+  assignment:
+    [0x07fa] EX_StringConst "A"
+[0x07fd] EX_Let property=0x1b4d9170780
+  variable:
+    [0x0806] EX_StructMemberContext member_prop=0x1b4d9170780
+      struct_expr:
+        [0x080f] EX_LocalVariable prop=0x1b52d3f9f00
+  assignment:
+    [0x0818] EX_ByteConst 4
+[0x081a] EX_Let property=0x1b4d8f16e50
+  variable:
+    [0x0823] EX_StructMemberContext member_prop=0x1b4d8f16e50
+      struct_expr:
+        [0x082c] EX_LocalVariable prop=0x1b52d3f9f00
+  assignment:
+    [0x0835] EX_LocalVariable prop=0x1b52d36fd60
+[0x083e] EX_Let property=0x1b4d8f16ec0
+  variable:
+    [0x0847] EX_StructMemberContext member_prop=0x1b4d8f16ec0
+      struct_expr:
+        [0x0850] EX_LocalVariable prop=0x1b52d3f9f00
+  assignment:
+    [0x0859] EX_Int64Const 0
+[0x0862] EX_Let property=0x1b4d8f16f30
+  variable:
+    [0x086b] EX_StructMemberContext member_prop=0x1b4d8f16f30
+      struct_expr:
+        [0x0874] EX_LocalVariable prop=0x1b52d3f9f00
+  assignment:
+    [0x087d] EX_FloatConst 0.0
+[0x0882] EX_Let property=0x1b4d8f16fa0
+  variable:
+    [0x088b] EX_StructMemberContext member_prop=0x1b4d8f16fa0
+      struct_expr:
+        [0x0894] EX_LocalVariable prop=0x1b52d3f9f00
+  assignment:
+    [0x089d] EX_DoubleConst 0.0
+[0x08a6] EX_Let property=0x1b4d9170880
+  variable:
+    [0x08af] EX_StructMemberContext member_prop=0x1b4d9170880
+      struct_expr:
+        [0x08b8] EX_LocalVariable prop=0x1b52d3f9f00
+  assignment:
+    [0x08c1] EX_ByteConst 0
+[0x08c3] EX_SetArray
+  elem[0]:
+    [0x08c4] EX_LocalVariable prop=0x1b52d3f9e80
+  elem[1]:
+    [0x08cd] EX_LocalVariable prop=0x1b52d3f9f00
+  EX_EndArray
+[0x08d7] EX_Let property=0x1b52d36fc80
+  variable:
+    [0x08e0] EX_LocalVariable prop=0x1b52d36fc80
+  assignment:
+    [0x08e9] EX_CallMath func=0x7ff485ccb2d8
+      param[0]:
+        [0x08f2] EX_TextConst subtype=2 <best-effort, may misparse>
+      param[1]:
+        [0x08f4] EX_StringConst "DATE CREATED : {A}"
+      param[2]:
+        [0x0908] EX_LocalVariable prop=0x1b52d3f9e80
+      EX_EndFunctionParms
+[0x0912] EX_Context
+  object_expr:
+    [0x0913] EX_InstanceVariable prop=0x1b52d3f2180
+  skip=23 field=0x0
+  context_expr:
+    [0x0928] EX_VirtualFunction FName(ci=150374, disp=0, num=0)
+      param[0]:
+        [0x0935] EX_LocalVariable prop=0x1b52d36fc80
+      EX_EndFunctionParms
+[0x093f] EX_LetObj
+  variable:
+    [0x0940] EX_LocalVariable prop=0x1b52d3fa180
+  assignment:
+    [0x0949] EX_CallMath func=0x7ff485dcae58
+      param[0]:
+        [0x0952] EX_Self
+      param[1]:
+        [0x0953] EX_ObjectConst obj=0x1b52c6c4de0
+      param[2]:
+        [0x095c] EX_StringConst ""
+      param[3]:
+        [0x095e] EX_StringConst ""
+      EX_EndFunctionParms
+[0x0961] EX_Let property=0x1b52d36fc10
+  variable:
+    [0x096a] EX_LocalVariable prop=0x1b52d36fc10
+  assignment:
+    [0x0973] EX_CallMath func=0x7ff485ccaa18
+      param[0]:
+        [0x097c] EX_Context
+          object_expr:
+            [0x097d] EX_LocalVariable prop=0x1b52d3fa180
+          skip=9 field=0x1b52c881ac0
+          context_expr:
+            [0x0992] EX_InstanceVariable prop=0x1b52c881ac0
+      EX_EndFunctionParms
+[0x099c] EX_Let property=0x1b4d8f16de0
+  variable:
+    [0x09a5] EX_StructMemberContext member_prop=0x1b4d8f16de0
+      struct_expr:
+        [0x09ae] EX_LocalVariable prop=0x1b52d3f9d80
+  assignment:
+    [0x09b7] EX_StringConst "B"
+[0x09ba] EX_Let property=0x1b4d9170780
+  variable:
+    [0x09c3] EX_StructMemberContext member_prop=0x1b4d9170780
+      struct_expr:
+        [0x09cc] EX_LocalVariable prop=0x1b52d3f9d80
+  assignment:
+    [0x09d5] EX_ByteConst 4
+[0x09d7] EX_Let property=0x1b4d8f16e50
+  variable:
+    [0x09e0] EX_StructMemberContext member_prop=0x1b4d8f16e50
+      struct_expr:
+        [0x09e9] EX_LocalVariable prop=0x1b52d3f9d80
+  assignment:
+    [0x09f2] EX_LocalVariable prop=0x1b52d36fc10
+[0x09fb] EX_Let property=0x1b4d8f16ec0
+  variable:
+    [0x0a04] EX_StructMemberContext member_prop=0x1b4d8f16ec0
+      struct_expr:
+        [0x0a0d] EX_LocalVariable prop=0x1b52d3f9d80
+  assignment:
+    [0x0a16] EX_Int64Const 0
+[0x0a1f] EX_Let property=0x1b4d8f16f30
+  variable:
+    [0x0a28] EX_StructMemberContext member_prop=0x1b4d8f16f30
+      struct_expr:
+        [0x0a31] EX_LocalVariable prop=0x1b52d3f9d80
+  assignment:
+    [0x0a3a] EX_FloatConst 0.0
+[0x0a3f] EX_Let property=0x1b4d8f16fa0
+  variable:
+    [0x0a48] EX_StructMemberContext member_prop=0x1b4d8f16fa0
+      struct_expr:
+        [0x0a51] EX_LocalVariable prop=0x1b52d3f9d80
+  assignment:
+    [0x0a5a] EX_DoubleConst 0.0
+[0x0a63] EX_Let property=0x1b4d9170880
+  variable:
+    [0x0a6c] EX_StructMemberContext member_prop=0x1b4d9170880
+      struct_expr:
+        [0x0a75] EX_LocalVariable prop=0x1b52d3f9d80
+  assignment:
+    [0x0a7e] EX_ByteConst 0
+[0x0a80] EX_Let property=0x1b52d36fba0
+  variable:
+    [0x0a89] EX_LocalVariable prop=0x1b52d36fba0
+  assignment:
+    [0x0a92] EX_CallMath func=0x7ff485ccaa18
+      param[0]:
+        [0x0a9b] EX_Context
+          object_expr:
+            [0x0a9c] EX_LocalVariable prop=0x1b52d3fa180
+          skip=9 field=0x1b52c881b30
+          context_expr:
+            [0x0ab1] EX_InstanceVariable prop=0x1b52c881b30
+      EX_EndFunctionParms
+[0x0abb] EX_Let property=0x1b4d8f16de0
+  variable:
+    [0x0ac4] EX_StructMemberContext member_prop=0x1b4d8f16de0
+      struct_expr:
+        [0x0acd] EX_LocalVariable prop=0x1b52d3f9d00
+  assignment:
+    [0x0ad6] EX_StringConst "A"
+[0x0ad9] EX_Let property=0x1b4d9170780
+  variable:
+    [0x0ae2] EX_StructMemberContext member_prop=0x1b4d9170780
+      struct_expr:
+        [0x0aeb] EX_LocalVariable prop=0x1b52d3f9d00
+  assignment:
+    [0x0af4] EX_ByteConst 4
+[0x0af6] EX_Let property=0x1b4d8f16e50
+  variable:
+    [0x0aff] EX_StructMemberContext member_prop=0x1b4d8f16e50
+      struct_expr:
+        [0x0b08] EX_LocalVariable prop=0x1b52d3f9d00
+  assignment:
+    [0x0b11] EX_LocalVariable prop=0x1b52d36fba0
+[0x0b1a] EX_Let property=0x1b4d8f16ec0
+  variable:
+    [0x0b23] EX_StructMemberContext member_prop=0x1b4d8f16ec0
+      struct_expr:
+        [0x0b2c] EX_LocalVariable prop=0x1b52d3f9d00
+  assignment:
+    [0x0b35] EX_Int64Const 0
+[0x0b3e] EX_Let property=0x1b4d8f16f30
+  variable:
+    [0x0b47] EX_StructMemberContext member_prop=0x1b4d8f16f30
+      struct_expr:
+        [0x0b50] EX_LocalVariable prop=0x1b52d3f9d00
+  assignment:
+    [0x0b59] EX_FloatConst 0.0
+[0x0b5e] EX_Let property=0x1b4d8f16fa0
+  variable:
+    [0x0b67] EX_StructMemberContext member_prop=0x1b4d8f16fa0
+      struct_expr:
+        [0x0b70] EX_LocalVariable prop=0x1b52d3f9d00
+  assignment:
+    [0x0b79] EX_DoubleConst 0.0
+[0x0b82] EX_Let property=0x1b4d9170880
+  variable:
+    [0x0b8b] EX_StructMemberContext member_prop=0x1b4d9170880
+      struct_expr:
+        [0x0b94] EX_LocalVariable prop=0x1b52d3f9d00
+  assignment:
+    [0x0b9d] EX_ByteConst 0
+[0x0b9f] EX_SetArray
+  elem[0]:
+    [0x0ba0] EX_LocalVariable prop=0x1b52d3f9c00
+  elem[1]:
+    [0x0ba9] EX_LocalVariable prop=0x1b52d3f9d00
+  elem[2]:
+    [0x0bb2] EX_LocalVariable prop=0x1b52d3f9d80
+  EX_EndArray
+[0x0bbc] EX_Let property=0x1b52d36fb30
+  variable:
+    [0x0bc5] EX_LocalVariable prop=0x1b52d36fb30
+  assignment:
+    [0x0bce] EX_CallMath func=0x7ff485ccb2d8
+      param[0]:
+        [0x0bd7] EX_TextConst subtype=2 <best-effort, may misparse>
+      param[1]:
+        [0x0bd9] EX_StringConst "CHARACTER NAME : {A} {B}"
+      param[2]:
+        [0x0bf3] EX_LocalVariable prop=0x1b52d3f9c00
+      EX_EndFunctionParms
+[0x0bfd] EX_Context
+  object_expr:
+    [0x0bfe] EX_InstanceVariable prop=0x1b52d3f2880
+  skip=23 field=0x0
+  context_expr:
+    [0x0c13] EX_VirtualFunction FName(ci=150374, disp=0, num=0)
+      param[0]:
+        [0x0c20] EX_LocalVariable prop=0x1b52d36fb30
+      EX_EndFunctionParms
+[0x0c2a] EX_LetObj
+  variable:
+    [0x0c2b] EX_LocalVariable prop=0x1b52d3fa180
+  assignment:
+    [0x0c34] EX_CallMath func=0x7ff485dcae58
+      param[0]:
+        [0x0c3d] EX_Self
+      param[1]:
+        [0x0c3e] EX_ObjectConst obj=0x1b52c6c4de0
+      param[2]:
+        [0x0c47] EX_StringConst ""
+      param[3]:
+        [0x0c49] EX_StringConst ""
+      EX_EndFunctionParms
+[0x0c4c] EX_Let property=0x1b52d36fe40
+  variable:
+    [0x0c55] EX_LocalVariable prop=0x1b52d36fe40
+  assignment:
+    [0x0c5e] EX_CallMath func=0x7ff485d38478
+      param[0]:
+        [0x0c67] EX_Context
+          object_expr:
+            [0x0c68] EX_LocalVariable prop=0x1b52d3fa180
+          skip=9 field=0x1b52c8817b0
+          context_expr:
+            [0x0c7d] EX_InstanceVariable prop=0x1b52c8817b0
+      EX_EndFunctionParms
+[0x0c87] EX_Let property=0x1b4d8f16de0
+  variable:
+    [0x0c90] EX_StructMemberContext member_prop=0x1b4d8f16de0
+      struct_expr:
+        [0x0c99] EX_LocalVariable prop=0x1b52d3fa080
+  assignment:
+    [0x0ca2] EX_StringConst "A"
+[0x0ca5] EX_Let property=0x1b4d9170780
+  variable:
+    [0x0cae] EX_StructMemberContext member_prop=0x1b4d9170780
+      struct_expr:
+        [0x0cb7] EX_LocalVariable prop=0x1b52d3fa080
+  assignment:
+    [0x0cc0] EX_ByteConst 0
+[0x0cc2] EX_Let property=0x1b4d8f16e50
+  variable:
+    [0x0ccb] EX_StructMemberContext member_prop=0x1b4d8f16e50
+      struct_expr:
+        [0x0cd4] EX_LocalVariable prop=0x1b52d3fa080
+  assignment:
+    [0x0cdd] EX_TextConst subtype=0 <best-effort, may misparse>
+[0x0cdf] EX_Let property=0x1b4d8f16ec0
+  variable:
+    [0x0ce8] EX_StructMemberContext member_prop=0x1b4d8f16ec0
+      struct_expr:
+        [0x0cf1] EX_LocalVariable prop=0x1b52d3fa080
+  assignment:
+    [0x0cfa] EX_LocalVariable prop=0x1b52d36fe40
+[0x0d03] EX_Let property=0x1b4d8f16f30
+  variable:
+    [0x0d0c] EX_StructMemberContext member_prop=0x1b4d8f16f30
+      struct_expr:
+        [0x0d15] EX_LocalVariable prop=0x1b52d3fa080
+  assignment:
+    [0x0d1e] EX_FloatConst 0.0
+[0x0d23] EX_Let property=0x1b4d8f16fa0
+  variable:
+    [0x0d2c] EX_StructMemberContext member_prop=0x1b4d8f16fa0
+      struct_expr:
+        [0x0d35] EX_LocalVariable prop=0x1b52d3fa080
+  assignment:
+    [0x0d3e] EX_DoubleConst 0.0
+[0x0d47] EX_Let property=0x1b4d9170880
+  variable:
+    [0x0d50] EX_StructMemberContext member_prop=0x1b4d9170880
+      struct_expr:
+        [0x0d59] EX_LocalVariable prop=0x1b52d3fa080
+  assignment:
+    [0x0d62] EX_ByteConst 0
+[0x0d64] EX_SetArray
+  elem[0]:
+    [0x0d65] EX_LocalVariable prop=0x1b52d3fa000
+  elem[1]:
+    [0x0d6e] EX_LocalVariable prop=0x1b52d3fa080
+  EX_EndArray
+[0x0d78] EX_Let property=0x1b52d36fcf0
+  variable:
+    [0x0d81] EX_LocalVariable prop=0x1b52d36fcf0
+  assignment:
+    [0x0d8a] EX_CallMath func=0x7ff485ccb2d8
+      param[0]:
+        [0x0d93] EX_TextConst subtype=1 <best-effort, may misparse>
+      param[1]:
+        [0x0d95] EX_StringConst "Day {A}"
+      param[2]:
+        [0x0d9e] EX_StringConst "D579864146F6641C8C8E5EBC971F7AB6"
+      param[3]:
+        [0x0dc0] EX_StringConst ""
+      param[4]:
+        [0x0dc2] EX_LocalVariable prop=0x1b52d3fa000
+      EX_EndFunctionParms
+[0x0dcc] EX_Context
+  object_expr:
+    [0x0dcd] EX_InstanceVariable prop=0x1b52d3f3080
+  skip=23 field=0x0
+  context_expr:
+    [0x0de2] EX_VirtualFunction FName(ci=150374, disp=0, num=0)
+      param[0]:
+        [0x0def] EX_LocalVariable prop=0x1b52d36fcf0
+      EX_EndFunctionParms
+[0x0df9] EX_PopExecutionFlow
+[0x0dfa] EX_Let property=0x1b52d36f120
+  variable:
+    [0x0e03] EX_LocalVariable prop=0x1b52d36f120
+  assignment:
+    [0x0e0c] EX_CallMath func=0x7ff485d33cb8
+      param[0]:
+        [0x0e15] EX_LocalVariable prop=0x1b52d36f190
+      param[1]:
+        [0x0e1e] EX_IntConst 1
+      EX_EndFunctionParms
+[0x0e24] EX_Let property=0x1b52d36f190
+  variable:
+    [0x0e2d] EX_LocalVariable prop=0x1b52d36f190
+  assignment:
+    [0x0e36] EX_LocalVariable prop=0x1b52d36f120
+[0x0e3f] EX_Jump -> 0x05cc
+[0x0e44] EX_BindDelegate FName(ci=1946614,disp=0,num=0)
+  delegate:
+    [0x0e51] EX_LocalVariable prop=0x1b52d3f7b00
+  object:
+    [0x0e5a] EX_Self
+[0x0e5b] EX_CallMath func=0x7ff485dc3678
+  param[0]:
+    [0x0e64] EX_NameConst FName(ci=1818060, disp=0, num=0)
+  param[1]:
+    [0x0e71] EX_LocalVariable prop=0x1b52d3f7b00
+  param[2]:
+    [0x0e7a] EX_True
+  EX_EndFunctionParms
+[0x0e7c] EX_PopExecutionFlow
+[0x0e7d] EX_Let property=0x1b52d36f270
+  variable:
+    [0x0e86] EX_LocalVariable prop=0x1b52d36f270
+  assignment:
+    [0x0e8f] EX_CallMath func=0x7ff485d33cb8
+      param[0]:
+        [0x0e98] EX_LocalVariable prop=0x1b52d36f2e0
+      param[1]:
+        [0x0ea1] EX_IntConst 1
+      EX_EndFunctionParms
+[0x0ea7] EX_Let property=0x1b52d36f2e0
+  variable:
+    [0x0eb0] EX_LocalVariable prop=0x1b52d36f2e0
+  assignment:
+    [0x0eb9] EX_LocalVariable prop=0x1b52d36f270
+[0x0ec2] EX_LocalVirtualFunction FName(ci=1946488, disp=0, num=0)
+  param[0]:
+    [0x0ecf] EX_LocalVariable prop=0x1b52d3f8480
+  EX_EndFunctionParms
+[0x0ed9] EX_Let property=0x1b52d36ff90
+  variable:
+    [0x0ee2] EX_LocalVariable prop=0x1b52d36ff90
+  assignment:
+    [0x0eeb] EX_Context
+      object_expr:
+        [0x0eec] EX_ObjectConst obj=0x7ff485f098b0
+      skip=19 field=0x1b52d36ff90
+      context_expr:
+        [0x0f01] EX_FinalFunction func=0x7ff485d2de38
+          param[0]:
+            [0x0f0a] EX_LocalVariable prop=0x1b52d3f8480
+          EX_EndFunctionParms
+[0x0f14] EX_LetBool
+  variable:
+    [0x0f15] EX_LocalVariable prop=0x1b52d3fa500
+  assignment:
+    [0x0f1e] EX_CallMath func=0x7ff485d43fb8
+      param[0]:
+        [0x0f27] EX_LocalVariable prop=0x1b52d36f2e0
+      param[1]:
+        [0x0f30] EX_LocalVariable prop=0x1b52d36ff90
+      EX_EndFunctionParms
+[0x0f3a] EX_PopExecutionFlowIfNot if NOT:
+  [0x0f3b] EX_LocalVariable prop=0x1b52d3fa500
+[0x0f44] EX_Let property=0x1b52d36f200
+  variable:
+    [0x0f4d] EX_LocalVariable prop=0x1b52d36f200
+  assignment:
+    [0x0f56] EX_LocalVariable prop=0x1b52d36f2e0
+[0x0f5f] EX_PushExecutionFlow -> 0x0e7d
+[0x0f64] EX_LocalVirtualFunction FName(ci=1946488, disp=0, num=0)
+  param[0]:
+    [0x0f71] EX_LocalVariable prop=0x1b52d3f8480
+  EX_EndFunctionParms
+[0x0f7b] EX_Context
+  object_expr:
+    [0x0f7c] EX_ObjectConst obj=0x7ff485f098b0
+  skip=37 field=0x0
+  context_expr:
+    [0x0f91] EX_FinalFunction func=0x7ff485d2d818
+      param[0]:
+        [0x0f9a] EX_LocalVariable prop=0x1b52d3f8480
+      param[1]:
+        [0x0fa3] EX_LocalVariable prop=0x1b52d36f200
+      param[2]:
+        [0x0fac] EX_LocalVariable prop=0x1b52d36e710
+      EX_EndFunctionParms
+[0x0fb6] EX_Context
+  object_expr:
+    [0x0fb7] EX_InstanceVariable prop=0x1b52d3f2400
+  skip=19 field=0x0
+  context_expr:
+    [0x0fcc] EX_FinalFunction func=0x7ff485b017c8
+      param[0]:
+        [0x0fd5] EX_LocalVariable prop=0x1b52d36e710
+      EX_EndFunctionParms
+[0x0fdf] EX_PopExecutionFlow
+[0x0fe0] EX_Let property=0x1b52d36f2e0
+  variable:
+    [0x0fe9] EX_LocalVariable prop=0x1b52d36f2e0
+  assignment:
+    [0x0ff2] EX_IntConst 0
+[0x0ff7] EX_Let property=0x1b52d36f200
+  variable:
+    [0x1000] EX_LocalVariable prop=0x1b52d36f200
+  assignment:
+    [0x1009] EX_IntConst 0
+[0x100e] EX_Jump -> 0x0ec2
+[0x1013] EX_Context
+  object_expr:
+    [0x1014] EX_ObjectConst obj=0x1b4fe06be60
+  skip=24 field=0x0
+  context_expr:
+    [0x1029] EX_LocalVirtualFunction FName(ci=1678559, disp=0, num=0)
+      param[0]:
+        [0x1036] EX_Self
+      param[1]:
+        [0x1037] EX_LocalVariable prop=0x1b52d3f7900
+      EX_EndFunctionParms
+[0x1041] EX_LetBool
+  variable:
+    [0x1042] EX_LocalVariable prop=0x1b52d3f7880
+  assignment:
+    [0x104b] EX_CallMath func=0x7ff485d4d018
+      param[0]:
+        [0x1054] EX_InstanceVariable prop=0x1b52d3f3f80
+      EX_EndFunctionParms
+[0x105e] EX_Context
+  object_expr:
+    [0x105f] EX_LocalVariable prop=0x1b52d3f7900
+  skip=23 field=0x0
+  context_expr:
+    [0x1074] EX_VirtualFunction FName(ci=1702877, disp=0, num=0)
+      param[0]:
+        [0x1081] EX_LocalVariable prop=0x1b52d3f7880
+      EX_EndFunctionParms
+[0x108b] EX_VirtualFunction FName(ci=147305, disp=0, num=0)
+  EX_EndFunctionParms
+[0x1099] EX_CallMulticastDelegate func=0x1b52ce27d00
+  delegate:
+    [0x10a2] EX_InstanceVariable prop=0x1b52d3f3e80
+  EX_EndFunctionParms
+[0x10ac] EX_LocalVirtualFunction FName(ci=188209, disp=0, num=0)
+  param[0]:
+    [0x10b9] EX_InstanceVariable prop=0x1b52d3f3f80
+  param[1]:
+    [0x10c2] EX_NameConst FName(ci=719605, disp=0, num=0)
+  EX_EndFunctionParms
+[0x10d0] EX_PopExecutionFlow
+[0x10d1] EX_Context
+  object_expr:
+    [0x10d2] EX_InstanceVariable prop=0x1b52d3f4200
+  skip=16 field=0x0
+  context_expr:
+    [0x10e7] EX_VirtualFunction FName(ci=126215, disp=0, num=0)
+      param[0]:
+        [0x10f4] EX_ByteConst 2
+      EX_EndFunctionParms
+[0x10f7] EX_PopExecutionFlow
+[0x10f8] EX_Context
+  object_expr:
+    [0x10f9] EX_ObjectConst obj=0x7ff485f08dd8
+  skip=38 field=0x0
+  context_expr:
+    [0x110e] EX_FinalFunction func=0x7ff485d24898
+      param[0]:
+        [0x1117] EX_Self
+      param[1]:
+        [0x1118] EX_ObjectConst obj=0x1b4f95ba390
+      param[2]:
+        [0x1121] EX_FloatConst 1.0
+      param[3]:
+        [0x1126] EX_FloatConst 1.0
+      param[4]:
+        [0x112b] EX_FloatConst 0.0
+      param[5]:
+        [0x1130] EX_NoObject
+      param[6]:
+        [0x1131] EX_NoObject
+      param[7]:
+        [0x1132] EX_True
+      EX_EndFunctionParms
+[0x1134] EX_PopExecutionFlow
+[0x1135] EX_Jump -> 0x10f8
+[0x113a] EX_Context
+  object_expr:
+    [0x113b] EX_InstanceVariable prop=0x1b52d3f2700
+  skip=16 field=0x0
+  context_expr:
+    [0x1150] EX_VirtualFunction FName(ci=126215, disp=0, num=0)
+      param[0]:
+        [0x115d] EX_ByteConst 2
+      EX_EndFunctionParms
+[0x1160] EX_PopExecutionFlow
+[0x1161] EX_PushExecutionFlow -> 0x119c
+[0x1166] EX_LetBool
+  variable:
+    [0x1167] EX_LocalVariable prop=0x1b52d3f7600
+  assignment:
+    [0x1170] EX_CallMath func=0x7ff485d23e18
+      param[0]:
+        [0x1179] EX_Self
+      EX_EndFunctionParms
+[0x117b] EX_PopExecutionFlowIfNot if NOT:
+  [0x117c] EX_LocalVariable prop=0x1b52d3f7600
+[0x1185] EX_LetBool
+  variable:
+    [0x1186] EX_LocalVariable prop=0x1b52d3f7700
+  assignment:
+    [0x118f] EX_CallMath func=0x7ff485d25698
+      param[0]:
+        [0x1198] EX_Self
+      param[1]:
+        [0x1199] EX_False
+      EX_EndFunctionParms
+[0x119b] EX_PopExecutionFlow
+[0x119c] EX_CallMath func=0x7ff485acbc28
+  param[0]:
+    [0x11a5] EX_Self
+  param[1]:
+    [0x11a6] EX_StructConst struct=0x7ff485acbb68 size=32
+      member[0]:
+        [0x11b3] EX_SkipOffsetConst 0x000f
+      member[1]:
+        [0x11b8] EX_IntConst -1378617445
+      member[2]:
+        [0x11bd] EX_NameConst FName(ci=1946474, disp=0, num=0)
+      member[3]:
+        [0x11ca] EX_Self
+      EX_EndStructConst
+  EX_EndFunctionParms
+[0x11cd] EX_PopExecutionFlow
+[0x11ce] EX_PushExecutionFlow -> 0x1231
+[0x11d3] EX_PopExecutionFlowIfNot if NOT:
+  [0x11d4] EX_InstanceVariable prop=0x1b52d3f3f80
+[0x11dd] EX_Context
+  object_expr:
+    [0x11de] EX_ObjectConst obj=0x1b4fe06be60
+  skip=24 field=0x0
+  context_expr:
+    [0x11f3] EX_LocalVirtualFunction FName(ci=1678559, disp=0, num=0)
+      param[0]:
+        [0x1200] EX_Self
+      param[1]:
+        [0x1201] EX_LocalVariable prop=0x1b52d3f7780
+      EX_EndFunctionParms
+[0x120b] EX_Context
+  object_expr:
+    [0x120c] EX_LocalVariable prop=0x1b52d3f7780
+  skip=15 field=0x0
+  context_expr:
+    [0x1221] EX_VirtualFunction FName(ci=1702877, disp=0, num=0)
+      param[0]:
+        [0x122e] EX_False
+      EX_EndFunctionParms
+[0x1230] EX_PopExecutionFlow
+[0x1231] EX_LocalVirtualFunction FName(ci=188209, disp=0, num=0)
+  param[0]:
+    [0x123e] EX_InstanceVariable prop=0x1b52d3f3f80
+  param[1]:
+    [0x1247] EX_NameConst FName(ci=719605, disp=0, num=0)
+  EX_EndFunctionParms
+[0x1255] EX_PopExecutionFlow
+[0x1256] EX_CallMath func=0x7ff485acbc28
+  param[0]:
+    [0x125f] EX_Self
+  param[1]:
+    [0x1260] EX_StructConst struct=0x7ff485acbb68 size=32
+      member[0]:
+        [0x126d] EX_SkipOffsetConst 0x01ab
+      member[1]:
+        [0x1272] EX_IntConst -668212205
+      member[2]:
+        [0x1277] EX_NameConst FName(ci=1946474, disp=0, num=0)
+      member[3]:
+        [0x1284] EX_Self
+      EX_EndStructConst
+  EX_EndFunctionParms
+[0x1287] EX_PopExecutionFlow
+[0x1288] EX_LetBool
+  variable:
+    [0x1289] EX_LocalVariable prop=0x1b52d3f7480
+  assignment:
+    [0x1292] EX_CallMath func=0x7ff485d25698
+      param[0]:
+        [0x129b] EX_Self
+      param[1]:
+        [0x129c] EX_InstanceVariable prop=0x1b52d3f3f80
+      EX_EndFunctionParms
+[0x12a6] EX_Jump -> 0x1256
+[0x12ab] EX_VirtualFunction FName(ci=147305, disp=0, num=0)
+  EX_EndFunctionParms
+[0x12b9] EX_Context
+  object_expr:
+    [0x12ba] EX_ObjectConst obj=0x1b4fe06be60
+  skip=24 field=0x0
+  context_expr:
+    [0x12cf] EX_LocalVirtualFunction FName(ci=1678559, disp=0, num=0)
+      param[0]:
+        [0x12dc] EX_Self
+      param[1]:
+        [0x12dd] EX_LocalVariable prop=0x1b52d3f9480
+      EX_EndFunctionParms
+[0x12e7] EX_Context
+  object_expr:
+    [0x12e8] EX_LocalVariable prop=0x1b52d3f9480
+  skip=15 field=0x0
+  context_expr:
+    [0x12fd] EX_VirtualFunction FName(ci=1702877, disp=0, num=0)
+      param[0]:
+        [0x130a] EX_False
+      EX_EndFunctionParms
+[0x130c] EX_CallMath func=0x7ff485acbc28
+  param[0]:
+    [0x1315] EX_Self
+  param[1]:
+    [0x1316] EX_StructConst struct=0x7ff485acbb68 size=32
+      member[0]:
+        [0x1323] EX_SkipOffsetConst 0x0499
+      member[1]:
+        [0x1328] EX_IntConst 52328327
+      member[2]:
+        [0x132d] EX_NameConst FName(ci=1946474, disp=0, num=0)
+      member[3]:
+        [0x133a] EX_Self
+      EX_EndStructConst
+  EX_EndFunctionParms
+[0x133d] EX_PopExecutionFlow
+[0x133e] EX_Context
+  object_expr:
+    [0x133f] EX_InstanceVariable prop=0x1b52d3f2d80
+  skip=16 field=0x0
+  context_expr:
+    [0x1354] EX_VirtualFunction FName(ci=126215, disp=0, num=0)
+      param[0]:
+        [0x1361] EX_ByteConst 2
+      EX_EndFunctionParms
+[0x1364] EX_PopExecutionFlow
+[0x1365] EX_Context
+  object_expr:
+    [0x1366] EX_ObjectConst obj=0x7ff485f08dd8
+  skip=38 field=0x0
+  context_expr:
+    [0x137b] EX_FinalFunction func=0x7ff485d24898
+      param[0]:
+        [0x1384] EX_Self
+      param[1]:
+        [0x1385] EX_ObjectConst obj=0x1b4f95ba390
+      param[2]:
+        [0x138e] EX_FloatConst 1.0
+      param[3]:
+        [0x1393] EX_FloatConst 1.0
+      param[4]:
+        [0x1398] EX_FloatConst 0.0
+      param[5]:
+        [0x139d] EX_NoObject
+      param[6]:
+        [0x139e] EX_NoObject
+      param[7]:
+        [0x139f] EX_True
+      EX_EndFunctionParms
+[0x13a1] EX_PopExecutionFlow
+[0x13a2] EX_Jump -> 0x1365
+[0x13a7] EX_Context
+  object_expr:
+    [0x13a8] EX_InstanceVariable prop=0x1b52d3f2300
+  skip=16 field=0x0
+  context_expr:
+    [0x13bd] EX_VirtualFunction FName(ci=126215, disp=0, num=0)
+      param[0]:
+        [0x13ca] EX_ByteConst 2
+      EX_EndFunctionParms
+[0x13cd] EX_LocalVirtualFunction FName(ci=1946449, disp=0, num=0)
+  EX_EndFunctionParms
+[0x13db] EX_PopExecutionFlow
+[0x13dc] EX_Context
+  object_expr:
+    [0x13dd] EX_InstanceVariable prop=0x1b52d3f2300
+  skip=16 field=0x0
+  context_expr:
+    [0x13f2] EX_VirtualFunction FName(ci=126215, disp=0, num=0)
+      param[0]:
+        [0x13ff] EX_ByteConst 2
+      EX_EndFunctionParms
+[0x1402] EX_LetObj
+  variable:
+    [0x1403] EX_InstanceVariable prop=0x1b52d3f3c80
+  assignment:
+    [0x140c] EX_NoObject
+[0x140d] EX_PopExecutionFlow
+[0x140e] EX_Context
+  object_expr:
+    [0x140f] EX_ObjectConst obj=0x7ff485f08dd8
+  skip=38 field=0x0
+  context_expr:
+    [0x1424] EX_FinalFunction func=0x7ff485d24898
+      param[0]:
+        [0x142d] EX_Self
+      param[1]:
+        [0x142e] EX_ObjectConst obj=0x1b4f95ba390
+      param[2]:
+        [0x1437] EX_FloatConst 1.0
+      param[3]:
+        [0x143c] EX_FloatConst 1.0
+      param[4]:
+        [0x1441] EX_FloatConst 0.0
+      param[5]:
+        [0x1446] EX_NoObject
+      param[6]:
+        [0x1447] EX_NoObject
+      param[7]:
+        [0x1448] EX_True
+      EX_EndFunctionParms
+[0x144a] EX_PopExecutionFlow
+[0x144b] EX_Jump -> 0x140e
+[0x1450] EX_PushExecutionFlow -> 0x0fe0
+[0x1455] EX_PushExecutionFlow -> 0x0e44
+[0x145a] EX_PushExecutionFlow -> 0x1537
+[0x145f] EX_JumpIfNot -> 0x14c4 if NOT:
+  [0x1464] EX_InstanceVariable prop=0x1b52d3f3f80
+[0x146d] EX_FinalFunction func=0x7ff485aff788
+  EX_EndFunctionParms
+[0x1477] EX_Context
+  object_expr:
+    [0x1478] EX_InstanceVariable prop=0x1b52d3f2c80
+  skip=16 field=0x0
+  context_expr:
+    [0x148d] EX_VirtualFunction FName(ci=126215, disp=0, num=0)
+      param[0]:
+        [0x149a] EX_ByteConst 0
+      EX_EndFunctionParms
+[0x149d] EX_Context
+  object_expr:
+    [0x149e] EX_InstanceVariable prop=0x1b52d3f2900
+  skip=16 field=0x0
+  context_expr:
+    [0x14b3] EX_VirtualFunction FName(ci=126215, disp=0, num=0)
+      param[0]:
+        [0x14c0] EX_ByteConst 0
+      EX_EndFunctionParms
+[0x14c3] EX_PopExecutionFlow
+[0x14c4] EX_Context
+  object_expr:
+    [0x14c5] EX_InstanceVariable prop=0x1b52d3f2680
+  skip=16 field=0x0
+  context_expr:
+    [0x14da] EX_VirtualFunction FName(ci=126215, disp=0, num=0)
+      param[0]:
+        [0x14e7] EX_ByteConst 0
+      EX_EndFunctionParms
+[0x14ea] EX_Context
+  object_expr:
+    [0x14eb] EX_InstanceVariable prop=0x1b52d3f2c80
+  skip=16 field=0x0
+  context_expr:
+    [0x1500] EX_VirtualFunction FName(ci=126215, disp=0, num=0)
+      param[0]:
+        [0x150d] EX_ByteConst 1
+      EX_EndFunctionParms
+[0x1510] EX_Context
+  object_expr:
+    [0x1511] EX_InstanceVariable prop=0x1b52d3f2900
+  skip=16 field=0x0
+  context_expr:
+    [0x1526] EX_VirtualFunction FName(ci=126215, disp=0, num=0)
+      param[0]:
+        [0x1533] EX_ByteConst 1
+      EX_EndFunctionParms
+[0x1536] EX_PopExecutionFlow
+[0x1537] EX_LocalVirtualFunction FName(ci=1945388, disp=0, num=0)
+  EX_EndFunctionParms
+[0x1545] EX_LocalVirtualFunction FName(ci=1946789, disp=0, num=0)
+  EX_EndFunctionParms
+[0x1553] EX_PopExecutionFlow
+[0x1554] EX_JumpIfNot -> 0x1584 if NOT:
+  [0x1559] EX_InstanceVariable prop=0x1b52d3f3f80
+[0x1562] EX_CallMulticastDelegate func=0x1b52d28b300
+  delegate:
+    [0x156b] EX_InstanceVariable prop=0x1b52d3f3d80
+  EX_EndFunctionParms
+[0x1575] EX_VirtualFunction FName(ci=147305, disp=0, num=0)
+  EX_EndFunctionParms
+[0x1583] EX_PopExecutionFlow
+[0x1584] EX_VirtualFunction FName(ci=126215, disp=0, num=0)
+  param[0]:
+    [0x1591] EX_ByteConst 2
+  EX_EndFunctionParms
+[0x1594] EX_CallMulticastDelegate func=0x1b52ce27c00
+  delegate:
+    [0x159d] EX_InstanceVariable prop=0x1b52d3f3f00
+  EX_EndFunctionParms
+[0x15a7] EX_PopExecutionFlow
+[0x15a8] EX_LetObj
+  variable:
+    [0x15a9] EX_LocalVariable prop=0x1b52d3f8580
+  assignment:
+    [0x15b2] EX_Context
+      object_expr:
+        [0x15b3] EX_ObjectConst obj=0x7ff485fa24a0
+      skip=21 field=0x1b52d3f8580
+      context_expr:
+        [0x15c8] EX_FinalFunction func=0x7ff485b0b418
+          param[0]:
+            [0x15d1] EX_Self
+          param[1]:
+            [0x15d2] EX_ObjectConst obj=0x1b4f9a38200
+          param[2]:
+            [0x15db] EX_NoObject
+          EX_EndFunctionParms
+[0x15dd] EX_CallMath func=0x7ff485ad70f8
+  param[0]:
+    [0x15e6] EX_LocalVariable prop=0x1b52d3f8580
+  param[1]:
+    [0x15ef] EX_NameConst FName(ci=1492122, disp=0, num=0)
+  param[2]:
+    [0x15fc] EX_LocalVariable prop=0x1b52d36ef60
+  EX_EndFunctionParms
+[0x1606] EX_Let property=0x1b4d8d9e0f0
+  variable:
+    [0x160f] EX_StructMemberContext member_prop=0x1b4d8d9e0f0
+      struct_expr:
+        [0x1618] EX_LocalVariable prop=0x1b52d3f8680
+  assignment:
+    [0x1621] EX_FloatConst 0.0
+[0x1626] EX_Let property=0x1b4d8d9e160
+  variable:
+    [0x162f] EX_StructMemberContext member_prop=0x1b4d8d9e160
+      struct_expr:
+        [0x1638] EX_LocalVariable prop=0x1b52d3f8680
+  assignment:
+    [0x1641] EX_FloatConst 5.0
+[0x1646] EX_Let property=0x1b4d8d9e1d0
+  variable:
+    [0x164f] EX_StructMemberContext member_prop=0x1b4d8d9e1d0
+      struct_expr:
+        [0x1658] EX_LocalVariable prop=0x1b52d3f8680
+  assignment:
+    [0x1661] EX_FloatConst 0.0
+[0x1666] EX_Let property=0x1b4d8d9e240
+  variable:
+    [0x166f] EX_StructMemberContext member_prop=0x1b4d8d9e240
+      struct_expr:
+        [0x1678] EX_LocalVariable prop=0x1b52d3f8680
+  assignment:
+    [0x1681] EX_FloatConst 0.0
+[0x1686] EX_Context
+  object_expr:
+    [0x1687] EX_LocalVariable prop=0x1b52d3f8580
+  skip=19 field=0x0
+  context_expr:
+    [0x169c] EX_FinalFunction func=0x7ff485b4e4c0
+      param[0]:
+        [0x16a5] EX_LocalVariable prop=0x1b52d3f8680
+      EX_EndFunctionParms
+[0x16af] EX_BindDelegate FName(ci=1946808,disp=0,num=0)
+  delegate:
+    [0x16bc] EX_LocalVariable prop=0x1b52d3f8880
+  object:
+    [0x16c5] EX_Self
+[0x16c6] EX_AddMulticastDelegate
+  delegate:
+    [0x16c7] EX_Context
+      object_expr:
+        [0x16c8] EX_LocalVariable prop=0x1b52d3f8580
+      skip=9 field=0x1b4ed5c5a80
+      context_expr:
+        [0x16dd] EX_InstanceVariable prop=0x1b4ed5c5a80
+  value:
+    [0x16e6] EX_LocalVariable prop=0x1b52d3f8880
+[0x16ef] EX_BindDelegate FName(ci=1946799,disp=0,num=0)
+  delegate:
+    [0x16fc] EX_LocalVariable prop=0x1b52d3f7f80
+  object:
+    [0x1705] EX_Self
+[0x1706] EX_AddMulticastDelegate
+  delegate:
+    [0x1707] EX_Context
+      object_expr:
+        [0x1708] EX_LocalVariable prop=0x1b52d3f8580
+      skip=9 field=0x1b4ed5c5980
+      context_expr:
+        [0x171d] EX_InstanceVariable prop=0x1b4ed5c5980
+  value:
+    [0x1726] EX_LocalVariable prop=0x1b52d3f7f80
+[0x172f] EX_LetObj
+  variable:
+    [0x1730] EX_LocalVariable prop=0x1b52d3f8500
+  assignment:
+    [0x1739] EX_Context
+      object_expr:
+        [0x173a] EX_InstanceVariable prop=0x1b52d3f2d00
+      skip=19 field=0x1b52d3f8500
+      context_expr:
+        [0x174f] EX_FinalFunction func=0x7ff485b04d70
+          param[0]:
+            [0x1758] EX_LocalVariable prop=0x1b52d3f8580
+          EX_EndFunctionParms
+[0x1762] EX_PopExecutionFlow
+[0x1763] EX_Context
+  object_expr:
+    [0x1764] EX_InstanceVariable prop=0x1b52d3f2500
+  skip=12 field=0x0
+  context_expr:
+    [0x1779] EX_FinalFunction func=0x7ff485b040b0
+      param[0]:
+        [0x1782] EX_TextConst subtype=0 <best-effort, may misparse>
+      EX_EndFunctionParms
+[0x1785] EX_PopExecutionFlow
+[0x1786] EX_LetBool
+  variable:
+    [0x1787] EX_LocalVariable prop=0x1b52d3f9180
+  assignment:
+    [0x1790] EX_CallMath func=0x7ff485ad1648
+      param[0]:
+        [0x1799] EX_InstanceVariable prop=0x1b52d3f4000
+      EX_EndFunctionParms
+[0x17a3] EX_JumpIfNot -> 0x1869 if NOT:
+  [0x17a8] EX_LocalVariable prop=0x1b52d3f9180
+[0x17b1] EX_LocalVirtualFunction FName(ci=188420, disp=0, num=0)
+  EX_EndFunctionParms
+[0x17bf] EX_LetObj
+  variable:
+    [0x17c0] EX_LocalVariable prop=0x1b52d3f9100
+  assignment:
+    [0x17c9] EX_CallMath func=0x7ff485dcb018
+      param[0]:
+        [0x17d2] EX_Self
+      param[1]:
+        [0x17d3] EX_LocalVariable prop=0x1b52d36ecc0
+      EX_EndFunctionParms
+[0x17dd] EX_LocalVirtualFunction FName(ci=1945379, disp=0, num=0)
+  param[0]:
+    [0x17ea] EX_LocalVariable prop=0x1b52d36ecc0
+  EX_EndFunctionParms
+[0x17f4] EX_Let property=0x1b52d36ee10
+  variable:
+    [0x17fd] EX_LocalVariable prop=0x1b52d36ee10
+  assignment:
+    [0x1806] EX_CallMath func=0x7ff485d238d8
+      param[0]:
+        [0x180f] EX_Self
+      EX_EndFunctionParms
+[0x1811] EX_Let property=0x0
+  variable:
+    [0x181a] EX_LocalVariable prop=0x1b52d36fac0
+  assignment:
+    [0x1823] EX_Cast conv_type=3
+      [0x1825] EX_LocalVariable prop=0x1b52d36ee10
+[0x182e] EX_CallMath func=0x7ff485acba88
+  param[0]:
+    [0x1837] EX_Self
+  param[1]:
+    [0x1838] EX_LocalVariable prop=0x1b52d36fac0
+  param[2]:
+    [0x1841] EX_StructConst struct=0x7ff485acbb68 size=32
+      member[0]:
+        [0x184e] EX_SkipOffsetConst 0x0514
+      member[1]:
+        [0x1853] EX_IntConst 989099057
+      member[2]:
+        [0x1858] EX_NameConst FName(ci=1946474, disp=0, num=0)
+      member[3]:
+        [0x1865] EX_Self
+      EX_EndStructConst
+  EX_EndFunctionParms
+[0x1868] EX_PopExecutionFlow
+[0x1869] EX_CallMath func=0x7ff485dcbc58
+  param[0]:
+    [0x1872] EX_Self
+  param[1]:
+    [0x1873] EX_StringConst "SaveGame"
+  EX_EndFunctionParms
+[0x187e] EX_Jump -> 0x17b1
+[0x1883] EX_Let property=0x1b52d36eef0
+  variable:
+    [0x188c] EX_LocalVariable prop=0x1b52d36eef0
+  assignment:
+    [0x1895] EX_Context
+      object_expr:
+        [0x1896] EX_InstanceVariable prop=0x1b52d3f2500
+      skip=10 field=0x1b52d36eef0
+      context_expr:
+        [0x18ab] EX_FinalFunction func=0x7ff485b037f0
+          EX_EndFunctionParms
+[0x18b5] EX_Let property=0x1b52d36ee80
+  variable:
+    [0x18be] EX_LocalVariable prop=0x1b52d36ee80
+  assignment:
+    [0x18c7] EX_CallMath func=0x7ff485ccaaf8
+      param[0]:
+        [0x18d0] EX_LocalVariable prop=0x1b52d36eef0
+      EX_EndFunctionParms
+[0x18da] EX_LocalVirtualFunction FName(ci=1946388, disp=0, num=0)
+  param[0]:
+    [0x18e7] EX_LocalVariable prop=0x1b52d36ee80
+  EX_EndFunctionParms
+[0x18f1] EX_Jump -> 0x1763
+[0x18f6] EX_LocalVirtualFunction FName(ci=1946869, disp=0, num=0)
+  param[0]:
+    [0x1903] EX_LocalVariable prop=0x1b52d3f9400
+  EX_EndFunctionParms
+[0x190d] EX_CallMath func=0x7ff485ad5910
+  param[0]:
+    [0x1916] EX_Self
+  param[1]:
+    [0x1917] EX_StringConst "Save Slot Clicked On"
+  param[2]:
+    [0x192d] EX_True
+  param[3]:
+    [0x192e] EX_True
+  param[4]:
+    [0x192f] EX_StructConst struct=0x7ff485aba788 size=16
+      member[0]:
+        [0x193c] EX_FloatConst 0.0
+      member[1]:
+        [0x1941] EX_FloatConst 0.6600000262260437
+      member[2]:
+        [0x1946] EX_FloatConst 1.0
+      member[3]:
+        [0x194b] EX_FloatConst 1.0
+      EX_EndStructConst
+  param[5]:
+    [0x1951] EX_FloatConst 2.0
+  param[6]:
+    [0x1956] EX_NameConst FName(ci=0, disp=0, num=0)
+  EX_EndFunctionParms
+[0x1964] EX_PopExecutionFlow
+[0x1965] EX_LetBool
+  variable:
+    [0x1966] EX_LocalVariable prop=0x1b52d3f9380
+  assignment:
+    [0x196f] EX_CallMath func=0x7ff485ad1648
+      param[0]:
+        [0x1978] EX_InstanceVariable prop=0x1b52d3f4000
+      EX_EndFunctionParms
+[0x1982] EX_JumpIfNot -> 0x1b91 if NOT:
+  [0x1987] EX_LocalVariable prop=0x1b52d3f9380
+[0x1990] EX_Context
+  object_expr:
+    [0x1991] EX_InstanceVariable prop=0x1b52d3f2700
+  skip=16 field=0x0
+  context_expr:
+    [0x19a6] EX_VirtualFunction FName(ci=126215, disp=0, num=0)
+      param[0]:
+        [0x19b3] EX_ByteConst 0
+      EX_EndFunctionParms
+[0x19b6] EX_Let property=0x1b52d36eda0
+  variable:
+    [0x19bf] EX_LocalVariable prop=0x1b52d36eda0
+  assignment:
+    [0x19c8] EX_CallMath func=0x7ff485ccaa18
+      param[0]:
+        [0x19d1] EX_Context
+          object_expr:
+            [0x19d2] EX_InstanceVariable prop=0x1b52d3f4000
+          skip=9 field=0x1b441e43f80
+          context_expr:
+            [0x19e7] EX_InstanceVariable prop=0x1b441e43f80
+      EX_EndFunctionParms
+[0x19f1] EX_Let property=0x1b4d8f16de0
+  variable:
+    [0x19fa] EX_StructMemberContext member_prop=0x1b4d8f16de0
+      struct_expr:
+        [0x1a03] EX_LocalVariable prop=0x1b52d3f9300
+  assignment:
+    [0x1a0c] EX_StringConst "A"
+[0x1a0f] EX_Let property=0x1b4d9170780
+  variable:
+    [0x1a18] EX_StructMemberContext member_prop=0x1b4d9170780
+      struct_expr:
+        [0x1a21] EX_LocalVariable prop=0x1b52d3f9300
+  assignment:
+    [0x1a2a] EX_ByteConst 4
+[0x1a2c] EX_Let property=0x1b4d8f16e50
+  variable:
+    [0x1a35] EX_StructMemberContext member_prop=0x1b4d8f16e50
+      struct_expr:
+        [0x1a3e] EX_LocalVariable prop=0x1b52d3f9300
+  assignment:
+    [0x1a47] EX_LocalVariable prop=0x1b52d36eda0
+[0x1a50] EX_Let property=0x1b4d8f16ec0
+  variable:
+    [0x1a59] EX_StructMemberContext member_prop=0x1b4d8f16ec0
+      struct_expr:
+        [0x1a62] EX_LocalVariable prop=0x1b52d3f9300
+  assignment:
+    [0x1a6b] EX_Int64Const 0
+[0x1a74] EX_Let property=0x1b4d8f16f30
+  variable:
+    [0x1a7d] EX_StructMemberContext member_prop=0x1b4d8f16f30
+      struct_expr:
+        [0x1a86] EX_LocalVariable prop=0x1b52d3f9300
+  assignment:
+    [0x1a8f] EX_FloatConst 0.0
+[0x1a94] EX_Let property=0x1b4d8f16fa0
+  variable:
+    [0x1a9d] EX_StructMemberContext member_prop=0x1b4d8f16fa0
+      struct_expr:
+        [0x1aa6] EX_LocalVariable prop=0x1b52d3f9300
+  assignment:
+    [0x1aaf] EX_DoubleConst 0.0
+[0x1ab8] EX_Let property=0x1b4d9170880
+  variable:
+    [0x1ac1] EX_StructMemberContext member_prop=0x1b4d9170880
+      struct_expr:
+        [0x1aca] EX_LocalVariable prop=0x1b52d3f9300
+  assignment:
+    [0x1ad3] EX_ByteConst 0
+[0x1ad5] EX_SetArray
+  elem[0]:
+    [0x1ad6] EX_LocalVariable prop=0x1b52d3f9280
+  elem[1]:
+    [0x1adf] EX_LocalVariable prop=0x1b52d3f9300
+  EX_EndArray
+[0x1ae9] EX_Let property=0x1b52d36ed30
+  variable:
+    [0x1af2] EX_LocalVariable prop=0x1b52d36ed30
+  assignment:
+    [0x1afb] EX_CallMath func=0x7ff485ccb2d8
+      param[0]:
+        [0x1b04] EX_TextConst subtype=1 <best-effort, may misparse>
+      param[1]:
+        [0x1b06] EX_StringConst "Are you sure you want to load <Bold28>{A}</>?"
+      param[2]:
+        [0x1b35] EX_StringConst "D59385C641C8E18F0C7115960D0E69C5"
+      param[3]:
+        [0x1b57] EX_StringConst ""
+      param[4]:
+        [0x1b59] EX_LocalVariable prop=0x1b52d3f9280
+      EX_EndFunctionParms
+[0x1b63] EX_Context
+  object_expr:
+    [0x1b64] EX_InstanceVariable prop=0x1b52c97f100
+  skip=23 field=0x0
+  context_expr:
+    [0x1b79] EX_VirtualFunction FName(ci=150374, disp=0, num=0)
+      param[0]:
+        [0x1b86] EX_LocalVariable prop=0x1b52d36ed30
+      EX_EndFunctionParms
+[0x1b90] EX_PopExecutionFlow
+[0x1b91] EX_Context
+  object_expr:
+    [0x1b92] EX_ObjectConst obj=0x1b4fe06be60
+  skip=139 field=0x0
+  context_expr:
+    [0x1ba7] EX_LocalVirtualFunction FName(ci=1674714, disp=0, num=0)
+      param[0]:
+        [0x1bb4] EX_TextConst subtype=1 <best-effort, may misparse>
+      param[1]:
+        [0x1bb6] EX_StringConst "No save slot currently selected"
+      param[2]:
+        [0x1bd7] EX_StringConst "ED6FE2054200F361C54AE0804B8E8C15"
+      param[3]:
+        [0x1bf9] EX_StringConst ""
+      param[4]:
+        [0x1bfb] EX_ObjectConst obj=0x1b4f6790b80
+      param[5]:
+        [0x1c04] EX_StructConst struct=0x7ff485aba788 size=16
+          member[0]:
+            [0x1c11] EX_FloatConst 1.0
+          member[1]:
+            [0x1c16] EX_FloatConst 1.0
+          member[2]:
+            [0x1c1b] EX_FloatConst 1.0
+          member[3]:
+            [0x1c20] EX_FloatConst 1.0
+          EX_EndStructConst
+      param[6]:
+        [0x1c26] EX_DoubleConst 2.0
+      param[7]:
+        [0x1c2f] EX_False
+      param[8]:
+        [0x1c30] EX_Self
+      EX_EndFunctionParms
+[0x1c32] EX_PopExecutionFlow
+[0x1c33] EX_Let property=0x1b52d36e9b0
+  variable:
+    [0x1c3c] EX_LocalVariable prop=0x1b52d36e9b0
+  assignment:
+    [0x1c45] EX_Context
+      object_expr:
+        [0x1c46] EX_InstanceVariable prop=0x1b52d3f2500
+      skip=10 field=0x1b52d36e9b0
+      context_expr:
+        [0x1c5b] EX_FinalFunction func=0x7ff485b037f0
+          EX_EndFunctionParms
+[0x1c65] EX_LetBool
+  variable:
+    [0x1c66] EX_LocalVariable prop=0x1b52d3f8900
+  assignment:
+    [0x1c6f] EX_CallMath func=0x7ff485ccbd58
+      param[0]:
+        [0x1c78] EX_LocalVariable prop=0x1b52d36e9b0
+      EX_EndFunctionParms
+[0x1c82] EX_JumpIfNot -> 0x1f5e if NOT:
+  [0x1c87] EX_LocalVariable prop=0x1b52d3f8900
+[0x1c90] EX_LetBool
+  variable:
+    [0x1c91] EX_LocalVariable prop=0x1b52d3f8e80
+  assignment:
+    [0x1c9a] EX_CallMath func=0x7ff485ad1648
+      param[0]:
+        [0x1ca3] EX_InstanceVariable prop=0x1b52d3f4000
+      EX_EndFunctionParms
+[0x1cad] EX_JumpIfNot -> 0x1ebc if NOT:
+  [0x1cb2] EX_LocalVariable prop=0x1b52d3f8e80
+[0x1cbb] EX_Context
+  object_expr:
+    [0x1cbc] EX_InstanceVariable prop=0x1b52d3f2d80
+  skip=16 field=0x0
+  context_expr:
+    [0x1cd1] EX_VirtualFunction FName(ci=126215, disp=0, num=0)
+      param[0]:
+        [0x1cde] EX_ByteConst 0
+      EX_EndFunctionParms
+[0x1ce1] EX_Let property=0x1b52d36eb70
+  variable:
+    [0x1cea] EX_LocalVariable prop=0x1b52d36eb70
+  assignment:
+    [0x1cf3] EX_CallMath func=0x7ff485ccaa18
+      param[0]:
+        [0x1cfc] EX_Context
+          object_expr:
+            [0x1cfd] EX_InstanceVariable prop=0x1b52d3f4000
+          skip=9 field=0x1b441e43f80
+          context_expr:
+            [0x1d12] EX_InstanceVariable prop=0x1b441e43f80
+      EX_EndFunctionParms
+[0x1d1c] EX_Let property=0x1b4d8f16de0
+  variable:
+    [0x1d25] EX_StructMemberContext member_prop=0x1b4d8f16de0
+      struct_expr:
+        [0x1d2e] EX_LocalVariable prop=0x1b52d3f8e00
+  assignment:
+    [0x1d37] EX_StringConst "A"
+[0x1d3a] EX_Let property=0x1b4d9170780
+  variable:
+    [0x1d43] EX_StructMemberContext member_prop=0x1b4d9170780
+      struct_expr:
+        [0x1d4c] EX_LocalVariable prop=0x1b52d3f8e00
+  assignment:
+    [0x1d55] EX_ByteConst 4
+[0x1d57] EX_Let property=0x1b4d8f16e50
+  variable:
+    [0x1d60] EX_StructMemberContext member_prop=0x1b4d8f16e50
+      struct_expr:
+        [0x1d69] EX_LocalVariable prop=0x1b52d3f8e00
+  assignment:
+    [0x1d72] EX_LocalVariable prop=0x1b52d36eb70
+[0x1d7b] EX_Let property=0x1b4d8f16ec0
+  variable:
+    [0x1d84] EX_StructMemberContext member_prop=0x1b4d8f16ec0
+      struct_expr:
+        [0x1d8d] EX_LocalVariable prop=0x1b52d3f8e00
+  assignment:
+    [0x1d96] EX_Int64Const 0
+[0x1d9f] EX_Let property=0x1b4d8f16f30
+  variable:
+    [0x1da8] EX_StructMemberContext member_prop=0x1b4d8f16f30
+      struct_expr:
+        [0x1db1] EX_LocalVariable prop=0x1b52d3f8e00
+  assignment:
+    [0x1dba] EX_FloatConst 0.0
+[0x1dbf] EX_Let property=0x1b4d8f16fa0
+  variable:
+    [0x1dc8] EX_StructMemberContext member_prop=0x1b4d8f16fa0
+      struct_expr:
+        [0x1dd1] EX_LocalVariable prop=0x1b52d3f8e00
+  assignment:
+    [0x1dda] EX_DoubleConst 0.0
+[0x1de3] EX_Let property=0x1b4d9170880
+  variable:
+    [0x1dec] EX_StructMemberContext member_prop=0x1b4d9170880
+      struct_expr:
+        [0x1df5] EX_LocalVariable prop=0x1b52d3f8e00
+  assignment:
+    [0x1dfe] EX_ByteConst 0
+[0x1e00] EX_SetArray
+  elem[0]:
+    [0x1e01] EX_LocalVariable prop=0x1b52d3f8d80
+  elem[1]:
+    [0x1e0a] EX_LocalVariable prop=0x1b52d3f8e00
+  EX_EndArray
+[0x1e14] EX_Let property=0x1b52d36ea90
+  variable:
+    [0x1e1d] EX_LocalVariable prop=0x1b52d36ea90
+  assignment:
+    [0x1e26] EX_CallMath func=0x7ff485ccb2d8
+      param[0]:
+        [0x1e2f] EX_TextConst subtype=1 <best-effort, may misparse>
+      param[1]:
+        [0x1e31] EX_StringConst "Are you sure you want to save <Bold28>{A}</>?"
+      param[2]:
+        [0x1e60] EX_StringConst "0F691E334EFD1E87A1B0BE802B40099D"
+      param[3]:
+        [0x1e82] EX_StringConst ""
+      param[4]:
+        [0x1e84] EX_LocalVariable prop=0x1b52d3f8d80
+      EX_EndFunctionParms
+[0x1e8e] EX_Context
+  object_expr:
+    [0x1e8f] EX_InstanceVariable prop=0x1b52c97f080
+  skip=23 field=0x0
+  context_expr:
+    [0x1ea4] EX_VirtualFunction FName(ci=150374, disp=0, num=0)
+      param[0]:
+        [0x1eb1] EX_LocalVariable prop=0x1b52d36ea90
+      EX_EndFunctionParms
+[0x1ebb] EX_PopExecutionFlow
+[0x1ebc] EX_Context
+  object_expr:
+    [0x1ebd] EX_ObjectConst obj=0x1b4fe06be60
+  skip=139 field=0x0
+  context_expr:
+    [0x1ed2] EX_LocalVirtualFunction FName(ci=1674714, disp=0, num=0)
+      param[0]:
+        [0x1edf] EX_TextConst subtype=1 <best-effort, may misparse>
+      param[1]:
+        [0x1ee1] EX_StringConst "No save slot currently selected"
+      param[2]:
+        [0x1f02] EX_StringConst "ED6FE2054200F361C54AE0804B8E8C15"
+      param[3]:
+        [0x1f24] EX_StringConst ""
+      param[4]:
+        [0x1f26] EX_ObjectConst obj=0x1b4f6790b80
+      param[5]:
+        [0x1f2f] EX_StructConst struct=0x7ff485aba788 size=16
+          member[0]:
+            [0x1f3c] EX_FloatConst 1.0
+          member[1]:
+            [0x1f41] EX_FloatConst 1.0
+          member[2]:
+            [0x1f46] EX_FloatConst 1.0
+          member[3]:
+            [0x1f4b] EX_FloatConst 1.0
+          EX_EndStructConst
+      param[6]:
+        [0x1f51] EX_DoubleConst 2.0
+      param[7]:
+        [0x1f5a] EX_False
+      param[8]:
+        [0x1f5b] EX_Self
+      EX_EndFunctionParms
+[0x1f5d] EX_PopExecutionFlow
+[0x1f5e] EX_Context
+  object_expr:
+    [0x1f5f] EX_InstanceVariable prop=0x1b52d3f2d80
+  skip=16 field=0x0
+  context_expr:
+    [0x1f74] EX_VirtualFunction FName(ci=126215, disp=0, num=0)
+      param[0]:
+        [0x1f81] EX_ByteConst 0
+      EX_EndFunctionParms
+[0x1f84] EX_Let property=0x1b52d36ea20
+  variable:
+    [0x1f8d] EX_LocalVariable prop=0x1b52d36ea20
+  assignment:
+    [0x1f96] EX_Context
+      object_expr:
+        [0x1f97] EX_InstanceVariable prop=0x1b52d3f2500
+      skip=10 field=0x1b52d36ea20
+      context_expr:
+        [0x1fac] EX_FinalFunction func=0x7ff485b037f0
+          EX_EndFunctionParms
+[0x1fb6] EX_Let property=0x1b4d8f16de0
+  variable:
+    [0x1fbf] EX_StructMemberContext member_prop=0x1b4d8f16de0
+      struct_expr:
+        [0x1fc8] EX_LocalVariable prop=0x1b52d3f8a80
+  assignment:
+    [0x1fd1] EX_StringConst "A"
+[0x1fd4] EX_Let property=0x1b4d9170780
+  variable:
+    [0x1fdd] EX_StructMemberContext member_prop=0x1b4d9170780
+      struct_expr:
+        [0x1fe6] EX_LocalVariable prop=0x1b52d3f8a80
+  assignment:
+    [0x1fef] EX_ByteConst 4
+[0x1ff1] EX_Let property=0x1b4d8f16e50
+  variable:
+    [0x1ffa] EX_StructMemberContext member_prop=0x1b4d8f16e50
+      struct_expr:
+        [0x2003] EX_LocalVariable prop=0x1b52d3f8a80
+  assignment:
+    [0x200c] EX_LocalVariable prop=0x1b52d36ea20
+[0x2015] EX_Let property=0x1b4d8f16ec0
+  variable:
+    [0x201e] EX_StructMemberContext member_prop=0x1b4d8f16ec0
+      struct_expr:
+        [0x2027] EX_LocalVariable prop=0x1b52d3f8a80
+  assignment:
+    [0x2030] EX_Int64Const 0
+[0x2039] EX_Let property=0x1b4d8f16f30
+  variable:
+    [0x2042] EX_StructMemberContext member_prop=0x1b4d8f16f30
+      struct_expr:
+        [0x204b] EX_LocalVariable prop=0x1b52d3f8a80
+  assignment:
+    [0x2054] EX_FloatConst 0.0
+[0x2059] EX_Let property=0x1b4d8f16fa0
+  variable:
+    [0x2062] EX_StructMemberContext member_prop=0x1b4d8f16fa0
+      struct_expr:
+        [0x206b] EX_LocalVariable prop=0x1b52d3f8a80
+  assignment:
+    [0x2074] EX_DoubleConst 0.0
+[0x207d] EX_Let property=0x1b4d9170880
+  variable:
+    [0x2086] EX_StructMemberContext member_prop=0x1b4d9170880
+      struct_expr:
+        [0x208f] EX_LocalVariable prop=0x1b52d3f8a80
+  assignment:
+    [0x2098] EX_ByteConst 0
+[0x209a] EX_SetArray
+  elem[0]:
+    [0x209b] EX_LocalVariable prop=0x1b52d3f8a00
+  elem[1]:
+    [0x20a4] EX_LocalVariable prop=0x1b52d3f8a80
+  EX_EndArray
+[0x20ae] EX_Let property=0x1b52d36e940
+  variable:
+    [0x20b7] EX_LocalVariable prop=0x1b52d36e940
+  assignment:
+    [0x20c0] EX_CallMath func=0x7ff485ccb2d8
+      param[0]:
+        [0x20c9] EX_TextConst subtype=1 <best-effort, may misparse>
+      param[1]:
+        [0x20cb] EX_StringConst "Are you sure you want to save <Bold28>{A}</>?"
+      param[2]:
+        [0x20fa] EX_StringConst "0F691E334EFD1E87A1B0BE802B40099D"
+      param[3]:
+        [0x211c] EX_StringConst ""
+      param[4]:
+        [0x211e] EX_LocalVariable prop=0x1b52d3f8a00
+      EX_EndFunctionParms
+[0x2128] EX_Context
+  object_expr:
+    [0x2129] EX_InstanceVariable prop=0x1b52c97f080
+  skip=23 field=0x0
+  context_expr:
+    [0x213e] EX_VirtualFunction FName(ci=150374, disp=0, num=0)
+      param[0]:
+        [0x214b] EX_LocalVariable prop=0x1b52d36e940
+      EX_EndFunctionParms
+[0x2155] EX_PopExecutionFlow
+[0x2156] EX_LetBool
+  variable:
+    [0x2157] EX_LocalVariable prop=0x1b52d3f9000
+  assignment:
+    [0x2160] EX_CallMath func=0x7ff485ad1648
+      param[0]:
+        [0x2169] EX_InstanceVariable prop=0x1b52d3f4000
+      EX_EndFunctionParms
+[0x2173] EX_JumpIfNot -> 0x241d if NOT:
+  [0x2178] EX_LocalVariable prop=0x1b52d3f9000
+[0x2181] EX_Let property=0x1b52d36e8d0
+  variable:
+    [0x218a] EX_LocalVariable prop=0x1b52d36e8d0
+  assignment:
+    [0x2193] EX_IntConst 0
+[0x2198] EX_Let property=0x1b52d36eb00
+  variable:
+    [0x21a1] EX_LocalVariable prop=0x1b52d36eb00
+  assignment:
+    [0x21aa] EX_IntConst 0
+[0x21af] EX_Let property=0x1b52d3f8f80
+  variable:
+    [0x21b8] EX_LocalVariable prop=0x1b52d3f8f80
+  assignment:
+    [0x21c1] EX_Context
+      object_expr:
+        [0x21c2] EX_InstanceVariable prop=0x1b52d3f2d00
+      skip=10 field=0x1b52d3f8f80
+      context_expr:
+        [0x21d7] EX_FinalFunction func=0x7ff485b04f30
+          EX_EndFunctionParms
+[0x21e1] EX_Let property=0x1b52d36ebe0
+  variable:
+    [0x21ea] EX_LocalVariable prop=0x1b52d36ebe0
+  assignment:
+    [0x21f3] EX_Context
+      object_expr:
+        [0x21f4] EX_ObjectConst obj=0x7ff485f098b0
+      skip=19 field=0x1b52d36ebe0
+      context_expr:
+        [0x2209] EX_FinalFunction func=0x7ff485d2de38
+          param[0]:
+            [0x2212] EX_LocalVariable prop=0x1b52d3f8f80
+          EX_EndFunctionParms
+[0x221c] EX_LetBool
+  variable:
+    [0x221d] EX_LocalVariable prop=0x1b52d3f8780
+  assignment:
+    [0x2226] EX_CallMath func=0x7ff485d43fb8
+      param[0]:
+        [0x222f] EX_LocalVariable prop=0x1b52d36e8d0
+      param[1]:
+        [0x2238] EX_LocalVariable prop=0x1b52d36ebe0
+      EX_EndFunctionParms
+[0x2242] EX_PopExecutionFlowIfNot if NOT:
+  [0x2243] EX_LocalVariable prop=0x1b52d3f8780
+[0x224c] EX_Let property=0x1b52d36eb00
+  variable:
+    [0x2255] EX_LocalVariable prop=0x1b52d36eb00
+  assignment:
+    [0x225e] EX_LocalVariable prop=0x1b52d36e8d0
+[0x2267] EX_PushExecutionFlow -> 0x23d3
+[0x226c] EX_Let property=0x1b52d3f8f80
+  variable:
+    [0x2275] EX_LocalVariable prop=0x1b52d3f8f80
+  assignment:
+    [0x227e] EX_Context
+      object_expr:
+        [0x227f] EX_InstanceVariable prop=0x1b52d3f2d00
+      skip=10 field=0x1b52d3f8f80
+      context_expr:
+        [0x2294] EX_FinalFunction func=0x7ff485b04f30
+          EX_EndFunctionParms
+[0x229e] EX_Context
+  object_expr:
+    [0x229f] EX_ObjectConst obj=0x7ff485f098b0
+  skip=37 field=0x0
+  context_expr:
+    [0x22b4] EX_FinalFunction func=0x7ff485d2d818
+      param[0]:
+        [0x22bd] EX_LocalVariable prop=0x1b52d3f8f80
+      param[1]:
+        [0x22c6] EX_LocalVariable prop=0x1b52d36eb00
+      param[2]:
+        [0x22cf] EX_LocalVariable prop=0x1b52d3f8c80
+      EX_EndFunctionParms
+[0x22d9] EX_Let property=0x0
+  variable:
+    [0x22e2] EX_LocalVariable prop=0x1b52d3f8c00
+  assignment:
+    [0x22eb] EX_DynamicCast class=0x1b4f9a38200
+      [0x22f4] EX_LocalVariable prop=0x1b52d3f8c80
+[0x22fd] EX_Let property=0x0
+  variable:
+    [0x2306] EX_LocalVariable prop=0x1b52d3f8b80
+  assignment:
+    [0x230f] EX_Cast conv_type=1
+      [0x2311] EX_LocalVariable prop=0x1b52d3f8c00
+[0x231a] EX_PopExecutionFlowIfNot if NOT:
+  [0x231b] EX_LocalVariable prop=0x1b52d3f8b80
+[0x2324] EX_LetBool
+  variable:
+    [0x2325] EX_LocalVariable prop=0x1b52d3f8b00
+  assignment:
+    [0x232e] EX_CallMath func=0x7ff485d60cd8
+      param[0]:
+        [0x2337] EX_Context
+          object_expr:
+            [0x2338] EX_LocalVariable prop=0x1b52d3f8c00
+          skip=9 field=0x1b441e43f80
+          context_expr:
+            [0x234d] EX_InstanceVariable prop=0x1b441e43f80
+      param[1]:
+        [0x2356] EX_Context
+          object_expr:
+            [0x2357] EX_InstanceVariable prop=0x1b52d3f4000
+          skip=9 field=0x1b441e43f80
+          context_expr:
+            [0x236c] EX_InstanceVariable prop=0x1b441e43f80
+      EX_EndFunctionParms
+[0x2376] EX_JumpIfNot -> 0x24bf if NOT:
+  [0x237b] EX_LocalVariable prop=0x1b52d3f8b00
+[0x2384] EX_CallMath func=0x7ff485dcbc58
+  param[0]:
+    [0x238d] EX_Self
+  param[1]:
+    [0x238e] EX_Context
+      object_expr:
+        [0x238f] EX_InstanceVariable prop=0x1b52d3f4000
+      skip=9 field=0x1b441e43f80
+      context_expr:
+        [0x23a4] EX_InstanceVariable prop=0x1b441e43f80
+  EX_EndFunctionParms
+[0x23ae] EX_Context
+  object_expr:
+    [0x23af] EX_LocalVariable prop=0x1b52d3f8c00
+  skip=14 field=0x0
+  context_expr:
+    [0x23c4] EX_LocalVirtualFunction FName(ci=1946821, disp=0, num=0)
+      EX_EndFunctionParms
+[0x23d2] EX_PopExecutionFlow
+[0x23d3] EX_Let property=0x1b52d36e860
+  variable:
+    [0x23dc] EX_LocalVariable prop=0x1b52d36e860
+  assignment:
+    [0x23e5] EX_CallMath func=0x7ff485d33cb8
+      param[0]:
+        [0x23ee] EX_LocalVariable prop=0x1b52d36e8d0
+      param[1]:
+        [0x23f7] EX_IntConst 1
+      EX_EndFunctionParms
+[0x23fd] EX_Let property=0x1b52d36e8d0
+  variable:
+    [0x2406] EX_LocalVariable prop=0x1b52d36e8d0
+  assignment:
+    [0x240f] EX_LocalVariable prop=0x1b52d36e860
+[0x2418] EX_Jump -> 0x21af
+[0x241d] EX_Context
+  object_expr:
+    [0x241e] EX_ObjectConst obj=0x1b4fe06be60
+  skip=139 field=0x0
+  context_expr:
+    [0x2433] EX_LocalVirtualFunction FName(ci=1674714, disp=0, num=0)
+      param[0]:
+        [0x2440] EX_TextConst subtype=1 <best-effort, may misparse>
+      param[1]:
+        [0x2442] EX_StringConst "No save slot currently selected"
+      param[2]:
+        [0x2463] EX_StringConst "ED6FE2054200F361C54AE0804B8E8C15"
+      param[3]:
+        [0x2485] EX_StringConst ""
+      param[4]:
+        [0x2487] EX_ObjectConst obj=0x1b4f6790b80
+      param[5]:
+        [0x2490] EX_StructConst struct=0x7ff485aba788 size=16
+          member[0]:
+            [0x249d] EX_FloatConst 1.0
+          member[1]:
+            [0x24a2] EX_FloatConst 1.0
+          member[2]:
+            [0x24a7] EX_FloatConst 1.0
+          member[3]:
+            [0x24ac] EX_FloatConst 1.0
+          EX_EndStructConst
+      param[6]:
+        [0x24b2] EX_DoubleConst 2.0
+      param[7]:
+        [0x24bb] EX_False
+      param[8]:
+        [0x24bc] EX_Self
+      EX_EndFunctionParms
+[0x24be] EX_PopExecutionFlow
+[0x24bf] EX_Context
+  object_expr:
+    [0x24c0] EX_Context
+      object_expr:
+        [0x24c1] EX_LocalVariable prop=0x1b52d3f8c00
+      skip=9 field=0x1b4ed5c5d00
+      context_expr:
+        [0x24d6] EX_InstanceVariable prop=0x1b4ed5c5d00
+  skip=16 field=0x0
+  context_expr:
+    [0x24eb] EX_VirtualFunction FName(ci=150374, disp=0, num=0)
+      param[0]:
+        [0x24f8] EX_TextConst subtype=0 <best-effort, may misparse>
+      EX_EndFunctionParms
+[0x24fb] EX_PopExecutionFlow
+[0x24fc] EX_LocalVirtualFunction FName(ci=1946782, disp=0, num=0)
+  param[0]:
+    [0x2509] EX_LocalVariable prop=0x1b52d36ec50
+  EX_EndFunctionParms
+[0x2513] EX_PopExecutionFlow
+[0x2514] EX_Jump -> 0x1554
+[0x2519] EX_Jump -> 0x1288
+[0x251e] EX_LetObj
+  variable:
+    [0x251f] EX_InstanceVariable prop=0x1b52d3f4000
+  assignment:
+    [0x2528] EX_LocalVariable prop=0x1b52d3f8800
+[0x2531] EX_Jump -> 0x0523
+[0x2536] EX_LocalVirtualFunction FName(ci=1946762, disp=0, num=0)
+  param[0]:
+    [0x2543] EX_LocalVariable prop=0x1b52d36e7f0
+  EX_EndFunctionParms
+[0x254d] EX_PopExecutionFlow
+[0x254e] EX_LetObj
+  variable:
+    [0x254f] EX_InstanceVariable prop=0x1b52d3f3c80
+  assignment:
+    [0x2558] EX_LocalVariable prop=0x1b52d3f8600
+[0x2561] EX_Context
+  object_expr:
+    [0x2562] EX_InstanceVariable prop=0x1b52d3f2300
+  skip=16 field=0x0
+  context_expr:
+    [0x2577] EX_VirtualFunction FName(ci=126215, disp=0, num=0)
+      param[0]:
+        [0x2584] EX_ByteConst 0
+      EX_EndFunctionParms
+[0x2587] EX_Let property=0x1b52d36f3c0
+  variable:
+    [0x2590] EX_LocalVariable prop=0x1b52d36f3c0
+  assignment:
+    [0x2599] EX_CallMath func=0x7ff485ccaa18
+      param[0]:
+        [0x25a2] EX_Context
+          object_expr:
+            [0x25a3] EX_InstanceVariable prop=0x1b52d3f3c80
+          skip=9 field=0x1b441e43f80
+          context_expr:
+            [0x25b8] EX_InstanceVariable prop=0x1b441e43f80
+      EX_EndFunctionParms
+[0x25c2] EX_Let property=0x1b4d8f16de0
+  variable:
+    [0x25cb] EX_StructMemberContext member_prop=0x1b4d8f16de0
+      struct_expr:
+        [0x25d4] EX_LocalVariable prop=0x1b52d3f7d80
+  assignment:
+    [0x25dd] EX_StringConst "A"
+[0x25e0] EX_Let property=0x1b4d9170780
+  variable:
+    [0x25e9] EX_StructMemberContext member_prop=0x1b4d9170780
+      struct_expr:
+        [0x25f2] EX_LocalVariable prop=0x1b52d3f7d80
+  assignment:
+    [0x25fb] EX_ByteConst 4
+[0x25fd] EX_Let property=0x1b4d8f16e50
+  variable:
+    [0x2606] EX_StructMemberContext member_prop=0x1b4d8f16e50
+      struct_expr:
+        [0x260f] EX_LocalVariable prop=0x1b52d3f7d80
+  assignment:
+    [0x2618] EX_LocalVariable prop=0x1b52d36f3c0
+[0x2621] EX_Let property=0x1b4d8f16ec0
+  variable:
+    [0x262a] EX_StructMemberContext member_prop=0x1b4d8f16ec0
+      struct_expr:
+        [0x2633] EX_LocalVariable prop=0x1b52d3f7d80
+  assignment:
+    [0x263c] EX_Int64Const 0
+[0x2645] EX_Let property=0x1b4d8f16f30
+  variable:
+    [0x264e] EX_StructMemberContext member_prop=0x1b4d8f16f30
+      struct_expr:
+        [0x2657] EX_LocalVariable prop=0x1b52d3f7d80
+  assignment:
+    [0x2660] EX_FloatConst 0.0
+[0x2665] EX_Let property=0x1b4d8f16fa0
+  variable:
+    [0x266e] EX_StructMemberContext member_prop=0x1b4d8f16fa0
+      struct_expr:
+        [0x2677] EX_LocalVariable prop=0x1b52d3f7d80
+  assignment:
+    [0x2680] EX_DoubleConst 0.0
+[0x2689] EX_Let property=0x1b4d9170880
+  variable:
+    [0x2692] EX_StructMemberContext member_prop=0x1b4d9170880
+      struct_expr:
+        [0x269b] EX_LocalVariable prop=0x1b52d3f7d80
+  assignment:
+    [0x26a4] EX_ByteConst 0
+[0x26a6] EX_SetArray
+  elem[0]:
+    [0x26a7] EX_LocalVariable prop=0x1b52d3f7c00
+  elem[1]:
+    [0x26b0] EX_LocalVariable prop=0x1b52d3f7d80
+  EX_EndArray
+[0x26ba] EX_Let property=0x1b52d36f350
+  variable:
+    [0x26c3] EX_LocalVariable prop=0x1b52d36f350
+  assignment:
+    [0x26cc] EX_CallMath func=0x7ff485ccb2d8
+      param[0]:
+        [0x26d5] EX_TextConst subtype=1 <best-effort, may misparse>
+      param[1]:
+        [0x26d7] EX_StringConst "Are you sure you want to delete <Bold28>{A}</> save?"
+      param[2]:
+        [0x270d] EX_StringConst "B5591C8D465D8263DAC7EE81051C5532"
+      param[3]:
+        [0x272f] EX_StringConst ""
+      param[4]:
+        [0x2731] EX_LocalVariable prop=0x1b52d3f7c00
+      EX_EndFunctionParms
+[0x273b] EX_Context
+  object_expr:
+    [0x273c] EX_InstanceVariable prop=0x1b52d3f3180
+  skip=23 field=0x0
+  context_expr:
+    [0x2751] EX_VirtualFunction FName(ci=150374, disp=0, num=0)
+      param[0]:
+        [0x275e] EX_LocalVariable prop=0x1b52d36f350
+      EX_EndFunctionParms
+[0x2768] EX_PopExecutionFlow
+[0x2769] EX_PopExecutionFlow
+[0x276a] EX_Let property=0x1b52d3f7e80
+  variable:
+    [0x2773] EX_LocalVariable prop=0x1b52d3f7e80
+  assignment:
+    [0x277c] EX_ByteConst 0
+[0x277e] EX_Let property=0x1b52d3f7d00
+  variable:
+    [0x2787] EX_LocalVariable prop=0x1b52d3f7d00
+  assignment:
+    [0x2790] EX_ByteConst 1
+[0x2792] EX_LetBool
+  variable:
+    [0x2793] EX_LocalVariable prop=0x1b52d3f7f00
+  assignment:
+    [0x279c] EX_LocalVariable prop=0x1b52d3fa400
+[0x27a5] EX_Context
+  object_expr:
+    [0x27a6] EX_InstanceVariable prop=0x1b52d3f2e80
+  skip=67 field=0x0
+  context_expr:
+    [0x27bb] EX_VirtualFunction FName(ci=126215, disp=0, num=0)
+      param[0]:
+        [0x27c8] EX_SwitchValue numcases=2 end=0x27fd
+          index_expr:
+            [0x27cf] EX_LocalVariable prop=0x1b52d3f7f00
+          case[0] value:
+            [0x27d8] EX_False
+          case[0] next=0x27e6 result:
+            [0x27dd] EX_LocalVariable prop=0x1b52d3f7d00
+          case[1] value:
+            [0x27e6] EX_True
+          case[1] next=0x27f4 result:
+            [0x27eb] EX_LocalVariable prop=0x1b52d3f7e80
+          default_result:
+            [0x27f4] EX_LocalVariable prop=0x1b52d3fa300
+      EX_EndFunctionParms
+[0x27fe] EX_PopExecutionFlow
+[0x27ff] EX_Return
+  [0x2800] EX_Nothing
+[0x2801] EX_EndOfScript
