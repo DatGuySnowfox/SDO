@@ -35,12 +35,12 @@ import sys
 # by its full path to get the same environment the Bash tool itself uses.
 GIT_BASH = r"C:\Program Files\Git\bin\bash.exe"
 
-REMOTE_HOST = "<pc2-ssh-alias>"
-REMOTE_APPDATA_FLAG_DIR = r"$env:APPDATA\SurrounDeadBridge"
+REMOTE_HOST = "sdo-client2"
+REMOTE_APPDATA_FLAG_DIR = r"$env:APPDATA\SDO"
 LOCAL_TMP = r"C:\Users\mccau\AppData\Local\Temp\claude\C--Users-mccau\7b5f3f2f-bcdb-4d8e-afbd-151c82c05958\scratchpad"
-LOCAL_OUT_DIR = r"C:\temp\GIT\SDO\research\bytecode\playercharacter_decoded"
+LOCAL_OUT_DIR = r"C:\temp\GIT\SDO\research\bytecode\decoded_5_6"
 DISASM_SCRIPT = r"C:\temp\GIT\SDO\research\bytecode\kismet_disasm.py"
-DEBUG_LOG_REMOTE = r"$env:APPDATA\SurrounDeadBridge\debug.log"
+DEBUG_LOG_REMOTE = r"$env:APPDATA\SDO\debug.log"
 
 os.makedirs(LOCAL_OUT_DIR, exist_ok=True)
 os.makedirs(LOCAL_TMP, exist_ok=True)
