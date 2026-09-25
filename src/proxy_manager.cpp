@@ -1001,6 +1001,18 @@ static const wchar_t* body_part_under_clothing(const wchar_t* clothingCompName)
                     // while wearing a plate carrier, so no pairing is confirmed.
 }
 
+// Inverse of body_part_under_clothing: which clothing component sits over a
+// given bare body part. Kept adjacent so the two tables cannot drift apart.
+static const wchar_t* clothing_over_body_part(const wchar_t* bodyPartName)
+{
+    const std::wstring n(bodyPartName);
+    if (n == L"Torso") return STR("Clothing_Torso");
+    if (n == L"Legs")  return STR("Clothing_Legs");
+    if (n == L"Feet")  return STR("Clothing_Feet");
+    if (n == L"Hands") return STR("Clothing_Gloves");
+    return nullptr;
+}
+
 // Original bare-body meshes, keyed by the body-part component itself, so an
 // unequip can put back exactly what was there rather than re-deriving it from
 // appearance data. Populated on the first clear and never overwritten with null.
@@ -1015,6 +1027,22 @@ static void* read_skinned_asset(UObject* comp)
     void** slot = static_cast<void**>(comp->GetValuePtrByPropertyNameInChain(STR("SkinnedAsset")));
     if (!slot) slot = static_cast<void**>(comp->GetValuePtrByPropertyNameInChain(STR("SkeletalMesh")));
     return slot ? *slot : nullptr;
+}
+
+// True when this bare body part currently has clothing on top of it.
+//
+// 2026-09-24: sync_pawn_appearance and equip_clothing_to_mesh are two separate
+// writers of the same body-part mesh property. The appearance path applies
+// a.bodyPartMeshNames[i] whenever it is non-empty, which RESTORES the naked
+// mesh, while the clothing path clears it -- reported live as the coat
+// flickering before it settled. The clothing state is the one that knows
+// whether a part should be bare, so the appearance path defers to it here.
+static bool body_part_is_covered(AActor* actor, const wchar_t* bodyPartName)
+{
+    const wchar_t* clothingName = clothing_over_body_part(bodyPartName);
+    if (!clothingName) return false;
+    auto* comp = prop_obj(reinterpret_cast<UObject*>(actor), clothingName);
+    return comp && read_skinned_asset(comp) != nullptr;
 }
 
 // Sets a body part's mesh (null to clear) and re-establishes its leader-pose
@@ -3271,17 +3299,24 @@ void ProxyManager::sync_pawn_appearance(AActor* actor, RemotePlayer& player)
     // @0x7C0/@0x7C8) — same SetStaticMesh/SetMaterial UFUNCTIONs as any
     // other UStaticMeshComponent, research/CXXHeaderDump/Engine.hpp.
     if (stage == 0) {
-    struct PartInfo { uintptr_t compOffset; const std::string& meshName; const std::string& colorName; bool isBeard; };
+    // 2026-09-24: was a hardcoded {0x7C0, 0x7C8} pair for HairMesh/BeardMesh.
+    // Those are UE 5.3 offsets; on 5.6 HairMesh is 0x0798 and BeardMesh is
+    // 0x07A0, while 0x07C0 is AIOInvoker and 0x07C8 is RadiationComponent
+    // (research/CXXHeaderDump/BP_PlayerCharacter.hpp). So this loop was
+    // fetching two unrelated non-mesh components and calling SetStaticMesh /
+    // SetMaterial / SetVisibility on them -- silently doing nothing, since
+    // those UFunctions do not resolve on an invoker or a radiation component.
+    // A tenth site of the same 5.3-offset family, found while chasing the
+    // coat flicker. Resolved by name.
+    struct PartInfo { const wchar_t* compName; const std::string& meshName; const std::string& colorName; bool isBeard; };
     const PartInfo parts[] = {
-        { 0x7C0, a.hairMeshName,  a.hairColorName,  false },
-        { 0x7C8, a.beardMeshName, a.beardColorName, true },
+        { STR("HairMesh"),  a.hairMeshName,  a.hairColorName,  false },
+        { STR("BeardMesh"), a.beardMeshName, a.beardColorName, true  },
     };
     for (const auto& part : parts) {
-        auto* comp = *reinterpret_cast<UObject**>(reinterpret_cast<uintptr_t>(actor) + part.compOffset);
+        auto* comp = prop_obj(reinterpret_cast<UObject*>(actor), part.compName);
         if (!comp) {
-            debug_log("sync_pawn_appearance: component at offset 0x" +
-                      [&]{ char b[8]; snprintf(b, sizeof(b), "%llx", (unsigned long long)part.compOffset); return std::string(b); }() +
-                      " is null");
+            debug_log(std::string("sync_pawn_appearance: component ") + narrow(part.compName) + " is null");
             continue;
         }
 
@@ -3442,6 +3477,23 @@ void ProxyManager::sync_pawn_appearance(AActor* actor, RemotePlayer& player)
                 struct Params { bool bNewVisibility = false; bool bPropagateToChildren = false; } vparams;
                 comp->ProcessEvent(visFn, &vparams);
             }
+            player.appearanceSyncStage = stage + 1;
+            return;
+        }
+
+        // 2026-09-24: do not put the naked mesh back on a part that currently
+        // has clothing over it. This loop and equip_clothing_to_mesh both write
+        // this property, and this one runs on a repeating stage cycle (roughly
+        // once a second per part), so without this guard a covered part is
+        // cleared by the clothing path and restored here over and over --
+        // observed live as a coat flickering before it settled. An empty
+        // meshName is still handled above and still wins; this only suppresses
+        // a non-empty restore while clothing is actually present, which is the
+        // one case where the sender's view and the proxy's differ.
+        if (body_part_is_covered(actor, kBodyPartNames[i])) {
+            debug_log("sync_pawn_appearance: bodyPart[" + std::to_string(i) + "]=" + meshName +
+                      " SKIPPED restore, " + narrow(clothing_over_body_part(kBodyPartNames[i])) +
+                      " is covering it");
             player.appearanceSyncStage = stage + 1;
             return;
         }
