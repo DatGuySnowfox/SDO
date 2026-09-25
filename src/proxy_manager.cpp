@@ -1420,6 +1420,16 @@ static void anim_probe_body(void* raw)
         // printed visible=99 and visible=67, which are 0b01100011 and 0b01000011,
         // not booleans. Mask bit 0 for the real value.
         auto* visibleBits = prop_ptr<uint8_t>(comp, STR("bVisible"));
+        // 2026-09-25: bVisible is the component's OWN flag and says nothing
+        // about whether an ancestor is hidden. IsVisible() is the effective
+        // answer, and it is the one that was missing while a hidden parent was
+        // stopping a perfectly healthy child from drawing.
+        int effVisible = -1;
+        if (UFunction* isVisFn = comp->GetFunctionByNameInChain(L"IsVisible")) {
+            struct VP { bool ReturnValue = false; } vp;
+            comp->ProcessEvent(isVisFn, &vp);
+            effVisible = static_cast<int>(vp.ReturnValue);
+        }
 
         std::string parentName = "<NULL>";
         if (parent) {
@@ -1432,14 +1442,15 @@ static void anim_probe_body(void* raw)
         }
         char pb[360];
         snprintf(pb, sizeof(pb),
-                 "anim_part: %s#%d %-16s comp=0x%llx mesh=%s bones=%d attachParent=%s leaderPose=0x%llx visible=%d",
+                 "anim_part: %s#%d %-16s comp=0x%llx mesh=%s bones=%d attachParent=%s leaderPose=0x%llx bVisible=%d isVisible=%d",
                  tag, pass, narrow(partName).c_str(),
                  static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(comp)),
                  (skinned ? (*skinned ? "SET" : "MISSING") : "NOPROP"),
                  num_bones(comp),
                  parentName.c_str(),
                  static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(cLeader)),
-                 visibleBits ? static_cast<int>(*visibleBits & 0x01) : -1);
+                 visibleBits ? static_cast<int>(*visibleBits & 0x01) : -1,
+                 effVisible);
         debug_log(pb);
 
         double cx = 0, cy = 0, cz = 0;
@@ -3717,9 +3728,39 @@ void ProxyManager::sync_pawn_appearance(AActor* actor, RemotePlayer& player)
         // showed up as the shirt/pants "pulsing". Same "sync needs a clear
         // case" fix as tonight's beard/accessory bugs, applied here too.
         if (meshName.empty()) {
-            UFunction* visFn = comp->GetFunctionByNameInChain(L"SetVisibility");
-            if (visFn) {
-                struct Params { bool bNewVisibility = false; bool bPropagateToChildren = false; } vparams;
+            // 2026-09-25: this used to call SetVisibility(false) on the body
+            // part. An empty meshName is the sender correctly reporting that
+            // clothing covers this slot, so hiding the bare part looks right -
+            // except every clothing overlay is a CHILD of the body part it
+            // covers: Clothing_Torso parents to Torso, Clothing_Legs to Legs,
+            // Clothing_Feet to Feet, Clothing_Gloves to Hands, confirmed in the
+            // anim_part dump on the local player as well as the proxy. Hiding
+            // the parent takes the clothing down with it.
+            //
+            // This is the same fault already confirmed once in this file:
+            // removing the equivalent SetVisibility(false) on Hands is what
+            // made the proxy's gloves reappear. The general body-part path kept
+            // doing it, one stage per sync_pawn_appearance call, which is why
+            // the shirt rendered correctly and then vanished about a second
+            // later, and why every probe read healthy while it was invisible -
+            // bVisible is a component's OWN flag, so Clothing_Torso honestly
+            // reported visible=1 the whole time its parent was hidden.
+            //
+            // Clear the mesh instead, which is what the game itself does (a
+            // dressed local player reads Torso MISSING, not Torso hidden) and
+            // what hide_body_part_under_clothing already does on the equip side.
+            if (UFunction* setMeshFn = comp->GetFunctionByNameInChain(L"SetSkinnedAssetAndUpdate")) {
+                struct MeshParams { UObject* NewMesh = nullptr; bool bReinitPose = false; } mparams;
+                comp->ProcessEvent(setMeshFn, &mparams);
+                auto** leaderSlot = static_cast<UObject**>(
+                    actor->GetValuePtrByPropertyNameInChain(L"Mesh"));
+                refresh_leader_pose(comp, (leaderSlot && *leaderSlot) ? *leaderSlot : nullptr);
+            }
+            // And make sure nothing has left it hidden: a cleared part has no
+            // geometry to draw, so this is free, and it undoes any stale hide
+            // from the behaviour above.
+            if (UFunction* visFn = comp->GetFunctionByNameInChain(L"SetVisibility")) {
+                struct Params { bool bNewVisibility = true; bool bPropagateToChildren = false; } vparams;
                 comp->ProcessEvent(visFn, &vparams);
             }
             player.appearanceSyncStage = stage + 1;
