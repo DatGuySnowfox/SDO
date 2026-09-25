@@ -1235,6 +1235,38 @@ void log_anim_state(AActor* actor, const char* tag)
         x = btp.ReturnValue.locX; y = btp.ReturnValue.locY; z = btp.ReturnValue.locZ;
         return true;
     };
+    // 2026-09-25: materials. The bone probe established that the proxy's pose is
+    // correct - every component holding a mesh reports deltaFromLeader = 0.00,
+    // exactly as on the working local player - so the geometry is right and
+    // correctly posed, and still does not draw. What we never set is the
+    // material. The game's own EquipClothingToMesh assigns the mesh AND its
+    // materials; SetSkinnedAssetAndUpdate assigns only the mesh, leaving whatever
+    // the component already had. A skeletal mesh with a missing or wrong material
+    // is geometry that is present, posed, visible by every property, and
+    // invisible on screen, which is the symptom exactly.
+    auto mat_summary = [](UObject* c) -> std::string {
+        if (!c) return "<nocomp>";
+        int numMats = -1;
+        if (UFunction* fn = c->GetFunctionByNameInChain(L"GetNumMaterials")) {
+            struct P { int32_t ReturnValue = 0; } p;
+            c->ProcessEvent(fn, &p);
+            numMats = p.ReturnValue;
+        }
+        std::string first = "<none>";
+        if (UFunction* fn = c->GetFunctionByNameInChain(L"GetMaterial")) {
+            struct P { int32_t ElementIndex = 0; UObject* ReturnValue = nullptr; } p;
+            c->ProcessEvent(fn, &p);
+            if (p.ReturnValue) {
+                first = narrow(p.ReturnValue->GetFullName());
+                const size_t dot = first.find_last_of('.');
+                if (dot != std::string::npos) first = first.substr(dot + 1);
+            } else {
+                first = "NULL";
+            }
+        }
+        return "n=" + std::to_string(numMats) + " mat0=" + first;
+    };
+
     double lx = 0, ly = 0, lz = 0;
     const bool leaderBoneOk = bone_pos(mesh, lx, ly, lz);
     {
@@ -1338,6 +1370,9 @@ void log_anim_state(AActor* actor, const char* tag)
                      tag, pass, narrow(partName).c_str(), cx, cy, cz, drift);
             debug_log(bb);
         }
+
+        debug_log("mat_probe: " + std::string(tag) + "#" + std::to_string(pass) + " " +
+                  narrow(partName) + " " + mat_summary(comp));
     }
 }
 
