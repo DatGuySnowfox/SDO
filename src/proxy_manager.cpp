@@ -72,6 +72,21 @@ static T* prop_ptr(uintptr_t owner, const wchar_t* name)
 }
 
 // Object-valued property (a UObject* stored in the owner), dereferenced.
+// Same env-or-file switch form mod.cpp uses; the file form is the one that
+// works, since the game inherits Steam's environment from whenever Steam
+// launched and never sees a variable set afterwards.
+static bool env_flag_set_pm(const wchar_t* envName, const wchar_t* fileName)
+{
+    wchar_t buf[8];
+    const DWORD n = GetEnvironmentVariableW(envName, buf, 8);
+    if (n > 0 && n < 8 && buf[0] == L'1') return true;
+    wchar_t path[MAX_PATH];
+    const DWORD a = GetEnvironmentVariableW(L"APPDATA", path, MAX_PATH);
+    if (a == 0 || a >= MAX_PATH) return false;
+    const std::wstring flag = std::wstring(path, a) + L"\\SDO\\" + fileName;
+    return GetFileAttributesW(flag.c_str()) != INVALID_FILE_ATTRIBUTES;
+}
+
 static UObject* prop_obj(UObject* owner, const wchar_t* name)
 {
     auto** slot = prop_ptr<UObject*>(owner, name);
@@ -854,10 +869,58 @@ static bool equip_actor_to_socket(AActor* actor, AActor* itemActor, bool isSecon
         prop_obj(reinterpret_cast<UObject*>(actor), STR("BP_JigHelperComp")));
     if (!helper) return false;
 
+    // There are two functions with this name, and they are NOT equivalent:
+    //
+    //   BP_JigHelperComp::Equip Actor to Socket(AActor* ActorRef, bool IsSecondary)
+    //   BP_PlayerCharacter::EquipActorToSocket(UJigsawItem_DataAsset_C* DA,
+    //                                          AActor* ActorRef, bool IsSecondary)
+    //
+    // This code has always called the helper's two-argument version. The
+    // PlayerCharacter one takes the item's DataAsset explicitly, and the
+    // socket to attach to (EquipSocket, an FName at 0x02E0) lives on that
+    // asset — so the two-argument form has no direct way to be told which
+    // socket to use. Equipped weapons render lying on the floor, i.e. at the
+    // attach parent's origin, which is exactly where an attachment lands when
+    // the socket is not applied.
+    //
+    // Switchable rather than simply changed: this project has a save-
+    // corruption incident from an unverified ProcessEvent call, and swapping
+    // which function runs deserves one deliberate test rather than being
+    // folded into a batch. Drop use_pawn_equip.flag in %APPDATA%\SDO to try
+    // the PlayerCharacter variant.
+    const bool usePawnVariant = env_flag_set_pm(L"SDO_USE_PAWN_EQUIP", L"use_pawn_equip.flag");
+
+    if (usePawnVariant) {
+        UObject* pawnObj = reinterpret_cast<UObject*>(actor);
+        UFunction* pawnFn = pawnObj->GetFunctionByNameInChain(L"EquipActorToSocket");
+        if (pawnFn) {
+            UObject* da = nullptr;
+            if (UObject* pickup = prop_obj(reinterpret_cast<UObject*>(itemActor),
+                                           STR("BP_JigPickupComponent")))
+                da = prop_obj(pickup, STR("ItemDataAsset"));
+
+            struct PawnParams {
+                UObject* DA = nullptr;          // 0x00
+                AActor*  ActorRef = nullptr;    // 0x08
+                bool     IsSecondary = false;   // 0x10
+            } pp;
+            static_assert(offsetof(PawnParams, ActorRef)    == 0x08, "Kismet param layout");
+            static_assert(offsetof(PawnParams, IsSecondary) == 0x10, "Kismet param layout");
+            pp.DA = da;
+            pp.ActorRef = itemActor;
+            pp.IsSecondary = isSecondary;
+            pawnObj->ProcessEvent(pawnFn, &pp);
+            debug_log(std::string("equip_actor_to_socket: called pawn variant, DA=") +
+                      (da ? "set" : "NULL"));
+            return true;
+        }
+        debug_log("equip_actor_to_socket: pawn variant requested but EquipActorToSocket NOT FOUND");
+    }
+
     auto* helperObj = reinterpret_cast<UObject*>(helper);
     UFunction* fn = helperObj->GetFunctionByNameInChain(L"Equip Actor to Socket");
     if (!fn) {
-        debug_log("equip_actor_to_socket: EquipActorToSocket NOT FOUND");
+        debug_log("equip_actor_to_socket: Equip Actor to Socket NOT FOUND");
         return false;
     }
 
@@ -871,7 +934,7 @@ static bool equip_actor_to_socket(AActor* actor, AActor* itemActor, bool isSecon
     params.ActorRef = itemActor;
     params.IsSecondary = isSecondary;
     helperObj->ProcessEvent(fn, &params);
-    debug_log("equip_actor_to_socket: called");
+    debug_log("equip_actor_to_socket: called helper variant");
     return true;
 }
 
@@ -3447,10 +3510,29 @@ static void do_apply_proxy_velocity(void* ctxRaw)
     // UpdatedComponent and UpdatedPrimitive pointers — so this wrote three
     // doubles over live engine pointers inside the skeletal mesh component on
     // every movement tick.
+    // Both lookups used to fail silently. The proxy is moved with
+    // SetActorLocation, which produces no velocity of its own, so if this
+    // never lands the AnimBP sees zero speed and plays idle — the character
+    // slides instead of walking, and because nothing animates, every
+    // leader-posed body part stays in bind pose and every socketed weapon
+    // sits at the un-animated origin. Log the failure instead of returning
+    // quietly, since that one write explains all three symptoms.
     UObject* moveComp = prop_obj(reinterpret_cast<UObject*>(ctx->actor), STR("CharacterMovement"));
-    if (!moveComp) return;
+    if (!moveComp) {
+        debug_log("apply_proxy_velocity: CharacterMovement not found on proxy");
+        return;
+    }
     auto* vel = prop_ptr<double>(moveComp, STR("Velocity"));   // FVector: 3 doubles
-    if (!vel) return;
+    if (!vel) {
+        debug_log("apply_proxy_velocity: Velocity not found on CharacterMovement");
+        return;
+    }
+    {
+        char vb[128];
+        snprintf(vb, sizeof(vb), "apply_proxy_velocity: set vx=%.1f vy=%.1f vz=%.1f",
+                 ctx->vx, ctx->vy, ctx->vz);
+        debug_log(vb);
+    }
     vel[0] = ctx->vx;
     vel[1] = ctx->vy;
     vel[2] = ctx->vz;

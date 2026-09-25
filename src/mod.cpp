@@ -281,17 +281,31 @@ static void send_movement(AActor* pawn)
     // read_local_movement_flags's own comment for the bit layout.
     mv.movementState = read_local_movement_flags(pawn);
 
-    // Velocity: not exposed via the UE4SS stub, so read it directly.
-    // ACharacter::CharacterMovement (pawn+0x328) -> UMovementComponent::Velocity (+0xB8).
-    const auto pawnBase = reinterpret_cast<uintptr_t>(pawn);
-    const auto moveComp = *reinterpret_cast<uintptr_t*>(pawnBase + 0x328);
-    if (moveComp) {
-        const double vx = *reinterpret_cast<double*>(moveComp + 0xB8);
-        const double vy = *reinterpret_cast<double*>(moveComp + 0xC0);
-        const double vz = *reinterpret_cast<double*>(moveComp + 0xC8);
-        mv.velocityX = static_cast<float>(vx);
-        mv.velocityY = static_cast<float>(vy);
-        mv.velocityZ = static_cast<float>(vz);
+    // Velocity, by name. This was pawn+0x328 -> +0xB8/+0xC0/+0xC8, both stale:
+    // on UE 5.6 pawn+0x328 is Mesh (CharacterMovement moved to 0x330), and
+    // 0x0B8/0x0C0 on a movement component are the UpdatedComponent and
+    // UpdatedPrimitive pointers rather than Velocity, which sits at 0x00D0.
+    //
+    // The proxy side of this was corrected earlier; this sender-side read was
+    // not, so every client transmitted a velocity of zero. The receiver treats
+    // anything under a small deadzone as idle, so remote characters animated
+    // as standing still while their position updated — they slid. And because
+    // the skeleton never animated, every leader-posed body part stayed in bind
+    // pose and every socketed weapon sat at the un-animated origin, which is
+    // what looked like detached limbs and guns lying on the floor.
+    auto** moveSlot = static_cast<UObject**>(
+        pawn->GetValuePtrByPropertyNameInChain(STR("CharacterMovement")));
+    if (UObject* moveComp = (moveSlot && *moveSlot) ? *moveSlot : nullptr) {
+        if (auto* vel = static_cast<double*>(
+                moveComp->GetValuePtrByPropertyNameInChain(STR("Velocity")))) {
+            mv.velocityX = static_cast<float>(vel[0]);
+            mv.velocityY = static_cast<float>(vel[1]);
+            mv.velocityZ = static_cast<float>(vel[2]);
+        } else {
+            debug_log("send_movement: Velocity not found on CharacterMovement");
+        }
+    } else {
+        debug_log("send_movement: CharacterMovement not found on local pawn");
     }
 
     uint8_t payload[sdo::MOVEMENT_PAYLOAD_SIZE];
