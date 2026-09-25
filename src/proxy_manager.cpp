@@ -1350,6 +1350,19 @@ static void anim_probe_body(void* raw)
                  tag, pass, probeBoneName.c_str(), static_cast<int>(leaderBoneOk), lx, ly, lz);
         debug_log(bb);
 
+        {
+            struct RawBounds { double ox, oy, oz, ex, ey, ez, radius; };
+            if (auto* b = static_cast<RawBounds*>(mesh->GetValuePtrByPropertyNameInChain(STR("Bounds")))) {
+                char bnd[260];
+                snprintf(bnd, sizeof(bnd),
+                         "bounds_probe: %s#%d %-16s originFromActor=(%.1f, %.1f, %.1f) extent=(%.1f, %.1f, %.1f) r=%.1f",
+                         tag, pass, "Mesh(leader)",
+                         b->ox - ax, b->oy - ay, b->oz - az,
+                         b->ex, b->ey, b->ez, b->radius);
+                debug_log(bnd);
+            }
+        }
+
         double mx = 0, my = 0, mz = 0;
         world_offset(mesh, mx, my, mz);
         char wb[200];
@@ -1466,6 +1479,34 @@ static void anim_probe_body(void* raw)
 
         debug_log("mat_probe: " + std::string(tag) + "#" + std::to_string(pass) + " " +
                   narrow(partName) + " " + mat_summary(comp));
+
+        // 2026-09-25: BOUNDS. This is what the renderer actually uses to place
+        // and cull a primitive, and it is the only thing measured so far that
+        // maps directly onto what appears on screen. Everything else compared
+        // over nine rounds - mesh, bone count, materials, attach parent, leader
+        // pose, own visibility, component location, actor-space bone positions -
+        // reads identical between the proxy that draws wrong and the local
+        // player that draws right, so the divergence has to be somewhere those
+        // readings do not reach. A component whose bounds origin sits at head
+        // height is drawn at head height regardless of how healthy every other
+        // property looks.
+        //
+        // FBoxSphereBounds is Origin (FVector, 0x00), BoxExtent (FVector, 0x18),
+        // SphereRadius (double, 0x30), per CoreUObject.hpp. Reported relative to
+        // the actor so local and proxy are directly comparable.
+        struct RawBounds { double ox, oy, oz, ex, ey, ez, radius; };
+        if (auto* b = static_cast<RawBounds*>(comp->GetValuePtrByPropertyNameInChain(STR("Bounds")))) {
+            char bnd[260];
+            snprintf(bnd, sizeof(bnd),
+                     "bounds_probe: %s#%d %-16s originFromActor=(%.1f, %.1f, %.1f) extent=(%.1f, %.1f, %.1f) r=%.1f",
+                     tag, pass, narrow(partName).c_str(),
+                     b->ox - ax, b->oy - ay, b->oz - az,
+                     b->ex, b->ey, b->ez, b->radius);
+            debug_log(bnd);
+        } else {
+            debug_log(std::string("bounds_probe: ") + tag + "#" + std::to_string(pass) +
+                      " " + narrow(partName) + " Bounds property NOT FOUND");
+        }
 
         double ox = 0, oy = 0, oz = 0;
         if (world_offset(comp, ox, oy, oz)) {
