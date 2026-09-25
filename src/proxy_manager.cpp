@@ -1074,6 +1074,80 @@ static bool set_body_part_mesh(AActor* actor, UObject* comp, UObject* newMesh, c
 
 // Clear the bare body part a freshly-equipped clothing item covers, caching what
 // was there first so unequip can restore it.
+// BP_PlayerCharacter_C::BodyPartVisibility(FBodyPartSettings Parts,
+//     bool IsPlayerMale?, FName Body Part, bool UpdateAllBodyParts?)
+//
+// 2026-09-25: the half of dressing a character this project has never done.
+// Decoded from the live 5.6 build and confirmed by name resolution, not
+// inferred: MC_AttachClothing is a thunk into the ubergraph at offset 140324,
+// and there it is exactly two calls -
+//
+//     BodyPartVisibility( Parts, IsPlayerMale?, BodyPart, UpdateAllBodyParts? )
+//     Clothing->SetSkinnedAssetAndUpdate( Mesh, false )
+//
+// (ci=1696234 resolved to BodyPartVisibility, ci=137933 to
+// SetSkinnedAssetAndUpdate, ci=1710744 to MC_AttachClothing itself.) We have
+// always done the second and never the first, substituting a four-entry table
+// of body-part pairs assembled by watching which components a dressed local
+// player happened to have cleared. This is the real thing.
+//
+// The Body Part argument's vocabulary came out of the same resolution: the only
+// EX_NameConst values in UpdateBodyParts are ci=1534056 "Torso", 1534053 "Legs"
+// and 1534050 "Feet". There is no name for gloves or armour, so those two slots
+// keep the old hand-rolled clear rather than being handed a guessed name.
+//
+// Param block follows UHT sequential alignment: Parts is 0x80 and 8-aligned,
+// the two bools are 1-aligned and FName is 4-aligned.
+static bool call_body_part_visibility(AActor* actor, void* clothingSettings,
+                                      bool isMale, const wchar_t* bodyPartName)
+{
+    if (!actor || !clothingSettings || !bodyPartName) return false;
+
+    UFunction* fn = reinterpret_cast<UObject*>(actor)->GetFunctionByNameInChain(L"BodyPartVisibility");
+    if (!fn) { debug_log("body_part_visibility: UFunction not found"); return false; }
+
+    struct Params {
+        uint8_t         Parts[0x80];             // 0x00  FBodyPartSettings
+        bool            IsPlayerMale = false;    // 0x80
+        uint8_t         _pad0[3];                // 0x81
+        RawFGameplayTag BodyPart{};              // 0x84  FName, same 8-byte shape
+        bool            UpdateAllBodyParts = false; // 0x8C
+        uint8_t         _pad1[3];                // 0x8D
+    } params{};
+    static_assert(offsetof(Params, IsPlayerMale)       == 0x80, "Kismet param layout");
+    static_assert(offsetof(Params, BodyPart)           == 0x84, "Kismet param layout");
+    static_assert(offsetof(Params, UpdateAllBodyParts) == 0x8C, "Kismet param layout");
+
+    // FClothingSettings: MaleMesh 0x00, FemaleMesh 0x08, UpdateAllBodyParts? 0x10,
+    // BodyPartSettings 0x18 (0x80 bytes) - research/CXXHeaderDump/ClothingSettings.hpp.
+    const auto cs = reinterpret_cast<uintptr_t>(clothingSettings);
+    memcpy(params.Parts, reinterpret_cast<const void*>(cs + 0x18), sizeof(params.Parts));
+    params.IsPlayerMale       = isMale;
+    params.UpdateAllBodyParts = *reinterpret_cast<const bool*>(cs + 0x10);
+
+    if (!construct_fname_from_string(bodyPartName, &params.BodyPart)) {
+        debug_log("body_part_visibility: could not build FName for " + narrow(bodyPartName));
+        return false;
+    }
+
+    reinterpret_cast<UObject*>(actor)->ProcessEvent(fn, &params);
+    debug_log("body_part_visibility: called for " + narrow(bodyPartName) +
+              " isMale=" + std::to_string(isMale) +
+              " updateAll=" + std::to_string(params.UpdateAllBodyParts));
+    return true;
+}
+
+// Which of BodyPartVisibility's three confirmed body-part names covers this
+// clothing slot. Gloves and armour have no confirmed name and return null.
+static const wchar_t* body_part_visibility_name(const wchar_t* clothingCompName)
+{
+    const std::wstring n(clothingCompName);
+    if (n == L"Clothing_Torso") return STR("Torso");
+    if (n == L"Clothing_Legs")  return STR("Legs");
+    if (n == L"Clothing_Feet")  return STR("Feet");
+    return nullptr;
+}
+
 static void hide_body_part_under_clothing(AActor* actor, const wchar_t* clothingCompName)
 {
     // 2026-09-25: switchable, because clearing the bare mesh is the one change
@@ -2344,6 +2418,20 @@ static bool equip_clothing_to_mesh(AActor* actor, void* itemAsset, const wchar_t
     static_assert(offsetof(Params, bReinitPose) == 0x08, "Kismet param layout");
 
     params.NewMesh = mesh;
+
+    // The game calls BodyPartVisibility BEFORE swapping the clothing mesh (see
+    // call_body_part_visibility's comment for the decode), so do the same rather
+    // than inventing an order. Falls back to the old hand-rolled clear for the
+    // two slots with no confirmed body-part name, and to it entirely if
+    // no_bodypartvisibility.flag is set, so this can be switched off live
+    // without a rebuild.
+    static const bool bpvDisabled =
+        env_flag_set_pm(L"SDO_NO_BODYPARTVISIBILITY", L"no_bodypartvisibility.flag");
+    const wchar_t* bpvName = bpvDisabled ? nullptr : body_part_visibility_name(clothingCompName);
+    bool bpvCalled = false;
+    if (bpvName)
+        bpvCalled = call_body_part_visibility(actor, clothingSettings, isMale, bpvName);
+
     {
         // 2026-09-24: was char[96]. The literal alone is 86 characters, leaving
         // 9 for a 12-digit heap pointer plus its NUL, so every pointer printed
@@ -2414,7 +2502,9 @@ static bool equip_clothing_to_mesh(AActor* actor, void* itemAsset, const wchar_t
     // a still-present naked body -- confirmed live, run 1 on PC2, where the
     // proxy read Torso=SET and Clothing_Torso=SET simultaneously while a
     // correctly dressed local player read Torso=MISSING / Clothing_Torso=SET.
-    hide_body_part_under_clothing(actor, clothingCompName);
+    // BodyPartVisibility already did this properly when it ran; the hand-rolled
+    // clear is only for the slots it does not cover.
+    if (!bpvCalled) hide_body_part_under_clothing(actor, clothingCompName);
 
     debug_log("equip_clothing_to_mesh: itemId=\"" +
         equip_native::fname_to_string(reinterpret_cast<uintptr_t>(itemAsset) + 0x30) +
