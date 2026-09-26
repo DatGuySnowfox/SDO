@@ -6037,17 +6037,54 @@ static void check_fabrik_dump_trigger()
         mesh->ProcessEvent(getAnimFn, &aparams);
         if (!aparams.ReturnValue) { debug_log(std::string("fabrik_dump: ") + label + " AnimInstance is null"); return; }
 
-        for (const wchar_t* nodeName : { L"AnimGraphNode_Fabrik_6", L"AnimGraphNode_Fabrik_7" }) {
-            void* structPtr = aparams.ReturnValue->GetValuePtrByPropertyNameInChain(nodeName);
-            if (!structPtr) {
-                debug_log(std::string("fabrik_dump: ") + label + " node not found");
+        // 2026-09-26: reads the node's real fields instead of dumping raw bytes.
+        //
+        // Two things were wrong with the old version. The node names
+        // AnimGraphNode_Fabrik_6 and _7 do not exist on 5.6 - this AnimBP has
+        // AnimGraphNode_Fabrik, _1 and _2 (research/CXXHeaderDump/
+        // AnimBP_PlayerCharacter.hpp) - so it resolved nothing and said "node
+        // not found" every time. And it dumped 864 raw bytes to eyeball, which
+        // was the right call when no struct layout was available, but one is:
+        // FAnimNode_Fabrik is 0x1F0 and its base FAnimNode_SkeletalControlBase
+        // gives ActualAlpha at 0x24 and Alpha at 0x2C
+        // (research/CXXHeaderDump/AnimGraphRuntime.hpp:292 and :619).
+        //
+        // These offsets come from the 5.6 dump, not from guessing, and the base
+        // pointer is whatever GetValuePtrByPropertyNameInChain resolved, so this
+        // stays inside the project's rule about raw offsets.
+        //
+        // ActualAlpha is the number that matters: it is the effective blend
+        // weight after evaluation, so a proxy reading 0 while a local player
+        // reads 1 means the node is not being driven at all, and both reading 1
+        // with different effector positions means the target is wrong. Those
+        // need completely different fixes, which is why the left-arm problem is
+        // not worth another guess.
+        struct FabrikNode { const wchar_t* wide; const char* narrow; };
+        static const FabrikNode kNodes[] = {
+            { STR("AnimGraphNode_Fabrik"),   "Fabrik"   },
+            { STR("AnimGraphNode_Fabrik_1"), "Fabrik_1" },
+            { STR("AnimGraphNode_Fabrik_2"), "Fabrik_2" },
+        };
+        for (const auto& node : kNodes) {
+            const wchar_t* nodeName = node.wide;
+            auto* base = static_cast<const uint8_t*>(
+                aparams.ReturnValue->GetValuePtrByPropertyNameInChain(nodeName));
+            if (!base) {
+                debug_log(std::string("fabrik: ") + label + " " + node.narrow + " NOT FOUND");
                 continue;
             }
-            std::wstring outPath = std::wstring(ctx->outDir, ctx->dn) + L"\\SDO\\fabrik_" +
-                ctx->wlabel + L"_" + nodeName + L".bin";
-            std::ofstream out(outPath, std::ios::binary | std::ios::trunc);
-            if (out.is_open()) out.write(reinterpret_cast<const char*>(structPtr), 864);
-            debug_log(std::string("fabrik_dump: ") + label + " wrote node dump");
+            const float actualAlpha = *reinterpret_cast<const float*>(base + 0x24);
+            const float alpha       = *reinterpret_cast<const float*>(base + 0x2C);
+            // FTransform at 0xD0: FQuat Rotation at +0x00, FVector Translation
+            // at +0x20, both doubles on UE5.
+            const double* tr = reinterpret_cast<const double*>(base + 0xD0 + 0x20);
+            const uint8_t space = *(base + 0x1E8);
+            char line[320];
+            snprintf(line, sizeof(line),
+                "fabrik: %s %s ActualAlpha=%.3f Alpha=%.3f effector=(%.1f,%.1f,%.1f) space=%u",
+                label, node.narrow, actualAlpha, alpha,
+                tr[0], tr[1], tr[2], space);
+            debug_log(line);
         }
     };
 
@@ -9009,6 +9046,53 @@ static void do_aim_write(void* ctxRaw)
         : nullptr;
     if (charAds) *charAds = isAds ? 1 : 0;
 
+    // 2026-09-26: aim PITCH has to go through RemoteViewPitch, not AOPitch.
+    //
+    // Reported live: a proxy does not look up or down while aiming. The
+    // aim_write diagnostic shows exactly why, and it is not a missing value -
+    // the value arrives fine and is then thrown away every single frame:
+    //
+    //   aim_write: beforePitch=0.00 targetPitch=-11.25  beforeYaw=2.29 targetYaw=-2.29
+    //                                                   renderYaw=146.57 rawAimYaw=144.32
+    //
+    // targetPitch is a real synced pitch, yet beforePitch reads back 0.00 on
+    // every sample, so the write above loses a race. beforeYaw tells us who
+    // wins it: 2.29 is renderYaw minus rawAimYaw, which is the aim offset the
+    // GAME computed for itself. The AnimBP's GetAimOffset recomputes both of
+    // these each frame from GetBaseAimRotation(), so whatever is written into
+    // AOPitch/AOYaw is overwritten before anything renders.
+    //
+    // Yaw survives that anyway, because the game derives it from actor and
+    // control rotation and this mod already syncs the proxy's actor rotation.
+    // Pitch does not, because for a pawn that is not locally controlled
+    // GetBaseAimRotation takes pitch from RemoteViewPitch - the stock engine
+    // channel for exactly this - and nothing has ever written it. The engine
+    // computes zero and is right to.
+    //
+    // This is the mechanism read_local_aim_pitch's own comment describes and
+    // named as the reason for sending pitch at all, and it was quantized on the
+    // sender with FRotator::CompressAxisToByte's scaling to match. Only the
+    // receiving half was missing.
+    //
+    // Both fields are written. `RemoteViewPitch` is the uint8 at 0x02BC and
+    // `RemoteViewPitch16` the uint16 at 0x02BA, both on APawn
+    // (research/CXXHeaderDump/Engine.hpp:10635). UE moved to the 16-bit one and
+    // which of them GetBaseAimRotation reads is a build detail, so set both and
+    // let the engine pick. Encoded from the smoothed value rather than reusing
+    // the wire byte, so the 16-bit path gets more than the byte's 1.4 degrees.
+    // AOPitch/AOYaw above are left in place: harmless when the game recomputes
+    // them, and still correct if a code path ever reads them before it does.
+    if (proxyActor) {
+        double p = std::fmod(static_cast<double>(player.renderAimPitch), 360.0);
+        if (p < 0.0) p += 360.0;
+        if (auto* rvp = static_cast<uint8_t*>(
+                proxyActor->GetValuePtrByPropertyNameInChain(L"RemoteViewPitch")))
+            *rvp = static_cast<uint8_t>(p * (256.0 / 360.0));
+        if (auto* rvp16 = static_cast<uint16_t*>(
+                proxyActor->GetValuePtrByPropertyNameInChain(L"RemoteViewPitch16")))
+            *rvp16 = static_cast<uint16_t>(p * (65536.0 / 360.0));
+    }
+
     // One-shot resolution report.
     //
     // 2026-09-26: watch_activeslot came back with CActiveSlot="<not found>",
@@ -9025,12 +9109,15 @@ static void do_aim_write(void* ctxRaw)
             s_reported = true;
             char buf[256];
             snprintf(buf, sizeof(buf),
-                     "aim_write_probe: anim IsADS=%d IsCrouching=%d Falling=%d Pitch=%d Yaw=%d | char IsADS?=%d",
+                     "aim_write_probe: anim ADS?=%d Crouched?=%d PlayerFalling?=%d AOPitch=%d AOYaw=%d"
+                     " | char IsADS?=%d RemoteViewPitch=%d RemoteViewPitch16=%d",
                      obj->GetValuePtrByPropertyNameInChain(L"ADS?")       != nullptr,
                      obj->GetValuePtrByPropertyNameInChain(L"Crouched?") != nullptr,
                      obj->GetValuePtrByPropertyNameInChain(L"PlayerFalling?")     != nullptr,
                      pitchSlot != nullptr, yawSlot != nullptr,
-                     charAds   != nullptr);
+                     charAds   != nullptr,
+                     proxyActor && proxyActor->GetValuePtrByPropertyNameInChain(L"RemoteViewPitch") != nullptr,
+                     proxyActor && proxyActor->GetValuePtrByPropertyNameInChain(L"RemoteViewPitch16") != nullptr);
             debug_log(buf);
         }
     }

@@ -173,6 +173,12 @@ private:
     // Local_AttachSocket on the *weapon's* own mesh (not the character's).
     void sync_weapon_attachments(RemotePlayer& player);
 
+    // The laser emitter on a tactical laser/light combo. Separate from
+    // sync_weapon_attachments because it depends on whether the player is
+    // aiming right now, which changes far more often than the attachment set
+    // does - see the function's own comment.
+    void sync_attachment_laser(RemotePlayer& player);
+
     // Applies player.flashlightOn/nightVisionOn onto the proxy's own
     // character-level toggles (BP_PlayerCharacter_C::FlashlightToggle/
     // NightVisionOn) - distinct from sync_weapon_attachments' per-attachment

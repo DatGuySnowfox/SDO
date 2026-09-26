@@ -435,6 +435,14 @@ static std::string fname_to_string(uintptr_t fnamePtr)
 // this layout).
 struct RawFGameplayTag { int32_t ComparisonIndex = 0; int32_t Number = 0; };
 
+// Attachment activation states, as carried on the wire by
+// WeaponAttachmentEntry::activeState: 0 is no mode at all, 1 to 3 are
+// Jig.AttachmentActivate.State1/2/3 and 4 is StateADS. Mapped from a live cycle
+// (see sync_weapon_attachments' own comment on what each one turned out to
+// mean). File scope because both sync_weapon_attachments and
+// sync_attachment_laser need them.
+constexpr uint8_t kState1 = 1, kState2 = 2, kState3 = 3, kStateADS = 4;
+
 // Raw FName(const wchar_t*, EFindName, void*) constructor, resolved by
 // address - mirrors mod.cpp's own copy exactly (see that file for the full
 // rationale: RC::Unreal::FName only exposes a from-INDEX ctor, useless since
@@ -3395,6 +3403,259 @@ void ProxyManager::sync_active_weapon_hand(AActor* actor, RemotePlayer& player)
         newActive, widen(itemId), equipSocket.ComparisonIndex, attached);
 }
 
+// The laser emitter on a tactical laser/light combo.
+//
+// 2026-09-26: reported live as "the laser still stays on". Two separate
+// mistakes were stacked, and the logs settle both.
+//
+// First, ActivateState is a persistent device MODE, not "aiming right now".
+// The local player's own combo reported StateADS continuously for over two
+// minutes after aiming had stopped, dropping to State2 then State1 only when
+// the light key was pressed, and returning to StateADS afterwards:
+//
+//   [15:04:11] attachment_state: TacticalLaserLightCombo ActivateState (StateADS)
+//   ... unchanged for 40+ samples ...
+//   [15:04:53] attachment_state: TacticalLaserLightCombo ActivateState (State2)
+//   [15:04:57] attachment_state: TacticalLaserLightCombo ActivateState (State1)
+//   [15:04:59] attachment_state: TacticalLaserLightCombo ActivateState (StateADS)
+//
+// BP_TacticalLaserLightComboLocalAttachment_C's ubergraph agrees: it stores the
+// tag into its own ActivateState and branches on State1/State2, treating it as
+// stored configuration. So StateADS means "this device is in laser mode", and
+// gating the emitter on the mode alone leaves it lit for as long as that mode
+// is selected - exactly the reported symptom.
+//
+// Second, sync_weapon_attachments only runs when the attachment payload
+// changes. Even a correct gate there would only be re-evaluated when an
+// attachment was added, removed or had its mode changed, never as the player
+// raises and lowers their sights. The laser therefore has to be driven from the
+// per-tick path, not the payload-driven one.
+//
+// So: lit only when the device is in laser mode AND the player is actually
+// aiming. The aiming half is movState bit 0x02, which only started carrying a
+// real value once the AnimBP property renames landed earlier today - before
+// that it was always zero, which is its own reason this could not have worked.
+//
+// Change-detected against player.laserAppliedState so the common case is a
+// couple of comparisons and no ProcessEvent at all.
+void ProxyManager::sync_attachment_laser(RemotePlayer& player)
+{
+    const uint8_t slot = player.handAttachedSlot;
+    if (slot == 0xFF) return;
+
+    auto it = player.weaponAttachmentActors.find(slot);
+    if (it == player.weaponAttachmentActors.end() || it->second.empty()) return;
+
+    // Laser mode is a property of the attachment set, so it is read from the
+    // payload rather than from the actors. Any attachment on the in-hand weapon
+    // sitting in StateADS puts the weapon in laser mode; in practice there is
+    // at most one such device.
+    bool laserMode = false;
+    for (const auto& e : player.weaponAttachments) {
+        if (e.weaponSlotIndex == slot && e.activeState == kStateADS) { laserMode = true; break; }
+    }
+
+    const bool aiming = (player.movState & 0x02) != 0;
+    const bool wantLaser = laserMode && aiming;
+
+    const int8_t want = wantLaser ? 1 : 0;
+
+    // The beam's END POINT needs refreshing every frame while it is lit, which
+    // is a separate job from switching it on.
+    //
+    // 2026-09-26: reported live as the laser not following the rifle - the beam
+    // started at the gun but shot off at its own angle while the pawn aimed up.
+    // ABP_TacticalLaserLightComboLocalAttachment_C explains it
+    // (research/CXXHeaderDump/BP_TacticalLaserLightComboLocalAttachment.hpp):
+    // alongside NS_LaserSight it carries LaserEndPoint(FVector&), Event_Laser()
+    // and a LaserTimer handle. The end point is recomputed by a timer-driven
+    // event, and a proxy never runs that timer, so the emitter was lit with a
+    // stale endpoint and simply kept pointing wherever it was first aimed.
+    //
+    // Driving the game's own Event_Laser is the same approach that worked for
+    // BodyPartVisibility and Jig_SetAttachmentActiveState: call the function the
+    // game uses rather than reimplementing a trace. Only while lit, so it costs
+    // nothing in the common case, and only for actors that actually have the
+    // emitter.
+    if (wantLaser) {
+        for (void* raw : it->second) {
+            auto* a = static_cast<AActor*>(raw);
+            if (!a) continue;
+            if (!prop_obj(reinterpret_cast<UObject*>(a), STR("NS_LaserSight"))) continue;
+            UFunction* fn = a->GetFunctionByNameInChain(L"Event_Laser");
+            if (!fn) continue;
+            struct ECtx { AActor* actor; UFunction* fn; } ec{ a, fn };
+            if (!seh_invoke([](void* r) {
+                    auto* c = static_cast<ECtx*>(r);
+                    c->actor->ProcessEvent(c->fn, nullptr);
+                }, &ec)) {
+                static bool s_warned = false;
+                if (!s_warned) { s_warned = true;
+                    debug_log("sync_attachment_laser: Event_Laser crashed, caught via SEH"); }
+            }
+
+            // Drive the beam's endpoint ourselves.
+            //
+            // 2026-09-26: Event_Laser above runs without crashing, and the beam
+            // still pointed somewhere other than down the barrel. The laser_geom
+            // capture says why - the endpoint is frozen while the emitter moves:
+            //
+            //   emitter=(94740,51249,1441) rot=(-17.5,150.9,91.3) end=(94073,49043,-2662)
+            //   emitter=(94768,51145,1446) rot=(-14.6,-148.2,91.2) end=(94073,49043,-2662)
+            //   emitter=(94737,51208,1445) rot=(-15.2,173.2,91.2) end=(94073,49043,-2662)
+            //
+            // Byte-identical across every sample, and 4100 units BELOW the
+            // emitter. So LaserEndPoint hands back a stale cached value on a
+            // proxy no matter how often Event_Laser is called, while the
+            // emitter's own transform is live and correct. That also rules out
+            // the other candidate: the emitter is not mis-rotated.
+            //
+            // NS_LaserSight draws its beam from the Niagara user parameter
+            // "User.Beam End" (research/Exports/SurrounDead/Content/FX/
+            // NS_LaserSight.json, which also carries the DynamicBeam.BeamEnd
+            // it feeds). Setting that straight from the emitter's own forward
+            // vector skips the broken endpoint entirely.
+            //
+            // Both spellings are set. UNiagaraComponent::SetVariableVec3 takes
+            // the bare name and prepends the User namespace itself, but which
+            // form a given build wants is not worth a round trip to find out,
+            // and the wrong one is a no-op.
+            //
+            // Known limitation, stated rather than hidden: this projects a fixed
+            // distance along the barrel instead of tracing to whatever the laser
+            // is pointing at, so the dot will not stop on a wall the way the
+            // local player's does. Direction and length will be right, the
+            // termination will not. Tracing properly needs a LineTraceSingle
+            // through the same reflection path and is worth doing only once the
+            // direction is confirmed correct.
+            if (auto* laserComp = prop_obj(reinterpret_cast<UObject*>(a), STR("NS_LaserSight"))) {
+                struct BCtx { UObject* comp; bool ok = false; } bc{ laserComp };
+                seh_invoke([](void* r) {
+                    auto* c = static_cast<BCtx*>(r);
+                    struct FVec { double X = 0, Y = 0, Z = 0; };
+                    FVec loc{}, fwd{};
+                    UFunction* locFn = c->comp->GetFunctionByNameInChain(L"K2_GetComponentLocation");
+                    UFunction* fwdFn = c->comp->GetFunctionByNameInChain(L"GetForwardVector");
+                    if (!locFn || !fwdFn) return;
+                    c->comp->ProcessEvent(locFn, &loc);
+                    c->comp->ProcessEvent(fwdFn, &fwd);
+
+                    constexpr double kBeamLength = 8000.0;
+                    FVec end{ loc.X + fwd.X * kBeamLength,
+                              loc.Y + fwd.Y * kBeamLength,
+                              loc.Z + fwd.Z * kBeamLength };
+
+                    UFunction* setFn = c->comp->GetFunctionByNameInChain(L"SetVariableVec3");
+                    if (!setFn) return;
+                    struct SetParams { RawFGameplayTag Name; FVec Value; } sp{};
+                    sp.Value = end;
+                    for (const wchar_t* n : { STR("Beam End"), STR("User.Beam End") }) {
+                        if (!construct_fname_from_string(n, &sp.Name)) continue;
+                        c->comp->ProcessEvent(setFn, &sp);
+                    }
+                    c->ok = true;
+                }, &bc);
+            }
+
+            // 2026-09-26 diagnostic: on/off is correct now (the log shows
+            // on=1/aiming=1 then on=0/aiming=0), but the beam still points
+            // somewhere other than down the barrel. Two very different causes
+            // fit that: the endpoint LaserEndPoint computes could be nonsense on
+            // a proxy, or the emitter itself could be mis-oriented, in which
+            // case the light points wrong too and nobody noticed in the dark.
+            //
+            // Log the endpoint beside the emitter's own world transform and the
+            // weapon's, once a second while lit. If the endpoint roughly equals
+            // emitter location plus a few metres of the WEAPON's forward vector,
+            // the endpoint is fine and the emitter is rotated; if it is wildly
+            // off or unchanging, the endpoint is the problem. Guessing between
+            // those two would be another round trip.
+            {
+                static uint64_t s_lastUs = 0;
+                const uint64_t nowUs = now_micros();
+                if (nowUs - s_lastUs >= 1'000'000ULL) {
+                    s_lastUs = nowUs;
+                    struct DCtx {
+                        AActor* actor; UObject* laser;
+                        double ex=0, ey=0, ez=0, epitch=0, eyaw=0, eroll=0;
+                        double lx=0, ly=0, lz=0;
+                        bool haveEnd=false, haveXf=false;
+                    } dc{ a, prop_obj(reinterpret_cast<UObject*>(a), STR("NS_LaserSight")) };
+                    seh_invoke([](void* r) {
+                        auto* c = static_cast<DCtx*>(r);
+                        if (c->laser) {
+                            if (UFunction* lf = c->laser->GetFunctionByNameInChain(L"K2_GetComponentLocation")) {
+                                struct LP { double X, Y, Z; } lp{};
+                                c->laser->ProcessEvent(lf, &lp);
+                                c->ex = lp.X; c->ey = lp.Y; c->ez = lp.Z; c->haveXf = true;
+                            }
+                            if (UFunction* rf = c->laser->GetFunctionByNameInChain(L"K2_GetComponentRotation")) {
+                                struct RP { double P, Y, R; } rp{};
+                                c->laser->ProcessEvent(rf, &rp);
+                                c->epitch = rp.P; c->eyaw = rp.Y; c->eroll = rp.R;
+                            }
+                        }
+                        if (UFunction* ef = c->actor->GetFunctionByNameInChain(L"LaserEndPoint")) {
+                            struct EP { double X, Y, Z; } ep{};
+                            c->actor->ProcessEvent(ef, &ep);
+                            c->lx = ep.X; c->ly = ep.Y; c->lz = ep.Z; c->haveEnd = true;
+                        }
+                    }, &dc);
+                    char buf[320];
+                    snprintf(buf, sizeof(buf),
+                        "laser_geom: emitter=(%.0f,%.0f,%.0f) rot(P/Y/R)=(%.1f,%.1f,%.1f) "
+                        "end=(%.0f,%.0f,%.0f) haveEnd=%d haveXf=%d",
+                        dc.ex, dc.ey, dc.ez, dc.epitch, dc.eyaw, dc.eroll,
+                        dc.lx, dc.ly, dc.lz, dc.haveEnd, dc.haveXf);
+                    debug_log(buf);
+                }
+            }
+        }
+    }
+
+    if (player.laserAppliedState == want) return;
+
+    bool touchedAny = false;
+    for (void* raw : it->second) {
+        auto* attachmentActor = static_cast<AActor*>(raw);
+        if (!attachmentActor) continue;
+        auto* laser = prop_obj(reinterpret_cast<UObject*>(attachmentActor), STR("NS_LaserSight"));
+        if (!laser) continue; // not a laser device, which is most of them
+
+        // SetVisibility alone is not enough for a Niagara component: hiding a
+        // particle system does not stop the emitter, so the beam keeps drawing.
+        // Activate and Deactivate are the real controls, and visibility is set
+        // alongside them so the two cannot disagree.
+        UFunction* setVisFn = laser->GetFunctionByNameInChain(L"SetVisibility");
+        UFunction* actFn    = laser->GetFunctionByNameInChain(wantLaser ? L"Activate" : L"Deactivate");
+        struct LCtx { UObject* obj; UFunction* vis; UFunction* act; bool on; }
+            lc{ laser, setVisFn, actFn, wantLaser };
+        const bool ok = seh_invoke([](void* r) {
+            auto* c = static_cast<LCtx*>(r);
+            if (c->vis) {
+                struct Params { bool bNewVisibility; bool bPropagateToChildren = false; } pp{ c->on, false };
+                c->obj->ProcessEvent(c->vis, &pp);
+            }
+            if (c->act) {
+                // Activate takes bReset, Deactivate takes nothing. A one-byte
+                // block is harmless for the latter.
+                struct AParams { bool bReset = true; } ap;
+                c->obj->ProcessEvent(c->act, &ap);
+            }
+        }, &lc);
+        touchedAny = true;
+        debug_log("sync_attachment_laser: on=" + std::to_string(wantLaser) +
+                  " mode=" + std::to_string(laserMode) + " aiming=" + std::to_string(aiming) +
+                  " vis=" + std::to_string(setVisFn != nullptr) +
+                  " act=" + std::to_string(actFn != nullptr) + " ok=" + std::to_string(ok));
+    }
+
+    // Only latch once something was actually driven. Attachment actors can be
+    // mid-spawn, and latching on a pass that touched nothing would skip the
+    // real write when they appear.
+    if (touchedAny) player.laserAppliedState = want;
+}
+
 void ProxyManager::sync_weapon_attachments(RemotePlayer& player)
 {
     if (!player.weaponAttachmentsDirty) return;
@@ -3685,58 +3946,16 @@ void ProxyManager::sync_weapon_attachments(RemotePlayer& player)
                 // Activation state indices, as the sender encodes them (see
                 // protocol.hpp's WeaponAttachmentEntry::activeState): 0 is the
                 // empty tag, 1 to 3 are State1 to State3, 4 is StateADS.
-                constexpr uint8_t kState1 = 1, kState2 = 2, kState3 = 3, kStateADS = 4;
 
                 // The laser is a separate component and has never been driven
                 // at all: NS_LaserSight, a UNiagaraComponent at 0x02E8 on the
                 // light combo. SetIntensity on a SpotLight can only ever produce
                 // a light, which is why no laser has ever appeared on a proxy.
                 //
-                // Which activeState means "laser" is not yet known - the combo
-                // has State1, State2, State3 and StateADS and nothing has mapped
-                // them to modes - so for now the laser follows StateADS (4),
-                // the aim-activated mode, and is switched off for every other
-                // state. If the live cycle shows a different state carrying it,
-                // this is the one place to change.
-                if (auto* laser = prop_obj(reinterpret_cast<UObject*>(attachmentActor), STR("NS_LaserSight"))) {
-                    // Aiming only. State3 was previously included here on the
-                    // assumption that it meant "light and laser together", which
-                    // was never observed - the live cycle only ever produced
-                    // NONE, State1, State2 and StateADS. Confirmed since: the
-                    // laser is meant to show only while aiming, so the guess is
-                    // removed rather than left in on a hunch.
-                    const bool wantLaser = (e->activeState == kStateADS);
-                    // 2026-09-26: SetVisibility alone is not enough for a
-                    // Niagara component. Reported live: the laser stays on after
-                    // aiming ends and only goes out when the flashlight is
-                    // toggled, which is the game's own activation path running
-                    // and doing it properly. Hiding a particle system does not
-                    // stop the emitter, so the effect keeps drawing. Activate
-                    // and Deactivate are the real controls; visibility is set
-                    // too so both agree.
-                    UFunction* setVisFn = laser->GetFunctionByNameInChain(L"SetVisibility");
-                    UFunction* actFn    = laser->GetFunctionByNameInChain(wantLaser ? L"Activate" : L"Deactivate");
-                    struct LCtx { UObject* obj; UFunction* vis; UFunction* act; bool on; }
-                        lc{ laser, setVisFn, actFn, wantLaser };
-                    const bool ok = seh_invoke([](void* raw) {
-                        auto* c = static_cast<LCtx*>(raw);
-                        if (c->vis) {
-                            struct Params { bool bNewVisibility; bool bPropagateToChildren = false; } pp{ c->on, false };
-                            c->obj->ProcessEvent(c->vis, &pp);
-                        }
-                        if (c->act) {
-                            // Activate takes bReset, Deactivate takes nothing. A
-                            // one-byte block is harmless for the latter.
-                            struct AParams { bool bReset = true; } ap;
-                            c->obj->ProcessEvent(c->act, &ap);
-                        }
-                    }, &lc);
-                    debug_log("sync_weapon_attachments: laser on=" + std::to_string(wantLaser) +
-                              " vis=" + std::to_string(setVisFn != nullptr) +
-                              " act=" + std::to_string(actFn != nullptr) +
-                              " ok=" + std::to_string(ok) + " state=" + std::to_string(e->activeState) +
-                              " itemId=" + e->itemId);
-                }
+                // The laser emitter itself is NOT driven here. It depends on
+                // whether the player is aiming right now, which changes far more
+                // often than the attachment payload this function reacts to.
+                // See sync_attachment_laser, which runs every tick.
 
                 if (setIntensityFn) {
                     // 2026-09-26: was "any non-zero state means lit", which is
@@ -5172,6 +5391,16 @@ void ProxyManager::do_proxy_per_player_tick(void* ctxRaw)
     // just above.
     if (ctx->allowDirtyStateSync && player.lightsDirty) {
         self.sync_player_lights(static_cast<AActor*>(player.proxyActor), player);
+    }
+
+    // Laser emitter - every tick, for the same reason as the lights above:
+    // cheap, and a discrete player action that should apply promptly rather
+    // than waiting behind whichever sync happens to be dirty. Unlike the
+    // lights it is not even dirty-flag driven, because what it depends on is
+    // whether the player is aiming this instant. It is change-detected
+    // internally, so the steady state costs a couple of comparisons.
+    if (ctx->allowDirtyStateSync) {
+        self.sync_attachment_laser(player);
     }
 
     // 2026-08-20: the proxySpawnedAtUs 2s grace period documented ~130

@@ -182,6 +182,10 @@ struct RemotePlayer {
     bool weaponAttachmentsDirty = false;
     std::unordered_map<uint8_t, std::string> weaponAttachmentsAppliedKey;
     std::unordered_map<uint8_t, std::vector<void*>> weaponAttachmentActors;
+    // Last on/off actually pushed to a laser emitter, -1 for "never set".
+    // The laser is driven every tick rather than from the attachment payload
+    // (see ProxyManager::sync_attachment_laser), so it needs its own marker.
+    int8_t   laserAppliedState = -1;
 
     // Last PawnAppearance frame received, applied in
     // ProxyManager::sync_pawn_appearance. appliedAppearanceKey is a cheap
