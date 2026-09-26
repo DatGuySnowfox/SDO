@@ -10745,3 +10745,196 @@ guessed at what the game does when it dresses a character. The game will say, an
 this project already owns the pipeline to ask it. That is a deliberate piece of
 work rather than another patch, and it is what should have been started hours
 earlier.
+
+## Session 61 (2026-09-26) - the reference material itself was wrong: a stale-name audit
+
+The clothing chain was fixed earlier in this session by resolving equipment slot
+tags by name instead of by captured ComparisonIndex. What follows started as
+three separate animation complaints and ended in the same place: names in the
+source that no longer exist in the game.
+
+### The complaints
+
+1. Weapon animations did not play on proxies.
+2. A proxy standing still with a rifle used the empty-handed idle, arms at its
+   sides, with the rifle visibly in hand.
+3. ADS never showed on a proxy.
+
+### What the rifle idle turned out to be
+
+`BP_PlayerCharacter_C.GetAnimationInfo`'s decode
+(`research/bytecode/pc1_decoded/BP_PlayerCharacter_C_GetAnimationInfo.decoded.txt`)
+names where the AnimBP gets its idea of what the character is holding. Both of
+its relevant outputs come from one place:
+
+- `ActiveSlot` is `BP_JigHelperComp.ActiveWeapon`, straight through.
+- `EquippedDA` is `GetItemInfo(GetActiveWeapon())`, and `GetActiveWeapon` walks
+  `RepActorsData` for the entry whose `Slot` equals that same tag.
+
+`sync_equipment` did call `set_active_weapon_slot`, but once per weapon slot as
+each was first written, in slot order, and never again. The live log says it
+plainly:
+
+```
+equip-activate slot=11 itemId=AK15 ok=1
+equip-activate slot=12 itemId=BenelliM4 ok=1
+equip-activate slot=13 itemId=BattleReadyGlock ok=1
+equip-activate slot=14 itemId=TacticalHatchet ok=1
+```
+
+A player carrying four weapons posed by the hatchet for the rest of the session.
+Fixed by writing the tag in `sync_active_weapon_hand`, where the drawn slot is
+already known to have changed, with an explicit empty-tag branch for 0xFF.
+
+Worth recording what this was **not**. The heuristic in
+`combat_state_blendspace_for_slot` maps Primary to 1, which was flagged as a
+guess in its own comment and was the obvious suspect. It is correct. The five
+`BlendListByInt` poses resolve to `BS_Jog`, `BS_RifleJog2D`, `BS_PistolJog`,
+`BS_MeleeJog`, `BS_MeleeJog`, and a shotgun reading 1 live means index 1 is the
+rifle family. Live capture then confirmed proxy and local both read
+`BlendSpaceInt=1`. Changing that table would have broken a working thing.
+
+### The diagnostic that did not add up
+
+The same capture reported, on the **local** player:
+
+```
+watch_activeslot: local CActiveSlot="<not found>" InMeleeStance=-1 IsCrouching=-1 BlendSpaceInt=1
+```
+
+Three properties missing and a fourth present, on one object, all four declared
+on `Player_AnimBP_C`. That is not a thing to reason about, so the next step was
+to look rather than think.
+
+### Root cause: the AnimBP was renamed, and the export that says otherwise is stale
+
+There is no `Player_AnimBP_C` in the 5.6 header dump. There is
+`AnimBP_PlayerCharacter`, and it has `BlendSpaceInt` but no `CActiveSlot`, no
+`InMeleeStance` and no `IsCrouching`. Four out of four agreement with the live
+probe.
+
+The variables were renamed with the class:
+
+| 5.3 | 5.6 |
+| --- | --- |
+| `IsADS` | `ADS?` |
+| `IsCrouching` | `Crouched?` |
+| `Falling` | `PlayerFalling?` |
+| `InMeleeStance` | `MeleeStance?` |
+| `Pitch` / `Yaw` | `AOPitch` / `AOYaw` |
+| `LeftHandWeaponLocation` | `PlayerLeftHandWeaponLocation` |
+| `CActiveSlot`, `HeadQuat`, `LeftHandWeaponRotator` | no counterpart |
+
+`BlendSpaceInt` and `HeadRotation` kept their names. That is precisely why this
+survived a whole port: some lookups on the same object worked, so nothing ever
+looked wholesale broken.
+
+The damage was at both ends. `read_local_movement_flags` read
+`IsCrouching`/`IsADS`/`Falling` on the sender and got null for all three, so
+`movState` was always 0 and no crouch, ADS or falling state was ever transmitted.
+`do_aim_write` wrote the same three plus `Pitch`/`Yaw` on the receiver, through
+null. None of it faulted, because a null return from
+`GetValuePtrByPropertyNameInChain` is simply skipped.
+
+**`research/Exports/` is why the wrong names looked right.** The directory is a
+mix of two engine versions with nothing in the layout to distinguish them: the
+2026-09-24 re-extraction refreshed 4754 files and left 9343 pre-September 5.3-era
+files in place. `Player_AnimBP.json` is one of the stale ones, dated 2026-08-12,
+and it lists every 5.3 name in full. Reading it gives a complete, plausible,
+entirely wrong answer. `research/CXXHeaderDump/` is a clean 5.6 dump, confirmed by
+`JigsawItem_DataAsset.hpp` carrying `EquippedTransform` at 0x0280 and
+`EquipSocket` at 0x02E0, the documented 5.6 offsets. Check an export's mtime
+before trusting it, and prefer the header dump for anything about names or
+offsets.
+
+### ADS needed the character, not the AnimBP
+
+Renaming `IsADS` to `ADS?` is necessary but not sufficient. The AnimBP's copy is
+downstream: `GetAnimationInfo` hands out ADS from the character's own `IsADS?`
+bool, and `GetAnimationInfoFromCharacter` pulls it in every update, so a write to
+the AnimBP variable is overwritten by the next pull. Nothing sets `IsADS?` on a
+proxy, because the real one is driven by local input and by the
+`Svr_SetADS`/`MC_ADS` replication pair that a locally spawned stand-in takes no
+part in.
+
+The fix writes the character's bool, which also makes the ordering question moot:
+it no longer matters whether the post-callback runs before or after the pull. This
+is the same lesson already written into this file for `RemoteViewPitch` - feed the
+upstream value the engine's own per-frame computation reads, not the derived
+variable it recomputes from it.
+
+Deliberately not routed through `MC_ADS` or `Svr_SetADS`. Both are thin wrappers
+that jump into `BP_PlayerCharacter`'s ubergraph (entry points 173204 and 173044),
+carrying camera, FOV and server-RPC work a proxy has no business running.
+
+### The audit, and how to repeat it
+
+Rather than fix the names that happened to surface, every name-based lookup in
+`src/` was checked against the 5.6 dump. The method is mechanical and worth
+re-running after any engine bump:
+
+1. Parse `research/CXXHeaderDump/*.hpp` into two indexes, property name to owning
+   class and function name to owning class. 2619 files, 28568 property names,
+   17864 function names.
+2. Extract every string literal passed to `GetValuePtrByPropertyNameInChain`,
+   `GetFunctionByNameInChain`, `prop_obj`, `prop_ptr` and `obj_prop`.
+3. Flag any name with no owner, and print the owning class beside the receiver
+   variable. A name existing on *some* class is not the same as existing on the
+   one being used - that column is what caught `GetSkeletalMeshComponent`.
+
+195 distinct lookups, 11 bad. Two further finds beyond the AnimBP renames:
+
+- `GetSkeletalMeshComponent` was looked up as a UFUNCTION at five sites.
+  `ASkeletalMeshActor` declares no such getter; it has a `SkeletalMeshComponent`
+  **property** at 0x02B0 (`Engine.hpp:11207`). The lookup always failed and always
+  took the `K2_GetRootComponent` fallback, which happened to return the same thing
+  because the skeletal mesh is the root. It only stays true while no Blueprint in
+  the chain reparents its root, and a lookup that can never succeed misleads
+  whoever reads it next. Replaced by `skeletal_or_root_component`, which reads the
+  property first and keeps root as the genuine fallback.
+- `EquipClothingToMesh` does not exist anywhere in the 5.6 dump. It sat in a
+  resolve-retry condition that could never be satisfied, so `find_local_pawn()` - a
+  full reflection scan over every UObject - ran once a second for the entire
+  session chasing it. The clothing path's real entry points are the
+  `MC_AttachClothing`/`Svr_AttachClothing` pair already resolved beside it.
+
+Checked and deliberately left alone: all 21 `Jig.PlayerSlot.*` and all 4
+`Jig.AttachmentActivate.*` tags match the pak's `DT_JigTags` exactly.
+`Velocity` at 0x00D0 on `UMovementComponent` and `bVisible` at 0x01CA on
+`USceneComponent` match the offsets already documented in the source.
+`SkeletalMeshAsset` is a fallback the source itself already notes never matches.
+`MenuWidget_C` has no entry in the dump, but it is a main-menu class and the dump
+was taken in game, so absence there is expected rather than evidence of a rename -
+unloaded classes are a real blind spot in this method.
+
+Four dead names remain on purpose: `CActiveSlot`, `HeadQuat`,
+`LeftHandWeaponRotator` and `bTickInEditor`. All are null-guarded diagnostic
+reads, and each now carries a comment saying it has no 5.6 counterpart rather than
+being quietly deleted.
+
+### Montages
+
+Change detection compared asset pointers, so replaying a montage that was still
+running looked identical to it merely continuing, and was dropped - two reloads in
+a row sent one. It now also reads `Montage_GetPosition` (`Engine.hpp:12236`,
+native, genuinely `float`) and treats a fall in position as a replay. The poll also
+moved out of the 50ms movement rate limit to every tick, so a montage that starts
+and finishes between two samples is no longer missed.
+
+Not verified. The capture afterwards shows eleven `Chr_Roll_Montage` plays, but
+seconds apart, so each had already ended and the old pointer compare would have
+caught them too. Nothing yet proves the replay path fires.
+
+Also worth not re-chasing: firing plays no montage at all. That was established
+2026-08-20 and still holds - it is `MuzzleEffects`/`StartRecoil` on the weapon
+actor, so "fire montages are never sent" was never the gap.
+
+### What this session should be remembered for
+
+The clothing fix earlier in the day and this one have the same shape. In both
+cases the code was correct in structure and wrong in its constants, the constants
+came from a source that was true once, and nothing failed loudly enough to point
+at them. A null return from a name lookup is silent by design. After an engine
+upgrade, "it compiles and does not crash" says nothing about whether any of these
+lookups still resolve, and the audit above is cheap enough that there is no excuse
+for finding this one complaint at a time.
