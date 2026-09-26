@@ -2747,15 +2747,48 @@ static void check_max_vitals_trigger()
                  nw(comp).c_str(), nw(field).c_str(), before, value, after);
         debug_log(vb);
     };
-    set_double(STR("MedicalComponent"),       STR("Health"),        100.0);
-    set_double(STR("Hunger&ThirstComponent"), STR("CurrentHunger"), 100.0);
-    set_double(STR("Hunger&ThirstComponent"), STR("CurrentThirst"), 100.0);
+    // 2026-09-26: full means the component's OWN maximum, not 100.
+    //
+    // Reported live: the health bar sat at 80% after a reset that wrote 100 and
+    // read 100 back, while the client's own profile send also reported
+    // health=100. Both were true. MedicalComponent carries MaxHealth alongside
+    // Health (research/CXXHeaderDump/MedicalComponent.hpp, 0x00E0 and 0x00E8),
+    // and 100/125 is exactly the 80% on screen. The write was landing perfectly
+    // and the target was simply wrong.
+    //
+    // Every vitals component has the same shape - MaxHunger, MaxThirst,
+    // MaxStamina, MaxRadiation - so read each one rather than assuming any of
+    // them tops out at 100. The maxima are logged, since nothing in this project
+    // had ever looked at them.
+    auto read_double = [&](const wchar_t* comp, const wchar_t* field, double fallback) {
+        if (UObject* c = obj_prop(pawn, comp))
+            if (auto* slot = static_cast<double*>(c->GetValuePtrByPropertyNameInChain(field)))
+                return *slot;
+        debug_log(std::string("max_vitals: could not read ") + nw(comp) + "." + nw(field) +
+                  ", falling back to " + std::to_string(fallback));
+        return fallback;
+    };
+
+    const double maxHealth  = read_double(STR("MedicalComponent"),       STR("MaxHealth"),  100.0);
+    const double maxHunger  = read_double(STR("Hunger&ThirstComponent"), STR("MaxHunger"),  100.0);
+    const double maxThirst  = read_double(STR("Hunger&ThirstComponent"), STR("MaxThirst"),  100.0);
+    const double maxStamina = read_double(STR("StaminaComponent"),       STR("MaxStamina"), 100.0);
+    {
+        char mb[160];
+        snprintf(mb, sizeof(mb), "max_vitals: maxima health=%.1f hunger=%.1f thirst=%.1f stamina=%.1f",
+                 maxHealth, maxHunger, maxThirst, maxStamina);
+        debug_log(mb);
+    }
+
+    set_double(STR("MedicalComponent"),       STR("Health"),        maxHealth);
+    set_double(STR("Hunger&ThirstComponent"), STR("CurrentHunger"), maxHunger);
+    set_double(STR("Hunger&ThirstComponent"), STR("CurrentThirst"), maxThirst);
     // Radiation is the one vital where full is bad: CurrentRadiation goes to
     // 0, not 100. Field confirmed in research/CXXHeaderDump/RadiationComponent.hpp
     // (CurrentRadiation 0x00D8, MaxRadiation 0x00E0), and it is the same field
     // vitals_restore writes, so the stored value below has to match.
     set_double(STR("RadiationComponent"),     STR("CurrentRadiation"), 0.0);
-    set_double(STR("StaminaComponent"),       STR("CurrentStamina"),   100.0);
+    set_double(STR("StaminaComponent"),       STR("CurrentStamina"),   maxStamina);
 
     // 2026-09-25: and the STORED values the deferred restore replays, or
     // this write lasts about two seconds.
@@ -2772,13 +2805,13 @@ static void check_max_vitals_trigger()
     // when it lands. These are also what the next ProfileRevision sends, so
     // the values persist to the server instead of reverting on relaunch.
     auto& st = sdo::g_state();
-    st.vitalsHealth = 100.0f;
-    st.vitalsHunger = 100.0f;
-    st.vitalsThirst = 100.0f;
-    st.vitalsStamina = 100.0f;
+    st.vitalsHealth    = static_cast<float>(maxHealth);
+    st.vitalsHunger    = static_cast<float>(maxHunger);
+    st.vitalsThirst    = static_cast<float>(maxThirst);
+    st.vitalsStamina   = static_cast<float>(maxStamina);
     st.vitalsRadiation = 0.0f;
 
-    debug_log("max_vitals: health/hunger/thirst/stamina=100, radiation=0 (live components and stored vitals)");
+    debug_log("max_vitals: vitals set to each component's own maximum, radiation=0 (live components and stored vitals)");
 }
 
 // Raw FName(const wchar_t*, EFindName, void*) constructor, resolved by
