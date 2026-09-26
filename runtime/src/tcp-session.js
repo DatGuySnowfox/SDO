@@ -3,7 +3,7 @@
 // Manages the TCP connection to the gateway.
 //
 // State machine:
-//   disconnected → connecting → authenticating → joining → active
+//   disconnected -> connecting -> authenticating -> joining -> active
 //
 // On any error/close: back to disconnected, schedule reconnect with
 // exponential backoff up to maxReconnectMs.
@@ -81,7 +81,7 @@ class TcpSession {
 
         let frame;
         try { frame = decodeFrame(rawBuf); }
-        catch { return; } // malformed – ignore
+        catch { return; } // malformed - ignore
         if (!frame || !GAME_TO_GW.has(frame.type)) return;
 
         // Overwrite session fields with our authoritative values from the gateway.
@@ -121,7 +121,7 @@ class TcpSession {
 
         const ticket = cfg.joinTicket;
         if (!ticket) {
-            console.error('[tcp] SDO_JOIN_TICKET is not set – cannot authenticate');
+            console.error('[tcp] SDO_JOIN_TICKET is not set - cannot authenticate');
             this._socket.destroy();
             return;
         }

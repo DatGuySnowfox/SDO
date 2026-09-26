@@ -3,7 +3,7 @@
 
 namespace RC::Unreal {
 
-// Opaque – we only need pointers to UClass and UFunction.
+// Opaque - we only need pointers to UClass and UFunction.
 class UFunction : public UObject {};
 class UClass    : public UObject {};
 class UEngine   : public UObject {};

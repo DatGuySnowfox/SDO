@@ -1,4 +1,4 @@
--- SDO – xmake build (alternative to CMake)
+-- SDO - xmake build (alternative to CMake)
 -- Usage: xmake build
 -- Requires UE4SS_SDK env var or set ue4ss_sdk below.
 
@@ -40,7 +40,7 @@ target("SDO")
     set_filename("main.dll")
     set_targetdir("$(buildir)/out")
 
--- Standalone wire-protocol round-trip test — deliberately its own target
+-- Standalone wire-protocol round-trip test - deliberately its own target
 -- rather than a mode of the mod DLL: protocol.cpp has zero UE4SS/UE5
 -- dependency (only stdlib + <Windows.h> for now_micros()), so this builds
 -- and runs as a plain console binary with no game, no UE4SS, and no

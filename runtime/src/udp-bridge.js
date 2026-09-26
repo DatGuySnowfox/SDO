@@ -23,7 +23,7 @@ class UdpBridge {
         });
 
         sock.on('message', (msg, rinfo) => {
-            // Accept only loopback – the game DLL is always local.
+            // Accept only loopback - the game DLL is always local.
             if (rinfo.address !== '127.0.0.1') return;
             this._onFrame(msg);
         });

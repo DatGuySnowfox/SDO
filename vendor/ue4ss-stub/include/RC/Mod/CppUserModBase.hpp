@@ -35,7 +35,7 @@ namespace LuaMadeSimple { class Lua; }
 // class now begins with a std::vector, so simply assigning ModName in a
 // derived constructor wrote a string over a vector's internals and corrupted
 // the heap before the mod could log anything. When UE4SS is updated, re-check
-// this file first — a mismatch here fails long before any of the mod's own
+// this file first - a mismatch here fails long before any of the mod's own
 // logic runs.
 //
 // UE4SS and the mod must also be built with the same C runtime and

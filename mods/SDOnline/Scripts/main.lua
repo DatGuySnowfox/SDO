@@ -5,7 +5,7 @@
 --
 -- File paths are suffixed with this process's PID (via the SDB_CC_PID env var,
 -- set by the C++ mod in the same process) so two mod instances on one machine
--- don't race on the same request/done files — see mod.cpp's init_cc_ipc_paths().
+-- don't race on the same request/done files - see mod.cpp's init_cc_ipc_paths().
 local pidOk, pidVal = pcall(function() return os.getenv("SDB_CC_PID") end)
 local PID_SUFFIX   = (pidOk and pidVal) or ""
 local DONE_FILE    = "C:\\temp\\SDB_cc_done_" .. PID_SUFFIX .. ".json"
@@ -13,7 +13,7 @@ local REQUEST_FLAG = "C:\\temp\\SDB_cc_request_" .. PID_SUFFIX .. ".flag"
 local WIDGET_PATH  = "/Game/UI/Widgets/Player/CharacterBarberMenu.CharacterBarberMenu_C"
 
 if PID_SUFFIX == "" then
-    print("[SDB-CC] WARNING: SDB_CC_PID not set (os.getenv unavailable or C++ mod not loaded yet) — "
+    print("[SDB-CC] WARNING: SDB_CC_PID not set (os.getenv unavailable or C++ mod not loaded yet) - "
         .. "falling back to unsuffixed IPC file names, which is not safe with a second instance "
         .. "on this machine\n")
 end
@@ -89,7 +89,7 @@ local function readChildText(parent, propName, verbose)
         return ""
     end
 
-    -- Method 1: GetText() — UTextBlock / UEditableText / UEditableTextBox
+    -- Method 1: GetText() - UTextBlock / UEditableText / UEditableTextBox
     local ok2, text = pcall(function() return child:GetText() end)
     if ok2 and text ~= nil then
         if type(text) == "string" then
@@ -123,7 +123,7 @@ local function readChildText(parent, propName, verbose)
         if verbose then print("[SDB-CC]   "..propName..": .Text err="..tostring(textProp)) end
     end
 
-    -- Method 3: GetSelectedOption() — UComboBoxString
+    -- Method 3: GetSelectedOption() - UComboBoxString
     local ok6, opt = pcall(function() return child:GetSelectedOption() end)
     if ok6 and type(opt) == "string" then
         if verbose then print("[SDB-CC]   "..propName..": GetSelectedOption()='"..opt.."'") end
@@ -165,7 +165,7 @@ local function writeDone(s)
               .. ',"occupation":' .. tostring(s.occupation) .. '}'
     local f = io.open(DONE_FILE,"w")
     if f then f:write(json); f:close() end
-    print("[SDB-CC] done → "..json)
+    print("[SDB-CC] done -> "..json)
 end
 
 local function fileExists(path)
@@ -209,7 +209,7 @@ local function stopTracking(ctrl, writeJson)
 
     if writeJson then
         local s = buildFinalSnapshot(ctrl)
-        print("[SDB-CC] menu closed — final:")
+        print("[SDB-CC] menu closed - final:")
         print("  Forename="..s.forename.."  Surname="..s.surname
             .."  Sex="..s.sex.."  Age="..s.age.."  Occupation="..s.occupation)
         writeDone(s)
@@ -261,7 +261,7 @@ local function startTracking(widget)
     local ctrl = FindFirstOf("BP_PlayerController_C")
     if ctrl and ctrl:IsValid() then
         lastSnap = ctrlSnapshot(ctrl)
-        print("[SDB-CC] menu opened — initial values:")
+        print("[SDB-CC] menu opened - initial values:")
         print("  Forename="..lastSnap.forename.."  Surname="..lastSnap.surname
             .."  Sex="..lastSnap.sex.."  Age="..lastSnap.age
             .."  Occupation="..lastSnap.occupation)
@@ -329,7 +329,7 @@ if not ok1 then print("[SDB-CC] NotifyOnNewObject ERROR: "..tostring(err1)) end
 
 local function scanForMenu()
     if not pollRunning and not ccCompleted and fileExists(REQUEST_FLAG) then
-        print("[SDB-CC] request flag found — opening creation menu")
+        print("[SDB-CC] request flag found - opening creation menu")
         os.remove(REQUEST_FLAG)
         openCreationMenu()
     end
@@ -384,7 +384,7 @@ local function scanPrimProps(obj, label, names)
                     sv = '"'..s..'"  (via ToString)'
                 else
                     sv = tostring(v)
-                    -- Skip bare UObject/UFunction/AActor pointers — not useful
+                    -- Skip bare UObject/UFunction/AActor pointers - not useful
                     if sv:match("^UObject:") or sv:match("^UFunction:")
                         or sv:match("^AActor:") then sv = nil end
                 end
@@ -453,12 +453,12 @@ end)
 RegisterKeyBind(Key.M, function()
     if not pollRunning then return end
     chosenSex = "Male"
-    print("[SDB-CC] Sex → Male  (press F for Female)")
+    print("[SDB-CC] Sex -> Male  (press F for Female)")
 end)
 RegisterKeyBind(Key.F, function()
     if not pollRunning then return end
     chosenSex = "Female"
-    print("[SDB-CC] Sex → Female  (press M for Male)")
+    print("[SDB-CC] Sex -> Female  (press M for Male)")
 end)
 
 print("[SDB-CC] loaded")

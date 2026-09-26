@@ -22,7 +22,7 @@ public:
     // Walk the function chain and return the named UFunction.
     RC_API UFunction* GetFunctionByNameInChain(const wchar_t* name);
 
-    // Human-readable path (slow – debug only)
+    // Human-readable path (slow - debug only)
     RC_API std::wstring GetFullName(UObject* stopOuter = nullptr) const;
 
     // Type checks

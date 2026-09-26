@@ -1,6 +1,6 @@
 'use strict';
 
-// Wire protocol v3 — matches the binary format used by UE4SS.dll ↔ runtime ↔ gateway.
+// Wire protocol v3 - matches the binary format used by UE4SS.dll <-> runtime <-> gateway.
 // All multi-byte integers are big-endian.
 //
 // Frame layout:

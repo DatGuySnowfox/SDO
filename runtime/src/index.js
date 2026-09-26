@@ -1,6 +1,6 @@
 'use strict';
 
-// SurrounDead Online – client-side runtime
+// SurrounDead Online - client-side runtime
 //
 // Relays binary protocol v3 frames between the game DLL (UDP) and the
 // gateway server (TCP).  Set env vars before launching:
@@ -22,8 +22,8 @@ if (!cfg.joinTicket) {
 }
 
 console.log('SDO runtime');
-console.log(`  udp  bind  127.0.0.1:${cfg.runtimePort}  (← game DLL sends here)`);
-console.log(`  udp  game  ${cfg.gameHost}:${cfg.bindPort}  (→ game DLL receives here)`);
+console.log(`  udp  bind  127.0.0.1:${cfg.runtimePort}  (<- game DLL sends here)`);
+console.log(`  udp  game  ${cfg.gameHost}:${cfg.bindPort}  (-> game DLL receives here)`);
 console.log(`  tcp  gw    ${cfg.gatewayHost}:${cfg.gatewayPort}`);
 
 // tcp and udp reference each other via callbacks; both are defined before
