@@ -2182,13 +2182,29 @@ static AActor* spawn_and_equip_item_visual(AActor* actor, void* itemAsset, bool 
     // backpack-worn case (confirmed via FModel export of
     // SK_Chr_ToplessMale_01_Skeleton.json: "PrimaryWeaponBackpack",
     // "SecondaryWeaponBackpack", both real sockets), and ItemDataAsset
-    // carries the matching FName in PrimaryUnequipSocketBackpack (@0x290)/
-    // SecondaryUnequipSocketBackpack (@0x3F8) (research/CXXHeaderDump/
+    // carries the matching FName in PrimaryUnequipSocketBackpack /
+    // SecondaryUnequipSocketBackpack (research/CXXHeaderDump/
     // JigsawItem_DataAsset.hpp) - read the right one ourselves and redo the
     // attach manually when the proxy currently has a backpack equipped.
-    if (preferBackpackSocket && itemRoot) {
-        const RawFGameplayTag backpackSocket = *reinterpret_cast<RawFGameplayTag*>(
-            reinterpret_cast<uintptr_t>(itemAsset) + (isSecondary ? 0x3F8 : 0x290));
+    //
+    // 2026-09-26: these were read at itemAsset+0x290 and +0x3F8, which are UE
+    // 5.3 offsets. On 5.6 the fields are at 0x02F0 and 0x0458, so this handed
+    // K2_AttachToComponent whatever happened to sit at the old addresses as a
+    // socket name. Attaching to a socket that does not exist drops the weapon,
+    // which is exactly the live report: weapons correctly equipped in data,
+    // lying on the ground. This path only runs when a backpack is worn, which
+    // is why it survived so long. Resolved by name, same as EquipSocket.
+    const wchar_t* backpackField = isSecondary ? STR("SecondaryUnequipSocketBackpack")
+                                               : STR("PrimaryUnequipSocketBackpack");
+    auto* backpackSocketSlot = itemAsset
+        ? prop_ptr<RawFGameplayTag>(reinterpret_cast<UObject*>(itemAsset), backpackField)
+        : nullptr;
+    if (preferBackpackSocket && itemRoot && !backpackSocketSlot)
+        debug_log(std::string("spawn_and_equip_item_visual: ") + narrow(backpackField) +
+                  " not found on item asset, leaving the default attach alone");
+
+    if (preferBackpackSocket && itemRoot && backpackSocketSlot) {
+        const RawFGameplayTag backpackSocket = *backpackSocketSlot;
         auto** meshSlot = static_cast<UObject**>(actor->GetValuePtrByPropertyNameInChain(L"Mesh"));
         UObject* rootMesh = (meshSlot && *meshSlot) ? *meshSlot : nullptr;
         UFunction* reAttachFn = rootMesh ? itemRoot->GetFunctionByNameInChain(L"K2_AttachToComponent") : nullptr;
