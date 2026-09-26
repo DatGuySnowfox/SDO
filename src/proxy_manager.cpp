@@ -3615,7 +3615,45 @@ void ProxyManager::sync_weapon_attachments(RemotePlayer& player)
                                   std::to_string(idx) + " ok=" + std::to_string(ok) +
                                   " itemId=" + e->itemId);
                     }
-                } else if (setIntensityFn) {
+                }
+
+                // 2026-09-26: the game's own call is ADDITIVE, not a
+                // replacement. Jig_SetAttachmentActiveState lives on the
+                // attachment BASE class, so every attachment has it, and making
+                // it an else-if meant the direct component path below stopped
+                // running entirely. Reported live straight after: the proxy's
+                // light no longer turns on or off at all, where before it at
+                // least lit. The native call may well need owning-client state a
+                // proxy does not have, so it is best effort; the direct
+                // component writes are what demonstrably work and now always run.
+                // The laser is a separate component and has never been driven
+                // at all: NS_LaserSight, a UNiagaraComponent at 0x02E8 on the
+                // light combo. SetIntensity on a SpotLight can only ever produce
+                // a light, which is why no laser has ever appeared on a proxy.
+                //
+                // Which activeState means "laser" is not yet known - the combo
+                // has State1, State2, State3 and StateADS and nothing has mapped
+                // them to modes - so for now the laser follows StateADS (4),
+                // the aim-activated mode, and is switched off for every other
+                // state. If the live cycle shows a different state carrying it,
+                // this is the one place to change.
+                if (auto* laser = prop_obj(reinterpret_cast<UObject*>(attachmentActor), STR("NS_LaserSight"))) {
+                    const bool wantLaser = (e->activeState == 4);
+                    UFunction* setVisFn = laser->GetFunctionByNameInChain(L"SetVisibility");
+                    if (setVisFn) {
+                        struct LCtx { UObject* obj; UFunction* fn; bool on; } lc{ laser, setVisFn, wantLaser };
+                        const bool ok = seh_invoke([](void* raw) {
+                            auto* c = static_cast<LCtx*>(raw);
+                            struct Params { bool bNewVisibility; bool bPropagateToChildren = false; } pp{ c->on, false };
+                            c->obj->ProcessEvent(c->fn, &pp);
+                        }, &lc);
+                        debug_log("sync_weapon_attachments: laser visible=" + std::to_string(wantLaser) +
+                                  " ok=" + std::to_string(ok) + " state=" + std::to_string(e->activeState) +
+                                  " itemId=" + e->itemId);
+                    }
+                }
+
+                if (setIntensityFn) {
                     struct CallCtx { UObject* obj; UFunction* fn; float intensity; } callCtx{ comp, setIntensityFn, e->activeState ? 50000.0f : 0.0f };
                     const bool callOk = seh_invoke([](void* raw) {
                         auto* c = static_cast<CallCtx*>(raw);
