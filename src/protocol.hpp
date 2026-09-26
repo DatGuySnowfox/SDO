@@ -243,7 +243,16 @@ struct WeaponAttachmentEntry {
     // (mags, scopes, suppressors have no on/off state). Appended after the
     // original fields so old encodings without it still decode (defaults to
     // false) - same forward-compat approach as PlayerProgress's trailer.
-    bool        active = false;
+    // 2026-09-26: was a bool. A laser-light combo has four activation states
+    // (Jig.AttachmentActivate.State1/State2/State3/StateADS, plus none), and a
+    // bool could only ever say "something is on". The proxy therefore rendered
+    // the light for every state and could never render the laser.
+    //
+    // 0 means off, 1 to 3 are State1 to State3, 4 is StateADS. The wire already
+    // spent a whole byte on this field, so nothing about the format changes -
+    // only what the byte means. Anything non-zero is still "on" for callers
+    // that only care about that.
+    uint8_t     activeState = 0;
 };
 
 struct WeaponAttachments {

@@ -3401,7 +3401,10 @@ void ProxyManager::sync_weapon_attachments(RemotePlayer& player)
             // the cheapest possible path (a light in-place update would be
             // enough), but reuses the already-correct, already-tested spawn
             // pipeline instead of adding a second, narrower update path.
-            key += (e.active ? '1' : '0');
+            // The applied-state key has to carry the STATE, not on/off, or
+            // switching a combo from light to laser looks unchanged and never
+            // resyncs.
+            key += static_cast<char>('0' + (e.activeState <= 9 ? e.activeState : 9));
             key += '|';
         }
         if (key == appliedKey || changedSlotThisCall) continue;
@@ -3554,8 +3557,66 @@ void ProxyManager::sync_weapon_attachments(RemotePlayer& player)
                     }
                 }
 
-                if (setIntensityFn) {
-                    struct CallCtx { UObject* obj; UFunction* fn; float intensity; } callCtx{ comp, setIntensityFn, e->active ? 50000.0f : 0.0f };
+                // 2026-09-26: prefer the game's own entry point.
+                //
+                // ABP_AMainLocalAttachment_C exposes
+                // Jig_SetAttachmentActiveState(FGameplayTag), which is how the
+                // game itself activates an attachment: it takes the state tag
+                // and does whatever that attachment's mode requires, including
+                // the laser this mod has never been able to show. Writing
+                // SetIntensity on a SpotLight, as below, can only ever produce
+                // a light, which is exactly the reported symptom - the proxy's
+                // light works but is always on and no laser ever appears.
+                //
+                // Same shape as BodyPartVisibility: call the function the game
+                // uses rather than emulating a fraction of it. The direct
+                // component calls stay as a fallback for attachments that do
+                // not expose it.
+                UFunction* setStateFn = nullptr;
+                {
+                    auto* aObj = reinterpret_cast<UObject*>(attachmentActor);
+                    struct LookupCtx { UObject* obj; UFunction* fn; } lc{ aObj, nullptr };
+                    if (seh_invoke([](void* raw) {
+                            auto* c = static_cast<LookupCtx*>(raw);
+                            c->fn = c->obj->GetFunctionByNameInChain(L"Jig_SetAttachmentActiveState");
+                        }, &lc))
+                        setStateFn = lc.fn;
+                }
+
+                if (setStateFn) {
+                    // State index to tag name, mirroring the sender's mapping:
+                    // 0 is off (NAME_None), 1 to 3 are State1 to State3, 4 is
+                    // StateADS. An empty tag is how the game represents off.
+                    static const wchar_t* kStateTag[5] = {
+                        nullptr,
+                        STR("Jig.AttachmentActivate.State1"),
+                        STR("Jig.AttachmentActivate.State2"),
+                        STR("Jig.AttachmentActivate.State3"),
+                        STR("Jig.AttachmentActivate.StateADS"),
+                    };
+                    RawFGameplayTag tag{};
+                    const uint8_t idx = (e->activeState < 5) ? e->activeState : uint8_t{0};
+                    bool tagOk = true;
+                    if (idx != 0)
+                        tagOk = construct_fname_from_string(kStateTag[idx], &tag);
+
+                    if (!tagOk) {
+                        debug_log("sync_weapon_attachments: could not build activation tag for state " +
+                                  std::to_string(idx) + ", itemId=" + e->itemId);
+                    } else {
+                        struct StateCtx { UObject* obj; UFunction* fn; RawFGameplayTag tag; }
+                            sctx{ reinterpret_cast<UObject*>(attachmentActor), setStateFn, tag };
+                        const bool ok = seh_invoke([](void* raw) {
+                            auto* c = static_cast<StateCtx*>(raw);
+                            struct Params { RawFGameplayTag Value; } params{ c->tag };
+                            c->obj->ProcessEvent(c->fn, &params);
+                        }, &sctx);
+                        debug_log("sync_weapon_attachments: Jig_SetAttachmentActiveState state=" +
+                                  std::to_string(idx) + " ok=" + std::to_string(ok) +
+                                  " itemId=" + e->itemId);
+                    }
+                } else if (setIntensityFn) {
+                    struct CallCtx { UObject* obj; UFunction* fn; float intensity; } callCtx{ comp, setIntensityFn, e->activeState ? 50000.0f : 0.0f };
                     const bool callOk = seh_invoke([](void* raw) {
                         auto* c = static_cast<CallCtx*>(raw);
                         struct Params { float NewIntensity = 0.0f; } params;
@@ -3563,14 +3624,14 @@ void ProxyManager::sync_weapon_attachments(RemotePlayer& player)
                         c->obj->ProcessEvent(c->fn, &params);
                     }, &callCtx);
                     if (!callOk) debug_log("sync_weapon_attachments: SetIntensity call crashed, caught via SEH, itemId=" + e->itemId);
-                } else if (e->active && reverseFromEndFn) {
+                } else if (e->activeState && reverseFromEndFn) {
                     struct CallCtx { UObject* obj; UFunction* fn; } callCtx{ comp, reverseFromEndFn };
                     const bool callOk = seh_invoke([](void* raw) {
                         auto* c = static_cast<CallCtx*>(raw);
                         c->obj->ProcessEvent(c->fn, nullptr);
                     }, &callCtx);
                     if (!callOk) debug_log("sync_weapon_attachments: NVGTL.ReverseFromEnd call crashed, caught via SEH, itemId=" + e->itemId);
-                } else if (!e->active && playFromStartFn) {
+                } else if (!e->activeState && playFromStartFn) {
                     struct CallCtx { UObject* obj; UFunction* fn; } callCtx{ comp, playFromStartFn };
                     const bool callOk = seh_invoke([](void* raw) {
                         auto* c = static_cast<CallCtx*>(raw);

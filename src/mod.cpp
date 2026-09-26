@@ -1116,7 +1116,9 @@ static void do_weapon_attach_scan(void* ctxRaw)
         // name not raw CI" caution (CI values aren't stable across restarts)
         // only in that this doesn't hardcode any specific CI at all, just its
         // zero-ness.
-        std::unordered_map<std::string, bool> nestedActiveByItemId;
+        // Holds the activation state index, not a bool - see protocol.hpp's
+        // WeaponAttachmentEntry::activeState.
+        std::unordered_map<std::string, uint8_t> nestedActiveByItemId;
         {
             auto* nestedArr = static_cast<AttachChildrenArray*>(
                 childComp ? childComp->GetValuePtrByPropertyNameInChain(STR("AttachChildren")) : nullptr);
@@ -1160,6 +1162,7 @@ static void do_weapon_attach_scan(void* ctxRaw)
                     // toggling the light live says what changes instead of it
                     // being inferred. The behaviour is unchanged until that is
                     // known.
+                    uint8_t stateIdx = 0;
                     {
                         // 2026-09-26: the real tags are State1/State2/State3 and
                         // StateADS. An earlier pass here resolved
@@ -1199,8 +1202,20 @@ static void do_weapon_attach_scan(void* ctxRaw)
                         else if (activateCi == ciStates[3])     which = "StateADS";
                         debug_log("attachment_state: " + nestedItemId + " ActivateState ci=" +
                                   std::to_string(activateCi) + " (" + which + ")");
+
+                        // Map the tag to the wire's state index rather than
+                        // flattening it to on/off. kStateNames is in declaration
+                        // order State1, State2, State3, StateADS, so the index
+                        // is k+1 with 0 reserved for off.
+                        if (activateCi != 0) {
+                            for (int k = 0; k < 4; ++k)
+                                if (activateCi == ciStates[k]) { stateIdx = static_cast<uint8_t>(k + 1); break; }
+                            // A tag we do not recognise still means "on", so
+                            // fall back to State1 rather than reporting off.
+                            if (stateIdx == 0) stateIdx = 1;
+                        }
                     }
-                    nestedActiveByItemId[nestedItemId] = (activateCi != 0);
+                    nestedActiveByItemId[nestedItemId] = stateIdx;
                 }
             }
         }
@@ -1232,7 +1247,7 @@ static void do_weapon_attach_scan(void* ctxRaw)
             wae.weaponSlotIndex = slotIndex;
             wae.containerIndex  = static_cast<uint8_t>(*reinterpret_cast<int32_t*>(entry + 0x18));
             auto activeIt = nestedActiveByItemId.find(attItemId);
-            wae.active = (activeIt != nestedActiveByItemId.end()) && activeIt->second;
+            wae.activeState = (activeIt != nestedActiveByItemId.end()) ? activeIt->second : uint8_t{0};
             wae.itemId          = std::move(attItemId);
             out.entries.push_back(std::move(wae));
         }

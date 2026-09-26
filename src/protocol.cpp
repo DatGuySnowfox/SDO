@@ -617,7 +617,7 @@ std::vector<uint8_t> encode_weapon_attachments(const WeaponAttachments& a)
             std::memcpy(buf.data() + off, e.itemId.data(), idLen);
             off += idLen;
         }
-        buf[off++] = e.active ? 1 : 0;
+        buf[off++] = e.activeState;
     }
 
     return buf;
@@ -643,7 +643,7 @@ std::optional<WeaponAttachments> decode_weapon_attachments(const uint8_t* p, siz
         // Appended field - defaults to false if a peer sends the old,
         // shorter encoding (shouldn't happen once both ends are on this
         // build, but decoding shouldn't hard-fail over one missing byte).
-        e.active = (off < n) ? (p[off++] != 0) : false;
+        e.activeState = (off < n) ? p[off++] : uint8_t{0};
         a.entries.push_back(std::move(e));
     }
 
