@@ -1000,6 +1000,7 @@ struct WeaponAttachScanCtx {
 // __except can't share a stack frame with C++ objects needing unwinding
 // (MSVC C2712), hence the trampoline split - same pattern as this file's own
 // seh_invoke/destroy_actor_safe uses elsewhere.
+static bool construct_fname_from_string(const wchar_t* str, void* out8ByteBuf);
 static void do_weapon_attach_scan(void* ctxRaw)
 {
     auto* ctx = static_cast<WeaponAttachScanCtx*>(ctxRaw);
@@ -1148,6 +1149,37 @@ static void do_weapon_attach_scan(void* ctxRaw)
                             reinterpret_cast<UObject*>(nestedOwner)
                                 ->GetValuePtrByPropertyNameInChain(STR("ActivateState"))))
                         activateCi = *actPtr;
+                    // 2026-09-26: "active" was simply activateCi != 0. Reported
+                    // live: the proxy's weapon light is always on. Only two
+                    // activation tags exist in DT_JigTags,
+                    // Jig.AttachmentActivate.State and
+                    // Jig.AttachmentActivate.StateADS, and neither means off, so
+                    // a non-zero ActivateState may well be describing WHICH mode
+                    // the attachment uses rather than whether it is currently
+                    // lit. Log which tag it actually holds, resolved by name, so
+                    // toggling the light live says what changes instead of it
+                    // being inferred. The behaviour is unchanged until that is
+                    // known.
+                    {
+                        static uint32_t ciState = 0, ciStateADS = 0;
+                        static bool tagsResolved = false;
+                        if (!tagsResolved) {
+                            tagsResolved = true;
+                            uint8_t buf[8];
+                            if (construct_fname_from_string(L"Jig.AttachmentActivate.State", buf))
+                                ciState = *reinterpret_cast<uint32_t*>(buf);
+                            if (construct_fname_from_string(L"Jig.AttachmentActivate.StateADS", buf))
+                                ciStateADS = *reinterpret_cast<uint32_t*>(buf);
+                            debug_log("attachment_state: tags resolved State=" + std::to_string(ciState) +
+                                      " StateADS=" + std::to_string(ciStateADS));
+                        }
+                        const char* which = (activateCi == 0)          ? "NONE"
+                                          : (activateCi == ciState)    ? "State"
+                                          : (activateCi == ciStateADS) ? "StateADS"
+                                                                       : "OTHER";
+                        debug_log("attachment_state: " + nestedItemId + " ActivateState ci=" +
+                                  std::to_string(activateCi) + " (" + which + ")");
+                    }
                     nestedActiveByItemId[nestedItemId] = (activateCi != 0);
                 }
             }
