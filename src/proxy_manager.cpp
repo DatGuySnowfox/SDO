@@ -1529,7 +1529,7 @@ static void anim_probe_body(void* raw)
         }
         char pb[360];
         snprintf(pb, sizeof(pb),
-                 "anim_part: %s#%d %-16s comp=0x%llx mesh=%s bones=%d attachParent=%s leaderPose=0x%llx bVisible=%d isVisible=%d",
+                 "anim_part: %s#%d %-16s comp=0x%llx mesh=%s bones=%d attachParent=%s leaderPose=0x%llx bVisible=%d isVisible=%d flagByte=0x%02x",
                  tag, pass, narrow(partName).c_str(),
                  static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(comp)),
                  (skinned ? (*skinned ? "SET" : "MISSING") : "NOPROP"),
@@ -1537,7 +1537,17 @@ static void anim_probe_body(void* raw)
                  parentName.c_str(),
                  static_cast<unsigned long long>(reinterpret_cast<uintptr_t>(cLeader)),
                  visibleBits ? static_cast<int>(*visibleBits & 0x01) : -1,
-                 effVisible);
+                 effVisible,
+                 // 2026-09-26: the WHOLE packed flag byte, not just bit 0.
+                 // bVisible, bHiddenInGame and bVisibleInRayTracing all live at
+                 // USceneComponent+0x01CA (Engine.hpp lines 3703-3708), so this
+                 // one byte carries every flag that can make IsVisible() false.
+                 // Masking bit 0 and discarding the rest is why nine rounds of
+                 // probing reported a healthy bVisible=1 on a component that was
+                 // hidden the whole time. Diffing this byte between a hidden
+                 // Clothing_Torso and a visible Clothing_Legs names the exact bit
+                 // without needing a debugger.
+                 visibleBits ? static_cast<int>(*visibleBits) : -1);
         debug_log(pb);
 
         double cx = 0, cy = 0, cz = 0;
