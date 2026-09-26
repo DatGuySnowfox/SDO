@@ -897,9 +897,9 @@ static uint8_t read_local_movement_flags(AActor* pawn)
     if (!aparams.ReturnValue) return 0;
 
     auto* anim = aparams.ReturnValue;
-    auto* crouching = static_cast<uint8_t*>(anim->GetValuePtrByPropertyNameInChain(L"IsCrouching"));
-    auto* ads       = static_cast<uint8_t*>(anim->GetValuePtrByPropertyNameInChain(L"IsADS"));
-    auto* falling   = static_cast<uint8_t*>(anim->GetValuePtrByPropertyNameInChain(L"Falling"));
+    auto* crouching = static_cast<uint8_t*>(anim->GetValuePtrByPropertyNameInChain(L"Crouched?"));
+    auto* ads       = static_cast<uint8_t*>(anim->GetValuePtrByPropertyNameInChain(L"ADS?"));
+    auto* falling   = static_cast<uint8_t*>(anim->GetValuePtrByPropertyNameInChain(L"PlayerFalling?"));
 
     uint8_t flags = 0;
     if (crouching && *crouching) flags |= 0x01;
@@ -3463,10 +3463,15 @@ static void check_scan_pickup_class_trigger()
 
     for (UObject* inst : instances) {
         auto* actor = static_cast<AActor*>(inst);
-        UFunction* rootFn = actor->GetFunctionByNameInChain(L"GetSkeletalMeshComponent");
-        if (!rootFn) rootFn = actor->GetFunctionByNameInChain(L"K2_GetRootComponent");
-        UObject* root = nullptr;
-        if (rootFn) actor->ProcessEvent(rootFn, &root);
+        // ASkeletalMeshActor has a SkeletalMeshComponent PROPERTY (0x02B0,
+        // research/CXXHeaderDump/Engine.hpp:11207) and no getter of that name,
+        // so the function lookup this used to lead with could never succeed.
+        // See proxy_manager.cpp's skeletal_or_root_component for the full note.
+        UObject* root = obj_prop(reinterpret_cast<UObject*>(actor), STR("SkeletalMeshComponent"));
+        if (!root) {
+            if (UFunction* rootFn = actor->GetFunctionByNameInChain(L"K2_GetRootComponent"))
+                actor->ProcessEvent(rootFn, &root);
+        }
         const void* attachParent = root
             ? static_cast<void*>(obj_prop(reinterpret_cast<UObject*>(root), STR("AttachParent")))
             : nullptr;
@@ -3632,8 +3637,8 @@ static void log_aimoffset_values(const char* label, AActor* pawn)
     auto* r9  = static_cast<double*>(anim->GetValuePtrByPropertyNameInChain(L"K2Node_PropertyAccess_9"));
     auto* r10 = static_cast<double*>(anim->GetValuePtrByPropertyNameInChain(L"K2Node_PropertyAccess_10"));
     auto* r11 = static_cast<double*>(anim->GetValuePtrByPropertyNameInChain(L"K2Node_PropertyAccess_11"));
-    auto* pitchP = static_cast<double*>(anim->GetValuePtrByPropertyNameInChain(L"Pitch"));
-    auto* yawP   = static_cast<double*>(anim->GetValuePtrByPropertyNameInChain(L"Yaw"));
+    auto* pitchP = static_cast<double*>(anim->GetValuePtrByPropertyNameInChain(L"AOPitch"));
+    auto* yawP   = static_cast<double*>(anim->GetValuePtrByPropertyNameInChain(L"AOYaw"));
 
     char line[420];
     snprintf(line, sizeof(line),
@@ -3707,14 +3712,19 @@ static void log_lefthand_values(const char* label, AActor* pawn)
 
     auto* anim = aparams.ReturnValue;
     auto* propAccess13 = static_cast<double*>(anim->GetValuePtrByPropertyNameInChain(L"K2Node_PropertyAccess_13"));
-    auto* leftHandLoc   = static_cast<double*>(anim->GetValuePtrByPropertyNameInChain(L"LeftHandWeaponLocation"));
+    auto* leftHandLoc   = static_cast<double*>(anim->GetValuePtrByPropertyNameInChain(L"PlayerLeftHandWeaponLocation"));
+    // No 5.6 counterpart: AnimBP_PlayerCharacter carries
+    // PlayerLeftHandWeaponLocation but no rotator beside it
+    // (research/CXXHeaderDump/AnimBP_PlayerCharacter.hpp). Kept as a read so
+    // the log says so out loud rather than silently printing zeros.
     auto* leftHandRot   = static_cast<double*>(anim->GetValuePtrByPropertyNameInChain(L"LeftHandWeaponRotator"));
-    auto* isAds = static_cast<uint8_t*>(anim->GetValuePtrByPropertyNameInChain(L"IsADS"));
-    // "IsADS?" (with a trailing '?') showed up as a distinct name elsewhere
-    // in the FModel export at least once - check both spellings live in
-    // case the plain "IsADS" instance isn't actually the one GetAnimationInfo
-    // FromCharacter's Ads output feeds.
-    auto* isAdsQ = static_cast<uint8_t*>(anim->GetValuePtrByPropertyNameInChain(L"IsADS?"));
+    auto* isAds = static_cast<uint8_t*>(anim->GetValuePtrByPropertyNameInChain(L"ADS?"));
+    // The character's own bool, a genuinely different object from the AnimBP's.
+    // On 5.6 the AnimBP calls its copy "ADS?" and ABP_PlayerCharacter_C calls
+    // its own "IsADS?" (research/CXXHeaderDump/BP_PlayerCharacter.hpp:110), and
+    // the AnimBP pulls from the character - so seeing both at once is what
+    // tells a stale pull apart from a value that was never set.
+    auto* isAdsQ = static_cast<uint8_t*>(pawn->GetValuePtrByPropertyNameInChain(L"IsADS?"));
 
     char line[460];
     snprintf(line, sizeof(line),
@@ -3782,8 +3792,8 @@ static void log_activeslot_values(const char* label, AActor* pawn)
         ? native::fname_to_string(reinterpret_cast<uintptr_t>(activeSlotPtr))
         : std::string("<not found>");
 
-    auto* inMeleeStance = static_cast<uint8_t*>(anim->GetValuePtrByPropertyNameInChain(L"InMeleeStance"));
-    auto* isCrouching    = static_cast<uint8_t*>(anim->GetValuePtrByPropertyNameInChain(L"IsCrouching"));
+    auto* inMeleeStance = static_cast<uint8_t*>(anim->GetValuePtrByPropertyNameInChain(L"MeleeStance?"));
+    auto* isCrouching    = static_cast<uint8_t*>(anim->GetValuePtrByPropertyNameInChain(L"Crouched?"));
     // Session 55: CombatState(int32 BlendSpace)'s entire decoded body is just
     // "BlendSpaceInt = BlendSpace; return;" (bytecode_dump.flag + kismet_disasm.py,
     // no branch/weapon-type check at all) - BlendSpaceInt itself, whatever
@@ -7536,8 +7546,22 @@ static void do_game_tick(bool cleanContext)
     if (now - g_last_move_us.load() >= static_cast<uint64_t>(cfg_move_interval_us)) {
         g_last_move_us.store(now);
         send_movement(pawn);
-        check_local_montage_change(pawn);
     }
+
+    // 4a. Montage poll, every tick.
+    //
+    // 2026-09-26: this used to sit inside the movement rate limit above, which
+    // is 50ms by default (SDO_MOVE_INTERVAL_MS). A montage shorter than that
+    // window, or one that starts and finishes between two samples, was simply
+    // never current when anyone looked, so it never went out. Polling per tick
+    // also makes the replay detection above meaningful, since it needs to see
+    // the position fall rather than land on the same value twice.
+    //
+    // The cost is one zero-argument ProcessEvent plus one position read per
+    // frame, against the per-frame equipment, appearance and proxy work this
+    // same tick already does. Nothing is sent unless the montage actually
+    // changed, so the network side is unaffected.
+    check_local_montage_change(pawn);
 
     // 5. Drive proxy actors.
     UWorld* world = pawn->GetWorld();
@@ -7788,11 +7812,22 @@ static UFunction* s_montagePlayEngine_fn = nullptr;
 // GetCurrentMontage() doesn't expose it, and none of the montages synced
 // this way are precision-timed enough for that to matter visually).
 static UObject* g_last_local_montage = nullptr;
+// Play position of g_last_local_montage as of the previous poll. Only
+// meaningful while that montage is still the current one.
+static float    g_last_local_montage_pos = 0.0f;
+
+// How far the play position has to fall before it counts as a replay rather
+// than sampling noise. A montage advances by one frame's worth per poll (a few
+// hundredths of a second at most), while a genuine replay drops it back to the
+// start of a section, so anything in between is comfortably clear of both.
+static constexpr float kMontageRestartDrop = 0.05f;
 
 struct LocalMontageCtx {
     AActor*    pawn;
     UFunction* fn;
     UObject*   montage = nullptr;
+    float      position = 0.0f;
+    bool       havePosition = false;
     std::string name;
 };
 
@@ -7815,7 +7850,33 @@ static void do_check_local_montage(void* ctxRaw)
     struct Params { UObject* ReturnValue = nullptr; } p;
     ctx->pawn->ProcessEvent(ctx->fn, &p);
     ctx->montage = p.ReturnValue;
-    if (ctx->montage) ctx->name = short_object_name(ctx->montage);
+    if (!ctx->montage) return;
+    ctx->name = short_object_name(ctx->montage);
+
+    // How far into the montage playback currently is, used by the caller to
+    // tell a replay of the current montage from it simply still running.
+    // UAnimInstance::Montage_GetPosition is native (research/CXXHeaderDump/
+    // Engine.hpp:12236, "float Montage_GetPosition(const UAnimMontage*)"), so
+    // the return really is a float here, unlike the double-widened PlayRate on
+    // the Blueprint-exposed PlayMontage this same data ends up driving.
+    //
+    // A failure to read it is not worth reporting: the caller degrades to the
+    // plain asset comparison it has always done, and this runs on every tick.
+    auto** meshSlot = static_cast<UObject**>(ctx->pawn->GetValuePtrByPropertyNameInChain(L"Mesh"));
+    UObject* mesh = (meshSlot && *meshSlot) ? *meshSlot : nullptr;
+    if (!mesh) return;
+    UFunction* getAnimFn = mesh->GetFunctionByNameInChain(L"GetAnimInstance");
+    if (!getAnimFn) return;
+    struct AnimParams { UObject* ReturnValue = nullptr; } ap;
+    mesh->ProcessEvent(getAnimFn, &ap);
+    if (!ap.ReturnValue) return;
+    UFunction* getPosFn = ap.ReturnValue->GetFunctionByNameInChain(L"Montage_GetPosition");
+    if (!getPosFn) return;
+    struct PosParams { UObject* Montage = nullptr; float ReturnValue = 0.0f; } pp;
+    pp.Montage = ctx->montage;
+    ap.ReturnValue->ProcessEvent(getPosFn, &pp);
+    ctx->position     = pp.ReturnValue;
+    ctx->havePosition = true;
 }
 
 static void check_local_montage_change(AActor* pawn)
@@ -7830,9 +7891,28 @@ static void check_local_montage_change(AActor* pawn)
         return;
     }
 
-    if (ctx.montage == g_last_local_montage) return;
-    g_last_local_montage = ctx.montage;
+    // 2026-09-26: a replay of the montage already running is a change too.
+    //
+    // This compared asset pointers and nothing else, so playing the same
+    // montage again while the first play was still running looked identical to
+    // that first play still running, and was dropped. Two reloads in a row sent
+    // one; a burst of the same action sent its opening frame and then went
+    // quiet for as long as the player kept it up.
+    //
+    // The play position sees what the pointer cannot. It only ever counts up
+    // within a single play, so a drop means playback was restarted from an
+    // earlier point. Anything that fails to read a position falls back to the
+    // pointer comparison, which is what this always did.
+    const bool changed   = (ctx.montage != g_last_local_montage);
+    const bool restarted = !changed && ctx.montage && ctx.havePosition &&
+                           ctx.position + kMontageRestartDrop < g_last_local_montage_pos;
+
+    g_last_local_montage     = ctx.montage;
+    g_last_local_montage_pos = ctx.havePosition ? ctx.position : 0.0f;
+
+    if (!changed && !restarted) return;
     if (!ctx.montage || ctx.name.empty()) return;
+    if (restarted) debug_log("check_local_montage_change: replay of \"" + ctx.name + "\"");
 
     sdo::PlayMontageData m;
     m.montageName = ctx.name;
@@ -8449,7 +8529,16 @@ static void check_barber_exit_hook(UObject* obj, UFunction* func)
 
 static void check_attach_clothing_hooks(UObject* obj, UFunction* func)
 {
-    if (!s_svrAttachClothingFn || !s_mcAttachClothingFn || !s_equipClothingToMeshFn) {
+    // 2026-09-26: no longer waits on s_equipClothingToMeshFn.
+    //
+    // "EquipClothingToMesh" is not a function on ABP_PlayerCharacter_C in the
+    // 5.6 dump, or on anything else in it. The clothing path's real entry
+    // points are the MC_AttachClothing/Svr_AttachClothing pair already resolved
+    // here. Keeping it in the condition meant this never considered itself
+    // finished, so find_local_pawn() - a full reflection scan over every
+    // UObject - ran once a second for the whole session chasing a name that
+    // could not resolve.
+    if (!s_svrAttachClothingFn || !s_mcAttachClothingFn) {
         static std::atomic<uint64_t> s_lastTryUs{0};
         const uint64_t now = sdo::now_micros();
         const uint64_t last = s_lastTryUs.load(std::memory_order_relaxed);
@@ -8458,7 +8547,6 @@ static void check_attach_clothing_hooks(UObject* obj, UFunction* func)
             if (AActor* pawn = find_local_pawn()) {
                 if (!s_svrAttachClothingFn) s_svrAttachClothingFn = pawn->GetFunctionByNameInChain(L"Svr_AttachClothing");
                 if (!s_mcAttachClothingFn) s_mcAttachClothingFn = pawn->GetFunctionByNameInChain(L"MC_AttachClothing");
-                if (!s_equipClothingToMeshFn) s_equipClothingToMeshFn = pawn->GetFunctionByNameInChain(L"EquipClothingToMesh");
             }
         }
     }
@@ -8847,8 +8935,8 @@ static void do_aim_write(void* ctxRaw)
     // Yaw property (0x5AF8, right after Pitch at 0x5AF0 - same struct,
     // same GetAimOffset per-frame reset-to-zero this whole mechanism
     // already exists to win against for Pitch).
-    auto* pitchSlot = static_cast<double*>(obj->GetValuePtrByPropertyNameInChain(L"Pitch"));
-    auto* yawSlot   = static_cast<double*>(obj->GetValuePtrByPropertyNameInChain(L"Yaw"));
+    auto* pitchSlot = static_cast<double*>(obj->GetValuePtrByPropertyNameInChain(L"AOPitch"));
+    auto* yawSlot   = static_cast<double*>(obj->GetValuePtrByPropertyNameInChain(L"AOYaw"));
 
     // Temporary diagnostic (2026-08-13): densified to ~20/sec (was
     // 1/sec) at the user's request to actually see the "quickly rotate
@@ -8883,12 +8971,70 @@ static void do_aim_write(void* ctxRaw)
     if (pitchSlot) *pitchSlot = static_cast<double>(player.renderAimPitch);
     if (yawSlot)   *yawSlot   = static_cast<double>(-player.renderAimYaw);
 
-    if (auto* crouching = static_cast<uint8_t*>(obj->GetValuePtrByPropertyNameInChain(L"IsCrouching")))
+    if (auto* crouching = static_cast<uint8_t*>(obj->GetValuePtrByPropertyNameInChain(L"Crouched?")))
         *crouching = (player.movState & 0x01) ? 1 : 0;
     const bool isAds = (player.movState & 0x02) != 0;
-    if (auto* ads = static_cast<uint8_t*>(obj->GetValuePtrByPropertyNameInChain(L"IsADS")))
+    if (auto* ads = static_cast<uint8_t*>(obj->GetValuePtrByPropertyNameInChain(L"ADS?")))
         *ads = isAds ? 1 : 0;
-    if (auto* falling = static_cast<uint8_t*>(obj->GetValuePtrByPropertyNameInChain(L"Falling")))
+
+    // 2026-09-26: ADS has to be set on the CHARACTER, not only on the AnimBP.
+    //
+    // Reported live: proxies never visibly aim down sights. The AnimBP variable
+    // written just above is not the source of truth.
+    // BP_PlayerCharacter_C.GetAnimationInfo (research/bytecode/pc1_decoded/
+    // BP_PlayerCharacter_C_GetAnimationInfo.decoded.txt) hands out its ADS
+    // output straight from the character's own "IsADS?" bool, and the AnimBP's
+    // GetAnimationInfoFromCharacter pulls that in every update. Nothing ever
+    // sets "IsADS?" on a proxy - the real one is driven by local input and by
+    // the Svr_SetADS/MC_ADS replication pair, neither of which a locally
+    // spawned stand-in takes part in - so every pull overwrote the write above
+    // with false and the aim pose never appeared.
+    //
+    // Same lesson as RemoteViewPitch below: feed the upstream value the
+    // engine's own per-frame computation already reads, rather than the derived
+    // AnimBP variable it recomputes from it. Writing the character's bool also
+    // makes the ordering question moot - it no longer matters whether this
+    // post-callback runs before or after the pull, because the pull now
+    // produces the right answer whenever it happens.
+    //
+    // A plain bool property (research/CXXHeaderDump/BP_PlayerCharacter.hpp:110,
+    // 0x138A), resolved by name like every other trailing-"?" property here.
+    // Deliberately not routed through MC_ADS or Svr_SetADS: both are thin
+    // wrappers that jump into BP_PlayerCharacter's ubergraph (entry points
+    // 173204 and 173044), which carries camera, FOV and server-RPC work a
+    // proxy has no business running.
+    auto* proxyActor = static_cast<AActor*>(player.proxyActor);
+    uint8_t* charAds = proxyActor
+        ? static_cast<uint8_t*>(proxyActor->GetValuePtrByPropertyNameInChain(L"IsADS?"))
+        : nullptr;
+    if (charAds) *charAds = isAds ? 1 : 0;
+
+    // One-shot resolution report.
+    //
+    // 2026-09-26: watch_activeslot came back with CActiveSlot="<not found>",
+    // InMeleeStance=-1 and IsCrouching=-1 on the LOCAL player, while
+    // BlendSpaceInt resolved fine on that same AnimInstance. All four are
+    // declared on Player_AnimBP_C, so three of them failing to resolve while a
+    // fourth succeeds is not something to reason about - it would mean the
+    // IsCrouching/IsADS/Falling writes here have been silent no-ops, writing
+    // through null and skipping. Print which pointers this actually got, once,
+    // and stop guessing about it.
+    {
+        static bool s_reported = false;
+        if (!s_reported) {
+            s_reported = true;
+            char buf[256];
+            snprintf(buf, sizeof(buf),
+                     "aim_write_probe: anim IsADS=%d IsCrouching=%d Falling=%d Pitch=%d Yaw=%d | char IsADS?=%d",
+                     obj->GetValuePtrByPropertyNameInChain(L"ADS?")       != nullptr,
+                     obj->GetValuePtrByPropertyNameInChain(L"Crouched?") != nullptr,
+                     obj->GetValuePtrByPropertyNameInChain(L"PlayerFalling?")     != nullptr,
+                     pitchSlot != nullptr, yawSlot != nullptr,
+                     charAds   != nullptr);
+            debug_log(buf);
+        }
+    }
+    if (auto* falling = static_cast<uint8_t*>(obj->GetValuePtrByPropertyNameInChain(L"PlayerFalling?")))
         *falling = (player.movState & 0x04) ? 1 : 0;
 
     // Head-look sync (2026-08-21): Player_AnimBP_C::GetHeadRot (decoded via

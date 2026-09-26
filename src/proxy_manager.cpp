@@ -93,6 +93,34 @@ static UObject* prop_obj(UObject* owner, const wchar_t* name)
     return slot ? *slot : nullptr;
 }
 
+// An item actor's skeletal mesh component, or failing that its root.
+//
+// 2026-09-26: every caller of this used to ask for a UFUNCTION called
+// "GetSkeletalMeshComponent" and fall back to K2_GetRootComponent when it was
+// not found. It was never found. ASkeletalMeshActor, which every pickup actor
+// in this game derives from, exposes SkeletalMeshComponent as a PROPERTY at
+// 0x02B0 and declares no getter at all (research/CXXHeaderDump/Engine.hpp:11207)
+// - so the first lookup always failed and every call silently took the fallback.
+//
+// That happened to work, because ASkeletalMeshActor makes its skeletal mesh the
+// root component, so the fallback usually returned the very thing the first
+// lookup was after. It is still worth fixing: the two only agree as long as no
+// Blueprint in the chain reparents its root, and a lookup that can never
+// succeed is a trap for whoever reads this next and assumes it does.
+//
+// Reads the property first, keeps the root as the genuine fallback.
+static UObject* skeletal_or_root_component(AActor* actor)
+{
+    if (!actor) return nullptr;
+    if (UObject* smc = prop_obj(reinterpret_cast<UObject*>(actor), STR("SkeletalMeshComponent")))
+        return smc;
+    UFunction* rootFn = actor->GetFunctionByNameInChain(L"K2_GetRootComponent");
+    if (!rootFn) return nullptr;
+    UObject* root = nullptr;
+    actor->ProcessEvent(rootFn, &root);
+    return root;
+}
+
 // UE4SS.dll's own UWorld::SpawnActor wrapper unconditionally returns nullptr
 // on this build - live IDA tracing (research/04_ida_investigation_log.md
 // Session 40) followed its real call chain (UWorld::SpawnActor ->
@@ -906,11 +934,9 @@ static bool set_equipped_info_by_slot(AActor* actor, uint8_t slotIndex, const st
 // NOT make the proxy visually hold the weapon - this is the follow-up call
 // needed to actually trigger the visual attach via OnActiveWeaponSlotChanged.
 // Single 8-byte FGameplayTag param, no output params.
-static bool set_active_weapon_slot(AActor* actor, uint8_t slotIndex)
+static bool set_active_weapon_tag(AActor* actor, RawFGameplayTag tag)
 {
     if (!actor) return false;
-    RawFGameplayTag tag;
-    if (!slot_tag(slotIndex, tag)) return false;
 
     const uintptr_t helper = reinterpret_cast<uintptr_t>(
         prop_obj(reinterpret_cast<UObject*>(actor), STR("BP_JigHelperComp")));
@@ -923,6 +949,13 @@ static bool set_active_weapon_slot(AActor* actor, uint8_t slotIndex)
     RawFGameplayTag params = tag;
     helperObj->ProcessEvent(fn, &params);
     return true;
+}
+
+static bool set_active_weapon_slot(AActor* actor, uint8_t slotIndex)
+{
+    RawFGameplayTag tag;
+    if (!slot_tag(slotIndex, tag)) return false;
+    return set_active_weapon_tag(actor, tag);
 }
 
 // BP_JigHelperComp_C.EquipActorToSocket(AActor* ActorRef, bool IsSecondary) -
@@ -2116,10 +2149,7 @@ static AActor* spawn_and_equip_item_visual(AActor* actor, void* itemAsset, bool 
     // regardless of whether the attach itself succeeded. Disable physics on
     // the root/mesh component directly before equipping, same getter fallback
     // chain as spawn_and_attach_weapon_visual.
-    UFunction* itemRootFn = itemActor->GetFunctionByNameInChain(L"GetSkeletalMeshComponent");
-    if (!itemRootFn) itemRootFn = itemActor->GetFunctionByNameInChain(L"K2_GetRootComponent");
-    UObject* itemRoot = nullptr;
-    if (itemRootFn) itemActor->ProcessEvent(itemRootFn, &itemRoot);
+    UObject* itemRoot = skeletal_or_root_component(itemActor);
     if (itemRoot) {
         UFunction* simFn = itemRoot->GetFunctionByNameInChain(L"SetSimulatePhysics");
         if (simFn) {
@@ -2352,12 +2382,8 @@ static AActor* spawn_and_attach_weapon_attachment(AActor* weaponActor, void* att
         debug_log("spawn_and_attach_weapon_attachment: Jig_SetAttachmentInfo NOT FOUND");
     }
 
-    // Weapon's own root (same GetSkeletalMeshComponent/K2_GetRootComponent
-    // fallback chain used everywhere else in this file).
-    UFunction* weaponRootFn = weaponActor->GetFunctionByNameInChain(L"GetSkeletalMeshComponent");
-    if (!weaponRootFn) weaponRootFn = weaponActor->GetFunctionByNameInChain(L"K2_GetRootComponent");
-    UObject* weaponRoot = nullptr;
-    if (weaponRootFn) weaponActor->ProcessEvent(weaponRootFn, &weaponRoot);
+    // Weapon's own root (see skeletal_or_root_component).
+    UObject* weaponRoot = skeletal_or_root_component(weaponActor);
     if (!weaponRoot) {
         debug_log("spawn_and_attach_weapon_attachment: weapon actor has no root/mesh component");
         return attachmentActor;
@@ -3207,10 +3233,7 @@ static bool reattach_weapon_visual_to_socket(AActor* characterActor, AActor* ite
 {
     if (!characterActor || !itemActor) return false;
 
-    UFunction* itemRootFn = itemActor->GetFunctionByNameInChain(L"GetSkeletalMeshComponent");
-    if (!itemRootFn) itemRootFn = itemActor->GetFunctionByNameInChain(L"K2_GetRootComponent");
-    UObject* itemRoot = nullptr;
-    if (itemRootFn) itemActor->ProcessEvent(itemRootFn, &itemRoot);
+    UObject* itemRoot = skeletal_or_root_component(itemActor);
     if (!itemRoot) return false;
 
     auto** meshSlot = static_cast<UObject**>(characterActor->GetValuePtrByPropertyNameInChain(L"Mesh"));
@@ -3267,11 +3290,7 @@ void ProxyManager::sync_active_weapon_hand(AActor* actor, RemotePlayer& player)
     // apply_item_equipped_transform has to be re-run after every re-attach,
     // not just the original spawn.
     auto findItemRoot = [](AActor* itemActor) -> UObject* {
-        UFunction* fn = itemActor->GetFunctionByNameInChain(L"GetSkeletalMeshComponent");
-        if (!fn) fn = itemActor->GetFunctionByNameInChain(L"K2_GetRootComponent");
-        UObject* root = nullptr;
-        if (fn) itemActor->ProcessEvent(fn, &root);
-        return root;
+        return skeletal_or_root_component(itemActor);
     };
 
     // Revert the previously hand-attached weapon back to its holster socket
@@ -3296,6 +3315,43 @@ void ProxyManager::sync_active_weapon_hand(AActor* actor, RemotePlayer& player)
     }
 
     player.handAttachedSlot = newActive;
+
+    // 2026-09-26: ActiveWeapon has to follow the slot actually in hand.
+    //
+    // Reported live: a proxy standing still with a rifle out does not hold the
+    // rifle idle. BP_PlayerCharacter_C.GetAnimationInfo's decode
+    // (research/bytecode/pc1_decoded/BP_PlayerCharacter_C_GetAnimationInfo
+    // .decoded.txt) shows where the animation blueprint gets its idea of what
+    // the character is holding, and it is not anything this mod was keeping
+    // current. It reads BP_JigHelperComp.ActiveWeapon for the ActiveSlot name,
+    // and GetItemInfo(GetActiveWeapon()) for EquippedDA, where GetActiveWeapon
+    // walks RepActorsData for the entry whose Slot equals that same tag. Both
+    // outputs come from that one tag, and the AnimBP pulls them every update
+    // into CActiveSlot, so whatever it says is what the proxy poses as.
+    //
+    // sync_equipment does call set_active_weapon_slot, but once per weapon slot
+    // as each one is first written, so the tag ends up naming whichever of
+    // Primary/Secondary/Sidearm/Melee happened to be written last and then
+    // never moves again. Nothing followed the weapon being drawn or holstered.
+    // A player carrying a rifle and a pistol therefore posed by the wrong one
+    // for the rest of the session.
+    //
+    // Writing it here, where the in-hand slot is already known to have changed,
+    // is the same fix as the slot tags themselves: set the property the game
+    // actually reads. 0xFF means nothing is drawn, which the game represents as
+    // an empty tag - see BP_PlayerCharacter_C.SetCombatStateOnUnequip, which
+    // reaches for combat state 0 exactly when GetActiveWeapon is invalid.
+    {
+        RawFGameplayTag tag{};
+        const bool haveTag = (newActive != 0xFF) && slot_tag(newActive, tag);
+        const bool wroteTag = (newActive == 0xFF || haveTag)
+                                ? set_active_weapon_tag(actor, tag)
+                                : false;
+        Output::send<LogLevel::Normal>(
+            STR("SDO: hand-activeweapon slot={:d} tag_ci={:d} ok={:d}\n"),
+            newActive, tag.ComparisonIndex, wroteTag);
+    }
+
     call_combat_state(actor, combat_state_blendspace_for_slot(newActive));
     if (newActive == 0xFF) return;
 
