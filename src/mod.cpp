@@ -4881,6 +4881,44 @@ static bool drift_part_covered_by_clothing(ComponentDriftCtx* ctx)
             : ctx->key;
     if (!sdo::body_part_is_covered_by_name(ctx->owner, partName)) return false;
 
+    // 2026-09-26: while we are here, make sure the overlay doing the covering is
+    // actually VISIBLE.
+    //
+    // Measured on a proxy: Clothing_Torso and Clothing_Gloves read flag byte
+    // 0x43 while every other component reads 0x63. The single differing bit is
+    // 0x20, which is bVisible - so these two are plainly hidden, and something
+    // calls SetVisibility(false) on them. do_body_part_repair already contains a
+    // "has a mesh but is HIDDEN, re-show it" branch for exactly this, but it
+    // only runs from the repair path, and the covered-check this function
+    // performs short-circuits that path. In other words the guard added earlier
+    // today to stop a pointless repair also switched off the one thing that was
+    // fixing this.
+    //
+    // The re-show is cheap, idempotent and correct whether or not the body part
+    // underneath is covered, so it does not belong behind the repair gate.
+    if (const wchar_t* clothingName = sdo::clothing_over_body_part_by_name(partName)) {
+        if (UObject* cloth = obj_prop(ctx->owner, clothingName)) {
+            void** m = static_cast<void**>(cloth->GetValuePtrByPropertyNameInChain(L"SkinnedAsset"));
+            if (!m) m = static_cast<void**>(cloth->GetValuePtrByPropertyNameInChain(L"SkeletalMesh"));
+            if (m && *m) {
+                bool visible = true; // fail open: never force a call we cannot justify
+                if (UFunction* isVisFn = cloth->GetFunctionByNameInChain(L"IsVisible")) {
+                    struct VP { bool ReturnValue = false; } vp;
+                    cloth->ProcessEvent(isVisFn, &vp);
+                    visible = vp.ReturnValue;
+                }
+                if (!visible) {
+                    if (UFunction* setVis = cloth->GetFunctionByNameInChain(L"SetVisibility")) {
+                        struct SP { bool bNewVisibility = true; bool bPropagateToChildren = false; } sp;
+                        cloth->ProcessEvent(setVis, &sp);
+                        debug_log("component_drift: " + ctx->key + " re-showed hidden overlay " +
+                                  std::string(partName) + " -> its clothing");
+                    }
+                }
+            }
+        }
+    }
+
     // Same one-per-second throttle the repair path uses, so the property walk
     // does not run on every scan tick just because the repair never fires.
     ctx->lastRepairAttemptUs = sdo::now_micros();

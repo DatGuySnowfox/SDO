@@ -1045,6 +1045,12 @@ static bool body_part_is_covered(AActor* actor, const wchar_t* bodyPartName)
     return comp && read_skinned_asset(comp) != nullptr;
 }
 
+const wchar_t* clothing_over_body_part_by_name(const std::string& bodyPartName)
+{
+    const std::wstring wide(bodyPartName.begin(), bodyPartName.end());
+    return clothing_over_body_part(wide.c_str());
+}
+
 bool body_part_is_covered_by_name(AActor* actor, const std::string& bodyPartName)
 {
     // Component names are ASCII, and widen() is not declared this early in the

@@ -84,6 +84,12 @@ void log_anim_state(RC::Unreal::AActor* actor, const char* tag);
 // scan can pass the tail of its own ctx->key ("proxy0:Hands" -> "Hands").
 bool body_part_is_covered_by_name(RC::Unreal::AActor* actor, const std::string& bodyPartName);
 
+// Which clothing overlay sits over a given bare body part, or null when that
+// part has no overlay. Narrow name in, wide name out, for the same reason as
+// the function above: the drift scan holds its part name as the tail of its
+// own ctx->key.
+const wchar_t* clothing_over_body_part_by_name(const std::string& bodyPartName);
+
 // ProxyManager spawns and drives remote-player proxy actors in the UE5 world.
 //
 // Position tracking + actor teleport via K2_SetActorLocationAndRotation, and
