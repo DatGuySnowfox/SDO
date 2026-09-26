@@ -55,3 +55,57 @@ Resolve the "Body Part" FName first. UpdateBodyParts(FName Name) takes the same
 kind of value, and ComponentDriftCtx::bodyPartCi already carries per-part FName
 comparison indices for Torso/Legs/Feet, so the vocabulary is probably already
 known to this codebase.
+
+# Why the game hides a proxy's clothing overlays (2026-09-26)
+
+Decoded from the live 5.6 build, names resolved against the running client.
+
+## OnRep_ClothingTorsoEquipped? and siblings
+
+    if (ClothingTorsoEquipped?) {
+        GetEquippedInfoBySlot( Jig.PlayerSlot.Torso, out Info, out Equipped )
+        ... Svr_AttachClothing( ... "Torso" ... )
+    } else {
+        UpdateBodyParts( "Torso" )        // restores bare skin, hides the overlay
+    }
+
+Resolved: ci=1704958 GetEquippedInfoBySlot, ci=1715440 Svr_AttachClothing,
+ci=1716825 UpdateBodyParts, ci=1572105 Jig.PlayerSlot.Torso,
+ci=1571986 Jig.PlayerSlot.Gloves, ci=1572021 Jig.PlayerSlot.Legs.
+
+So the overlay is hidden because the flag is false on a proxy, and the else
+branch does exactly what it is supposed to do. Nothing is malfunctioning.
+
+It also explains why setting those flags by hand made things strictly worse
+(commit ddaeb91, reverted): the true branch asks GetEquippedInfoBySlot for the
+slot's item, a proxy has none, so it hides the bare skin and attaches nothing,
+leaving the character with neither.
+
+## The tag family in kSlotTagComparisonIndex is the wrong one
+
+proxy_manager.cpp line 470 records that the "Jig.PlayerSlot.*" tags were
+dismissed as "a different, unrelated tag family used for the active-weapon-slot
+UI switching, not equipment slot identity". That conclusion is wrong. The OnRep
+passes Jig.PlayerSlot.Torso directly to GetEquippedInfoBySlot, which is the same
+function set_equipped_info_by_slot's counterpart writes to.
+
+So kSlotTagComparisonIndex is doubly wrong: the wrong tag family, and raw
+ComparisonIndex values captured on 5.3 that this project already knows are not
+stable across builds.
+
+That is the real chain. Equipment writes address slots by a tag the game does
+not use for this, so a proxy's equipped state never becomes true, so every
+ClothingXEquipped? flag stays false, so every OnRep takes its else branch and
+restores bare skin over the overlay we just applied.
+
+## What to do with it
+
+Resolve the slot tags by name at runtime - Jig.PlayerSlot.Torso, .Gloves, .Legs,
+.Feet and the rest - rather than carrying hardcoded indices, then verify
+GetEquippedInfoBySlot reports equipped=true for a proxy slot. If it does, the
+flags can be set honestly and the OnReps will attach clothing themselves rather
+than needing the overlay re-shown behind them.
+
+The current re-show fix stands either way: it is what made the proxy render
+correctly for the first time in this port, and it is cheap and idempotent. But
+it treats the symptom, and this is the cause.

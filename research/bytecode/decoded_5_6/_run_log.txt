@@ -200,3 +200,9 @@ scp: failed to upload file C:/Users/mccau/AppData/Local/Temp/claude/C--Users-mcc
 [84/84] SaveMenu_C::SetCurrentSaveSlotByName -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\SaveMenu_C_SetCurrentSaveSlotByName.decoded.txt
 [83/84] SaveMenu_C::LoadGameFromSlot -> skip: timed out waiting for dump confirmation
 [84/84] SaveMenu_C::SetCurrentSaveSlotByName -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\SaveMenu_C_SetCurrentSaveSlotByName.decoded.txt
+
+=== run started, 4 targets ===
+[1/4] BP_PlayerCharacter_C::OnRep_ClothingTorsoEquipped? -> skip: timed out waiting for dump confirmation
+[2/4] BP_PlayerCharacter_C::OnRep_ClothingGlovesEquipped? -> skip: timed out waiting for dump confirmation
+[3/4] BP_PlayerCharacter_C::OnRep_ClothingLegsEquipped? -> skip: timed out waiting for dump confirmation
+[4/4] BP_PlayerCharacter_C::OnRep_ClothingFeetEquipped? -> skip: timed out waiting for dump confirmation

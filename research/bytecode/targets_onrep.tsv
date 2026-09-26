@@ -1,0 +1,4 @@
+BP_PlayerCharacter_C	OnRep_ClothingTorsoEquipped?
+BP_PlayerCharacter_C	OnRep_ClothingGlovesEquipped?
+BP_PlayerCharacter_C	OnRep_ClothingLegsEquipped?
+BP_PlayerCharacter_C	OnRep_ClothingFeetEquipped?

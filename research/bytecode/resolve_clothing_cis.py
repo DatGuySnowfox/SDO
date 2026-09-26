@@ -22,7 +22,7 @@ import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import auto_decode_pc2 as pipe
 
-TARGETS = [1696234, 137933, 127923, 1534050, 1534053, 1534056, 1716933, 1710744]
+TARGETS = [1704958, 1572105, 1715440, 1571986, 1572021, 1574440, 1716825, 1534053, 1534056, 137933, 1710744]
 
 def main():
     pairs = [(ci, 0) for ci in TARGETS]
