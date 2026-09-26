@@ -3626,6 +3626,11 @@ void ProxyManager::sync_weapon_attachments(RemotePlayer& player)
                 // least lit. The native call may well need owning-client state a
                 // proxy does not have, so it is best effort; the direct
                 // component writes are what demonstrably work and now always run.
+                // Activation state indices, as the sender encodes them (see
+                // protocol.hpp's WeaponAttachmentEntry::activeState): 0 is the
+                // empty tag, 1 to 3 are State1 to State3, 4 is StateADS.
+                constexpr uint8_t kState1 = 1, kState2 = 2, kState3 = 3, kStateADS = 4;
+
                 // The laser is a separate component and has never been driven
                 // at all: NS_LaserSight, a UNiagaraComponent at 0x02E8 on the
                 // light combo. SetIntensity on a SpotLight can only ever produce
@@ -3638,7 +3643,7 @@ void ProxyManager::sync_weapon_attachments(RemotePlayer& player)
                 // state. If the live cycle shows a different state carrying it,
                 // this is the one place to change.
                 if (auto* laser = prop_obj(reinterpret_cast<UObject*>(attachmentActor), STR("NS_LaserSight"))) {
-                    const bool wantLaser = (e->activeState == 4);
+                    const bool wantLaser = (e->activeState == kStateADS || e->activeState == kState3);
                     UFunction* setVisFn = laser->GetFunctionByNameInChain(L"SetVisibility");
                     if (setVisFn) {
                         struct LCtx { UObject* obj; UFunction* fn; bool on; } lc{ laser, setVisFn, wantLaser };
@@ -3654,7 +3659,22 @@ void ProxyManager::sync_weapon_attachments(RemotePlayer& player)
                 }
 
                 if (setIntensityFn) {
-                    struct CallCtx { UObject* obj; UFunction* fn; float intensity; } callCtx{ comp, setIntensityFn, e->activeState ? 50000.0f : 0.0f };
+                    // 2026-09-26: was "any non-zero state means lit", which is
+                    // wrong and was reported as the light staying on after being
+                    // switched off. A live cycle settled the mapping:
+                    //
+                    //   off, as the player sees it -> State1, NOT the empty tag
+                    //   light on                    -> State2
+                    //   aiming                      -> StateADS
+                    //
+                    // captured in order as NONE, State2, StateADS, State2,
+                    // State1, StateADS while the light was toggled and aimed.
+                    // The empty tag appears before the attachment has any mode
+                    // at all, so both it and State1 mean dark. State3 has not
+                    // been observed yet and is assumed to be the both-on mode,
+                    // which is a guess and marked as one.
+                    const bool wantLight = (e->activeState == kState2 || e->activeState == kState3);
+                    struct CallCtx { UObject* obj; UFunction* fn; float intensity; } callCtx{ comp, setIntensityFn, wantLight ? 50000.0f : 0.0f };
                     const bool callOk = seh_invoke([](void* raw) {
                         auto* c = static_cast<CallCtx*>(raw);
                         struct Params { float NewIntensity = 0.0f; } params;
