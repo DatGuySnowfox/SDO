@@ -1161,22 +1161,42 @@ static void do_weapon_attach_scan(void* ctxRaw)
                     // being inferred. The behaviour is unchanged until that is
                     // known.
                     {
-                        static uint32_t ciState = 0, ciStateADS = 0;
+                        // 2026-09-26: the real tags are State1/State2/State3 and
+                        // StateADS. An earlier pass here resolved
+                        // "Jig.AttachmentActivate.State", which does not exist:
+                        // the name came from a grep whose character class was
+                        // [A-Za-z]* and silently dropped the trailing digit, and
+                        // construct_fname_from_string uses EFindName::Add, so it
+                        // CREATED that name and handed back a fresh index
+                        // (2233451, far outside the range of the real ones).
+                        // Reverse-resolving the value actually held, 1570319,
+                        // named it State1 and exposed the mistake. Names that
+                        // resolve are not names that exist.
+                        static uint32_t ciStates[4] = {};
                         static bool tagsResolved = false;
+                        static const wchar_t* kStateNames[4] = {
+                            L"Jig.AttachmentActivate.State1",
+                            L"Jig.AttachmentActivate.State2",
+                            L"Jig.AttachmentActivate.State3",
+                            L"Jig.AttachmentActivate.StateADS",
+                        };
                         if (!tagsResolved) {
                             tagsResolved = true;
-                            uint8_t buf[8];
-                            if (construct_fname_from_string(L"Jig.AttachmentActivate.State", buf))
-                                ciState = *reinterpret_cast<uint32_t*>(buf);
-                            if (construct_fname_from_string(L"Jig.AttachmentActivate.StateADS", buf))
-                                ciStateADS = *reinterpret_cast<uint32_t*>(buf);
-                            debug_log("attachment_state: tags resolved State=" + std::to_string(ciState) +
-                                      " StateADS=" + std::to_string(ciStateADS));
+                            std::string line = "attachment_state: tags resolved";
+                            for (int k = 0; k < 4; ++k) {
+                                uint8_t buf[8];
+                                if (construct_fname_from_string(kStateNames[k], buf))
+                                    ciStates[k] = *reinterpret_cast<uint32_t*>(buf);
+                                line += " [" + std::to_string(k) + "]=" + std::to_string(ciStates[k]);
+                            }
+                            debug_log(line);
                         }
-                        const char* which = (activateCi == 0)          ? "NONE"
-                                          : (activateCi == ciState)    ? "State"
-                                          : (activateCi == ciStateADS) ? "StateADS"
-                                                                       : "OTHER";
+                        const char* which = "OTHER";
+                        if (activateCi == 0)                    which = "NONE(off)";
+                        else if (activateCi == ciStates[0])     which = "State1";
+                        else if (activateCi == ciStates[1])     which = "State2";
+                        else if (activateCi == ciStates[2])     which = "State3";
+                        else if (activateCi == ciStates[3])     which = "StateADS";
                         debug_log("attachment_state: " + nestedItemId + " ActivateState ci=" +
                                   std::to_string(activateCi) + " (" + which + ")");
                     }
