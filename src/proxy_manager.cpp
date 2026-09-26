@@ -2434,6 +2434,21 @@ static AActor* spawn_and_attach_weapon_attachment(AActor* weaponActor, void* att
 // Clothing_* component via SetSkinnedAssetAndUpdate instead, sidestepping
 // the incomplete table entirely. IsPlayerMale? is BP_PlayerCharacter_C's own
 // field (research/CXXHeaderDump/BP_PlayerCharacter.hpp @0x15A0).
+// The item's own ItemId, resolved by name.
+//
+// 2026-09-26: this was read at itemAsset+0x30 in two places. That offset happens
+// to be correct on 5.6 - UJigsawItem_DataAsset_C declares FName ItemId at
+// 0x0030 - but it is a reflected property, so there is no reason to carry the
+// number. Every other hardcoded offset in this file that looked equally safe
+// turned out to have moved between 5.3 and 5.6.
+static std::string item_asset_id_string(void* itemAsset)
+{
+    if (!itemAsset) return std::string();
+    auto* slot = prop_ptr<RawFGameplayTag>(reinterpret_cast<UObject*>(itemAsset), STR("ItemId"));
+    if (!slot) return std::string();
+    return equip_native::fname_to_string(reinterpret_cast<uintptr_t>(slot));
+}
+
 static bool equip_clothing_to_mesh(AActor* actor, void* itemAsset, const wchar_t* clothingCompName)
 {
     if (!actor || !itemAsset) return false;
@@ -2474,7 +2489,7 @@ static bool equip_clothing_to_mesh(AActor* actor, void* itemAsset, const wchar_t
         reinterpret_cast<uintptr_t>(clothingSettings) + (isMale ? 0x00 : 0x08));
     if (!mesh) {
         debug_log("equip_clothing_to_mesh: itemId=\"" +
-            equip_native::fname_to_string(reinterpret_cast<uintptr_t>(itemAsset) + 0x30) +
+            item_asset_id_string(itemAsset) +
             "\" has no " + std::string(isMale ? "male" : "female") + " mesh");
         return false;
     }
@@ -2597,7 +2612,7 @@ static bool equip_clothing_to_mesh(AActor* actor, void* itemAsset, const wchar_t
     if (!bpvCalled) hide_body_part_under_clothing(actor, clothingCompName);
 
     debug_log("equip_clothing_to_mesh: itemId=\"" +
-        equip_native::fname_to_string(reinterpret_cast<uintptr_t>(itemAsset) + 0x30) +
+        item_asset_id_string(itemAsset) +
         "\" set mesh directly (bypassing DT_Clothing)");
     return true;
 }
@@ -3493,8 +3508,31 @@ void ProxyManager::sync_weapon_attachments(RemotePlayer& player)
             // of the earlier crash - same already-proven-safe call site,
             // just the other direction.
             {
-                auto* comp = *reinterpret_cast<UObject**>(
-                    reinterpret_cast<uintptr_t>(attachmentActor) + 0x02E0);
+                // 2026-09-26: this read attachmentActor+0x02E0 and treated it as
+                // the component to drive. On 5.6 that offset is UberGraphFrame
+                // on both attachment classes
+                // (research/CXXHeaderDump/BP_TacticalLaserLightComboLocalAttachment.hpp
+                // and BP_SpecOpsNVGLocalAttachment.hpp) - a Blueprint frame
+                // pointer, not a component at all. Every SetIntensity,
+                // ReverseFromEnd and PlayFromStart here was being aimed at it.
+                //
+                // Worth connecting to a known incident: PlayFromStart on a
+                // freshly spawned proxy crashed the observing client, which was
+                // recorded as a TimelineComponent hazard and left disabled. It
+                // was almost certainly this - the call never reached a
+                // TimelineComponent, it reached an UberGraphFrame.
+                //
+                // The real components on 5.6 are SpotLight (0x02F8) for the
+                // light and NVGTL (0x02F0) for the goggles' timeline. Resolve
+                // whichever this attachment actually has, by name.
+                UObject* comp = nullptr;
+                {
+                    auto* aObj = reinterpret_cast<UObject*>(attachmentActor);
+                    comp = prop_obj(aObj, STR("SpotLight"));
+                    if (!comp) comp = prop_obj(aObj, STR("NVGTL"));
+                    if (!comp)
+                        debug_log("sync_weapon_attachments: neither SpotLight nor NVGTL on attachment, itemId=" + e->itemId);
+                }
 
                 UFunction* setIntensityFn   = nullptr;
                 UFunction* reverseFromEndFn = nullptr;
