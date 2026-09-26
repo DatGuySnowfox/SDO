@@ -4460,6 +4460,17 @@ void ProxyManager::on_pawn_appearance(uint64_t playerId, const PawnAppearance& a
 // reaches a proxy through its own manual equip/movement sync paths.
 void ProxyManager::on_play_montage(uint64_t playerId, const std::string& montageName, float playRate)
 {
+    // 2026-09-26: log every arrival, not just the failures.
+    //
+    // Reported live: weapon animations never play on the proxy. PC1 sent eight
+    // montages in one run - Chr_Roll_Montage, Chr_Rifle_Equip_Montage,
+    // Chr_Rifle_Unequip_Montage - and PC2 logged nothing at all. That was
+    // unreadable rather than informative, because this function only ever spoke
+    // when something failed, so silence meant either "never arrived" or
+    // "arrived and worked". Those need completely different fixes.
+    debug_log("on_play_montage: received \"" + montageName + "\" rate=" +
+              std::to_string(playRate) + " player=" + std::to_string(playerId));
+
     void* montage = resolve_montage_asset(montageName);
     if (!montage) {
         debug_log("on_play_montage: montage \"" + montageName + "\" not found/loaded");
@@ -4487,6 +4498,7 @@ void ProxyManager::on_play_montage(uint64_t playerId, const std::string& montage
     params.Montage  = static_cast<UObject*>(montage);
     params.PlayRate = playRate;
     actor->ProcessEvent(playFn, &params);
+    debug_log("on_play_montage: played \"" + montageName + "\" on proxy");
 }
 
 // 2026-08-20: weapon-fire sync (muzzle flash + recoil). Live trace_trigger.
