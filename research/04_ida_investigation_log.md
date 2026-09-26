@@ -10938,3 +10938,137 @@ at them. A null return from a name lookup is silent by design. After an engine
 upgrade, "it compiles and does not crash" says nothing about whether any of these
 lookups still resolve, and the audit above is cheap enough that there is no excuse
 for finding this one complaint at a time.
+
+### Session 61, later: the laser, the left arm, and a better audit
+
+Three more things came out of the same afternoon, and two of them are the same
+lesson again.
+
+#### The laser: a mode mistaken for an action
+
+The proxy laser was gated on `activeState == StateADS`, on the belief that
+`StateADS` meant "aiming right now". A live capture of the local player's own
+combo says otherwise:
+
+```
+[15:04:11] attachment_state: TacticalLaserLightCombo ActivateState (StateADS)
+   ... unchanged for 40+ samples, over two minutes ...
+[15:04:53] attachment_state: TacticalLaserLightCombo ActivateState (State2)
+[15:04:57] attachment_state: TacticalLaserLightCombo ActivateState (State1)
+[15:04:59] attachment_state: TacticalLaserLightCombo ActivateState (StateADS)
+```
+
+It sat at `StateADS` long after aiming stopped and only moved when the light key
+was pressed. `BP_TacticalLaserLightComboLocalAttachment_C`'s ubergraph agrees: it
+stores the tag into its own `ActivateState` and branches on it, treating it as
+stored configuration. So `StateADS` is "this device is in laser mode", and the
+gate could only ever mean "leave it lit while that mode is selected".
+
+That also explains an older report that toggling the flashlight was the only
+thing that switched the laser off. It was not the flashlight doing anything to
+the laser; it was the mode moving away from `StateADS`.
+
+Second problem underneath it: `sync_weapon_attachments` only runs when the
+attachment payload changes, so no gate placed there could ever have tracked
+aiming. The emitter moved to its own `sync_attachment_laser`, driven every tick
+and change-detected, lit only when the device is in laser mode **and**
+`movState & 0x02`. That second term only started carrying a real value once the
+AnimBP renames landed earlier the same day, which is its own reason this could
+not have worked before.
+
+#### The laser again: a frozen endpoint
+
+On/off then behaved correctly and the beam still pointed somewhere other than
+down the barrel. Rather than choose between "the endpoint is wrong" and "the
+emitter is rotated", both were logged:
+
+```
+emitter=(94740,51249,1441) rot=(-17.5,150.9,91.3)  end=(94073,49043,-2662)
+emitter=(94768,51145,1446) rot=(-14.6,-148.2,91.2) end=(94073,49043,-2662)
+emitter=(94737,51208,1445) rot=(-15.2,173.2,91.2)  end=(94073,49043,-2662)
+```
+
+The endpoint is byte-identical across every sample while the emitter moves and
+rotates, and sits 4100 units below it. So `LaserEndPoint` hands back a stale
+cached value on a proxy however often `Event_Laser` is called, and the emitter's
+transform is live and correct - which rules out the rotation theory outright, and
+incidentally means the tactical light has been pointing the right way all along.
+
+`NS_LaserSight` draws from the Niagara user parameter `User.Beam End`
+(`research/Exports/SurrounDead/Content/FX/NS_LaserSight.json`). That is now
+written directly from the emitter's forward vector via
+`UNiagaraComponent::SetVariableVec3`, skipping the broken endpoint. Stated
+plainly because it will be noticed: this projects a fixed distance rather than
+tracing, so the dot does not stop on a wall the way the local player's does.
+A real trace is worth doing once the direction is confirmed.
+
+#### The left arm: what it is not
+
+`PlayerLeftHandWeaponLocation` is not the problem. Local and proxy read the same
+constant, `(-32.50, -10.00, -2.50)`, on every sample, with `K2Node_PropertyAccess_13`
+identical too. That is the variable this mod would write, and writing it would
+change nothing.
+
+Also ruled out: the proxy reading `IsADS=1` throughout looked like a stuck flag
+until the user confirmed they were aiming for the whole capture. Not a bug.
+
+So the difference is downstream, in the Fabrik node. `fabrik_dump.flag` should
+have answered that months ago and never could: it targeted
+`AnimGraphNode_Fabrik_6` and `_7`, and this AnimBP has `AnimGraphNode_Fabrik`,
+`_1` and `_2`. It resolved nothing and logged "node not found" every time. Another
+stale name, and a telling one - the first audit missed it because the name is
+passed through a loop variable rather than written at the call site.
+
+It has been rewritten to read fields instead of dumping 864 raw bytes to eyeball.
+That was the right call when no struct layout was available, but one is:
+`FAnimNode_Fabrik` is `0x1F0` with `EffectorTransform` at `0xD0`, and its base
+`FAnimNode_SkeletalControlBase` gives `ActualAlpha` at `0x24` and `Alpha` at
+`0x2C` (`research/CXXHeaderDump/AnimGraphRuntime.hpp:292` and `:619`). Those come
+from the dump rather than guesswork, and the base pointer is whatever the name
+lookup resolved, so it stays inside the project's rule on raw offsets.
+
+`ActualAlpha` is the number that decides the next move. A proxy reading `0`
+against a local `1` means the node is never driven, and the fix is its exposed
+input. Both reading `1` with different effector positions means the target is
+wrong, and the fix is to compute and write the effector. Completely different
+jobs, which is the whole reason for measuring rather than taking a fourth guess.
+
+#### A more robust audit
+
+The Fabrik miss showed the first audit was too narrow, so `research/check_names.py`
+now runs two passes, because either alone has a blind spot:
+
+- **call sites** - literals passed straight to a name lookup. Precise: it knows
+  whether a name is wanted as a property or a function, and prints the owning
+  class beside the receiver variable, which is what caught
+  `GetSkeletalMeshComponent`. Blind to any name reaching a lookup via a variable.
+- **wide literals** - every `STR("...")` and `L"..."` in `src/`, classified
+  against every property, function, class and gameplay tag the dump knows. Sees
+  names in tables and loops regardless of use. Noisier, so `Output::send` format
+  strings are filtered; what remains is a short list a human reads in a minute.
+
+Validated against the case that motivated it rather than assumed:
+
+```
+AnimGraphNode_Fabrik_6     absent     <- would now be flagged
+AnimGraphNode_Fabrik       FOUND
+IsADS                      absent
+ADS?                       FOUND
+```
+
+Re-running it found **no further renames**. The only names without an owner are
+the four already known and deliberately kept: `CActiveSlot`, `HeadQuat` and
+`LeftHandWeaponRotator`, which have no 5.6 counterpart, and `bTickInEditor`,
+an engine property the dump does not cover, read into a `(void)` no-op.
+
+Of the remaining unclassified literals, the ones worth naming are benign for
+understandable reasons: `Beam End` is a Niagara user parameter rather than a
+UObject property, so a header dump cannot contain it; `MenuWidget_C` and its
+`BndEvt__...` handler are main-menu classes and the dump was taken in game, so
+their absence is expected rather than evidence of a rename. Unloaded classes
+remain a real blind spot in this method and always will.
+
+One limitation to keep in mind when reading pass 1: it reports `Pitch` as found,
+because `Pitch` exists on `FRotator` and elsewhere. Existing *somewhere* is not
+existing on the class being used, which is exactly why the owner column is
+printed and why neither pass removes the need to read it.
