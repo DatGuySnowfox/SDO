@@ -480,38 +480,96 @@ struct RawFGuid { uint32_t A = 0, B = 0, C = 0, D = 0; };
 // so it was very likely from that same wrong tag family, not a real
 // regression. Live-tested only as of this write - not yet confirmed to
 // persist correctly for slots 0-10/12-20 the way slot 11 was in Session 45.
-static constexpr int32_t kSlotTagComparisonIndex[EQUIPMENT_SLOT_COUNT] = {
-    1730464, // 0  Facewear
-    1730538, // 1  Headwear
-    1730452, // 2  Eyewear
-    1730374, // 3  Accessory
-    1730635, // 4  Torso
-    1730516, // 5  Gloves
-    1730551, // 6  Legs
-    1730477, // 7  Feet
-    1730439, // 8  Container
-    1730414, // 9  BodyArmor
-    1730387, // 10 Backpack
-    1730576, // 11 Primary
-    1730591, // 12 Secondary
-    1730607, // 13 Sidearm
-    1730562, // 14 Melee
-    1730622, // 15 Throwable
-    1730502, // 16 Flashlight
-    1730400, // 17 Binoculars
-    1730528, // 18 GPS
-    1730427, // 19 Compass
-    1730488, // 20 FishingRod
+// The real equipment slot tags, by name.
+//
+// 2026-09-26: this was a table of 21 hardcoded FName ComparisonIndex values
+// captured live on 2026-08-11 against the 5.3 build. It was wrong twice over.
+//
+// Wrong family first. The comment this replaces recorded that the
+// "Jig.PlayerSlot.*" tags had been dismissed as "a different, unrelated tag
+// family used for the active-weapon-slot UI switching, not equipment slot
+// identity". The 5.6 decode of OnRep_ClothingTorsoEquipped? settles it: that
+// function hands Jig.PlayerSlot.Torso straight to GetEquippedInfoBySlot, which
+// is the read counterpart of the very function set_equipped_info_by_slot
+// writes through. They are the equipment slot tags.
+//
+// Wrong values second. A raw ComparisonIndex is an index into the engine's name
+// table, which is rebuilt per process and certainly per game build - something
+// this project already knows and wrote down (see the gameplay-tag CI memory and
+// the 5.3-to-5.6 offset sweeps). Carrying 21 of them across an engine upgrade
+// was never going to survive.
+//
+// Together those explain the whole clothing chain: equipment writes addressed
+// slots by a tag the game does not use for this, so a proxy's equipped state
+// never became true, so every ClothingXEquipped? flag stayed false, so every
+// OnRep took its else branch and restored bare skin over the overlay we had
+// just applied.
+//
+// Names come from the pak's own DefaultGameplayTags.json, already extracted to
+// research/Exports/SurrounDead/Config/ and tabulated in the investigation log.
+// Three of them were independently confirmed against the live client this
+// session: Torso, Gloves and Legs resolved to the same tags the OnReps use.
+static constexpr const wchar_t* kSlotTagNames[EQUIPMENT_SLOT_COUNT] = {
+    STR("Jig.PlayerSlot.Facewear"),        //  0
+    STR("Jig.PlayerSlot.Headwear"),        //  1
+    STR("Jig.PlayerSlot.Eyewear"),         //  2
+    STR("Jig.PlayerSlot.Accessory"),       //  3
+    STR("Jig.PlayerSlot.Torso"),           //  4
+    STR("Jig.PlayerSlot.Gloves"),          //  5
+    STR("Jig.PlayerSlot.Legs"),            //  6
+    STR("Jig.PlayerSlot.Feet"),            //  7
+    STR("Jig.PlayerSlot.Container"),       //  8
+    STR("Jig.PlayerSlot.BodyArmor"),       //  9
+    STR("Jig.PlayerSlot.Backpack"),        // 10
+    STR("Jig.PlayerSlot.PrimaryWeapon"),   // 11  the four weapon slots carry an
+    STR("Jig.PlayerSlot.SecondaryWeapon"), // 12  extra "Weapon" suffix the wire
+    STR("Jig.PlayerSlot.SidearmWeapon"),   // 13  protocol's own names do not
+    STR("Jig.PlayerSlot.MeleeWeapon"),     // 14
+    STR("Jig.PlayerSlot.Throwable"),       // 15
+    STR("Jig.PlayerSlot.Flashlight"),      // 16
+    STR("Jig.PlayerSlot.Binoculars"),      // 17
+    STR("Jig.PlayerSlot.GPS"),             // 18
+    STR("Jig.PlayerSlot.Compass"),         // 19
+    STR("Jig.PlayerSlot.FishingRod"),      // 20
 };
 
-// Returns false (and leaves *out untouched) for any slot whose
-// ComparisonIndex hasn't been filled in above yet.
+// Builds the slot's FGameplayTag by name, once per slot per process.
+//
+// FGameplayTag is a single FName, so the existing 8-byte {ComparisonIndex,
+// Number} construction is exactly right - only the source of the value changes,
+// from a number captured against another build to the name the game itself
+// uses. Resolving at runtime is what makes this survive the next engine bump.
 static bool slot_tag(uint8_t slotIndex, RawFGameplayTag& out)
 {
     if (slotIndex >= EQUIPMENT_SLOT_COUNT) return false;
-    const int32_t ci = kSlotTagComparisonIndex[slotIndex];
-    if (ci == 0) return false;
-    out = RawFGameplayTag{ ci, 0 };
+
+    // narrow() is declared further down this file; these names are ASCII, so
+    // widen inline rather than reordering declarations for a log line.
+    auto nw = [](const wchar_t* w) {
+        std::string o;
+        for (; w && *w; ++w) o.push_back(static_cast<char>(*w));
+        return o;
+    };
+
+    static RawFGameplayTag cache[EQUIPMENT_SLOT_COUNT] = {};
+    static bool resolved[EQUIPMENT_SLOT_COUNT] = {};
+    static bool failed[EQUIPMENT_SLOT_COUNT] = {};
+
+    if (!resolved[slotIndex]) {
+        if (failed[slotIndex]) return false; // do not retry a name that will not resolve
+        RawFGameplayTag tag{};
+        if (!construct_fname_from_string(kSlotTagNames[slotIndex], &tag) ||
+            tag.ComparisonIndex == 0) {
+            failed[slotIndex] = true;
+            debug_log(std::string("slot_tag: could not resolve ") + nw(kSlotTagNames[slotIndex]));
+            return false;
+        }
+        cache[slotIndex] = tag;
+        resolved[slotIndex] = true;
+        debug_log("slot_tag: " + nw(kSlotTagNames[slotIndex]) + " -> ci=" +
+                  std::to_string(tag.ComparisonIndex));
+    }
+    out = cache[slotIndex];
     return true;
 }
 
