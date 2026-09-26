@@ -3643,19 +3643,43 @@ void ProxyManager::sync_weapon_attachments(RemotePlayer& player)
                 // state. If the live cycle shows a different state carrying it,
                 // this is the one place to change.
                 if (auto* laser = prop_obj(reinterpret_cast<UObject*>(attachmentActor), STR("NS_LaserSight"))) {
-                    const bool wantLaser = (e->activeState == kStateADS || e->activeState == kState3);
+                    // Aiming only. State3 was previously included here on the
+                    // assumption that it meant "light and laser together", which
+                    // was never observed - the live cycle only ever produced
+                    // NONE, State1, State2 and StateADS. Confirmed since: the
+                    // laser is meant to show only while aiming, so the guess is
+                    // removed rather than left in on a hunch.
+                    const bool wantLaser = (e->activeState == kStateADS);
+                    // 2026-09-26: SetVisibility alone is not enough for a
+                    // Niagara component. Reported live: the laser stays on after
+                    // aiming ends and only goes out when the flashlight is
+                    // toggled, which is the game's own activation path running
+                    // and doing it properly. Hiding a particle system does not
+                    // stop the emitter, so the effect keeps drawing. Activate
+                    // and Deactivate are the real controls; visibility is set
+                    // too so both agree.
                     UFunction* setVisFn = laser->GetFunctionByNameInChain(L"SetVisibility");
-                    if (setVisFn) {
-                        struct LCtx { UObject* obj; UFunction* fn; bool on; } lc{ laser, setVisFn, wantLaser };
-                        const bool ok = seh_invoke([](void* raw) {
-                            auto* c = static_cast<LCtx*>(raw);
+                    UFunction* actFn    = laser->GetFunctionByNameInChain(wantLaser ? L"Activate" : L"Deactivate");
+                    struct LCtx { UObject* obj; UFunction* vis; UFunction* act; bool on; }
+                        lc{ laser, setVisFn, actFn, wantLaser };
+                    const bool ok = seh_invoke([](void* raw) {
+                        auto* c = static_cast<LCtx*>(raw);
+                        if (c->vis) {
                             struct Params { bool bNewVisibility; bool bPropagateToChildren = false; } pp{ c->on, false };
-                            c->obj->ProcessEvent(c->fn, &pp);
-                        }, &lc);
-                        debug_log("sync_weapon_attachments: laser visible=" + std::to_string(wantLaser) +
-                                  " ok=" + std::to_string(ok) + " state=" + std::to_string(e->activeState) +
-                                  " itemId=" + e->itemId);
-                    }
+                            c->obj->ProcessEvent(c->vis, &pp);
+                        }
+                        if (c->act) {
+                            // Activate takes bReset, Deactivate takes nothing. A
+                            // one-byte block is harmless for the latter.
+                            struct AParams { bool bReset = true; } ap;
+                            c->obj->ProcessEvent(c->act, &ap);
+                        }
+                    }, &lc);
+                    debug_log("sync_weapon_attachments: laser on=" + std::to_string(wantLaser) +
+                              " vis=" + std::to_string(setVisFn != nullptr) +
+                              " act=" + std::to_string(actFn != nullptr) +
+                              " ok=" + std::to_string(ok) + " state=" + std::to_string(e->activeState) +
+                              " itemId=" + e->itemId);
                 }
 
                 if (setIntensityFn) {
