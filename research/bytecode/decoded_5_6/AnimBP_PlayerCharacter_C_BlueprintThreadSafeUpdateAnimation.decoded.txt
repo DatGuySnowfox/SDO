@@ -1,0 +1,51 @@
+; AnimBP_PlayerCharacter_C::BlueprintThreadSafeUpdateAnimation
+; dump: [08:54:15.012] bytecode_dump: wrote 191 bytes to AnimBP_PlayerCharacter_C_BlueprintThreadSafeUpdateAnimation.bin
+
+; C:/temp/GIT/SDO/research/bytecode/decoded_5_6/AnimBP_PlayerCharacter_C_BlueprintThreadSafeUpdateAnimation.bin  (191 bytes from file offset 0x0)
+[0x0000] EX_LetBool
+  variable:
+    [0x0001] EX_LocalVariable prop=0x26a080db780
+  assignment:
+    [0x000a] EX_CallMath func=0x7ff41c4251b8
+      param[0]:
+        [0x0013] EX_InstanceVariable prop=0x26a080dc180
+      param[1]:
+        [0x001c] EX_InstanceVariable prop=0x26a080dc300
+      EX_EndFunctionParms
+[0x0026] EX_JumpIfNot -> 0x0039 if NOT:
+  [0x002b] EX_LocalVariable prop=0x26a080db780
+[0x0034] EX_Jump -> 0x00bc
+[0x0039] EX_LocalVirtualFunction FName(ci=1843118, disp=0, num=0)
+  EX_EndFunctionParms
+[0x0047] EX_LocalVirtualFunction FName(ci=1843108, disp=0, num=0)
+  EX_EndFunctionParms
+[0x0055] EX_LocalVirtualFunction FName(ci=1843089, disp=0, num=0)
+  EX_EndFunctionParms
+[0x0063] EX_LocalVirtualFunction FName(ci=1843082, disp=0, num=0)
+  param[0]:
+    [0x0070] EX_LocalVariable prop=0x26b2e11ac00
+  EX_EndFunctionParms
+[0x007a] EX_Let property=0x0
+  variable:
+    [0x0083] EX_LocalVariable prop=0x26b2e11ab90
+  assignment:
+    [0x008c] EX_Cast conv_type=4
+      [0x008e] EX_LocalVariable prop=0x26b2e11ac00
+[0x0097] EX_LocalVirtualFunction FName(ci=1843095, disp=0, num=0)
+  param[0]:
+    [0x00a4] EX_LocalVariable prop=0x26b2e11ab90
+  EX_EndFunctionParms
+[0x00ae] EX_LocalVirtualFunction FName(ci=1843100, disp=0, num=0)
+  EX_EndFunctionParms
+[0x00bc] EX_Return
+  [0x00bd] EX_Nothing
+[0x00be] EX_EndOfScript
+
+
+; ---- Resolved names ----
+; ci=1843082 num=0 -> "GetAimOffset"
+; ci=1843089 num=0 -> "GetHeadRot"
+; ci=1843095 num=0 -> "GetLean"
+; ci=1843100 num=0 -> "GetLeftHandLoc"
+; ci=1843108 num=0 -> "GetSpeed&Direction"
+; ci=1843118 num=0 -> "GetThreadSafeBooleans"

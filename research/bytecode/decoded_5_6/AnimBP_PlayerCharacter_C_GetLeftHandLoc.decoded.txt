@@ -1,0 +1,12 @@
+; AnimBP_PlayerCharacter_C::GetLeftHandLoc
+; dump: [08:54:03.948] bytecode_dump: wrote 30 bytes to AnimBP_PlayerCharacter_C_GetLeftHandLoc.bin
+
+; C:/temp/GIT/SDO/research/bytecode/decoded_5_6/AnimBP_PlayerCharacter_C_GetLeftHandLoc.bin  (30 bytes from file offset 0x0)
+[0x0000] EX_Let property=0x26a080dbe00
+  variable:
+    [0x0009] EX_InstanceVariable prop=0x26a080dbe00
+  assignment:
+    [0x0012] EX_InstanceVariable prop=0x26a080da800
+[0x001b] EX_Return
+  [0x001c] EX_Nothing
+[0x001d] EX_EndOfScript

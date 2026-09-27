@@ -1,0 +1,203 @@
+; AnimBP_PlayerCharacter_C::GetAimOffset
+; dump: [08:54:28.464] bytecode_dump: wrote 891 bytes to AnimBP_PlayerCharacter_C_GetAimOffset.bin
+
+; C:/temp/GIT/SDO/research/bytecode/decoded_5_6/AnimBP_PlayerCharacter_C_GetAimOffset.bin  (891 bytes from file offset 0x0)
+[0x0000] EX_JumpIfNot -> 0x0064 if NOT:
+  [0x0005] EX_InstanceVariable prop=0x26a080dbd80
+[0x000e] EX_Let property=0x26b2e119b60
+  variable:
+    [0x0017] EX_InstanceVariable prop=0x26b2e119b60
+  assignment:
+    [0x0020] EX_DoubleConst 0.0
+[0x0029] EX_Let property=0x26b2e119af0
+  variable:
+    [0x0032] EX_InstanceVariable prop=0x26b2e119af0
+  assignment:
+    [0x003b] EX_DoubleConst 0.0
+[0x0044] EX_Let property=0x26b2e119a80
+  variable:
+    [0x004d] EX_InstanceVariable prop=0x26b2e119a80
+  assignment:
+    [0x0056] EX_DoubleConst 0.0
+[0x005f] EX_Jump -> 0x0378
+[0x0064] EX_Let property=0x26a080db600
+  variable:
+    [0x006d] EX_LocalVariable prop=0x26a080db600
+  assignment:
+    [0x0076] EX_CallMath func=0x7ff41c4439f8
+      param[0]:
+        [0x007f] EX_InstanceVariable prop=0x26a080da680
+      param[1]:
+        [0x0088] EX_InstanceVariable prop=0x26a080da700
+      param[2]:
+        [0x0091] EX_InstanceVariable prop=0x26a080da780
+      EX_EndFunctionParms
+[0x009b] EX_Let property=0x26a080dd680
+  variable:
+    [0x00a4] EX_LocalVariable prop=0x26a080dd680
+  assignment:
+    [0x00ad] EX_CallMath func=0x7ff41c43cbb8
+      param[0]:
+        [0x00b6] EX_InstanceVariable prop=0x26a080da600
+      param[1]:
+        [0x00bf] EX_LocalVariable prop=0x26a080db600
+      EX_EndFunctionParms
+[0x00c9] EX_CallMath func=0x7ff41c425fb8
+  param[0]:
+    [0x00d2] EX_LocalVariable prop=0x26a080dd680
+  param[1]:
+    [0x00db] EX_LocalVariable prop=0x26b2e119700
+  param[2]:
+    [0x00e4] EX_LocalVariable prop=0x26b2e119690
+  param[3]:
+    [0x00ed] EX_LocalVariable prop=0x26b2e119620
+  EX_EndFunctionParms
+[0x00f7] EX_Let property=0x0
+  variable:
+    [0x0100] EX_LocalVariable prop=0x26b2e1194d0
+  assignment:
+    [0x0109] EX_Cast conv_type=4
+      [0x010b] EX_LocalVariable prop=0x26b2e119690
+[0x0114] EX_Let property=0x26b2e119cb0
+  variable:
+    [0x011d] EX_InstanceVariable prop=0x26b2e119cb0
+  assignment:
+    [0x0126] EX_LocalVariable prop=0x26b2e1194d0
+[0x012f] EX_LetBool
+  variable:
+    [0x0130] EX_LocalVariable prop=0x26a080db700
+  assignment:
+    [0x0139] EX_CallMath func=0x7ff41c43d018
+      param[0]:
+        [0x0142] EX_InstanceVariable prop=0x26a080dbf00
+      EX_EndFunctionParms
+[0x014c] EX_LetBool
+  variable:
+    [0x014d] EX_LocalVariable prop=0x26a080db680
+  assignment:
+    [0x0156] EX_CallMath func=0x7ff41c424f18
+      param[0]:
+        [0x015f] EX_LocalVariable prop=0x26a080db700
+      param[1]:
+        [0x0168] EX_InstanceVariable prop=0x26a080dbf80
+      EX_EndFunctionParms
+[0x0172] EX_Let property=0x26b2e1197e0
+  variable:
+    [0x017b] EX_LocalVariable prop=0x26b2e1197e0
+  assignment:
+    [0x0184] EX_CallMath func=0x7ff41c443678
+      param[0]:
+        [0x018d] EX_DoubleConst 0.25
+      param[1]:
+        [0x0196] EX_DoubleConst 0.1
+      param[2]:
+        [0x019f] EX_LocalVariable prop=0x26a080db680
+      EX_EndFunctionParms
+[0x01a9] EX_Let property=0x26b2e119540
+  variable:
+    [0x01b2] EX_LocalVariable prop=0x26b2e119540
+  assignment:
+    [0x01bb] EX_CallMath func=0x7ff41c43b098
+      param[0]:
+        [0x01c4] EX_InstanceVariable prop=0x26b2e119cb0
+      param[1]:
+        [0x01cd] EX_LocalVariable prop=0x26b2e1197e0
+      EX_EndFunctionParms
+[0x01d7] EX_Let property=0x26b2e119b60
+  variable:
+    [0x01e0] EX_InstanceVariable prop=0x26b2e119b60
+  assignment:
+    [0x01e9] EX_LocalVariable prop=0x26b2e119540
+[0x01f2] EX_LetBool
+  variable:
+    [0x01f3] EX_LocalVariable prop=0x26a080db700
+  assignment:
+    [0x01fc] EX_CallMath func=0x7ff41c43d018
+      param[0]:
+        [0x0205] EX_InstanceVariable prop=0x26a080dbf00
+      EX_EndFunctionParms
+[0x020f] EX_LetBool
+  variable:
+    [0x0210] EX_LocalVariable prop=0x26a080db680
+  assignment:
+    [0x0219] EX_CallMath func=0x7ff41c424f18
+      param[0]:
+        [0x0222] EX_LocalVariable prop=0x26a080db700
+      param[1]:
+        [0x022b] EX_InstanceVariable prop=0x26a080dbf80
+      EX_EndFunctionParms
+[0x0235] EX_Let property=0x26b2e119850
+  variable:
+    [0x023e] EX_LocalVariable prop=0x26b2e119850
+  assignment:
+    [0x0247] EX_CallMath func=0x7ff41c443678
+      param[0]:
+        [0x0250] EX_DoubleConst 0.3
+      param[1]:
+        [0x0259] EX_DoubleConst 0.15
+      param[2]:
+        [0x0262] EX_LocalVariable prop=0x26a080db680
+      EX_EndFunctionParms
+[0x026c] EX_Let property=0x26b2e1195b0
+  variable:
+    [0x0275] EX_LocalVariable prop=0x26b2e1195b0
+  assignment:
+    [0x027e] EX_CallMath func=0x7ff41c43b098
+      param[0]:
+        [0x0287] EX_InstanceVariable prop=0x26b2e119cb0
+      param[1]:
+        [0x0290] EX_LocalVariable prop=0x26b2e119850
+      EX_EndFunctionParms
+[0x029a] EX_Let property=0x26b2e119af0
+  variable:
+    [0x02a3] EX_InstanceVariable prop=0x26b2e119af0
+  assignment:
+    [0x02ac] EX_LocalVariable prop=0x26b2e1195b0
+[0x02b5] EX_LetBool
+  variable:
+    [0x02b6] EX_LocalVariable prop=0x26a080db700
+  assignment:
+    [0x02bf] EX_CallMath func=0x7ff41c43d018
+      param[0]:
+        [0x02c8] EX_InstanceVariable prop=0x26a080dbf00
+      EX_EndFunctionParms
+[0x02d2] EX_LetBool
+  variable:
+    [0x02d3] EX_LocalVariable prop=0x26a080db680
+  assignment:
+    [0x02dc] EX_CallMath func=0x7ff41c424f18
+      param[0]:
+        [0x02e5] EX_LocalVariable prop=0x26a080db700
+      param[1]:
+        [0x02ee] EX_InstanceVariable prop=0x26a080dbf80
+      EX_EndFunctionParms
+[0x02f8] EX_Let property=0x26b2e1198c0
+  variable:
+    [0x0301] EX_LocalVariable prop=0x26b2e1198c0
+  assignment:
+    [0x030a] EX_CallMath func=0x7ff41c443678
+      param[0]:
+        [0x0313] EX_DoubleConst 0.5
+      param[1]:
+        [0x031c] EX_DoubleConst 0.25
+      param[2]:
+        [0x0325] EX_LocalVariable prop=0x26a080db680
+      EX_EndFunctionParms
+[0x032f] EX_Let property=0x26b2e119770
+  variable:
+    [0x0338] EX_LocalVariable prop=0x26b2e119770
+  assignment:
+    [0x0341] EX_CallMath func=0x7ff41c43b098
+      param[0]:
+        [0x034a] EX_InstanceVariable prop=0x26b2e119cb0
+      param[1]:
+        [0x0353] EX_LocalVariable prop=0x26b2e1198c0
+      EX_EndFunctionParms
+[0x035d] EX_Let property=0x26b2e119a80
+  variable:
+    [0x0366] EX_InstanceVariable prop=0x26b2e119a80
+  assignment:
+    [0x036f] EX_LocalVariable prop=0x26b2e119770
+[0x0378] EX_Return
+  [0x0379] EX_Nothing
+[0x037a] EX_EndOfScript

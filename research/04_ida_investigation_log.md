@@ -11200,3 +11200,175 @@ on join". Flags are now swept before every deploy alongside the logs.
 `debug_log` honours `SDO_LOG_DIR`, and PC1 sets it to the checkout, so clearing
 only `%APPDATA%\SDO` left an 18 MB log in place and produced an empty sender-side
 capture. The clear script reads the variable now.
+
+## Session 62 (2026-09-27) - the left elbow, four dead ends, and two incidents
+
+### The elbow, confirmed and isolated
+
+The proxy's left arm does not bend at the elbow. Measured with every control
+passing, which took three attempts to achieve:
+
+```
+bone_dist: local  uparmL-handL=41.5..43.8   clavL-handL=39.2   handL-pelvis=30.2
+bone_dist: proxy  uparmL-handL=58.7..59.5   clavL-handL=52.6   handL-pelvis=47.8
+fixed (both):     clavL-uparmL=13.20  uparmL-loarmL=33.95  loarmL-handL=27.11
+```
+
+Maximum `upperarm_l`-`hand_l` is 33.95 + 27.11 = 61.06, a fully straight arm.
+The proxy reads 58.7, i.e. 97% extended; the local player reads 41.5, clearly
+bent. `handL-handR` barely differs (35.3 against 34.0), so both hands hold the
+same grip and the whole assembly is pushed away from the body with the elbow
+locked. That is one hold pose swapped for another, not a broken joint.
+
+**Controls that had to be true at once**, each learned by getting it wrong:
+
+1. `BlendSpaceInt=1` on both. The first capture compared an unarmed local player
+   against an armed proxy and the numbers looked clean.
+2. `AOPitch` near zero on both. The second compared a proxy pitched 35 degrees
+   down against a local player at +11. An aim offset rotates the upper body, so
+   a 47 degree gap moves the arms regardless of the elbow.
+3. The three fixed bone lengths identical. Without this, nothing rules out the
+   two characters being on different skeletons.
+
+Bone names are enumerated, not guessed: `GetSocketLocation` returns the
+COMPONENT's own location for a name that does not exist, so a bad name yields a
+plausible number rather than an error. The enumeration confirmed `clavicle_l`,
+`upperarm_l`, `lowerarm_l`, `hand_l`, `Head`, `Pelvis`.
+
+Distances rather than positions, because the two characters stand in different
+places and face different ways; pairwise distances are invariant under any rigid
+transform.
+
+### Every readable input matches
+
+Ruled out by measurement, not opinion:
+
+- Named AnimBP variables: `ADS?`, `Crouched?`, `Sprinting?`, `CrouchedSprinting?`,
+  `MeleeStance?`, `PlayerFalling?`, `ClimbingLadder?`, `Swimming?`,
+  `SwimmingUnderWater?`, `InVehicle?`, `InFirstPerson?`, `PlayerDead?`,
+  `Fishing?`, plus velocity, direction and lean. All identical.
+- The fifteen fast-path booleans (`K2Node_PropertyAccess`, `_7`, `_11`,
+  `_14`..`_25`) that feed the graph directly, bypassing the named variables.
+  All zero on both.
+- `PlayerRef`: correct and matching the owning pawn on both, `match=1`.
+- `IsAnyMontagePlaying`: 0 on both.
+- Base mesh: same bone count (69), same anim class, same skeleton.
+- `PlayerLeftHandWeaponLocation`: the same constant on both. Its own decode
+  (`AnimBP_PlayerCharacter_C::GetLeftHandLoc`) is two instructions, copying one
+  instance variable to another, so it is not computed from the weapon at all.
+
+### Four dead ends, and the single reason behind them
+
+Every technique that reads animation runtime state from the **UAnimInstance**
+returned empty or default. The one that works reads from the **mesh component**.
+
+1. **Node class properties.** All 17 skeletal-control nodes (3 Fabrik, 14
+   ModifyBone) read `ActualAlpha` exactly 0.00 with `effector=(0,0,0)` on both
+   sides, on visible characters mid-animation.
+2. **`GetBoneTransform`.** Crashed the client on join. It returns an
+   `FTransform`, 16-byte aligned, needing a padded parameter block; the
+   hand-built struct accounted for neither. `GetSocketLocation` returns a plain
+   `FVector` and has no such trap.
+3. **`GetCurrentStateName`.** Returns a value `fname_to_string` cannot resolve
+   for machine 0 and zero for machines 1 and 2, while the identical resolve
+   pattern works for `GetBoneName`.
+4. **`GetInstanceStateWeight`.** Every state on every machine reads zero weight,
+   on both sides, which cannot be true of a running animation.
+
+**The reason:** this AnimBP is thread-safe - its update function is literally
+`BlueprintThreadSafeUpdateAnimation`. UE5 evaluates thread-safe animation on
+worker threads through `FAnimInstanceProxy`, which owns the live node and
+state-machine data. The `UAnimInstance` UObject only holds values copied across
+at sync points. The variables that DID read correctly (`ADS?`, `AOPitch`,
+`BlendSpaceInt`) are exactly the ones copied back.
+
+So reflection against the `UAnimInstance` cannot answer this. Going further needs
+`FAnimInstanceProxy` read directly, or a debugger.
+
+### The 5.6 AnimBP had never been decoded
+
+The previous decode run targeted `Player_AnimBP_C::GetLeftHandLoc` and timed out.
+That is the 5.3 name. The rename broke the decode pipeline along with everything
+else, so every belief about this AnimBP's logic came from the stale 5.3 export.
+Decoding `AnimBP_PlayerCharacter_C` for the first time turned up its update
+function's early-out:
+
+```
+if (<math fn>(PlayerDead?, K2Node_PropertyAccess)) return;
+```
+
+which skips every `Get*` call when it fires. `K2Node_PropertyAccess` is the
+fast-path pull of `PlayerRef->PlayerDead?`. Checked live: `fastpath_dead=0` and
+`PlayerRef` valid on both, so it is not firing on the proxy.
+
+Targets are in `research/bytecode/targets_animbp56.txt`.
+
+### Parameter blocks: stop computing the size
+
+Four `ProcessEvent` parameter blocks were written from the dump this session and
+several were wrong, one fatally.
+
+- `FName` is two `int32`s, so it aligns to **4**, not 8. The bone-name
+  enumerator put the return at 0x08 and silently produced zeros for all 69
+  bones, which reads as "this skeleton has no bones". A wrong offset can be as
+  quiet as a wrong name.
+- `ProcessEvent` writes the function's entire `ParmsSize` into whatever buffer it
+  is handed. If the real size exceeds the modelled fields it walks off the end
+  and corrupts the stack. Buffers are now padded well past any plausible size
+  with fields read back by offset, so correctness no longer depends on the
+  arithmetic.
+
+### Incident: the naked characters
+
+Both machines lost their gear during this session. Neither was data loss.
+
+**Cause.** The flag sweep run before each deploy removed every `*.flag` in
+`%APPDATA%\SDO`. That directory mixes diagnostic flags with CONFIGURATION, and
+`disable_auto_continue.flag` is configuration. Removing it re-enabled the mod's
+auto-click of Continue on the main menu, the client came up on something other
+than the intended save, and on PC1 it then saved over that slot. The sweep is now
+name-based (`clearflags.ps1` lists diagnostic flags explicitly) and must never
+wildcard that directory again.
+
+**Recovery.** Loading the correct slot restored both. Nothing was actually lost.
+Two false alarms along the way worth recording so the same reasoning is not
+repeated:
+
+- A 445-byte `player_progress` row shrinking to 106 bytes looked like server-side
+  corruption. It was the client saving an empty profile after failing to load,
+  a symptom rather than a cause.
+- `test2`'s `PlayerInfo.sav` at 4217 bytes against `test1`'s 23322 looked like a
+  stripped inventory. Save sizes vary by character, and the slot was fine. The
+  in-game thumbnail is `Thumb.sav`, not `Thumb.jpg`; the `.jpg` was a month stale
+  and reading its date produced the wrong conclusion.
+
+### Two real server-side findings
+
+**Join tickets live two minutes.** `server/src/config.js:49` defaults
+`ticketTtlMs` to `120_000`, overridable by `SDO_TICKET_TTL_MS`, and the live
+server sets no override. The launcher mints a ticket then launches the game; if
+the game takes longer than two minutes to reach authentication, the ticket is
+already expired and the gateway logs `reason=expired_ticket`. The
+`ticketTtlMs: 3600000` in `server/settings.json` is not read at all, because the
+containerised server has no `settings.json` in `/app`.
+
+**The directory entry is incomplete.** `https://sdo.ristl.org/v1/servers` returns
+the server with `ticketPort: None` and `players: None`, which is why the launcher
+shows 0 players and has no ticket endpoint to call.
+
+### The server does not serve inventory
+
+`PlayerProgress` already carries the full inventory as `containers`, with
+per-container columns, rows and item lists, plus level, XP and the stats
+trailer. The client sends it every 30 seconds and the server stores it (1371
+bytes for one player). On join the gateway replays it verbatim as
+`PlayerProgressRestore`, and the client decodes the whole payload and then uses
+**position and the five vitals only** (`src/mod.cpp`, the
+`PlayerProgressRestore` case). Containers are discarded.
+
+So gear lives entirely in the local save, and no server-side restore can bring it
+back. Making the server authoritative is not a rewrite - the data already arrives
+- but the apply side needs real game functions found by decode rather than raw
+writes, and it has to be ordered against the game's own load or the two will
+race. It is the highest-value remaining work: it prevents lost characters, where
+the elbow is cosmetic.

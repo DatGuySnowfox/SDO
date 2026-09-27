@@ -3901,6 +3901,75 @@ static void log_activeslot_values(const char* label, AActor* pawn)
             d(STR("PlayerVelocity")), d(STR("PlayerDirection")), d(STR("PlayerLean")),
             d(STR("AOPitch")), d(STR("AOYaw")));
         debug_log(line);
+
+        // 2026-09-27: every fast-path boolean, local against proxy.
+        //
+        // The elbow difference is now confirmed under full controls (both at
+        // BlendSpaceInt=1, both level, fixed bone lengths identical, both
+        // stationary): uparmL-handL reads 58.7 on the proxy against 43.0 local,
+        // where 61.06 is a fully straight arm. handL-handR barely differs, so
+        // both hands hold the same grip and the whole arm assembly is pushed
+        // out with the elbow locked - a different hold pose, not a broken joint.
+        //
+        // Every NAMED AnimBP variable has been compared and they match. But the
+        // graph is also fed directly by the fast-path property copies, which
+        // bypass the named variables entirely, and those have never been looked
+        // at. Fifteen of them are booleans (research/CXXHeaderDump/
+        // AnimBP_PlayerCharacter.hpp: K2Node_PropertyAccess, _7, _11, and
+        // _14 through _25), and a BlendListByBool switching between a relaxed
+        // and an extended hold is exactly the shape of the difference measured.
+        //
+        // This is the last unexplored input surface. If they all match too, the
+        // divergence is not in the inputs at all.
+        {
+            std::string bits = std::string("anim_fastpath: ") + label;
+            auto one = [&](const wchar_t* n, const char* lbl) {
+                auto* p = static_cast<uint8_t*>(anim->GetValuePtrByPropertyNameInChain(n));
+                bits += std::string(" ") + lbl + "=" + (p ? std::to_string((int)*p) : std::string("x"));
+            };
+            one(STR("K2Node_PropertyAccess"), "PA");
+            one(STR("K2Node_PropertyAccess_7"), "7");
+            one(STR("K2Node_PropertyAccess_11"), "11");
+            for (int i = 14; i <= 25; ++i) {
+                wchar_t nm[48]; swprintf(nm, 48, L"K2Node_PropertyAccess_%d", i);
+                char lb[8];     snprintf(lb, sizeof(lb), "%d", i);
+                one(nm, lb);
+            }
+            debug_log(bits);
+        }
+
+        // 2026-09-27: PlayerRef and the fast-path copies.
+        //
+        // The 5.6 decode of BlueprintThreadSafeUpdateAnimation (the first ever
+        // taken - the previous decode run targeted Player_AnimBP_C, the 5.3
+        // name, and timed out, so every belief about this AnimBP's logic came
+        // from the stale 5.3 export) opens with an early-out:
+        //
+        //     if (<math fn>(PlayerDead?, K2Node_PropertyAccess)) return;
+        //
+        // and skips every Get* call when it fires. K2Node_PropertyAccess is the
+        // fast-path pull of PlayerRef->PlayerDead?, which makes PlayerRef the
+        // thing that matters. If it is null on a proxy, the whole property-access
+        // fast path is dead and every pulled value sits at its default.
+        //
+        // That reframes the "every boolean is identical" result: they were all
+        // zero on both sides, which is exactly what defaults look like. Identical
+        // defaults and identical live values are indistinguishable when the live
+        // values happen to be false, and nothing so far has told them apart.
+        {
+            auto* refSlot = static_cast<UObject**>(
+                anim->GetValuePtrByPropertyNameInChain(STR("PlayerRef")));
+            UObject* playerRef = (refSlot && *refSlot) ? *refSlot : nullptr;
+            char rb[256];
+            snprintf(rb, sizeof(rb),
+                "anim_ref: %s PlayerRef=0x%llx pawn=0x%llx match=%d fastpath_dead=%d",
+                label,
+                reinterpret_cast<unsigned long long>(playerRef),
+                reinterpret_cast<unsigned long long>(pawn),
+                playerRef == reinterpret_cast<UObject*>(pawn),
+                b(STR("K2Node_PropertyAccess")));
+            debug_log(rb);
+        }
     }
 
     // 2026-09-26, second attempt: bone POSITIONS, compared as distances.
@@ -4063,6 +4132,53 @@ static void log_activeslot_values(const char* label, AActor* pawn)
     // measurement is still worth taking - identical animation inputs with a
     // different-looking pose means the bones are the only thing left to check -
     // but it needs a correctly built call, not this one.
+
+    // 2026-09-27: find the active state by WEIGHT, not by name.
+    //
+    // GetCurrentStateName returns an FName this project cannot resolve (see
+    // the note below), so ask a question that needs no name:
+    // GetInstanceStateWeight(MachineIndex, StateIndex) returns a float, and the
+    // state a machine is in is the one weighted 1. Printing the weighted index
+    // is enough to tell local and proxy apart, and an index is what a fix would
+    // act on anyway.
+    //
+    // Worth doing because every input is now known to match: named variables,
+    // the fifteen fast-path booleans, PlayerRef, montage state, skeleton,
+    // stance and aim pitch, all identical while the elbow differs by 16 units.
+    // Either the graph evaluates differently from identical inputs, or
+    // something being read as live is really a default.
+    {
+        struct WCtx { UObject* anim; int32_t m, st; float w; bool ok; };
+        std::string wline = std::string("anim_weights: ") + label;
+        for (int32_t m = 0; m < 3; ++m) {
+            std::string active;
+            for (int32_t stt = 0; stt < 12; ++stt) {
+                WCtx wc{ anim, m, stt, 0.0f, false };
+                seh_invoke([](void* raw) {
+                    auto* c = static_cast<WCtx*>(raw);
+                    UFunction* fn = c->anim->GetFunctionByNameInChain(L"GetInstanceStateWeight");
+                    if (!fn) return;
+                    // int32 MachineIndex, int32 StateIndex, float return at
+                    // 0x08. Padded well past ParmsSize on purpose: several
+                    // hand-sized parameter blocks have been wrong this week,
+                    // one of them fatally.
+                    struct Params { int32_t M; int32_t S; float Ret; uint8_t pad[52]; } pm{};
+                    static_assert(offsetof(Params, Ret) == 0x08, "float return offset");
+                    pm.M = c->m; pm.S = c->st;
+                    c->anim->ProcessEvent(fn, &pm);
+                    c->w = pm.Ret; c->ok = true;
+                }, &wc);
+                if (wc.ok && wc.w > 0.01f) {
+                    char b[32];
+                    snprintf(b, sizeof(b), "%d(%.2f)", stt, wc.w);
+                    if (!active.empty()) active += ",";
+                    active += b;
+                }
+            }
+            wline += " sm" + std::to_string(m) + "=[" + (active.empty() ? "none" : active) + "]";
+        }
+        debug_log(wline);
+    }
 
     // 2026-09-26: which STATE each state machine is in, and whether a montage
     // is playing.

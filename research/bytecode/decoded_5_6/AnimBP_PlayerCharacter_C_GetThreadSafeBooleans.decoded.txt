@@ -1,0 +1,93 @@
+; AnimBP_PlayerCharacter_C::GetThreadSafeBooleans
+; dump: [08:54:09.657] bytecode_dump: wrote 317 bytes to AnimBP_PlayerCharacter_C_GetThreadSafeBooleans.bin
+
+; C:/temp/GIT/SDO/research/bytecode/decoded_5_6/AnimBP_PlayerCharacter_C_GetThreadSafeBooleans.bin  (317 bytes from file offset 0x0)
+[0x0000] EX_PushExecutionFlow -> 0x013a
+[0x0005] EX_PushExecutionFlow -> 0x0100
+[0x000a] EX_PushExecutionFlow -> 0x00ec
+[0x000f] EX_PushExecutionFlow -> 0x00d8
+[0x0014] EX_PushExecutionFlow -> 0x00b1
+[0x0019] EX_PushExecutionFlow -> 0x009d
+[0x001e] EX_PushExecutionFlow -> 0x0050
+[0x0023] EX_PushExecutionFlow -> 0x003c
+[0x0028] EX_LetBool
+  variable:
+    [0x0029] EX_InstanceVariable prop=0x26a080dbd00
+  assignment:
+    [0x0032] EX_InstanceVariable prop=0x26a080da900
+[0x003b] EX_PopExecutionFlow
+[0x003c] EX_LetBool
+  variable:
+    [0x003d] EX_InstanceVariable prop=0x26a080dc100
+  assignment:
+    [0x0046] EX_InstanceVariable prop=0x26a080da980
+[0x004f] EX_PopExecutionFlow
+[0x0050] EX_LetBool
+  variable:
+    [0x0051] EX_LocalVariable prop=0x26a080db880
+  assignment:
+    [0x005a] EX_CallMath func=0x7ff41c4251b8
+      param[0]:
+        [0x0063] EX_InstanceVariable prop=0x26a080daa00
+      param[1]:
+        [0x006c] EX_InstanceVariable prop=0x26a080daa80
+      EX_EndFunctionParms
+[0x0076] EX_LetBool
+  variable:
+    [0x0077] EX_InstanceVariable prop=0x26a080dbf80
+  assignment:
+    [0x0080] EX_LocalVariable prop=0x26a080db880
+[0x0089] EX_LetBool
+  variable:
+    [0x008a] EX_InstanceVariable prop=0x26a080dbf00
+  assignment:
+    [0x0093] EX_InstanceVariable prop=0x26a080dab00
+[0x009c] EX_PopExecutionFlow
+[0x009d] EX_LetBool
+  variable:
+    [0x009e] EX_InstanceVariable prop=0x26a080dbc80
+  assignment:
+    [0x00a7] EX_InstanceVariable prop=0x26a080dab80
+[0x00b0] EX_PopExecutionFlow
+[0x00b1] EX_LetBool
+  variable:
+    [0x00b2] EX_InstanceVariable prop=0x26a080dbc00
+  assignment:
+    [0x00bb] EX_InstanceVariable prop=0x26a080dac00
+[0x00c4] EX_LetBool
+  variable:
+    [0x00c5] EX_InstanceVariable prop=0x26a080dbb80
+  assignment:
+    [0x00ce] EX_InstanceVariable prop=0x26a080dac80
+[0x00d7] EX_PopExecutionFlow
+[0x00d8] EX_LetBool
+  variable:
+    [0x00d9] EX_InstanceVariable prop=0x26a080dbd80
+  assignment:
+    [0x00e2] EX_InstanceVariable prop=0x26a080dad00
+[0x00eb] EX_PopExecutionFlow
+[0x00ec] EX_LetBool
+  variable:
+    [0x00ed] EX_InstanceVariable prop=0x26a080dba00
+  assignment:
+    [0x00f6] EX_InstanceVariable prop=0x26a080dae00
+[0x00ff] EX_PopExecutionFlow
+[0x0100] EX_LetBool
+  variable:
+    [0x0101] EX_LocalVariable prop=0x26a080db800
+  assignment:
+    [0x010a] EX_CallMath func=0x7ff41c424f18
+      param[0]:
+        [0x0113] EX_InstanceVariable prop=0x26a080dad80
+      param[1]:
+        [0x011c] EX_InstanceVariable prop=0x26a080dba00
+      EX_EndFunctionParms
+[0x0126] EX_LetBool
+  variable:
+    [0x0127] EX_InstanceVariable prop=0x26a080dba80
+  assignment:
+    [0x0130] EX_LocalVariable prop=0x26a080db800
+[0x0139] EX_PopExecutionFlow
+[0x013a] EX_Return
+  [0x013b] EX_Nothing
+[0x013c] EX_EndOfScript

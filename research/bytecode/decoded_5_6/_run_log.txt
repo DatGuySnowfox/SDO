@@ -206,3 +206,10 @@ scp: failed to upload file C:/Users/mccau/AppData/Local/Temp/claude/C--Users-mcc
 [2/4] BP_PlayerCharacter_C::OnRep_ClothingGlovesEquipped? -> skip: timed out waiting for dump confirmation
 [3/4] BP_PlayerCharacter_C::OnRep_ClothingLegsEquipped? -> skip: timed out waiting for dump confirmation
 [4/4] BP_PlayerCharacter_C::OnRep_ClothingFeetEquipped? -> skip: timed out waiting for dump confirmation
+
+=== run started, 5 targets ===
+[1/5] AnimBP_PlayerCharacter_C::GetLeftHandLoc -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\AnimBP_PlayerCharacter_C_GetLeftHandLoc.decoded.txt
+[2/5] AnimBP_PlayerCharacter_C::GetThreadSafeBooleans -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\AnimBP_PlayerCharacter_C_GetThreadSafeBooleans.decoded.txt
+[3/5] AnimBP_PlayerCharacter_C::BlueprintThreadSafeUpdateAnimation -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\AnimBP_PlayerCharacter_C_BlueprintThreadSafeUpdateAnimation.decoded.txt
+[4/5] AnimBP_PlayerCharacter_C::GetAimOffset -> ok: C:\temp\GIT\SDO\research\bytecode\decoded_5_6\AnimBP_PlayerCharacter_C_GetAimOffset.decoded.txt
+[5/5] AnimBP_PlayerCharacter_C::GetSpeed&Direction -> skip: timed out waiting for dump confirmation
