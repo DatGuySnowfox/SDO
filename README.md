@@ -23,26 +23,43 @@ kept deliberately blunt so nobody wastes an evening on something already known t
 > committed before the work it marked, which silently turned any transient failure into a permanent
 > one, and two separate writers fighting over the same body-part mesh property.
 >
-> **Still unverified: everything past "two dressed players standing next to each other."** Combat,
-> vehicles, building, zombies and death/respawn have not been re-tested on 5.6 with two clients.
-> Treat the table below as "worked on 5.3, unproven on 5.6."
+> **2026-09-26 brought the port past that point**, and the bug behind most of it was one thing:
+> the player's animation blueprint was renamed between engine versions,
+> `Player_AnimBP_C` to `AnimBP_PlayerCharacter`, and its variables renamed with it. Every lookup
+> using the old names returned null, and because every caller skips on null, the writes simply
+> stopped happening. No crash, no log line, no compiler error. Crouch, ADS, falling and aim
+> pitch were dead at **both** ends for the whole port while the source looked healthy. An audit of
+> all 195 name-based lookups found 11 dead; `research/check_names.py` now does that audit and
+> should be run after any engine upgrade.
+>
+> **Still unverified on 5.6:** combat, vehicles, building, zombies, and death/respawn have not been
+> re-tested with two clients. Treat those rows as "worked on 5.3, unproven on 5.6."
 
-Verified = observed working in a live two-client test *on UE 5.3*. Everything else is called out.
+### Verified on UE 5.6
+
+Observed working in a live two-client test on 5.6, mostly on 2026-09-26.
+
+| Area | Notes |
+| --- | --- |
+| Player movement + proxy spawning | Two clients connect, spawn, move and see each other. |
+| Clothing and appearance | Proxies render fully dressed. Root cause was `kSlotTagComparisonIndex`, see the rough-edges table. |
+| Weapon in hand | The drawn weapon attaches to the `Rifle_Hand` socket with the data asset's own `EquippedTransform`. |
+| Rifle stance | `BlendSpaceInt=1` confirmed identical on local and proxy. Root cause was `ActiveWeapon` naming the last-written slot forever. |
+| Weapon-mounted light | Works on proxies. The forced `SetIntensity` write is load-bearing; removing it kills the light. |
+| Montage sync | Roll and rifle equip/unequip confirmed playing on proxies. Replay detection is in but unverified. |
+| World time of day | Server-owned, propagates to clients. Changing it server-side is a database edit plus a gateway restart, since the value is held in memory. |
 
 ### Worked on 5.3 - not yet re-verified on 5.6
 
 | Area | Notes |
 | --- | --- |
-| Player movement + proxy spawning | Other players appear and move. The core loop. |
-| Equipment / appearance sync | Clothing, armour, weapons, character-creator appearance. Appearance reads are ported to name lookups and resolving real meshes again. |
-| Weapon grip poses | Via `CombatState`. Confirmed for shotgun + pistol, and the rifle stance is confirmed on 5.6 (proxy and local both read `BlendSpaceInt=1`). See the `ActiveWeapon` entry under 5.6 rough edges for what was actually wrong. |
+| Equipment sync, beyond clothing | Clothing and the drawn weapon are confirmed on 5.6 above. Armour, backpacks and the character-creator appearance path are not separately re-tested. |
 | Weapon firing | Muzzle flash / recoil on proxies, single and full-auto. |
-| Weapon-mounted lights | Proxy sync works (`SpotLight.SetIntensity`). |
 | NVG deploy animation | Goggles visibly lower on proxies when activated. |
 | Inventory, damage, death, respawn | Server-confirmed death/respawn. |
 | Ground items | Drop/pickup, persisted, with TTL expiry and a max-count budget. |
 | Building placement | See `SpawnBuild` below - the hook needs rehoming on 5.6. |
-| World state | Time-of-day, persisted and broadcast. |
+| World state, beyond time of day | Time of day is confirmed on 5.6 above. Weather is broadcast but has never been checked against what clients render. |
 | Zombie simulation (server side) | Spawning, AI-relevance scoping, roaming, damage/death. 16/16 unit tests plus end-to-end integration. Server-side only, so unaffected by the engine bump. |
 | Native zombie suppression | Client-side spawners stopped so the server owns zombies. Still working on 5.6 (926 spawners found and stopped, up from 857 on 5.3). |
 | Server directory | Cloudflare Worker; servers heartbeat in, clients list what is up. Unaffected by the engine bump. |
