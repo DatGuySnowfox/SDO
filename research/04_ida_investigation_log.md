@@ -11372,3 +11372,49 @@ back. Making the server authoritative is not a rewrite - the data already arrive
 writes, and it has to be ordered against the game's own load or the two will
 race. It is the highest-value remaining work: it prevents lost characters, where
 the elbow is cosmetic.
+
+### IDA: the FAnimInstanceProxy offset (2026-09-27)
+
+Four reflection techniques failed to read animation runtime state because this
+AnimBP is thread-safe and UE5 keeps that state in `FAnimInstanceProxy`. IDA
+settles where the proxy lives, against the 5.6 shipping binary
+(`SurrounDead-Win64-Shipping.exe`, imagebase 0x140000000).
+
+Method: the name string `"GetInstanceStateWeight"` at `0x147cc3f68` has a data
+xref at `0x147cca200`, which is a native-function registration pair
+`{const char* name; FNativeFuncPtr thunk}`. The thunk is `0x1439151f0`, and its
+decompilation is `execGetInstanceStateWeight`:
+
+```c
+v15 = a1[118];                                  // this->AnimInstanceProxy
+if ( !v15 ) {
+    v15 = (*(...)(*a1 + 880LL))(a1, ...);       // CreateAnimInstanceProxy(), vtable+880
+    a1[118] = v15;
+}
+*a3 = sub_143945E20(v15, v10, v12);             // proxy->GetInstanceStateWeight(machine, state)
+```
+
+**`UAnimInstance::AnimInstanceProxy` is at offset 0x3B0** (index 118 * 8 = 944),
+created lazily through vtable slot 880. `FAnimInstanceProxy::GetInstanceStateWeight`
+is at `0x143945E20`. Cross-checked against `UAnimInstance`'s size of 0x3E0
+(research/CXXHeaderDump/Engine.hpp), which accommodates a pointer at 0x3B0 with
+room to spare.
+
+Two further details from `execGetCurrentStateName` (thunk `0x143914790`, found the
+same way from the string at `0x147cc36c0` via `0x147cca150`):
+
+- It does NOT use the proxy. It casts the class to `UAnimBlueprintGeneratedClass`,
+  fetches the state machine property array through a virtual call, and reads the
+  node out of the UAnimInstance at a property offset. So state machine NODES live
+  in the UObject while evaluation state lives in the proxy, which is why the two
+  accessors behave differently.
+- The machine array is indexed in REVERSE: `array[count - index - 1]`. Worth
+  knowing before trusting any machine index.
+
+Both accessors return zero for an out-of-range machine index rather than failing,
+which is consistent with the live captures reading `none` for every machine and
+means the indices used (0..2) may simply be wrong rather than the data being
+absent.
+
+Next step is reading the proxy directly at +0x3B0 rather than through these
+accessors.
