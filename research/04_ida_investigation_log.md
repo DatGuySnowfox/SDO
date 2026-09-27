@@ -11072,3 +11072,131 @@ One limitation to keep in mind when reading pass 1: it reports `Pitch` as found,
 because `Pitch` exists on `FRotator` and elsewhere. Existing *somewhere* is not
 existing on the class being used, which is exactly why the owner column is
 printed and why neither pass removes the need to read it.
+
+### Session 61, evening: the left elbow, the laser mode table, and three dead ends
+
+#### The laser: the tag cannot express the outputs
+
+Four separate attempts were made to map `ActivateState` to what the device shows,
+and all four were structurally doomed rather than merely wrong. Reading the local
+player's own `SpotLight.Intensity` and the emitter's `IsActive()` beside the tag
+settles it:
+
+```
+State1     light=0 laser=0
+State2     light=1 laser=0
+StateADS   light=0 laser=0
+StateADS   light=0 laser=1
+StateADS   light=1 laser=1
+```
+
+`StateADS` produces three different output combinations in one capture, so the
+tag does not encode the light at all. No mapping from it could ever have been
+right. The sender now packs the real outputs into the spare high bits of the byte
+that already carries the state index, bit 6 light and bit 7 laser, and the
+receiver applies them instead of inferring anything. No new wire field.
+
+Two earlier readings of this were wrong and are worth recording so they are not
+repeated:
+
+- `bVisible` is useless as a laser signal. It read 1 in every state including
+  `State1`, which is fully off, because for a Niagara component visibility is not
+  activation. `IsActive()` is the real gate.
+- The forced `SetIntensity` write on the receiver **is** load-bearing. Gating it
+  behind "only when the game's own activation is absent" was tried and reverted
+  within the hour: the proxy's flashlight simply stopped working.
+  `Jig_SetAttachmentActiveState` alone does not light a proxy.
+
+#### The laser endpoint: local-player-gated, still open
+
+`Event_Laser` was reinstated earlier on the belief that it drove the beam
+correctly. It does not. Reported live: the beam goes wherever the OBSERVER is
+looking, not where the proxy's weapon points. That is the pattern already
+documented in this project for Blueprint functions computing from
+`GetPlayerCharacter()`, which is always the local player.
+
+So every option currently available is wrong:
+
+- call `Event_Laser`: beam follows the observer's view
+- do not call it: beam freezes wherever it was last set
+- project a fixed distance along the emitter's forward vector: correct direction,
+  but passes through walls (tried, reverted)
+
+The fix is the same shape as the light/laser bits: send the owner's own computed
+endpoint, since `LaserEndPoint` is correct on the machine that owns the weapon and
+it is a world position the proxy can write straight into `User.Beam End`. That
+needs movement-rate cadence rather than the 2s attachment payload, so it is a
+protocol addition plus a JS relay change, and it was deliberately not started at
+the end of a long session.
+
+#### The left arm: located, not yet explained
+
+Measured, with every control passing: both characters at `BlendSpaceInt=1`, the
+three fixed left-arm bone lengths identical (`clavicle_l`-`upperarm_l` 13.20,
+`upperarm_l`-`lowerarm_l` 33.95, `lowerarm_l`-`hand_l` 27.11), and the bone names
+confirmed by enumeration rather than assumed.
+
+```
+bone_dist: local  uparmL-handL=41.5, 43.2, 42.8   clavL-handL=37.9, 39.1, 39.3
+bone_dist: proxy  uparmL-handL=58.7, 58.9, 59.3   clavL-handL=52.6, 53.0, 53.1
+```
+
+Maximum possible `upperarm_l`-`hand_l` is 33.95 + 27.11 = 61.06, a fully straight
+arm. The proxy reads 59, which is 97% extended; the local player reads 42, clearly
+bent. **The proxy's left elbow does not bend.** That is the whole visual bug,
+reduced from "the left arm looks wrong" to one joint.
+
+What is NOT the cause, each ruled out by measurement rather than opinion:
+
+- `PlayerLeftHandWeaponLocation`: identical constant on both sides.
+- Every animation-state boolean, `InFirstPerson?` included: identical.
+- Velocity, direction, lean: identical when both stand still.
+- Base mesh: same bone count, same anim class, same skeleton.
+- Any montage: `IsAnyMontagePlaying` reads 0 on both.
+
+#### Three dead ends, and why they are dead
+
+Recorded so nobody spends another evening on them.
+
+**1. Reading anim node state from class properties does not work on this
+AnimBP.** All 17 skeletal-control nodes (3 Fabrik, 14 ModifyBone) read
+`ActualAlpha` exactly 0.00 with `effector=(0,0,0)` on both sides, on visible
+characters mid-animation. That is not plausible as live state. This AnimBP carries
+`__AnimBlueprintMutables` and an `AnimBlueprintGeneratedMutableData` struct, and
+UE5 moves anim node working state there, so the class properties hold defaults.
+Every node-state number produced this session is therefore meaningless, including
+two separate Fabrik readings that were used to rule IK in and out.
+
+**2. `GetBoneTransform` crashed the client on join.** It returns an `FTransform`,
+which is 16-byte aligned and needs a padded parameter block; the hand-built struct
+accounted for neither. Use `GetSocketLocation`, which returns a plain `FVector`
+and has no alignment trap, and note that bone names work through a socket lookup.
+
+**3. `GetCurrentStateName` returns something that is not a resolvable `FName`.**
+Machine 0 gives a non-zero value `fname_to_string` faults on; machines 1 and 2
+return zero. The identical resolve pattern works for `GetBoneName`, so the return
+is not landing at the modelled offset. Unsolved.
+
+#### Parameter blocks: stop computing the size
+
+Four `ProcessEvent` parameter blocks were written from the dump this session and
+several were subtly wrong, one of them fatally. Two lessons:
+
+- `FName` is two `int32`s, so it aligns to **4**, not 8. The bone-name enumerator
+  put the return at 0x08 and silently returned zeros for all 69 bones, which reads
+  as "this skeleton has no bones". A wrong offset can be as quiet as a wrong name.
+- `ProcessEvent` writes the function's entire `ParmsSize` into the buffer it is
+  given. If the real size exceeds the modelled fields it walks off the end and
+  corrupts the stack. Parameter buffers are now padded well past any plausible
+  size, with fields read back by offset, so correctness no longer depends on
+  getting the arithmetic right.
+
+#### Operational
+
+Stale `.flag` files on both machines caused a diagnostic to fire on join rather
+than on request, which is how the `GetBoneTransform` crash presented as "crashing
+on join". Flags are now swept before every deploy alongside the logs.
+
+`debug_log` honours `SDO_LOG_DIR`, and PC1 sets it to the checkout, so clearing
+only `%APPDATA%\SDO` left an 18 MB log in place and produced an empty sender-side
+capture. The clear script reads the variable now.

@@ -1163,6 +1163,7 @@ static void do_weapon_attach_scan(void* ctxRaw)
                     // being inferred. The behaviour is unchanged until that is
                     // known.
                     uint8_t stateIdx = 0;
+                    int lightOn = -1, laserVis = -1;
                     {
                         // 2026-09-26: the real tags are State1/State2/State3 and
                         // StateADS. An earlier pass here resolved
@@ -1200,8 +1201,58 @@ static void do_weapon_attach_scan(void* ctxRaw)
                         else if (activateCi == ciStates[1])     which = "State2";
                         else if (activateCi == ciStates[2])     which = "State3";
                         else if (activateCi == ciStates[3])     which = "StateADS";
+                        // 2026-09-26: log what the device is ACTUALLY doing,
+                        // not just which tag it holds.
+                        //
+                        // Three rounds of inferring light and laser visibility
+                        // from the state tag have each produced a different
+                        // wrong answer, and the user's own client shows both lit
+                        // at once, which no mapping tried so far can express.
+                        // Only State1, State2 and StateADS have ever been
+                        // observed; State3 never has. So read the truth off the
+                        // local player, where both outputs are known correct,
+                        // and let one capture produce the whole tag -> outputs
+                        // table instead of a fourth guess.
+                        //
+                        // Intensity is the SpotLight's own float. bVisible is
+                        // bit 5 (0x20) of the packed flag byte at
+                        // USceneComponent+0x01CA, NOT bit 0 - that mistake cost
+                        // nine rounds during the clothing work and is worth not
+                        // repeating.
+                        if (auto* sl = obj_prop(reinterpret_cast<UObject*>(nestedOwner), STR("SpotLight")))
+                            if (auto* inten = static_cast<float*>(
+                                    sl->GetValuePtrByPropertyNameInChain(STR("Intensity"))))
+                                lightOn = (*inten > 0.0f) ? 1 : 0;
+                        // 2026-09-26, corrected: bVisible is the wrong signal.
+                        // It read 1 in EVERY state including State1, which is
+                        // fully off, because for a Niagara component visibility
+                        // is not activation - hiding a particle system does not
+                        // stop the emitter. This file already says exactly that
+                        // about the receiving side. IsActive is the real gate.
+                        //
+                        // UActorComponent::IsActive() is zero-argument returning
+                        // bool (research/CXXHeaderDump/Engine.hpp, UActorComponent),
+                        // so the Kismet parameter block is a single bool. Checked
+                        // against the dump before calling it, which is the step
+                        // skipped an hour ago when a hand-built GetBoneTransform
+                        // block crashed the client on join.
+                        if (auto* ns = obj_prop(reinterpret_cast<UObject*>(nestedOwner), STR("NS_LaserSight"))) {
+                            if (UFunction* activeFn = ns->GetFunctionByNameInChain(L"IsActive")) {
+                                struct ActiveCtx { UObject* comp; UFunction* fn; bool ret; } ac{ ns, activeFn, false };
+                                if (seh_invoke([](void* raw) {
+                                        auto* c = static_cast<ActiveCtx*>(raw);
+                                        struct Params { bool ReturnValue = false; } pp;
+                                        c->comp->ProcessEvent(c->fn, &pp);
+                                        c->ret = pp.ReturnValue;
+                                    }, &ac))
+                                    laserVis = ac.ret ? 1 : 0;
+                            }
+                        }
+
                         debug_log("attachment_state: " + nestedItemId + " ActivateState ci=" +
-                                  std::to_string(activateCi) + " (" + which + ")");
+                                  std::to_string(activateCi) + " (" + which + ")" +
+                                  " light=" + std::to_string(lightOn) +
+                                  " laser=" + std::to_string(laserVis));
 
                         // Map the tag to the wire's state index rather than
                         // flattening it to on/off. kStateNames is in declaration
@@ -1215,6 +1266,31 @@ static void do_weapon_attach_scan(void* ctxRaw)
                             if (stateIdx == 0) stateIdx = 1;
                         }
                     }
+                    // 2026-09-26: carry the device's REAL outputs, not just
+                    // the tag.
+                    //
+                    // A live capture settles what three rounds of inference
+                    // could not. Reading the SpotLight's Intensity and the
+                    // emitter's IsActive() beside the tag gives:
+                    //
+                    //     State1     light=0 laser=0
+                    //     State2     light=1 laser=0
+                    //     StateADS   light=0 laser=0
+                    //     StateADS   light=0 laser=1
+                    //     StateADS   light=1 laser=1
+                    //
+                    // StateADS produces three different combinations, so the
+                    // tag ALONE CANNOT determine the outputs - the light is an
+                    // independent toggle it does not encode. That is why every
+                    // mapping tried here failed, including the plausible ones.
+                    //
+                    // So stop deriving them. The low nibble keeps the state
+                    // index for anything that still wants it; bit 6 is the
+                    // light and bit 7 the laser, read off the local player
+                    // where both are known correct. No new wire field: this
+                    // byte had six spare bits.
+                    if (lightOn  == 1) stateIdx |= 0x40;
+                    if (laserVis == 1) stateIdx |= 0x80;
                     nestedActiveByItemId[nestedItemId] = stateIdx;
                 }
             }
@@ -3787,6 +3863,278 @@ static void log_activeslot_values(const char* label, AActor* pawn)
     if (!aparams.ReturnValue) { debug_log(std::string("watch_activeslot: ") + label + " AnimInstance is null"); return; }
 
     auto* anim = aparams.ReturnValue;
+
+    // 2026-09-26: the full 5.6 animation-state set, local against proxy.
+    //
+    // The left-arm difference is NOT inverse kinematics. All three Fabrik nodes
+    // read ActualAlpha=0.000 on a LOCAL player whose arm renders correctly, and
+    // identically on the proxy, so nothing is being IK-driven for anyone and the
+    // hand is placed by the animation itself. PlayerLeftHandWeaponLocation is
+    // out for the same reason - local and proxy read the same constant.
+    //
+    // That makes this an animation-STATE difference, so dump the whole state
+    // rather than guessing which field matters. Every name here is from
+    // research/CXXHeaderDump/AnimBP_PlayerCharacter.hpp; a missing one prints -1
+    // rather than being silently skipped, since a null lookup is exactly the
+    // failure this project keeps being bitten by.
+    {
+        auto b = [&](const wchar_t* n) -> int {
+            auto* p = static_cast<uint8_t*>(anim->GetValuePtrByPropertyNameInChain(n));
+            return p ? static_cast<int>(*p) : -1;
+        };
+        auto d = [&](const wchar_t* n) -> double {
+            auto* p = static_cast<double*>(anim->GetValuePtrByPropertyNameInChain(n));
+            return p ? *p : -999.0;
+        };
+        char line[480];
+        snprintf(line, sizeof(line),
+            "anim_state: %s ADS=%d Crouched=%d Sprint=%d CrouchSprint=%d Melee=%d "
+            "Falling=%d Ladder=%d Swim=%d SwimUW=%d Vehicle=%d FirstPerson=%d Dead=%d "
+            "Fishing=%d vel=%.1f dir=%.1f lean=%.1f AOPitch=%.1f AOYaw=%.1f",
+            label,
+            b(STR("ADS?")), b(STR("Crouched?")), b(STR("Sprinting?")),
+            b(STR("CrouchedSprinting?")), b(STR("MeleeStance?")),
+            b(STR("PlayerFalling?")), b(STR("ClimbingLadder?")),
+            b(STR("Swimming?")), b(STR("SwimmingUnderWater?")),
+            b(STR("InVehicle?")), b(STR("InFirstPerson?")), b(STR("PlayerDead?")),
+            b(STR("Fishing?")),
+            d(STR("PlayerVelocity")), d(STR("PlayerDirection")), d(STR("PlayerLean")),
+            d(STR("AOPitch")), d(STR("AOYaw")));
+        debug_log(line);
+    }
+
+    // 2026-09-26, second attempt: bone POSITIONS, compared as distances.
+    //
+    // The first version of this crashed the client on join (see the note that
+    // used to be here, preserved below). This one avoids the thing that broke:
+    // GetBoneTransform returns an FTransform, which is 16-byte aligned and needs
+    // a padded parameter block. GetSocketLocation returns a plain FVector, so
+    // the block is FName then three doubles with no alignment trap, and both
+    // offsets are checked at compile time rather than assumed. Bone names work
+    // here because a socket lookup falls back to the bone of the same name.
+    //
+    // Distances, not positions, because the two characters stand in different
+    // places and face different ways. Pairwise bone distances are invariant
+    // under any rigid transform, so identical poses give identical numbers no
+    // matter where each character is. That sidesteps the component-space
+    // question entirely, which is what an earlier bone probe got wrong.
+    //
+    // Names are enumerated rather than guessed: GetSocketLocation silently
+    // returns the COMPONENT's own location for a name that does not exist, so
+    // guessing "hand_l" and getting a plausible number back proves nothing. The
+    // real names are dumped once, on the first run.
+    {
+        struct NameCtx { UObject* mesh; int32_t idx; int32_t ci; int32_t num; bool ok; };
+        struct LocCtx  { UObject* mesh; int32_t ci; int32_t num; double x, y, z; bool ok; };
+
+        // One-time skeleton dump, so the bone names below are real.
+        static bool s_namesDumped = false;
+        if (!s_namesDumped) {
+            s_namesDumped = true;
+            std::string names;
+            for (int32_t i = 0; i < 69; ++i) {
+                NameCtx nc{ mesh, i, 0, 0, false };
+                seh_invoke([](void* raw) {
+                    auto* c = static_cast<NameCtx*>(raw);
+                    UFunction* fn = c->mesh->GetFunctionByNameInChain(L"GetBoneName");
+                    if (!fn) return;
+                    // int32 BoneIndex at 0x00, FName return at 0x04.
+                    //
+                    // 2026-09-26: this had the return at 0x08 and silently
+                    // produced nothing for all 69 bones. FName is two int32s,
+                    // so it aligns to 4, not 8 - there is no padding after the
+                    // index. Worth remembering: the wrong offset here did not
+                    // crash or error, it just returned zeros, which read as
+                    // "this skeleton has no bones".
+                    struct Params { int32_t BoneIndex; int32_t Ci; int32_t Num; } pm{ c->idx, 0, 0 };
+                    static_assert(offsetof(Params, Ci) == 0x04, "FName return offset");
+                    c->mesh->ProcessEvent(fn, &pm);
+                    c->ci = pm.Ci; c->num = pm.Num; c->ok = true;
+                }, &nc);
+                if (!nc.ok || nc.ci == 0) continue;
+                int32_t raw[2] = { nc.ci, nc.num };
+                names += " " + std::to_string(i) + ":" +
+                         native::fname_to_string(reinterpret_cast<uintptr_t>(raw));
+            }
+            if (names.empty()) {
+                // It printed an empty list once. Say which step failed rather
+                // than leaving a blank line that looks like "no bones".
+                UFunction* probe = mesh->GetFunctionByNameInChain(L"GetBoneName");
+                debug_log(std::string("bone_names: ") + label +
+                          " NONE - GetBoneName " + (probe ? "resolved but returned no names"
+                                                          : "NOT FOUND on this component"));
+            } else {
+                debug_log(std::string("bone_names: ") + label + names);
+            }
+        }
+
+        auto locOf = [&](const wchar_t* boneName, double* out) -> bool {
+            LocCtx lc{ mesh, 0, 0, 0, 0, 0, false };
+            if (!construct_fname_from_string(boneName, &lc.ci)) return false;
+            seh_invoke([](void* raw) {
+                auto* c = static_cast<LocCtx*>(raw);
+                UFunction* fn = c->mesh->GetFunctionByNameInChain(L"GetSocketLocation");
+                if (!fn) return;
+                // FName InSocketName at 0x00, FVector return at 0x08. No
+                // 16-byte alignment involved, unlike the FTransform overload.
+                struct Params { int32_t Ci; int32_t Num; double X, Y, Z; } pm{ c->ci, c->num, 0, 0, 0 };
+                static_assert(offsetof(Params, X) == 0x08, "FVector return offset");
+                static_assert(sizeof(Params) == 0x20, "GetSocketLocation param size");
+                c->mesh->ProcessEvent(fn, &pm);
+                c->x = pm.X; c->y = pm.Y; c->z = pm.Z; c->ok = true;
+            }, &lc);
+            if (!lc.ok) return false;
+            out[0] = lc.x; out[1] = lc.y; out[2] = lc.z;
+            return true;
+        };
+
+        // 2026-09-26, round two: localise the difference to a joint.
+        //
+        // The first valid capture (both sides at BlendSpaceInt=1) showed three
+        // of four distances matching within a couple of units, with one real
+        // outlier - handL-head, frozen at 62.3 on the proxy while the local
+        // varied between 54 and 58. So the arm is broadly right and something
+        // specific about the left hand is not. These bones split the left arm
+        // into its chain so the divergence can be attributed to a joint:
+        //
+        //   clavicle->hand   overall reach of the whole arm
+        //   upperarm->hand   elbow flexion, independent of shoulder
+        //   clavicle->upperarm and upperarm->lowerarm are fixed BONE LENGTHS:
+        //                    they must match exactly on both sides. If they do
+        //                    not, the two characters are on different skeletons
+        //                    and every other number here is meaningless.
+        //
+        // That last pair is the control this probe was missing.
+        enum { B_HANDL, B_HANDR, B_HEAD, B_PELVIS, B_CLAVL, B_UPARML, B_LOARML, B_COUNT };
+        static const wchar_t* kBones[B_COUNT] = {
+            STR("hand_l"), STR("hand_r"), STR("head"), STR("pelvis"),
+            STR("clavicle_l"), STR("upperarm_l"), STR("lowerarm_l"),
+        };
+        double pos[B_COUNT][3]{};
+        bool have[B_COUNT]{};
+        for (int i = 0; i < B_COUNT; ++i) have[i] = locOf(kBones[i], pos[i]);
+
+        auto dist = [&](int a, int b) -> double {
+            if (!have[a] || !have[b]) return -1.0;
+            const double dx = pos[a][0] - pos[b][0];
+            const double dy = pos[a][1] - pos[b][1];
+            const double dz = pos[a][2] - pos[b][2];
+            return std::sqrt(dx * dx + dy * dy + dz * dz);
+        };
+
+        // A name that does not exist makes GetSocketLocation return the
+        // COMPONENT's own location, so two bad names look like a distance of
+        // zero rather than an error. Call that out instead of printing it as
+        // data - the name enumeration below failed once already, which is what
+        // made this check necessary.
+        auto fmt = [&](int a, int b) -> double {
+            const double d = dist(a, b);
+            return (d >= 0.0 && d < 0.01) ? -2.0 : d;  // -2 means "suspect: identical points"
+        };
+
+        char line[420];
+        snprintf(line, sizeof(line),
+            "bone_dist: %s handL-handR=%.1f handL-head=%.1f handL-pelvis=%.1f "
+            "clavL-handL=%.1f uparmL-handL=%.1f "
+            "| fixed: clavL-uparmL=%.2f uparmL-loarmL=%.2f loarmL-handL=%.2f",
+            label,
+            fmt(B_HANDL, B_HANDR), fmt(B_HANDL, B_HEAD), fmt(B_HANDL, B_PELVIS),
+            fmt(B_CLAVL, B_HANDL), fmt(B_UPARML, B_HANDL),
+            fmt(B_CLAVL, B_UPARML), fmt(B_UPARML, B_LOARML), fmt(B_LOARML, B_HANDL));
+        debug_log(line);
+    }
+
+    // The FIRST version of this probe CRASHED THE CLIENT ON JOIN and was removed.
+    //
+    // It called GetBoneTransform through a hand-rolled parameter struct. The
+    // real signature is
+    //
+    //     FTransform GetBoneTransform(FName InBoneName,
+    //                                 TEnumAsByte<ERelativeTransformSpace> TransformSpace)
+    //
+    // (research/CXXHeaderDump/Engine.hpp:24391) - the transform is the RETURN
+    // value, not a trailing out-parameter, and FTransform is 16-byte aligned,
+    // neither of which the struct I wrote accounted for. The log stopped dead
+    // on the line immediately before it.
+    //
+    // That is the project's own rule ignored: a new ProcessEvent target gets
+    // verified in isolation before it goes anywhere near a live session, and
+    // the parameter layout is read off the dump rather than assumed. The
+    // measurement is still worth taking - identical animation inputs with a
+    // different-looking pose means the bones are the only thing left to check -
+    // but it needs a correctly built call, not this one.
+
+    // 2026-09-26: which STATE each state machine is in, and whether a montage
+    // is playing.
+    //
+    // The node-struct probe is a dead end: all 17 skeletal-control nodes read
+    // ActualAlpha exactly 0.00 with effector (0,0,0) on both sides, on visible
+    // characters mid-animation. That is not plausible as live state. This AnimBP
+    // carries __AnimBlueprintMutables and an AnimBlueprintGeneratedMutableData
+    // struct, and UE5 moves anim node working state there, so reading the class
+    // properties returns defaults. Every node-state number this file produced is
+    // therefore meaningless, the earlier Fabrik readings included.
+    //
+    // GetCurrentStateName and IsAnyMontagePlaying are real UFUNCTIONs that
+    // compute from live state instead, so they sidestep that entirely. Three
+    // state machines exist on this AnimBP. If the proxy sits in a different
+    // state from the local player, that is what bends one elbow and not the
+    // other, and it is visible here where it was not in the node structs.
+    {
+        struct SmCtx { UObject* anim; int32_t machine; int32_t ci, num; bool ok; };
+        std::string line = std::string("anim_sm: ") + label;
+        for (int32_t m = 0; m < 3; ++m) {
+            SmCtx sc{ anim, m, 0, 0, false };
+            seh_invoke([](void* raw) {
+                auto* c = static_cast<SmCtx*>(raw);
+                UFunction* fn = c->anim->GetFunctionByNameInChain(L"GetCurrentStateName");
+                if (!fn) return;
+                // int32 MachineIndex at 0x00, FName return at 0x04 - FName is
+                // two int32s, so it aligns to 4 and there is no padding.
+                // Over-sized on purpose. ProcessEvent writes the function's
+                // whole ParmsSize into this buffer, and if the real size is
+                // larger than the fields modelled here it walks off the end of
+                // the struct and corrupts the stack. That is what this probe
+                // did on its first run: it faulted every tick, caught only by
+                // the outer SEH guard. Several parameter blocks written from
+                // the dump today have been subtly wrong, so the buffer is now
+                // padded well past any plausible size and the fields are read
+                // back out of it by offset.
+                struct Params { int32_t MachineIndex; int32_t Ci; int32_t Num; uint8_t pad[52]; } pm{};
+                static_assert(offsetof(Params, Ci) == 0x04, "FName return offset");
+                static_assert(sizeof(Params) >= 64, "params buffer headroom");
+                pm.MachineIndex = c->machine;
+                c->anim->ProcessEvent(fn, &pm);
+                c->ci = pm.Ci; c->num = pm.Num; c->ok = true;
+            }, &sc);
+            // fname_to_string was being called out here, outside the guard,
+            // on a value the call may never have written. Guard it too.
+            std::string name("<none>");
+            if (sc.ok && sc.ci) {
+                struct NmCtx { int32_t raw[2]; std::string* out; } nc{ { sc.ci, sc.num }, &name };
+                if (!seh_invoke([](void* r) {
+                        auto* c = static_cast<NmCtx*>(r);
+                        *c->out = native::fname_to_string(reinterpret_cast<uintptr_t>(c->raw));
+                    }, &nc))
+                    name = "<resolve-crashed>";
+            }
+            line += " sm" + std::to_string(m) + "=" + name;
+        }
+        {
+            struct MpCtx { UObject* anim; bool playing, ok; } mc{ anim, false, false };
+            seh_invoke([](void* raw) {
+                auto* c = static_cast<MpCtx*>(raw);
+                UFunction* fn = c->anim->GetFunctionByNameInChain(L"IsAnyMontagePlaying");
+                if (!fn) return;
+                struct Params { bool ReturnValue; uint8_t pad[63]; } pm{};
+                c->anim->ProcessEvent(fn, &pm);
+                c->playing = pm.ReturnValue; c->ok = true;
+            }, &mc);
+            line += std::string(" montage=") + (mc.ok ? (mc.playing ? "1" : "0") : "?");
+        }
+        debug_log(line);
+    }
+
     auto* activeSlotPtr = anim->GetValuePtrByPropertyNameInChain(L"CActiveSlot");
     std::string activeSlot = activeSlotPtr
         ? native::fname_to_string(reinterpret_cast<uintptr_t>(activeSlotPtr))
@@ -6059,11 +6407,39 @@ static void check_fabrik_dump_trigger()
         // with different effector positions means the target is wrong. Those
         // need completely different fixes, which is why the left-arm problem is
         // not worth another guess.
+        // 2026-09-26: every skeletal-control node, not just Fabrik.
+        //
+        // Re-tested with BOTH characters holding rifles, all three Fabrik nodes
+        // read ActualAlpha=0 on each side, so no Fabrik IK runs for anyone. Yet
+        // the bone measurements say the proxy's left elbow is 97% straight
+        // (uparmL-handL 59 against a 61.06 maximum) while the local player's is
+        // clearly bent at 42. Something bends that elbow and it is not Fabrik.
+        //
+        // This AnimBP has 14 FAnimNode_ModifyBone nodes alongside the 3 Fabrik
+        // ones, and ModifyBone shares the same FAnimNode_SkeletalControlBase, so
+        // ActualAlpha sits at the same 0x24. Any node active on the local player
+        // and inactive on the proxy is the answer. Checking all of them is one
+        // capture; guessing which one would be another evening.
+        std::string summary;
         struct FabrikNode { const wchar_t* wide; const char* narrow; };
         static const FabrikNode kNodes[] = {
-            { STR("AnimGraphNode_Fabrik"),   "Fabrik"   },
-            { STR("AnimGraphNode_Fabrik_1"), "Fabrik_1" },
-            { STR("AnimGraphNode_Fabrik_2"), "Fabrik_2" },
+            { STR("AnimGraphNode_Fabrik"),      "Fabrik"   },
+            { STR("AnimGraphNode_Fabrik_1"),    "Fabrik_1" },
+            { STR("AnimGraphNode_Fabrik_2"),    "Fabrik_2" },
+            { STR("AnimGraphNode_ModifyBone"),    "MB"    },
+            { STR("AnimGraphNode_ModifyBone_1"),  "MB_1"  },
+            { STR("AnimGraphNode_ModifyBone_2"),  "MB_2"  },
+            { STR("AnimGraphNode_ModifyBone_3"),  "MB_3"  },
+            { STR("AnimGraphNode_ModifyBone_4"),  "MB_4"  },
+            { STR("AnimGraphNode_ModifyBone_5"),  "MB_5"  },
+            { STR("AnimGraphNode_ModifyBone_6"),  "MB_6"  },
+            { STR("AnimGraphNode_ModifyBone_7"),  "MB_7"  },
+            { STR("AnimGraphNode_ModifyBone_8"),  "MB_8"  },
+            { STR("AnimGraphNode_ModifyBone_9"),  "MB_9"  },
+            { STR("AnimGraphNode_ModifyBone_10"), "MB_10" },
+            { STR("AnimGraphNode_ModifyBone_11"), "MB_11" },
+            { STR("AnimGraphNode_ModifyBone_12"), "MB_12" },
+            { STR("AnimGraphNode_ModifyBone_13"), "MB_13" },
         };
         for (const auto& node : kNodes) {
             const wchar_t* nodeName = node.wide;
@@ -6079,13 +6455,21 @@ static void check_fabrik_dump_trigger()
             // at +0x20, both doubles on UE5.
             const double* tr = reinterpret_cast<const double*>(base + 0xD0 + 0x20);
             const uint8_t space = *(base + 0x1E8);
-            char line[320];
-            snprintf(line, sizeof(line),
-                "fabrik: %s %s ActualAlpha=%.3f Alpha=%.3f effector=(%.1f,%.1f,%.1f) space=%u",
-                label, node.narrow, actualAlpha, alpha,
-                tr[0], tr[1], tr[2], space);
-            debug_log(line);
+            // Only the ACTIVE ones matter, and 17 lines per side per capture
+            // buries them. Print the whole set on one line, alpha only, and
+            // follow with the effector for any node that is actually blending.
+            char frag[64];
+            snprintf(frag, sizeof(frag), " %s=%.2f", node.narrow, actualAlpha);
+            summary += frag;
+            if (actualAlpha > 0.001f) {
+                char line[320];
+                snprintf(line, sizeof(line),
+                    "fabrik: %s %s ACTIVE ActualAlpha=%.3f Alpha=%.3f effector=(%.1f,%.1f,%.1f) space=%u",
+                    label, node.narrow, actualAlpha, alpha, tr[0], tr[1], tr[2], space);
+                debug_log(line);
+            }
         }
+        debug_log(std::string("fabrik_alphas: ") + label + summary);
     };
 
     // SEH-guarded (2026-08-13): this is exploratory struct-property access

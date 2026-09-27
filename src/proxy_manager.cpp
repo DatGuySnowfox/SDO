@@ -443,6 +443,14 @@ struct RawFGameplayTag { int32_t ComparisonIndex = 0; int32_t Number = 0; };
 // sync_attachment_laser need them.
 constexpr uint8_t kState1 = 1, kState2 = 2, kState3 = 3, kStateADS = 4;
 
+// The sender packs the device's real outputs into the spare high bits of the
+// same byte: bit 6 the light, bit 7 the laser. The state index keeps the low
+// nibble. See read_local_weapon_attachments in mod.cpp for why the tag alone is
+// not enough.
+constexpr uint8_t kOutputLightBit = 0x40;
+constexpr uint8_t kOutputLaserBit = 0x80;
+constexpr uint8_t kStateMask      = 0x0F;
+
 // Raw FName(const wchar_t*, EFindName, void*) constructor, resolved by
 // address - mirrors mod.cpp's own copy exactly (see that file for the full
 // rationale: RC::Unreal::FName only exposes a from-INDEX ctor, useless since
@@ -3450,13 +3458,15 @@ void ProxyManager::sync_attachment_laser(RemotePlayer& player)
     // payload rather than from the actors. Any attachment on the in-hand weapon
     // sitting in StateADS puts the weapon in laser mode; in practice there is
     // at most one such device.
-    bool laserMode = false;
+    // The sender reports whether its own emitter is actually running, so there
+    // is nothing left to infer here - no state mapping and no aiming term. The
+    // aiming term in particular was wrong twice: first because the device mode
+    // was mistaken for an aiming flag, then because switching the light on moved
+    // the tag and killed the beam.
+    bool wantLaser = false;
     for (const auto& e : player.weaponAttachments) {
-        if (e.weaponSlotIndex == slot && e.activeState == kStateADS) { laserMode = true; break; }
+        if (e.weaponSlotIndex == slot && (e.activeState & kOutputLaserBit)) { wantLaser = true; break; }
     }
-
-    const bool aiming = (player.movState & 0x02) != 0;
-    const bool wantLaser = laserMode && aiming;
 
     const int8_t want = wantLaser ? 1 : 0;
 
@@ -3494,68 +3504,24 @@ void ProxyManager::sync_attachment_laser(RemotePlayer& player)
                     debug_log("sync_attachment_laser: Event_Laser crashed, caught via SEH"); }
             }
 
-            // Drive the beam's endpoint ourselves.
+            // 2026-09-26: do NOT write NS_LaserSight's "User.Beam End" here.
             //
-            // 2026-09-26: Event_Laser above runs without crashing, and the beam
-            // still pointed somewhere other than down the barrel. The laser_geom
-            // capture says why - the endpoint is frozen while the emitter moves:
+            // That was tried and reverted the same evening. The reasoning was
+            // that LaserEndPoint returns a frozen value on a proxy - which it
+            // does, confirmed by laser_geom logging the identical endpoint
+            // across every sample while the emitter moved. The conclusion drawn
+            // from it was wrong: a stale return from that function does not
+            // mean the BEAM reads it. Event_Laser above was already driving the
+            // Niagara parameter correctly, and overriding it with a fixed
+            // projection along the forward vector made the beam pass straight
+            // through walls instead of stopping on them. Live-confirmed as a
+            // regression and removed.
             //
-            //   emitter=(94740,51249,1441) rot=(-17.5,150.9,91.3) end=(94073,49043,-2662)
-            //   emitter=(94768,51145,1446) rot=(-14.6,-148.2,91.2) end=(94073,49043,-2662)
-            //   emitter=(94737,51208,1445) rot=(-15.2,173.2,91.2) end=(94073,49043,-2662)
-            //
-            // Byte-identical across every sample, and 4100 units BELOW the
-            // emitter. So LaserEndPoint hands back a stale cached value on a
-            // proxy no matter how often Event_Laser is called, while the
-            // emitter's own transform is live and correct. That also rules out
-            // the other candidate: the emitter is not mis-rotated.
-            //
-            // NS_LaserSight draws its beam from the Niagara user parameter
-            // "User.Beam End" (research/Exports/SurrounDead/Content/FX/
-            // NS_LaserSight.json, which also carries the DynamicBeam.BeamEnd
-            // it feeds). Setting that straight from the emitter's own forward
-            // vector skips the broken endpoint entirely.
-            //
-            // Both spellings are set. UNiagaraComponent::SetVariableVec3 takes
-            // the bare name and prepends the User namespace itself, but which
-            // form a given build wants is not worth a round trip to find out,
-            // and the wrong one is a no-op.
-            //
-            // Known limitation, stated rather than hidden: this projects a fixed
-            // distance along the barrel instead of tracing to whatever the laser
-            // is pointing at, so the dot will not stop on a wall the way the
-            // local player's does. Direction and length will be right, the
-            // termination will not. Tracing properly needs a LineTraceSingle
-            // through the same reflection path and is worth doing only once the
-            // direction is confirmed correct.
-            if (auto* laserComp = prop_obj(reinterpret_cast<UObject*>(a), STR("NS_LaserSight"))) {
-                struct BCtx { UObject* comp; bool ok = false; } bc{ laserComp };
-                seh_invoke([](void* r) {
-                    auto* c = static_cast<BCtx*>(r);
-                    struct FVec { double X = 0, Y = 0, Z = 0; };
-                    FVec loc{}, fwd{};
-                    UFunction* locFn = c->comp->GetFunctionByNameInChain(L"K2_GetComponentLocation");
-                    UFunction* fwdFn = c->comp->GetFunctionByNameInChain(L"GetForwardVector");
-                    if (!locFn || !fwdFn) return;
-                    c->comp->ProcessEvent(locFn, &loc);
-                    c->comp->ProcessEvent(fwdFn, &fwd);
-
-                    constexpr double kBeamLength = 8000.0;
-                    FVec end{ loc.X + fwd.X * kBeamLength,
-                              loc.Y + fwd.Y * kBeamLength,
-                              loc.Z + fwd.Z * kBeamLength };
-
-                    UFunction* setFn = c->comp->GetFunctionByNameInChain(L"SetVariableVec3");
-                    if (!setFn) return;
-                    struct SetParams { RawFGameplayTag Name; FVec Value; } sp{};
-                    sp.Value = end;
-                    for (const wchar_t* n : { STR("Beam End"), STR("User.Beam End") }) {
-                        if (!construct_fname_from_string(n, &sp.Name)) continue;
-                        c->comp->ProcessEvent(setFn, &sp);
-                    }
-                    c->ok = true;
-                }, &bc);
-            }
+            // The lesson worth keeping: measuring a function's return value
+            // says nothing about whether anything consumes it. If the beam ever
+            // does need driving by hand, verify first that the parameter is
+            // actually stale, by reading it back rather than by inspecting
+            // whatever computes it.
 
             // 2026-09-26 diagnostic: on/off is correct now (the log shows
             // on=1/aiming=1 then on=0/aiming=0), but the beam still points
@@ -3613,6 +3579,23 @@ void ProxyManager::sync_attachment_laser(RemotePlayer& player)
         }
     }
 
+    // 2026-09-26: the emitter is no longer switched on and off here.
+    //
+    // Reported live: "if you switch the flashlight on, the laser stops". That is
+    // this gate, not the game - laserMode is true only for StateADS, so moving
+    // the device to State2 to light it up made the check false and killed the
+    // beam. The user's own client shows both at once, so the premise behind the
+    // gate was wrong.
+    //
+    // Jig_SetAttachmentActiveState already gives the blueprint the real state
+    // tag and it handles both outputs correctly on a real client. What was
+    // genuinely missing on a proxy was only the endpoint refresh, which
+    // Event_Laser above provides. Everything else here was this mod overriding
+    // working behaviour, which regressed the beam once already today.
+    //
+    // RESTORED the same evening: the light half of this experiment turned the
+    // proxy's flashlight off entirely, so the forced writes stay until the
+    // tag -> outputs mapping is known from real data rather than inferred.
     if (player.laserAppliedState == want) return;
 
     bool touchedAny = false;
@@ -3645,7 +3628,7 @@ void ProxyManager::sync_attachment_laser(RemotePlayer& player)
         }, &lc);
         touchedAny = true;
         debug_log("sync_attachment_laser: on=" + std::to_string(wantLaser) +
-                  " mode=" + std::to_string(laserMode) + " aiming=" + std::to_string(aiming) +
+                  " (from sender bit)" +
                   " vis=" + std::to_string(setVisFn != nullptr) +
                   " act=" + std::to_string(actFn != nullptr) + " ok=" + std::to_string(ok));
     }
@@ -3957,6 +3940,33 @@ void ProxyManager::sync_weapon_attachments(RemotePlayer& player)
                 // often than the attachment payload this function reacts to.
                 // See sync_attachment_laser, which runs every tick.
 
+                // 2026-09-26: only force the light when the game's own
+                // activation path was NOT available.
+                //
+                // Both ran together until now, and they disagree. A single tag
+                // encodes the whole device mode, and a live capture while the
+                // user cycled it only ever produced State1, State2 and StateADS
+                // - State3 has never been seen. Their own client shows the
+                // flashlight cone and the laser AT THE SAME TIME, which this
+                // mapping cannot express: it lights up for State2/State3 and
+                // lases only for StateADS, so the two can never coexist. Any
+                // further guess at which state means what would be the fourth.
+                //
+                // Jig_SetAttachmentActiveState hands the blueprint the real tag,
+                // and the blueprint demonstrably drives both correctly on a real
+                // client. Forcing SetIntensity on top of that is this mod
+                // second-guessing a function that already works, which is the
+                // same mistake as the beam endpoint earlier today. Kept strictly
+                // as a fallback for attachments that expose no activation
+                // function at all.
+                // 2026-09-26, RESTORED: the forced write is load-bearing.
+                // Gating it on the game's own activation being absent was tried
+                // and reverted within the hour - the proxy's flashlight simply
+                // stopped working. Jig_SetAttachmentActiveState alone does not
+                // light a proxy, whatever it does on a real client. The mapping
+                // below is still wrong for the light-plus-laser case; that is
+                // being settled by measurement on the sender rather than by
+                // another guess here.
                 if (setIntensityFn) {
                     // 2026-09-26: was "any non-zero state means lit", which is
                     // wrong and was reported as the light staying on after being
@@ -3972,7 +3982,17 @@ void ProxyManager::sync_weapon_attachments(RemotePlayer& player)
                     // at all, so both it and State1 mean dark. State3 has not
                     // been observed yet and is assumed to be the both-on mode,
                     // which is a guess and marked as one.
-                    const bool wantLight = (e->activeState == kState2 || e->activeState == kState3);
+                    // 2026-09-26: the sender now reports the real outputs.
+                    //
+                    // Bit 6 is the light and bit 7 the laser, read off the local
+                    // player's own SpotLight Intensity and emitter IsActive().
+                    // The state index survives in the low nibble. Deriving the
+                    // light from the tag was wrong and could not be made right:
+                    // StateADS alone produces light=0/laser=0, light=0/laser=1
+                    // AND light=1/laser=1 in one capture, so the tag does not
+                    // encode the light at all. See read_local_weapon_attachments
+                    // for the table.
+                    const bool wantLight = (e->activeState & kOutputLightBit) != 0;
                     struct CallCtx { UObject* obj; UFunction* fn; float intensity; } callCtx{ comp, setIntensityFn, wantLight ? 50000.0f : 0.0f };
                     const bool callOk = seh_invoke([](void* raw) {
                         auto* c = static_cast<CallCtx*>(raw);
